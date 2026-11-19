@@ -1,5 +1,9 @@
 // @vitest-environment node
-import { addDays, subDays, subHours, subMinutes, subMonths } from "date-fns";
+import { addDays } from "date-fns/addDays";
+import { subDays } from "date-fns/subDays";
+import { subHours } from "date-fns/subHours";
+import { subMinutes } from "date-fns/subMinutes";
+import { subMonths } from "date-fns/subMonths";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatCompactRelativeTime,

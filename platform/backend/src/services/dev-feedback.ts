@@ -131,9 +131,10 @@ class DevFeedbackService {
 
   /** Open comments pinned on a route pattern, oldest first. */
   async listComments(route: string): Promise<DevFeedbackComment[]> {
-    const { channel } = await this.getTarget();
-    const messages = await this.getChannelHistory();
-    const workspaceUrl = await this.getWorkspaceUrl();
+    const target = await this.getTarget();
+    const { channel } = target;
+    const messages = await this.getChannelHistory(target);
+    const workspaceUrl = await this.getWorkspaceUrl(target.client);
     return messages
       .filter(
         (message) =>
@@ -429,8 +430,11 @@ class DevFeedbackService {
    * Recent channel messages. Bounded on purpose: the channel is a team
    * scratchpad, and a pin older than the last 200 messages is stale anyway.
    */
-  private async getChannelHistory(): Promise<SlackMessage[]> {
-    const { client, channel } = await this.getTarget();
+  private async getChannelHistory(target?: {
+    client: WebClient;
+    channel: string;
+  }): Promise<SlackMessage[]> {
+    const { client, channel } = target ?? (await this.getTarget());
     const cached = this.historyCache.get(channel);
     if (cached) return cached;
     const response = await client.conversations.history({
@@ -443,10 +447,12 @@ class DevFeedbackService {
     return messages;
   }
 
-  private async getWorkspaceUrl(): Promise<string | null> {
+  private async getWorkspaceUrl(client?: WebClient): Promise<string | null> {
     if (this.workspaceUrl) return this.workspaceUrl;
     try {
-      const response = await (await this.getTarget()).client.auth.test();
+      const response = await (
+        client ?? (await this.getTarget()).client
+      ).auth.test();
       this.workspaceUrl = response.url ?? null;
     } catch (error) {
       logger.warn({ err: error }, "[DevFeedback] auth.test failed");

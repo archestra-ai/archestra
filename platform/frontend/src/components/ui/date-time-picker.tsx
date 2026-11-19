@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { CalendarIcon } from "lucide-react";
 import * as React from "react";
 import { parseTimeExpression } from "@/components/time-range-picker/time-range";

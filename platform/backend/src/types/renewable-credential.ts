@@ -6,6 +6,11 @@ const RenewableCredentialSchema = z.object({
   scope: z.enum(["personal", "organization"]).optional(),
   value: z.string(),
   expiresAt: z.number().finite(),
+  /**
+   * Set once the person was told this personal connection stopped working,
+   * so each reconcile tick does not post again. Cleared when it works again.
+   */
+  reconnectNotified: z.boolean().optional(),
 });
 
 export const RenewableCredentialBundleSchema = z.object({

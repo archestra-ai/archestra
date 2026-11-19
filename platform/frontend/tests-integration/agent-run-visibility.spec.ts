@@ -26,6 +26,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
   const run = {
     id: "run-1",
     taskId: "12345678-abcd-4000-8000-123456789abc",
+    sessionId: "12345678-abcd-4000-8000-123456789abc",
     agentId: agent.id,
     organizationId: "test-org",
     actorKind: "user",
@@ -50,6 +51,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     stateChangedAt: "2026-09-01T12:01:00.000Z",
     runtimeLimits: null,
     initiatorName: ownerName,
+    workspace: null,
     shareVisibility: "team",
     shareTeamNames: ["Release reviewers"],
     shareUserNames: [],
@@ -93,7 +95,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
       agent: { id: agent.id, name: agent.name, icon: null },
     },
   });
-  await page.goto(`/agents/${agent.id}?section=runs`);
+  await page.goto(`/agents/${agent.id}?section=runs&run=${run.taskId}`);
   const details = page.getByRole("button", { name: "Details", exact: true });
   await details.click();
   const inspector = page.getByRole("complementary", { name: "Run details" });
@@ -165,9 +167,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     }
   }
   await stop.click();
-  await expect(
-    page.getByRole("dialog", { name: "Stop this run?" }),
-  ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Stop run?" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await fullView.click();
   await expect(page).toHaveURL(`/chat/runs/${run.taskId}`);

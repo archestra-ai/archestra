@@ -4,6 +4,7 @@ import {
   ArchestraInternalErrorCode,
   PROVIDER_BILLING_BLOCK_BODY,
   PROVIDER_BILLING_BLOCK_TITLE,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { get } from "lodash-es";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -42,6 +43,7 @@ import {
 } from "@/utils/billable-usage";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "../common";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
@@ -90,12 +92,14 @@ type AnthropicToolResultContentBlock =
 class AnthropicRequestAdapter
   implements LLMRequestAdapter<AnthropicRequest, AnthropicMessages>
 {
-  readonly provider = "anthropic" as const;
   private request: AnthropicRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: AnthropicRequest) {
+  constructor(
+    request: AnthropicRequest,
+    readonly provider: SupportedProvider = "anthropic",
+  ) {
     this.request = request;
   }
 
@@ -251,7 +255,9 @@ class AnthropicRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): AnthropicRequest {
+  toProviderRequest(options?: {
+    preserveToolCallIds?: boolean;
+  }): AnthropicRequest {
     let messages = this.request.messages;
 
     // Apply tool result updates if any
@@ -262,7 +268,9 @@ class AnthropicRequestAdapter
     messages = this.convertToolResultContent(messages);
     messages = stripEmptyTextBlocks(messages);
     // After the result updates above, which look up the client's call ids.
-    messages = withAnthropicToolCallIds(messages);
+    if (!options?.preserveToolCallIds) {
+      messages = withAnthropicToolCallIds(messages);
+    }
 
     return {
       ...this.request,
@@ -531,10 +539,12 @@ function convertMcpImageBlocksToAnthropic(
 class AnthropicResponseAdapter
   implements LLMResponseAdapter<AnthropicResponse>
 {
-  readonly provider = "anthropic" as const;
   private response: AnthropicResponse;
 
-  constructor(response: AnthropicResponse) {
+  constructor(
+    response: AnthropicResponse,
+    readonly provider: SupportedProvider = "anthropic",
+  ) {
     this.response = response;
   }
 
@@ -666,7 +676,6 @@ class AnthropicResponseAdapter
 class AnthropicStreamAdapter
   implements LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse>
 {
-  readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
   /** Upstream content-block index → position in `state.toolCalls`. */
   private toolCallByBlockIndex = new Map<number, number>();
@@ -790,7 +799,7 @@ class AnthropicStreamAdapter
     return this.replacedText !== null;
   }
 
-  constructor() {
+  constructor(readonly provider: SupportedProvider = "anthropic") {
     this.state = {
       responseId: "",
       model: "",
@@ -1336,7 +1345,7 @@ class AnthropicStreamAdapter
    * The cache counts belong here for the same reason they belong on the wire:
    * without them the stored body reports a prompt of only the tokens that missed
    * the cache, contradicting the row's own `cache_read_tokens` column and making
-   * any usage re-derived from the stored response (`getUsageTokens`) silently
+   * any usage re-derived from the stored response (`anthropicUsageTokens`) silently
    * cache-free.
    */
   private responseUsage(): AnthropicResponse["usage"] {
@@ -1408,20 +1417,6 @@ class AnthropicStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: Anthropic.Types.Usage) {
-  return {
-    input: usage.input_tokens,
-    output: usage.output_tokens,
-    cacheRead: usage.cache_read_input_tokens ?? 0,
-    cacheWrite: usage.cache_creation_input_tokens ?? 0,
-    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-  };
-}
-
 // Same value as the SDK default, but passing it explicitly opts out of the
 // SDK's client-side guard that throws "Streaming is required for operations
 // that may take longer than 10 minutes" on non-streaming requests with large
@@ -1429,6 +1424,26 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
 // must forward such requests — the upstream API is the authority on whether
 // they need streaming.
 const ANTHROPIC_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+const CLAUDE_OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
+function withClaudeOAuthBetaHeader(
+  defaultHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  const existing = defaultHeaders?.["anthropic-beta"]
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (existing?.includes(CLAUDE_OAUTH_BETA_HEADER)) {
+    return { ...defaultHeaders };
+  }
+  return {
+    ...defaultHeaders,
+    "anthropic-beta":
+      existing && existing.length > 0
+        ? `${existing.join(",")},${CLAUDE_OAUTH_BETA_HEADER}`
+        : CLAUDE_OAUTH_BETA_HEADER,
+  };
+}
 
 export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,
@@ -1443,20 +1458,20 @@ export const anthropicAdapterFactory: LLMProvider<
   createRequestAdapter(
     request: AnthropicRequest,
   ): LLMRequestAdapter<AnthropicRequest, AnthropicMessages> {
-    return new AnthropicRequestAdapter(request);
+    return new AnthropicRequestAdapter(request, this.provider);
   },
 
   createResponseAdapter(
     response: AnthropicResponse,
   ): LLMResponseAdapter<AnthropicResponse> {
-    return new AnthropicResponseAdapter(response);
+    return new AnthropicResponseAdapter(response, this.provider);
   },
 
   createStreamAdapter(): LLMStreamAdapter<
     AnthropicStreamChunk,
     AnthropicResponse
   > {
-    return new AnthropicStreamAdapter();
+    return new AnthropicStreamAdapter(this.provider);
   },
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {
@@ -1568,6 +1583,10 @@ export const anthropicAdapterFactory: LLMProvider<
       });
     }
 
+    const defaultHeaders = isClaudeSubscriptionToken
+      ? withClaudeOAuthBetaHeader(options.defaultHeaders)
+      : options.defaultHeaders;
+
     return new AnthropicProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
@@ -1575,11 +1594,11 @@ export const anthropicAdapterFactory: LLMProvider<
       // A personal OAuth token must never be forwarded to a deployment's
       // configured custom Anthropic upstream.
       baseURL: isClaudeSubscriptionToken
-        ? "https://api.anthropic.com"
+        ? ANTHROPIC_SUBSCRIPTION_UPSTREAM
         : options.baseUrl,
       fetch: customFetch,
       timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
-      defaultHeaders: options.defaultHeaders,
+      defaultHeaders,
     });
   },
 
@@ -1591,7 +1610,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return withSamplingParamFallback({
       input: request,
       strip: stripAnthropicSamplingParams,
-      logContext: { provider: "anthropic", model: request.model },
+      logContext: { provider: this.provider, model: request.model },
       run: async (req) => {
         const params = {
           ...req,
@@ -1675,7 +1694,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return withSamplingParamFallback({
       input: request,
       strip: stripAnthropicSamplingParams,
-      logContext: { provider: "anthropic", model: request.model },
+      logContext: { provider: this.provider, model: request.model },
       // use the raw create() stream rather than the messages.stream() helper:
       // the helper eagerly partial-parses accumulated input_json_delta fragments
       // and throws (unguarded) when a non-conformant upstream emits deltas that
@@ -1837,7 +1856,7 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
 }
 
 /** Tool-use ids Anthropic accepts; see `wordToolCallId`. */
-function withAnthropicToolCallIds(
+export function withAnthropicToolCallIds(
   messages: AnthropicMessages,
 ): AnthropicMessages {
   return messages.map((message) => {

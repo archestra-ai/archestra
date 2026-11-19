@@ -19,6 +19,7 @@ import {
   SESSION_MAX_AGE_MIN_SECONDS,
   StoredAgentRuntimeTierSettingsSchema,
   StoredKnowledgeConnectorOverridesSchema,
+  StoredMcpRuntimeTierSettingsSchema,
   StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
   StoredPopularAgentOverridesSchema,
@@ -26,7 +27,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { ConnectionSetupClientIdSchema } from "./connection-setup";
 import {
@@ -380,6 +381,7 @@ const extendedFields = {
     StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   agentRuntimeTiers: StoredAgentRuntimeTierSettingsSchema.nullable(),
+  mcpRuntimeTiers: StoredMcpRuntimeTierSettingsSchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
 };
@@ -410,20 +412,27 @@ export type OrganizationDefaultModelRef = z.infer<
   typeof OrganizationDefaultModelRefSchema
 >;
 
-/** What "Organization default" runs on: the default model, routed across the trio while auto routing is active. */
+/**
+ * What "Organization default" runs on, and the auto routers that can be
+ * picked as a model. `model` is the default model, or the default router's
+ * normal tier. `autoRouters` lists those that route: auto routing is on and
+ * their tiers are set.
+ */
 export const OrganizationDefaultModelSchema = z.object({
   model: OrganizationDefaultModelRefSchema.nullable(),
-  autoRouting: z.discriminatedUnion("active", [
-    z.object({ active: z.literal(false) }),
+  /** The router chats and agents on the organization default run on, when it is one. */
+  defaultAutoRouterId: z.string().uuid().nullable(),
+  autoRouters: z.array(
     z.object({
-      active: z.literal(true),
+      id: z.string().uuid(),
+      name: z.string(),
       tiers: z.object({
         fast: OrganizationDefaultModelRefSchema,
         normal: OrganizationDefaultModelRefSchema,
         smart: OrganizationDefaultModelRefSchema,
       }),
     }),
-  ]),
+  ),
 });
 export type OrganizationDefaultModel = z.infer<
   typeof OrganizationDefaultModelSchema
@@ -523,6 +532,11 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultAgentId: z.string().uuid().nullable().optional(),
   defaultFastModelId: z.string().uuid().nullable().optional(),
   defaultSmartModelId: z.string().uuid().nullable().optional(),
+  /**
+   * Chats and agents on the organization default run on this auto router.
+   * The default model stays what built-in tasks and forked subagents run on.
+   */
+  defaultAutoRouterId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({
@@ -604,6 +618,7 @@ export const UpdateAuthSettingsSchema = z.object({
 });
 
 export const UpdateConnectionSettingsSchema = z.object({
+  connectionPageHidden: z.boolean().optional(),
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
   connectionClientFutureProviders:
     ConnectionClientFutureProvidersSchema.nullable().optional(),
@@ -744,7 +759,7 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-/** One Agent Runtime tier in effect, with the memory its CPU gives it. */
+/** One Agent Runtime tier in effect, including any explicit memory overrides. */
 export const AgentRuntimeTierSizeSchema = z.object({
   name: z.string(),
   cpuRequest: z.number(),
@@ -755,6 +770,20 @@ export const AgentRuntimeTierSizeSchema = z.object({
     .describe("Whether the tier keeps spare containers ready for its runs"),
   memoryRequestMiB: z.number().int(),
   memoryLimitMiB: z.number().int(),
+  memoryRequestMiBOverride: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Explicit memory request in MiB; absent when the request follows CPU",
+    ),
+  memoryLimitMiBOverride: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Explicit memory limit in MiB; absent when the limit follows CPU",
+    ),
   workspaceGiB: z
     .number()
     .int()

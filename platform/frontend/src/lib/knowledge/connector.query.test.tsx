@@ -5,22 +5,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetConnectorRuns = vi.fn();
 const mockUseQuery = vi.fn();
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getConnectors: vi.fn(),
-    getConnector: vi.fn(),
-    createConnector: vi.fn(),
-    updateConnector: vi.fn(),
-    deleteConnector: vi.fn(),
-    syncConnector: vi.fn(),
-    forceResyncConnector: vi.fn(),
-    testConnectorConnection: vi.fn(),
-    getConnectorRuns: (...args: unknown[]) => mockGetConnectorRuns(...args),
-    getConnectorRun: vi.fn(),
-    assignConnectorToKnowledgeBases: vi.fn(),
-    unassignConnectorFromKnowledgeBase: vi.fn(),
-    getConnectorKnowledgeBases: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getConnectors: vi.fn(),
+  getConnector: vi.fn(),
+  createConnector: vi.fn(),
+  updateConnector: vi.fn(),
+  deleteConnector: vi.fn(),
+  syncConnector: vi.fn(),
+  forceResyncConnector: vi.fn(),
+  testConnectorConnection: vi.fn(),
+  getConnectorRuns: (...args: unknown[]) => mockGetConnectorRuns(...args),
+  getConnectorRun: vi.fn(),
+  assignConnectorToKnowledgeBases: vi.fn(),
+  unassignConnectorFromKnowledgeBase: vi.fn(),
+  getConnectorKnowledgeBases: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", async () => {

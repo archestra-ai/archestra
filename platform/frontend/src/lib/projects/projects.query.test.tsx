@@ -9,33 +9,25 @@ import { useRestoreProject } from "./projects.query";
 
 // The module destructures the SDK at import time, so every name it takes has
 // to exist on the mock even though only `restoreProject` is exercised here.
-vi.mock("@archestra/shared", async () => {
-  const actual =
-    await vi.importActual<typeof import("@archestra/shared")>(
-      "@archestra/shared",
-    );
-  return {
-    ...actual,
-    archestraApiSdk: {
-      createProject: vi.fn(),
-      createProjectFromConversation: vi.fn(),
-      deleteProject: vi.fn(),
-      deleteSkillSandboxArtifact: vi.fn(),
-      getProject: vi.fn(),
-      getProjectConversations: vi.fn(),
-      getProjectFiles: vi.fn(),
-      getProjectInstructions: vi.fn(),
-      getProjects: vi.fn(),
-      permanentlyDeleteProject: vi.fn(),
-      pinProject: vi.fn(),
-      restoreProject: vi.fn(),
-      setProjectInstructions: vi.fn(),
-      unpinProject: vi.fn(),
-      updateProject: vi.fn(),
-      uploadProjectFiles: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  createProject: vi.fn(),
+  createProjectFromConversation: vi.fn(),
+  deleteProject: vi.fn(),
+  deleteSkillSandboxArtifact: vi.fn(),
+  getProject: vi.fn(),
+  getProjectConversations: vi.fn(),
+  getProjectFiles: vi.fn(),
+  getProjectInstructions: vi.fn(),
+  getProjects: vi.fn(),
+  permanentlyDeleteProject: vi.fn(),
+  pinProject: vi.fn(),
+  restoreProject: vi.fn(),
+  setProjectInstructions: vi.fn(),
+  unpinProject: vi.fn(),
+  updateProject: vi.fn(),
+  uploadProjectFiles: vi.fn(),
+}));
 
 vi.mock("@/lib/utils/api", async () => {
   const actual =

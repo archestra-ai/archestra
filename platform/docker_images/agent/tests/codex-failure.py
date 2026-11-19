@@ -65,6 +65,23 @@ class FailureWatchTest(unittest.TestCase):
             )
             self.assertIn("Check the configured provider credential", watcher.public_message("\r\x01"))
 
+    def test_safety_refusal_says_a_retry_needs_a_different_request(self):
+        refusal = "This request was blocked by our safety systems. Reason: Potentially unintended activity."
+        for info, code in (("misalignment_policy_violation", "codex_safety_blocked"), ("other", "codex_turn_failed")):
+            with self.subTest(info=info), tempfile.TemporaryDirectory() as directory:
+                runtime = Path(directory)
+                transcript = runtime / "main.jsonl"
+                transcript.write_text("")
+                with patch.dict(os.environ, {"CODEX_HOME": str(runtime), "ARCHESTRA_AGENT_RUNTIME_MODE": "one_shot", "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn")}, clear=True):
+                    watch = watcher.FailureWatch(runtime)
+                    (runtime / "codex-main-transcript").write_text(str(transcript))
+                    transcript.write_text(json.dumps({"type": "event_msg", "payload": {"type": "task_complete", "error": {"message": refusal, "codex_error_info": info}}}) + "\n")
+                    watch.poll()
+                envelope = json.loads((runtime / "turn.failure").read_text())
+                self.assertEqual(envelope["code"], code)
+                self.assertTrue(envelope["message"].startswith(refusal))
+                self.assertEqual("Reword the request" in envelope["message"], info != "other")
+
     def test_successful_retained_turn_ignores_later_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory)

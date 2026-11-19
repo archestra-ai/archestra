@@ -176,6 +176,30 @@ describe("chat file upload helpers", () => {
     }
   });
 
+  test("lets audio-capable Gemini models read M4A/AAC voice clips", () => {
+    const readable = getModelReadableMimeTypes(["text", "audio"], "gemini");
+    for (const mimeType of ["audio/mp4", "audio/m4a", "audio/aac"]) {
+      expect(readable.has(mimeType)).toBe(true);
+    }
+    expect(readable.has("audio/mpeg")).toBe(true);
+  });
+
+  test("keeps M4A/AAC off providers whose request conversion rejects them", () => {
+    // OpenAI's chat conversion throws on audio other than WAV/MP3, so these
+    // must be staged into the sandbox rather than sent inline.
+    for (const provider of ["openai", "anthropic", undefined] as const) {
+      const readable = getModelReadableMimeTypes(["text", "audio"], provider);
+      expect(readable.has("audio/mp4")).toBe(false);
+      expect(readable.has("audio/aac")).toBe(false);
+    }
+  });
+
+  test("does not add Gemini audio formats when the model has no audio input", () => {
+    const readable = getModelReadableMimeTypes(["text", "image"], "gemini");
+    expect(readable.has("audio/mp4")).toBe(false);
+    expect(readable.has("audio/mpeg")).toBe(false);
+  });
+
   test("uses explicit file media types when present", () => {
     expect(getMediaType({ name: "notes.txt", type: "text/markdown" })).toBe(
       "text/markdown",
@@ -191,6 +215,8 @@ describe("chat file upload helpers", () => {
       "text/tab-separated-values",
     );
     expect(getMediaType({ name: "README.md", type: "" })).toBe("text/markdown");
+    expect(getMediaType({ name: "voice.m4a", type: "" })).toBe("audio/mp4");
+    expect(getMediaType({ name: "voice.aac", type: "" })).toBe("audio/aac");
     expect(getMediaType({ name: "readme.txt", type: "" })).toBe("text/plain");
     expect(getMediaType({ name: "config.yaml", type: "" })).toBe(
       "application/x-yaml",

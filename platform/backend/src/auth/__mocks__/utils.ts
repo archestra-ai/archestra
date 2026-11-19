@@ -6,6 +6,8 @@
  */
 import { vi } from "vitest";
 
-export const hasPermission = vi.fn();
-export const userHasPermission = vi.fn();
-export const getPermissionsForUserContext = vi.fn();
+import type { MockFunction } from "@/test/mocks/mock-function";
+
+export const hasPermission = vi.fn<MockFunction>();
+export const userHasPermission = vi.fn<MockFunction>();
+export const getPermissionsForUserContext = vi.fn<MockFunction>();

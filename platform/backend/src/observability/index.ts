@@ -1,5 +1,6 @@
 import AgentLabelModel from "@/models/agent-label";
 import * as metrics from "./metrics";
+import { initializeActiveUsersMetrics } from "./metrics/active-users";
 import { agentRuntimeHealthMetrics } from "./metrics/agent-runtime-health";
 
 export async function initializeObservabilityMetrics(params?: {
@@ -27,6 +28,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.sandbox.initializeSandboxMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();
   metrics.taskQueue.initializeTaskQueueMetrics();
+  metrics.toolSearchText.initializeToolSearchTextMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.limit.initializeLimitMetrics();
   metrics.openappa.initializeOpenappaMetrics();
@@ -34,7 +36,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
   agentRuntimeHealthMetrics.initialize();
   metrics.skill.initializeSkillMetrics();
-  metrics.activeUsers.initializeActiveUsersMetrics();
+  initializeActiveUsersMetrics();
 
   return labelKeys;
 }

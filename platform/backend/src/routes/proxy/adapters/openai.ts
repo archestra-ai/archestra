@@ -12,6 +12,10 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import {
+  openAIUsageTokens,
+  withReasoningOutsideCompletion,
+} from "@/observability/metrics/llm-usage";
 import { priceOpenAiAudioChat } from "@/services/media-pricing";
 import {
   decodeOpenAiCodexCredential,
@@ -70,6 +74,15 @@ type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
 type OpenAiEmbeddingRequest = OpenAi.Types.EmbeddingRequest;
 type OpenAiEmbeddingResponse = OpenAi.Types.EmbeddingResponse;
+/**
+ * How an OpenAI-wire provider's adapters read and write its usage.
+ * `reasoningOutsideCompletion` is xAI's dialect (see
+ * `reportsReasoningOutsideCompletion`).
+ */
+type OpenAiAdapterOptions = {
+  provider?: SupportedProvider;
+  reasoningOutsideCompletion?: boolean;
+};
 
 type OpenAiToolResultImageBlock = {
   type: "image_url";
@@ -289,18 +302,19 @@ export class OpenAIEmbeddingStreamAdapter
 // =============================================================================
 
 // Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
+export class OpenAIRequestAdapter<
+  TRequest extends Omit<OpenAiRequest, "response_format"> = OpenAiRequest,
+> implements LLMRequestAdapter<TRequest, OpenAiMessages>
 {
   readonly provider: SupportedProvider;
-  private request: OpenAiRequest;
+  private request: TRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
   // `provider` overrides which provider this adapter attributes to (logs,
   // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
   // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
-  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
+  constructor(request: TRequest, provider: SupportedProvider = "openai") {
     this.request = request;
     this.provider = provider;
   }
@@ -380,7 +394,7 @@ export class OpenAIRequestAdapter
     return this.request.messages;
   }
 
-  getOriginalRequest(): OpenAiRequest {
+  getOriginalRequest(): TRequest {
     return this.request;
   }
 
@@ -518,7 +532,7 @@ export class OpenAIRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): OpenAiRequest {
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {
@@ -596,7 +610,9 @@ export class OpenAIRequestAdapter
       ...this.request,
       model: this.getModel(),
       // After the result updates above, which look up the client's call ids.
-      messages: withOpenAiChatToolCallIds(messages),
+      messages: options?.preserveToolCallIds
+        ? messages
+        : withOpenAiChatToolCallIds(messages),
     };
   }
 
@@ -876,14 +892,19 @@ export class OpenAIResponseAdapter
 {
   readonly provider: SupportedProvider;
   private response: OpenAiResponse;
+  private readonly reasoningOutsideCompletion: boolean;
 
   constructor(
     response: OpenAiResponse,
-    provider: SupportedProvider = "openai",
+    {
+      provider = "openai",
+      reasoningOutsideCompletion = false,
+    }: OpenAiAdapterOptions = {},
   ) {
     assertResponseHasChoices(response, provider);
     this.response = response;
     this.provider = provider;
+    this.reasoningOutsideCompletion = reasoningOutsideCompletion;
   }
 
   getId(): string {
@@ -950,7 +971,9 @@ export class OpenAIResponseAdapter
       };
     }
     const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
-      getUsageTokens(this.response.usage);
+      openAIUsageTokens(this.response.usage, {
+        reasoningOutsideCompletion: this.reasoningOutsideCompletion,
+      });
     return withAudioTokenCost(
       {
         inputTokens: input,
@@ -1121,11 +1144,25 @@ export class OpenAIStreamAdapter
   // with empty `choices`, after the finish chunk.
   private readonly clientRequestedUsage: boolean;
 
-  constructor(
-    provider: SupportedProvider = "openai",
-    clientRequest?: OpenAiStreamUsageRequest,
-  ) {
+  private readonly reasoningOutsideCompletion: boolean;
+  private readonly clientReasoningOutsideCompletion: boolean;
+
+  constructor({
+    provider = "openai",
+    clientRequest,
+    reasoningOutsideCompletion = false,
+    clientReasoningOutsideCompletion = reasoningOutsideCompletion,
+  }: OpenAiAdapterOptions & {
+    clientRequest?: OpenAiStreamUsageRequest;
+    /**
+     * The dialect the client reads, when it is not the provider's own: the
+     * model router and the Responses surface give OpenAI's to an xAI turn.
+     */
+    clientReasoningOutsideCompletion?: boolean;
+  } = {}) {
     this.provider = provider;
+    this.reasoningOutsideCompletion = reasoningOutsideCompletion;
+    this.clientReasoningOutsideCompletion = clientReasoningOutsideCompletion;
     this.clientRequestedUsage =
       clientRequest?.stream_options?.include_usage === true;
     this.state = {
@@ -1154,16 +1191,17 @@ export class OpenAIStreamAdapter
 
     let sseData: string | null = null;
     let isToolCallChunk = false;
-    let isFinal = false;
 
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
-    // when stream_options.include_usage is true
+    // Usage is cumulative metadata, not a terminal signal: some compatible
+    // providers include it on every chunk, including the initial zero counts.
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
-      const tokens = getUsageTokens(chunk.usage);
+      const tokens = openAIUsageTokens(chunk.usage, {
+        reasoningOutsideCompletion: this.reasoningOutsideCompletion,
+      });
       this.state.usage = withAudioTokenCost(
         {
           inputTokens: tokens.input,
@@ -1183,11 +1221,12 @@ export class OpenAIStreamAdapter
     // reading [0] off it unguarded is a crash.
     const choice = chunk.choices?.[0];
     if (!choice) {
-      // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
+      // OpenAI sends terminal usage after finish_reason. An early usage-only
+      // chunk or a heartbeat after earlier usage must not end the stream.
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: this.state.usage !== null,
+        isFinal: !!chunk.usage && this.state.stopReason !== null,
       };
     }
 
@@ -1304,20 +1343,14 @@ export class OpenAIStreamAdapter
       isToolCallChunk = true;
     }
 
-    // Handle finish reason
-    // Note: Don't set isFinal here - OpenAI sends the usage chunk AFTER the finish_reason chunk
-    // when stream_options.include_usage is true (which we always set in executeStream)
+    // A finish chunk can carry cumulative usage that a trailing usage-only
+    // chunk corrects. Keep reading even when both are present; providers that
+    // omit trailing usage complete when the iterator ends normally.
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
-    // Only mark as final after we've received usage data (which comes in a separate chunk
-    // after the finish_reason chunk when include_usage is enabled)
-    if (this.state.usage !== null) {
-      isFinal = true;
-    }
-
-    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
+    return { sseData, isToolCallChunk, isFinal: false, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -1438,10 +1471,7 @@ export class OpenAIStreamAdapter
     // OpenAI-compatible models) never see token counts. `state.usage.inputTokens` is net of
     // cache reads (see processChunk above), so this must recombine them into a gross
     // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
-    const usage = withUpstreamUsageDetails(
-      toOpenAiStreamUsageWithCache(this.state.usage),
-      this.upstreamUsage,
-    );
+    const usage = this.rebuiltUsage();
     if (usage && this.clientRequestedUsage) {
       const usageChunk: OpenAiStreamChunk = {
         id: finalChunk.id,
@@ -1500,10 +1530,7 @@ export class OpenAIStreamAdapter
             : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
-      usage: withUpstreamUsageDetails(
-        toOpenAiStreamUsageWithCache(this.state.usage),
-        this.upstreamUsage,
-      ) ?? {
+      usage: this.rebuiltUsage() ?? {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -1533,6 +1560,22 @@ export class OpenAIStreamAdapter
       return "";
     }
     return this.getTextSuffix(firstText);
+  }
+
+  /**
+   * The wire usage rebuilt from the proxy's counts, in the client's dialect:
+   * `state.usage.outputTokens` includes reasoning, so a client that reads it
+   * outside `completion_tokens` gets it taken back out, and a streamed turn
+   * reports what the same turn would report unstreamed.
+   */
+  private rebuiltUsage() {
+    const usage = withUpstreamUsageDetails(
+      toOpenAiStreamUsageWithCache(this.state.usage),
+      this.upstreamUsage,
+    );
+    return usage && this.clientReasoningOutsideCompletion
+      ? withReasoningOutsideCompletion(usage, true)
+      : usage;
   }
 }
 
@@ -1638,32 +1681,6 @@ function withContentPrefix(
 // USAGE TOKEN HELPERS
 // =============================================================================
 
-export function getUsageTokens(usage: OpenAi.Types.Usage) {
-  // OpenAI reports cached tokens as a SUBSET already inside prompt_tokens, so
-  // subtract them to get the uncached input and avoid double-counting.
-  const cacheRead =
-    (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
-      ?.cached_tokens ?? 0;
-  const details = usage.prompt_tokens_details as
-    | { cache_write_tokens?: number; cache_write_1h_tokens?: number }
-    | undefined;
-  const cacheWrite = details?.cache_write_tokens ?? 0;
-  const reasoning =
-    (
-      usage.completion_tokens_details as
-        | { reasoning_tokens?: number }
-        | undefined
-    )?.reasoning_tokens ?? 0;
-  return {
-    input: Math.max(0, (usage.prompt_tokens ?? 0) - cacheRead - cacheWrite),
-    output: usage.completion_tokens ?? 0,
-    cacheRead,
-    cacheWrite,
-    cacheWrite1h: details?.cache_write_1h_tokens,
-    reasoning,
-  };
-}
-
 /**
  * An audio chat response (`gpt-audio`) counts its audio tokens inside the
  * prompt and completion totals, which the per-token chat price would bill as
@@ -1706,7 +1723,7 @@ export const openaiAdapterFactory: LLMProvider<
   createStreamAdapter(
     request?: OpenAiRequest,
   ): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
-    return new OpenAIStreamAdapter("openai", request);
+    return new OpenAIStreamAdapter({ clientRequest: request });
   },
 
   extractApiKey(headers: OpenAiHeaders): string | undefined {

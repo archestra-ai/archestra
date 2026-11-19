@@ -62,6 +62,7 @@ import {
 } from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
+  ConversationChatError,
   CopilotCredentialSource,
   InsertInteraction,
   Interaction,
@@ -83,6 +84,7 @@ import {
 import type { AttributionLabels } from "@/types/attribution-label";
 import type { InsertRoutingUsage } from "@/types/auto-routing";
 import {
+  InteractionErrorResponseSchema,
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
 } from "@/types/interaction";
@@ -105,6 +107,7 @@ import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
 import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
+import TeamModel from "./team";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -693,6 +696,20 @@ class InteractionModel {
     await InteractionModel.write({ data, auditContext, returnRow: false });
   }
 
+  /** Update only the routing outcome; usage was settled when the failed row was written. */
+  static async markPoolAttemptFailedOver(id: string): Promise<void> {
+    await db
+      .update(schema.interactionsTable)
+      .set({ attemptOutcome: "failed_over" })
+      .where(
+        and(
+          eq(schema.interactionsTable.id, id),
+          isNotNull(schema.interactionsTable.modelPoolId),
+          eq(schema.interactionsTable.attemptOutcome, "failed"),
+        ),
+      );
+  }
+
   /**
    * Find all interactions with pagination, sorting, and filtering support
    */
@@ -882,6 +899,8 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /** Rows before this interaction in (createdAt, id) order. */
+      beforeId?: string;
     };
   }): Promise<PaginatedResult<InteractionSummary>> {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
@@ -926,6 +945,17 @@ class InteractionModel {
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
+    if (filters?.beforeId) {
+      // At the stored precision: the API's timestamps stop at milliseconds,
+      // so only the database can rank rows that share one.
+      conditions.push(
+        sql`(${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}) < (
+          SELECT ${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}
+          FROM ${schema.interactionsTable}
+          WHERE ${schema.interactionsTable.id} = ${filters.beforeId}
+        )`,
+      );
+    }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const [rows, [{ total }]] = await Promise.all([
@@ -953,7 +983,12 @@ class InteractionModel {
           attempt: schema.interactionsTable.attempt,
           attemptOutcome: schema.interactionsTable.attemptOutcome,
           failureReason: schema.interactionsTable.failureReason,
+          failed: sql<boolean>`COALESCE(${schema.interactionsTable.failed}, false)`,
           source: schema.interactionsTable.source,
+          autoRouted: sql<boolean>`EXISTS (
+            SELECT 1 FROM ${schema.routingUsageTable}
+            WHERE ${schema.routingUsageTable.interactionId} = ${schema.interactionsTable.id}
+          )`,
           // The row's small stored preview (not the payload), so the trace can
           // name a turn by the prompt it served; decrypted below.
           attributionLabels: schema.interactionsTable.attributionLabels,
@@ -1000,7 +1035,14 @@ class InteractionModel {
           ),
         )
         .where(whereClause)
-        .orderBy(InteractionModel.getOrderByClause(sorting))
+        // Ties on the sort column break by id, so offset pages never swap
+        // rows that share a timestamp and a row's rank is well defined.
+        .orderBy(
+          InteractionModel.getOrderByClause(sorting),
+          sorting?.sortDirection === "asc"
+            ? asc(schema.interactionsTable.id)
+            : desc(schema.interactionsTable.id),
+        )
         .limit(pagination.limit)
         .offset(pagination.offset),
       db
@@ -1040,6 +1082,9 @@ class InteractionModel {
             : null,
           responseToolNames: preview.success
             ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseToolCalls: preview.success
+            ? (preview.data.responseToolCalls ?? null)
             : null,
           responseTextPreview: preview.success
             ? (preview.data.responseTextPreview ?? null)
@@ -1111,6 +1156,23 @@ class InteractionModel {
         (row.cacheWriteTokens ?? 0),
       createdAt: row.createdAt,
     };
+  }
+
+  /** Visibility checks for metadata endpoints must not decrypt or reconstruct conversation payloads. */
+  static async findAccessMetadata(params: {
+    id: string;
+    organizationId: string;
+  }) {
+    const [row] = await db
+      .select({ userId: schema.interactionsTable.userId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.id, params.id),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return row ?? null;
   }
 
   static async findById(
@@ -1535,7 +1597,7 @@ class InteractionModel {
       // A credential's billing team takes the place of the agent's teams the
       // caller belongs to.
       const teamIds = interaction.billingTeamId
-        ? [interaction.billingTeamId]
+        ? await TeamModel.getBillingAncestorIds(interaction.billingTeamId)
         : await AgentTeamModel.getCallerTeamsForAgent({
             agentId: interaction.profileId,
             userId: interaction.userId,
@@ -1561,7 +1623,13 @@ class InteractionModel {
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
         {
           entityType: "llm_oauth_client",
-          entityId: interaction.authenticatedAppId,
+          // Audit app identity can accompany non-OAuth credentials. Only
+          // actual OAuth authentication accrues application-limit usage.
+          entityId:
+            interaction.authMethod === "oauth_client_credentials" ||
+            interaction.authMethod === "oauth_user"
+              ? interaction.authenticatedAppId
+              : undefined,
         },
         {
           entityType: "virtual_key",
@@ -1597,6 +1665,38 @@ class InteractionModel {
    * The previous approach used ARRAY_AGG with FILTER on request::text which was O(n) on JSON size
    * and caused 17+ second queries due to scanning megabytes of JSON per session.
    */
+  /**
+   * The errors Archestra Chat showed for a session's conversation (its id is
+   * the session id), oldest first. Empty when the caller cannot see the
+   * session or the session is no chat conversation. Encrypted-chat errors come
+   * back as the locked sentinel, as on the request detail endpoint.
+   */
+  static async findSessionChatErrors(params: {
+    sessionId: string;
+    organizationId: string;
+    /** Limits the check to this user's requests; omit for `log:admin`. */
+    userId?: string;
+  }): Promise<ConversationChatError[]> {
+    if (!isUuid(params.sessionId)) return [];
+    const access = await InteractionModel.buildSessionConditions(
+      undefined,
+      undefined,
+      {
+        organizationId: params.organizationId,
+        userId: params.userId,
+        sessionId: params.sessionId,
+      },
+    );
+    if (access === SESSION_ACCESS_DENIED) return [];
+    const [visible] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(access)
+      .limit(1);
+    if (!visible) return [];
+    return ConversationChatErrorModel.findByConversation(params.sessionId);
+  }
+
   static async getSessions(
     pagination: PaginationQuery,
     requestingUserId?: string,
@@ -2535,6 +2635,13 @@ class InteractionModel {
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
         failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+        // Failed-over attempts are counted above: a pool retried them, so the
+        // request itself did not fail.
+        failedRequestCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.failed} AND ${schema.interactionsTable.attemptOutcome} IS DISTINCT FROM 'failed_over')`,
+        // Errors the Archestra Chat showed for the conversation whose id is
+        // the session id, by the indexed conversation id (same uuid guard as
+        // conversationTitle below).
+        chatErrorCount: sql<number>`(SELECT COUNT(*) FROM ${schema.conversationChatErrorsTable} WHERE ${schema.conversationChatErrorsTable.conversationId} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
         totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
@@ -2699,6 +2806,8 @@ class InteractionModel {
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         failedOverCount: Number(s.failedOverCount),
+        failedRequestCount: Number(s.failedRequestCount),
+        chatErrorCount: Number(s.chatErrorCount),
         totalDurationMs:
           s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,
@@ -3335,28 +3444,43 @@ class InteractionModel {
   }
 
   /**
-   * Number of distinct users with at least one attributed interaction since
-   * `since`. Backs the `llm_active_users` gauge.
+   * Distinct users with an attributed interaction at or after each cutoff.
+   * Computes every rolling window of the `llm_active_users` gauge in one scan.
    *
    * Deliberately an aggregate: per-user identity is not exported to Prometheus
    * (a user_id label would multiply every LLM metric's series count by the size
    * of the org — the same reason external_agent_id is not a label). Per-user
    * detail belongs to the statistics API, which reads this table directly.
    */
-  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
-    const [row] = await db
+  static async countDistinctActiveUsersForWindows(
+    since: Date[],
+  ): Promise<number[]> {
+    if (!since.length) return [];
+    const earliest = new Date(Math.min(...since.map((date) => date.getTime())));
+    // Group once over the widest window. Each user contributes exactly once
+    // to every window containing their most recent interaction.
+    const activeUsers = db
       .select({
-        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+        userId: schema.interactionsTable.userId,
+        lastSeen: max(schema.interactionsTable.createdAt).as("last_seen"),
       })
       .from(schema.interactionsTable)
       .where(
         and(
-          gte(schema.interactionsTable.createdAt, since),
+          gte(schema.interactionsTable.createdAt, earliest),
           isNotNull(schema.interactionsTable.userId),
         ),
-      );
-
-    return Number(row?.activeUsers) || 0;
+      )
+      .groupBy(schema.interactionsTable.userId)
+      .as("active_users");
+    const counts = Object.fromEntries(
+      since.map((date, index) => [
+        `window${index}`,
+        sql<number>`count(*) FILTER (WHERE ${activeUsers.lastSeen} >= ${date})`,
+      ]),
+    );
+    const [row] = await db.select(counts).from(activeUsers);
+    return since.map((_, index) => Number(row?.[`window${index}`]) || 0);
   }
 
   /**
@@ -3559,7 +3683,7 @@ class InteractionModel {
     // the deployment's Log Content mode withholds, or media the organization
     // keeps out of its logs, whether the call came from Chat, an agent
     // session or a client of the proxy.
-    const withheld = resolveLogContentMode() === "metadata_only";
+    const withheld = resolveLogContentMode(data.source) === "metadata_only";
     const keepMedia =
       withheld ||
       (agentSettings?.keepMediaInLogs ??
@@ -3582,6 +3706,10 @@ class InteractionModel {
     const sanitized = {
       ...record,
       environmentId,
+      // Read from the raw response: the stored one may be withheld or
+      // encrypted, and aggregates must not need the payload.
+      failed: InteractionErrorResponseSchema.safeParse(columns.response)
+        .success,
       request: stripUnstorableChars(record.request),
       processedRequest: stripUnstorableChars(record.processedRequest),
       response: stripUnstorableChars(record.response),
@@ -4052,7 +4180,7 @@ function buildLastUserMessagePreview(
   response: unknown = {},
 ): string | null {
   try {
-    if (type === "anthropic:messages") {
+    if (type === "anthropic:messages" || type === "github-copilot:messages") {
       const genuine = extractGenuineAnthropicUserMessage(request);
       if (genuine) {
         return truncatePreview(genuine);
@@ -4218,7 +4346,11 @@ function buildSessionPreview(
       ? extractClaudeCodeTitle(data.response)
       : null,
     ...(contentNotStored
-      ? { responseToolNames: [], responseTextPreview: null }
+      ? {
+          responseToolNames: [],
+          responseToolCalls: [],
+          responseTextPreview: null,
+        }
       : buildResponsePreview(data)),
   };
 }
@@ -4486,7 +4618,7 @@ function buildResponsePreview(
   data: InsertInteraction,
 ): Pick<
   InteractionSessionPreview,
-  "responseToolNames" | "responseTextPreview"
+  "responseToolNames" | "responseToolCalls" | "responseTextPreview"
 > {
   try {
     const interaction = new DynamicInteraction({
@@ -4497,13 +4629,18 @@ function buildResponsePreview(
     const responseToolNames = interaction.getToolNamesRequested();
     return {
       responseToolNames,
+      responseToolCalls: interaction.getToolCallsRequested(),
       responseTextPreview:
         responseToolNames.length > 0
           ? null
           : truncatePreview(interaction.getLastAssistantResponse()),
     };
   } catch {
-    return { responseToolNames: [], responseTextPreview: null };
+    return {
+      responseToolNames: [],
+      responseToolCalls: [],
+      responseTextPreview: null,
+    };
   }
 }
 

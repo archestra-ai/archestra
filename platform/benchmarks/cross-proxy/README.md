@@ -3,7 +3,7 @@
 [Measured 2026-10-26 results and caveats](evidence/2026-10-26/RESULTS.md).
 
 
-Run on the existing `ubicloud-standard-16-ubuntu-2404` runner, using the existing
+Run on the existing `ubuntu-24.04-16core` GitHub-hosted runner, using the existing
 **LLM Proxy Benchmark** workflow's manual `compare_litellm=true` input. This mode
 skips the ordinary release benchmark (including MCP). It never updates public
 performance docs. No model provider credentials are needed.

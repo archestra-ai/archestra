@@ -101,7 +101,7 @@ Each conversation gets a private Linux container, so the agent can run shell com
 - **Files you attach** appear under `/home/sandbox/attachments/`.
 - **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 32 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
 - **Files the agent saves** appear in the conversation's **Files** panel.
-- **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment.
+- **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment, unless the agent [sets its own](/docs/admin/environments#give-one-agent-its-own-policy).
 
 What to know:
 

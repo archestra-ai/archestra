@@ -9,6 +9,7 @@ asserts that no tool-using inference arrives while discovery is incomplete.
 import base64
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,10 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CLIENT = sys.argv.pop(1)
+if CLIENT == "hermes":
+    hermes_spec = importlib.util.spec_from_file_location("hermes_startup", Path(__file__).with_name("hermes-startup.py"))
+    hermes_startup = importlib.util.module_from_spec(hermes_spec)
+    hermes_spec.loader.exec_module(hermes_startup)
 TOOLS = ["archestra__get_remedy_plans", "archestra__execute_remedy_plan", "archestra__yell"]
 # The gateway puts an attestation marker in front of each description; the LLM
 # proxy resolves a client's renamed tool by it, so it must reach the model.
@@ -585,6 +590,10 @@ class StartupTest(unittest.TestCase):
                     pass
             os.close(fd)
             subprocess.run(["tmux", "-L", tmux_socket, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            if CLIENT == "hermes":
+                # The TUI's persistent gateway has its own session and survives
+                # the terminal kill. Stop this test runtime before rmtree.
+                hermes_startup.stop_runtime_processes(runtime)
 
 
 if __name__ == "__main__":

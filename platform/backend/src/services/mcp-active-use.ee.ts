@@ -4,11 +4,11 @@
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import { McpServerModel, OrganizationModel } from "@/models";
-import {
+import McpServerModel, {
   MCP_DEMAND_HEARTBEAT_INTERVAL_MS,
   MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
 } from "@/models/mcp-server";
+import OrganizationModel from "@/models/organization";
 import { trackBackgroundWork } from "@/utils/background-work";
 
 type DemandTrackingMode = "off" | "required";
@@ -267,7 +267,7 @@ class McpActiveUseTracker {
   /**
    * Once the shared organization toggle is on, every replica must publish
    * demand before dispatch even if its local rollout gates are still off:
-   * another replica may already be sweeping. Local beta/license/config state
+   * another replica may already be sweeping. Local licence or kill-switch state
    * cannot weaken the cluster-wide organization contract.
    */
   private trackingMode(): DemandTrackingMode | Promise<DemandTrackingMode> {
@@ -288,7 +288,6 @@ class McpActiveUseTracker {
 
   private trackingEnabledSync(): boolean | undefined {
     if (
-      !config.orchestrator.mcpIdleHibernation.betaEnabled ||
       config.orchestrator.mcpIdleHibernation.hardDisabled ||
       !enterpriseTier.isCoreActive()
     ) {

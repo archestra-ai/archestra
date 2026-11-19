@@ -56,7 +56,17 @@ for (const viewport of [
       await mswControl.use({
         method: "get",
         url: "/api/openappa/github-sync",
-        body: { enabled: true, hasPolicy: false, source: null },
+        body: {
+          selfService: {
+            enabled: false,
+            setting: false,
+            directory: "mcp",
+            autoMerge: { enabled: false, setting: false },
+          },
+          enabled: true,
+          hasPolicy: false,
+          source: null,
+        },
       });
       await mswControl.use({
         method: "get",
@@ -89,6 +99,7 @@ for (const viewport of [
         body: {
           batteries: [],
           unusedAliases: [],
+          repositoryFiles: [],
           rootRevision: 1,
           lastError: null,
           composition: {
@@ -189,7 +200,10 @@ for (const viewport of [
         },
       ]);
       await page.goto("/openappa/policy");
-      const policySource = page.getByText("Revision 1", { exact: true });
+      // The bar names the open file's kind only in the Source view.
+      const policySource = page
+        .getByTestId("policy-file-kind")
+        .filter({ hasText: "Organization policy" });
       await expect(policySource).toBeInViewport();
       await expect(
         page.getByRole("button", { name: "Save & apply" }),

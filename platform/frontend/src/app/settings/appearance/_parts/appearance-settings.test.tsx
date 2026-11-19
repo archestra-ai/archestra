@@ -70,6 +70,7 @@ beforeEach(() => {
     expiresAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     isActive: true,
+    dismissible: true,
   };
   patches = [];
   noticeWrites = [];
@@ -109,6 +110,7 @@ beforeEach(() => {
       const body = (await request.json()) as {
         content: string;
         expiresAt?: string;
+        dismissible?: boolean;
       };
       noticeWrites.push({ method: "POST", body });
       notification = {
@@ -116,6 +118,7 @@ beforeEach(() => {
         content: body.content,
         expiresAt: body.expiresAt ?? null,
         isActive: true,
+        dismissible: body.dismissible ?? true,
         createdAt: "2026-01-01T00:00:00.000Z",
       };
       return HttpResponse.json(notification);
@@ -191,7 +194,7 @@ describe("Appearance settings", () => {
       "Workspace",
     );
     expect(setHeader).toHaveBeenLastCalledWith({
-      title: "Appearance",
+      title: "Branding",
       description: "Name, logos, and colors for your organization.",
     });
   });
@@ -333,6 +336,7 @@ describe("Appearance settings", () => {
           body: {
             content: "# Maintenance",
             expiresAt: expect.any(String),
+            dismissible: true,
             isActive: true,
           },
         },
@@ -359,6 +363,39 @@ describe("Appearance settings", () => {
     expect(screen.getByText("No announcement configured.")).toBeVisible();
   });
 
+  it("saves a notification that users cannot dismiss", async () => {
+    const user = userEvent.setup();
+    vi.mocked(usePathname).mockReturnValue("/settings/appearance/other");
+    renderSettings();
+    await user.click(
+      await screen.findByRole("button", { name: "Edit site notification" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    const toggle = within(dialog).getByRole("switch", {
+      name: "Allow users to dismiss",
+    });
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep changes" }),
+    );
+    expect(screen.getByText(/Users can't dismiss it/)).toBeVisible();
+    await user.click(save());
+    await waitFor(() =>
+      expect(noticeWrites).toEqual([
+        {
+          method: "PUT",
+          body: {
+            content: "**Welcome** to the workspace.",
+            expiresAt: null,
+            dismissible: false,
+            isActive: true,
+          },
+        },
+      ]),
+    );
+  });
+
   it("creates a notification only after the page is saved", async () => {
     notification = null;
     vi.mocked(usePathname).mockReturnValue("/settings/appearance/other");
@@ -376,7 +413,10 @@ describe("Appearance settings", () => {
     await user.click(save());
     await waitFor(() =>
       expect(noticeWrites).toEqual([
-        { method: "POST", body: { content: "New announcement" } },
+        {
+          method: "POST",
+          body: { content: "New announcement", dismissible: true },
+        },
       ]),
     );
     await waitFor(() =>

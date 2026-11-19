@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import db from "@/database";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -330,11 +332,48 @@ test("continuations keep one owner session and ordered history without exposing 
       }),
     ).toBeNull();
   }
+  // The batch lookup answers each id as the single one does.
+  const standalone = await A2ATaskModel.createForRun({
+    contextId: context.id,
+    agentId: agent.id,
+  });
+  await AgentRunModel.create({
+    ...common,
+    workloadName: `standalone-${standalone.id}`,
+    taskId: standalone.id,
+  });
+  const unknown = crypto.randomUUID();
+  const batch = await AgentRunModel.findCurrentSessionsForActor({
+    ...lookup,
+    taskIds: [first.id, second.id, workspace.id, standalone.id, unknown],
+  });
+  expect(
+    Object.fromEntries(
+      [...batch].map(([id, run]) => [id, [run.taskId, run.sessionId]]),
+    ),
+  ).toEqual({
+    [first.id]: [second.id, first.id],
+    [second.id]: [second.id, first.id],
+    [workspace.id]: [second.id, first.id],
+    [standalone.id]: [standalone.id, standalone.id],
+  });
+  expect(
+    (
+      await AgentRunModel.findCurrentSessionsForActor({
+        ...lookup,
+        actorUserId: other.id,
+        taskIds: [first.id, second.id, workspace.id, standalone.id],
+      })
+    ).size,
+  ).toBe(0);
   const listed = await AgentRunModel.listForActor({
     ...lookup,
     pagination: { limit: 10, offset: 0 },
   });
-  expect(listed.data.map((run) => run.taskId)).toEqual([second.id]);
+  expect(listed.data.map((run) => run.taskId)).toEqual([
+    standalone.id,
+    second.id,
+  ]);
   const history = await AgentRunModel.listPreviousTurns({ run: secondRun });
   expect(history.map((run) => run.id)).toEqual([firstRun.id]);
   expect(
@@ -350,4 +389,70 @@ test("continuations keep one owner session and ordered history without exposing 
       organizationId: org.id,
     }),
   ).toMatchObject({ taskId: first.id });
+});
+
+test("deleting a session removes every turn in one statement, or none of them", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: owner.id,
+  });
+  const turns = [];
+  for (let turn = 0; turn < 2; turn++) {
+    turns.push(
+      await A2ATaskModel.createForRun({
+        contextId: context.id,
+        agentId: agent.id,
+      }),
+    );
+  }
+  const [first, current] = turns;
+  const common = {
+    organizationId: org.id,
+    agentId: agent.id,
+    actorKind: "user" as const,
+    actorId: owner.id,
+    actorUserId: owner.id,
+    workloadName: `session-${first.id}`,
+    backend: "kubernetes" as const,
+    runtimeScope: "test",
+  };
+  await AgentRunModel.create({ ...common, taskId: first.id });
+  const session = await AgentRunModel.create({
+    ...common,
+    taskId: current.id,
+  });
+
+  // The current turn's delete fails after the earlier turn's has run.
+  await db.execute(sql`
+    CREATE FUNCTION refuse_current_turn_delete() RETURNS trigger
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$
+  `);
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER refuse_current_turn_delete BEFORE DELETE ON a2a_task
+      FOR EACH ROW WHEN (OLD.id = '${current.id}')
+      EXECUTE FUNCTION refuse_current_turn_delete()
+    `),
+  );
+  try {
+    await expect(AgentRunModel.deleteSession(session)).rejects.toThrow();
+    expect(await A2ATaskModel.findById(first.id)).not.toBeNull();
+    expect(await A2ATaskModel.findById(current.id)).not.toBeNull();
+  } finally {
+    await db.execute(sql`DROP TRIGGER refuse_current_turn_delete ON a2a_task`);
+    await db.execute(sql`DROP FUNCTION refuse_current_turn_delete()`);
+  }
+
+  // A retry then removes both turns and their runs.
+  await AgentRunModel.deleteSession(session);
+  expect(await A2ATaskModel.findById(first.id)).toBeNull();
+  expect(await A2ATaskModel.findById(current.id)).toBeNull();
+  expect(await AgentRunModel.findByTaskId(current.id)).toBeNull();
 });

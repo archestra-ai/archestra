@@ -677,6 +677,51 @@ it.each([
   }
 });
 
+it("asks to reconnect GitHub when the stored connection no longer works", async () => {
+  const missing = [{ ...declarations[0], reconnect: true }];
+  server.use(
+    http.get(`${origin}/api/credentials`, () =>
+      HttpResponse.json([
+        {
+          key: "github",
+          name: "GitHub",
+          description: "Repository access",
+          kind: "github_app_user",
+          allowPersonal: true,
+        },
+      ]),
+    ),
+    http.get(`${origin}/api/agents/agent-1/runtime/preflight`, () =>
+      HttpResponse.json({
+        configured: [],
+        missing,
+        misconfigured: [],
+        incompatible: null,
+        ready: false,
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AgentRuntimeCredentialPrompt
+        agentId="agent-1"
+        missing={missing}
+        declarations={missing}
+        onConnected={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Reconnect GitHub",
+  });
+  expect(dialog).toHaveTextContent("Your GitHub connection no longer works");
+  expect(
+    screen.getByRole("button", { name: "Reconnect GitHub" }),
+  ).toBeVisible();
+});
+
 it("reopens remaining credentials with the GitHub confirmation and clears it on close", async () => {
   configured = ["GITHUB_TOKEN"];
   window.history.replaceState(

@@ -1,6 +1,7 @@
 import type {
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
+  McpRuntimeTierSettings,
   MessagingChannelOverrides,
   ModelProviderOverrides,
   OrganizationCustomFont,
@@ -203,9 +204,20 @@ const organizationsTable = pgTable("organization", {
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
   /**
+   * The auto router chats and agents on the organization default run on.
+   * `defaultModelId` stays what built-in tasks (titles, compaction) and
+   * forked subagents run on.
+   * FK to auto_routers(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  defaultAutoRouterId: uuid("default_auto_router_id"),
+
+  /** Auto routers route sessions. Off: each runs on its normal tier. */
+  autoRoutingEnabled: boolean("auto_routing_enabled").notNull().default(false),
+
+  /**
    * Optional `fast` / `smart` tiers of the default trio, on any provider.
    * With `defaultModelId` as the normal tier, the trio is what forked
-   * subagents pick tiers from and what auto routing routes across.
+   * subagents pick tiers from.
    */
   defaultFastModelId: uuid("default_fast_model_id").references(
     () => modelsTable.id,
@@ -307,6 +319,11 @@ const organizationsTable = pgTable("organization", {
   )
     .notNull()
     .default(DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+
+  /** Hide Connect from navigation without disabling existing connections. */
+  connectionPageHidden: boolean("connection_page_hidden")
+    .notNull()
+    .default(false),
 
   /**
    * Admin-selected MCP gateway pre-filled on /connection.
@@ -474,6 +491,9 @@ const organizationsTable = pgTable("organization", {
    * environment. NULL falls back to built-in unrestricted behavior.
    */
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /** Independent administrator-defined CPU/RAM tiers for MCP containers. */
+  mcpRuntimeTiers: jsonb("mcp_runtime_tiers").$type<McpRuntimeTierSettings>(),
 
   /**
    * Administrator overrides of the Agent Runtime tiers' CPU, memory and warm

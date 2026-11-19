@@ -2,10 +2,10 @@ import { PassThrough } from "node:stream";
 import {
   type ImagePullPolicy,
   type ImagePullSecretConfig,
-  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
+  type McpServerResources,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@archestra/shared";
@@ -20,6 +20,9 @@ import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
+} from "@/k8s/deployment-names";
+import {
+  describeK8sApiError,
   isK8sConflictError,
   isK8sNotFoundError,
   isTransientK8sApiError,
@@ -40,6 +43,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import {
   applyDeploymentObservation,
   deriveOrdinaryDeploymentState,
@@ -60,6 +64,7 @@ import {
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 import {
   customYamlToDeployment,
+  findDockerImagePlaceholderContainer,
   resolvePlaceholders,
 } from "./k8s-yaml-generator";
 import {
@@ -369,6 +374,18 @@ const TRANSIENT_IMAGE_PULL_WAITING_REASONS = [
   "ErrImagePull",
 ];
 
+// Except when the registry answered that the image does not exist (a deleted
+// tag or repository). The kubelet keeps retrying those too, but no retry can
+// succeed, so they are failures. Matched against the waiting message, which
+// carries the runtime's pull error: containerd reports `code = NotFound`, the
+// registry API's own codes come through as `manifest unknown` / `name
+// unknown`.
+const MISSING_IMAGE_PULL_PATTERNS = [
+  /\bcode = NotFound\b/,
+  /\bmanifest unknown\b/i,
+  /\bname unknown\b/i,
+];
+
 interface ManagedCustomPolicyResource {
   group: string;
   version: string;
@@ -608,6 +625,12 @@ export default class K8sDeployment {
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
+  // What the live Deployment runs, as last read from the cluster. The catalog
+  // row is only what the NEXT restart will run: a transport edit marks a
+  // single-tenant install "restart required" and leaves its pod alone.
+  private deployedUid?: string;
+  private deployedTransport?: DeployedTransport;
+  private replacedByAnotherProcess = false;
 
   constructor(options: K8sDeploymentOptions) {
     this.mcpServer = options.mcpServer;
@@ -2168,6 +2191,7 @@ export default class K8sDeployment {
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
+    runtimeResources?: McpServerResources,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -2306,27 +2330,10 @@ export default class K8sDeployment {
               }),
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests/limits for the container (with defaults).
-          // Ephemeral-storage governance keeps the scheduler disk-aware and
-          // prevents DiskPressure eviction cascades on over-packed nodes.
-          resources: {
-            requests: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_REQUEST
-                : config.orchestrator.mcpServerResources.requests.memory,
-              cpu: config.orchestrator.mcpServerResources.requests.cpu,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.requests
-                  .ephemeralStorage,
-            },
-            limits: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_LIMIT
-                : config.orchestrator.mcpServerResources.limits.memory,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.limits.ephemeralStorage,
-            },
-          },
+          resources: resolveMcpServerResources(
+            runtimeResources,
+            this.catalogItem?.id,
+          ),
         },
       ],
       restartPolicy: "Always",
@@ -2925,6 +2932,24 @@ export default class K8sDeployment {
    * Called by the manager after lazy-loading a deployment on a different replica.
    */
   async resolveHttpEndpoint(): Promise<void> {
+    // This process did not create the Deployment, so it has to read what the
+    // pod runs before it decides how to reach it.
+    try {
+      this.recordDeployed(
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        }),
+        { ownDeployment: true },
+      );
+    } catch (error) {
+      if (!isK8sNotFoundError(error)) {
+        logger.warn(
+          { err: error },
+          `Failed to read the deployed transport of ${this.deploymentName}; using the catalog's`,
+        );
+      }
+    }
     await this.ensureHttpServerConfigured();
   }
 
@@ -2932,7 +2957,7 @@ export default class K8sDeployment {
    * Ensure HTTP server configuration (Service and URL) is set up
    */
   private async ensureHttpServerConfigured(): Promise<void> {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (!needsHttp) {
       return;
     }
@@ -3067,6 +3092,7 @@ export default class K8sDeployment {
         );
         await lifecycle?.assertOwned?.();
         await this.adoptRuntimeOwner(existingDeployment);
+        this.recordDeployed(existingDeployment, { ownDeployment: true });
 
         // SELF-HEAL: a Deployment created before the catalog-stable selector fix
         // (#6340) still labels its pods with the per-install `mcpServer.id`, while
@@ -3102,6 +3128,17 @@ export default class K8sDeployment {
           );
         }
 
+        // FOLLOW THE BASE IMAGE: a server on the default base image moves to
+        // the one this platform is configured with now, whatever state it is
+        // in. A hibernated deployment is patched at zero replicas, so it wakes
+        // on the current image.
+        await lifecycle?.assertOwned?.();
+        const followedDeployment = await this.followDefaultBaseImage({
+          deployment: existingDeployment,
+          runFencedMutation: lifecycle?.runFencedMutation,
+        });
+        const adoptedDeployment = followedDeployment ?? existingDeployment;
+
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3126,21 +3163,17 @@ export default class K8sDeployment {
           if (this.observeState("hibernated")) {
             this.errorMessage = null;
           }
-          if (
-            config.orchestrator.mcpIdleHibernation.betaEnabled &&
-            !config.orchestrator.mcpIdleHibernation.hardDisabled
-          ) {
+          if (!config.orchestrator.mcpIdleHibernation.hardDisabled) {
             logger.info(
               `Deployment ${this.deploymentName} is hibernated — adopted without scaling up`,
             );
             return;
           }
           // The operator's kill switch (…MCP_IDLE_HIBERNATION_SECONDS=0) is
-          // set, or the beta flag that offers the feature is off. Leaving the
-          // deployment asleep would strand it: no sweeper runs, so only a
-          // tool call would ever wake it. Deployment-level off means "always
-          // on", so scale it back up here and let the periodic refresh
-          // complete the wake once it reports available replicas.
+          // set. Leaving the deployment asleep would strand it: no sweeper
+          // runs, so only a tool call would ever wake it. Deployment-level off
+          // means "always on", so scale it back up here and let the periodic
+          // refresh complete the wake once it reports available replicas.
           // (An org toggle that is merely OFF is deliberately NOT enough to
           // force a wake: nothing new gets hibernated, and ensureAwake still
           // wakes what is asleep on the next call that needs it.)
@@ -3180,7 +3213,9 @@ export default class K8sDeployment {
         );
 
         // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
-        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        const failureCheck = await this.checkPodContainerStatusesForFailure({
+          deployment: adoptedDeployment,
+        });
         if (failureCheck.hasFailed && !failureCheck.isTransientImagePull) {
           if (this.observeState("failed")) {
             this.errorMessage = failureCheck.message;
@@ -3266,6 +3301,13 @@ export default class K8sDeployment {
         })),
       };
 
+      const runtimeResources = catalogItem.deploymentSpecYaml
+        ? undefined
+        : await InternalMcpCatalogModel.resolveRuntimeResources(
+            catalogItem.localConfig,
+            catalogItem.organizationId,
+          );
+
       // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
@@ -3290,6 +3332,7 @@ export default class K8sDeployment {
             platformNodeSelector,
             platformTolerations,
             resolvedImagePullSecretNames,
+            runtimeResources,
           ),
         );
         await lifecycle?.assertOwned?.();
@@ -3317,12 +3360,23 @@ export default class K8sDeployment {
             ),
           };
         }
-        await mutate(() =>
+        const deployedTransport: DeployedTransport = needsHttp
+          ? "streamable-http"
+          : "stdio";
+        deploymentSpec.metadata ??= {};
+        deploymentSpec.metadata.annotations = {
+          ...deploymentSpec.metadata.annotations,
+          [MCP_TRANSPORT_ANNOTATION]: deployedTransport,
+        };
+        const created = await mutate(() =>
           this.k8sAppsApi.createNamespacedDeployment({
             namespace: this.namespace,
             body: deploymentSpec,
           }),
         );
+        this.deployedUid = created?.metadata?.uid;
+        this.deployedTransport = deployedTransport;
+        this.replacedByAnotherProcess = false;
         logger.debug(`Deployment ${this.deploymentName} created`);
       } catch (createError) {
         // A concurrent reconcile (e.g. another orchestrator replica that also saw
@@ -3554,6 +3608,18 @@ export default class K8sDeployment {
    */
   async beginWake(options?: LifecycleMutationOptions): Promise<void> {
     await this.assertBrowserEnabled();
+    // A deployment can sleep through a platform upgrade. Move it to the
+    // current default base image before it scales up, so the wake does not
+    // depend on a registry still holding the image it was created on.
+    if (this.defaultBaseImageContainerName()) {
+      const live = await this.readLiveDeployment();
+      if (live) {
+        await this.followDefaultBaseImage({
+          deployment: live,
+          runFencedMutation: options?.runFencedMutation,
+        });
+      }
+    }
     const generation = ++this.stateGeneration;
 
     let replicas = 1;
@@ -4345,14 +4411,25 @@ export default class K8sDeployment {
    * Used on startup and during state refresh to detect deployments stuck in a
    * failure state. Image pull failures are reported separately
    * (`isTransientImagePull`) because the kubelet retries pulls on its own and
-   * the pod recovers once the pull succeeds.
+   * the pod recovers once the pull succeeds — unless the registry says the
+   * image does not exist, which is a failure that names the `missingImage`.
+   *
+   * Given the Deployment, a pull failure on a pod whose image the Deployment
+   * no longer asks for is ignored: that pod belongs to a rollout's old
+   * ReplicaSet and is being replaced.
    */
-  private async checkPodContainerStatusesForFailure(): Promise<{
+  private async checkPodContainerStatusesForFailure(params?: {
+    deployment?: k8s.V1Deployment;
+  }): Promise<{
     hasFailed: boolean;
     isTransientImagePull: boolean;
+    missingImage: string | null;
     message: string;
   }> {
     let transientImagePullMessage: string | null = null;
+    let missingImagePull: { image: string; message: string } | null = null;
+    const templateContainers =
+      params?.deployment?.spec?.template?.spec?.containers ?? [];
 
     try {
       const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
@@ -4370,9 +4447,33 @@ export default class K8sDeployment {
           const message =
             cs.state?.waiting?.message || `Container in ${reason} state`;
           if (TERMINAL_CONTAINER_WAITING_REASONS.includes(reason)) {
-            return { hasFailed: true, isTransientImagePull: false, message };
+            return {
+              hasFailed: true,
+              isTransientImagePull: false,
+              missingImage: null,
+              message,
+            };
           }
-          if (TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(reason)) {
+          if (!TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(reason)) {
+            continue;
+          }
+          const podImage = pod.spec?.containers?.find(
+            (container) => container.name === cs.name,
+          )?.image;
+          const templateImage = templateContainers.find(
+            (container) => container.name === cs.name,
+          )?.image;
+          if (podImage && templateImage && podImage !== templateImage) {
+            continue;
+          }
+          if (
+            MISSING_IMAGE_PULL_PATTERNS.some((pattern) => pattern.test(message))
+          ) {
+            missingImagePull = {
+              image: podImage ?? cs.image ?? "",
+              message,
+            };
+          } else {
             transientImagePullMessage = message;
           }
         }
@@ -4384,15 +4485,182 @@ export default class K8sDeployment {
       );
     }
 
+    if (missingImagePull) {
+      return {
+        hasFailed: true,
+        isTransientImagePull: false,
+        missingImage: missingImagePull.image || null,
+        message: `Image not found in its registry: ${missingImagePull.message}`,
+      };
+    }
+
     if (transientImagePullMessage) {
       return {
         hasFailed: true,
         isTransientImagePull: true,
+        missingImage: null,
         message: transientImagePullMessage,
       };
     }
 
-    return { hasFailed: false, isTransientImagePull: false, message: "" };
+    return {
+      hasFailed: false,
+      isTransientImagePull: false,
+      missingImage: null,
+      message: "",
+    };
+  }
+
+  /**
+   * Pod failure facts for a refresh, plus the one repair a refresh makes: a
+   * server on the default base image whose pods cannot pull it because the
+   * registry no longer has that image is moved to the current base image
+   * (see {@link followDefaultBaseImage}) and reported as still starting.
+   */
+  private async readPodFailureForRefresh(params: {
+    deployment: k8s.V1Deployment;
+    runFencedMutation?: LifecycleMutationOptions["runFencedMutation"];
+  }): Promise<{
+    podFailure: OrdinaryDeploymentFacts["podFailure"];
+    failureMessage: string | null;
+  }> {
+    const failureCheck = await this.checkPodContainerStatusesForFailure({
+      deployment: params.deployment,
+    });
+    if (!failureCheck.hasFailed) {
+      return { podFailure: null, failureMessage: null };
+    }
+    if (failureCheck.missingImage) {
+      const followed = await this.followDefaultBaseImage(params);
+      if (followed) {
+        return {
+          podFailure: { failed: true, transient: true },
+          failureMessage: `Image ${failureCheck.missingImage} is no longer available; moving to ${mcpServerBaseImage}`,
+        };
+      }
+    }
+    return {
+      podFailure: {
+        failed: true,
+        transient: failureCheck.isTransientImagePull,
+      },
+      failureMessage: failureCheck.message,
+    };
+  }
+
+  /**
+   * Move a Deployment that runs the default MCP base image onto the base
+   * image this platform is configured with now.
+   *
+   * A Deployment keeps the image it was created with. Adoption, wakes and
+   * refreshes never rebuild it, so a server created on the default base image
+   * stays on that exact image across platform upgrades — and stops starting
+   * once the old image is removed from its registry. Servers whose catalog
+   * names its own image (`localConfig.dockerImage`, or a custom deployment
+   * YAML that does not use the `${archestra.docker_image}` placeholder) are
+   * never touched.
+   *
+   * The change is a JSON patch that first tests the container's current name
+   * and image, so it lands only on the object this decision was made from and
+   * fails rather than overwrite a concurrent writer. Returns the Deployment
+   * now on the current base image, or null when it was not moved. A
+   * Kubernetes API error is logged and returns null: the caller carries on
+   * with the Deployment as it is.
+   */
+  private async followDefaultBaseImage(params: {
+    deployment: k8s.V1Deployment;
+    runFencedMutation?: LifecycleMutationOptions["runFencedMutation"];
+  }): Promise<k8s.V1Deployment | null> {
+    const containerName = this.defaultBaseImageContainerName();
+    if (!containerName) return null;
+    const containers = params.deployment.spec?.template?.spec?.containers;
+    const index =
+      containers?.findIndex((container) => container.name === containerName) ??
+      -1;
+    const container = index >= 0 ? containers?.[index] : undefined;
+    if (!container?.image || container.image === mcpServerBaseImage) {
+      return null;
+    }
+
+    const path = `/spec/template/spec/containers/${index}`;
+    const operations: object[] = [
+      { op: "test", path: `${path}/name`, value: containerName },
+      { op: "test", path: `${path}/image`, value: container.image },
+      { op: "replace", path: `${path}/image`, value: mcpServerBaseImage },
+    ];
+    // The generated spec derives its pull policy from the image (a local
+    // image name must use `Never`, a mutable tag `Always`), so re-derive it
+    // for the new image. A custom YAML's own policy is left as the author
+    // wrote it unless the catalog pins one.
+    const configuredPolicy = this.catalogItem?.localConfig?.imagePullPolicy;
+    if (!this.catalogItem?.deploymentSpecYaml || configuredPolicy) {
+      operations.push({
+        op: "add",
+        path: `${path}/imagePullPolicy`,
+        value: getMcpImagePullPolicy(mcpServerBaseImage, {
+          configured: configuredPolicy,
+        }),
+      });
+    }
+
+    const mutate = params.runFencedMutation ?? (async (fn) => fn());
+    try {
+      const applied = await mutate(() =>
+        this.k8sAppsApi.patchNamespacedDeployment(
+          {
+            name: this.deploymentName,
+            namespace: this.namespace,
+            body: operations,
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.JsonPatch),
+        ),
+      );
+      logger.info(
+        {
+          deploymentName: this.deploymentName,
+          fromImage: container.image,
+          toImage: mcpServerBaseImage,
+        },
+        "Moved an MCP server deployment to the current default base image",
+      );
+      return applied;
+    } catch (error) {
+      if (describeK8sApiError(error) === undefined) throw error;
+      // A failed test operation usually means another replica, or another
+      // install sharing this Deployment, moved it first.
+      const live = await this.readLiveDeployment().catch(() => null);
+      const liveImage = live?.spec?.template?.spec?.containers?.find(
+        (candidate) => candidate.name === containerName,
+      )?.image;
+      if (live && liveImage === mcpServerBaseImage) return live;
+      logger.warn(
+        {
+          err: error,
+          deploymentName: this.deploymentName,
+          fromImage: container.image,
+          toImage: mcpServerBaseImage,
+        },
+        "Could not move an MCP server deployment to the current default base image",
+      );
+      return null;
+    }
+  }
+
+  /**
+   * The container that runs the default base image, or null when the
+   * catalog configures its own image (or is not loaded).
+   */
+  private defaultBaseImageContainerName(): string | null {
+    const catalogItem = this.catalogItem;
+    if (!catalogItem?.localConfig || catalogItem.localConfig.dockerImage) {
+      return null;
+    }
+    if (catalogItem.deploymentSpecYaml) {
+      return findDockerImagePlaceholderContainer(
+        catalogItem.deploymentSpecYaml,
+      );
+    }
+    return "mcp-server";
   }
 
   private checkPodConditionsForFailure(pod: k8s.V1Pod): {
@@ -4463,7 +4731,43 @@ export default class K8sDeployment {
   }
 
   /**
-   * Check if this MCP server needs an HTTP port
+   * Whether the running pod serves streamable HTTP. A Deployment created
+   * before the transport was recorded on it falls back to the catalog row.
+   */
+  private async servesHttp(): Promise<boolean> {
+    if (this.deployedTransport) {
+      return this.deployedTransport === "streamable-http";
+    }
+    return await this.needsHttpPort();
+  }
+
+  /**
+   * Record the identity and transport of the live Deployment. A read that
+   * finds another Deployment than the one this object knew means another
+   * process replaced it; this object's own create or adoption does not.
+   */
+  private recordDeployed(
+    deployment: k8s.V1Deployment,
+    options?: { ownDeployment?: boolean },
+  ): void {
+    const uid = deployment.metadata?.uid;
+    if (options?.ownDeployment) {
+      this.replacedByAnotherProcess = false;
+    } else if (uid && this.deployedUid && uid !== this.deployedUid) {
+      this.replacedByAnotherProcess = true;
+    }
+    this.deployedUid = uid ?? this.deployedUid;
+    const transport =
+      deployment.metadata?.annotations?.[MCP_TRANSPORT_ANNOTATION];
+    this.deployedTransport =
+      transport === "stdio" || transport === "streamable-http"
+        ? transport
+        : undefined;
+  }
+
+  /**
+   * Whether the catalog asks for an HTTP port: what the next pod this object
+   * creates will serve, not necessarily what the running one does.
    */
   private async needsHttpPort(): Promise<boolean> {
     const catalogItem = await this.getCatalogItem();
@@ -4599,7 +4903,7 @@ export default class K8sDeployment {
    * Assign HTTP port from the pod/service
    */
   private async assignHttpPortIfNeeded(pod: k8s.V1Pod): Promise<void> {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (needsHttp && pod.status?.podIP) {
       const catalogItem = await this.getCatalogItem();
       const httpPort = catalogItem?.localConfig?.httpPort || 8080;
@@ -5495,6 +5799,7 @@ export default class K8sDeployment {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (this.stateGeneration !== generation) return;
       // SPDX-SnippetEnd
+      this.recordDeployed(deployment);
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -5505,15 +5810,13 @@ export default class K8sDeployment {
         let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
         let failureMessage: string | null = null;
         if (availableReplicas === 0 && desiredReplicas >= 1) {
-          const failureCheck = await this.checkPodContainerStatusesForFailure();
+          ({ podFailure, failureMessage } = await this.readPodFailureForRefresh(
+            {
+              deployment,
+              runFencedMutation: hibernationOptions?.runFencedMutation,
+            },
+          ));
           if (this.stateGeneration !== generation) return;
-          if (failureCheck.hasFailed) {
-            podFailure = {
-              failed: true,
-              transient: failureCheck.isTransientImagePull,
-            };
-            failureMessage = failureCheck.message;
-          }
         }
 
         const decision = deriveHibernationDeploymentState(
@@ -5578,19 +5881,15 @@ export default class K8sDeployment {
       let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
       let failureMessage: string | null = null;
       if (availableReplicas === 0) {
-        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        ({ podFailure, failureMessage } = await this.readPodFailureForRefresh({
+          deployment,
+          runFencedMutation: options?.runFencedMutation,
+        }));
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         if (this.stateGeneration !== generation) return;
         // SPDX-SnippetEnd
-        if (failureCheck.hasFailed) {
-          podFailure = {
-            failed: true,
-            transient: failureCheck.isTransientImagePull,
-          };
-          failureMessage = failureCheck.message;
-        }
       }
 
       let decision = deriveOrdinaryDeploymentState(
@@ -5735,7 +6034,16 @@ export default class K8sDeployment {
    * Check if this pod uses streamable HTTP transport
    */
   async usesStreamableHttp(): Promise<boolean> {
-    return await this.needsHttpPort();
+    return await this.servesHttp();
+  }
+
+  /**
+   * True once a state refresh found a different Deployment under this name:
+   * another process restarted the install, so everything this object was built
+   * from (catalog row, install row, endpoint) may be out of date.
+   */
+  get wasReplacedByAnotherProcess(): boolean {
+    return this.replacedByAnotherProcess;
   }
 
   /**
@@ -5754,7 +6062,7 @@ export default class K8sDeployment {
   async getRunningPodHttpEndpoint(): Promise<
     { endpointUrl: string; podName: string } | undefined
   > {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (!needsHttp) {
       return undefined;
     }
@@ -5973,10 +6281,9 @@ const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
 const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
 
 /**
- * The built-in Playwright server runs one Chromium shared by every browser
- * session in its Environment, with a context per conversation. The generic MCP
- * server default (sized for small tool servers) starves it: pages slow to a
- * crawl and screenshots time out long before the pod is OOM-killed.
+ * The transport the Deployment's pod was created to serve. Every backend
+ * process reads it instead of trusting its own copy of the catalog row.
  */
-const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
-const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";
+const MCP_TRANSPORT_ANNOTATION = "archestra.ai/mcp-transport";
+
+type DeployedTransport = "stdio" | "streamable-http";

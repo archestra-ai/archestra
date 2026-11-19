@@ -30,6 +30,9 @@ export const useUpdateMcpSettings = vi.fn();
 export const useUpdateSkillsSettings = vi.fn();
 export const useUpdateAgentSettings = vi.fn();
 export const useAgentRuntimeTiers = vi.fn();
+export const useDefaultModelRuntimeDependents = vi.fn(() => ({
+  data: { agents: [], hiddenBlockingCount: 0 },
+}));
 export const useSaveAgentRuntimeTiers = vi.fn();
 export const useUpdateConnectionSettings = vi.fn();
 export const useUpdateIntegrationSettings = vi.fn();
@@ -44,3 +47,12 @@ export const useTestOcrConnection = vi.fn();
 export const useKeywordRankingStatus = vi.fn();
 export const useMemberSignupStatus = vi.fn();
 export const useDeletePendingSignupMember = vi.fn();
+
+export const useMcpRuntimeTiers = vi.fn(() => ({
+  data: { tiers: [] },
+  isPending: false,
+}));
+export const useSaveMcpRuntimeTiers = vi.fn(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+}));

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
 
@@ -83,5 +84,18 @@ describe("getAgentActionModel", () => {
     expect(agentAction(model, "edit").permissions).toEqual({
       mcpGateway: ["update"],
     });
+  });
+
+  it("keeps Chat available on the built-in SRE agent", () => {
+    const model = getAgentActionModel({
+      kind: "agent",
+      agent: {
+        id: "sre",
+        agentType: "agent",
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      },
+    });
+    expect(agentAction(model, "chat").visible).toBe(true);
   });
 });

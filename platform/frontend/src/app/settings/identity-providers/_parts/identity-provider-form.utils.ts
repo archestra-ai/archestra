@@ -2,6 +2,7 @@
 import {
   type archestraApiTypes,
   type IdentityProviderFormValues,
+  type IdentityProviderSecretPath,
   isEntraHostname,
   isOktaHostname,
   OAUTH_TOKEN_TYPE,
@@ -17,13 +18,28 @@ export type EnterpriseSubjectTokenType = NonNullable<
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
+  options?: {
+    /** Secrets the provider already stores, which come back blank. */
+    storedSecretPaths?: readonly IdentityProviderSecretPath[];
+  },
 ): IdentityProviderFormValues {
   if (data.providerType !== "oidc" || !data.oidcConfig) {
     return data;
   }
 
-  const oidcConfig = normalizeOidcIssuerFields(data);
-  const enterpriseManagedCredentials = oidcConfig.enterpriseManagedCredentials;
+  const issuerNormalizedConfig = normalizeOidcIssuerFields(data);
+  const enterpriseManagedCredentials = withoutBlankAgentIdentity({
+    credentials: withoutBlankEntraAgentId(
+      issuerNormalizedConfig.enterpriseManagedCredentials,
+    ),
+    privateKeyStored:
+      options?.storedSecretPaths?.includes(AGENT_IDENTITY_PRIVATE_KEY_PATH) ??
+      false,
+  });
+  const oidcConfig = {
+    ...issuerNormalizedConfig,
+    enterpriseManagedCredentials,
+  };
   if (!enterpriseManagedCredentials) {
     return {
       ...data,
@@ -183,6 +199,69 @@ export function getDefaultSubjectTokenType(
   return exchangeStrategy === "rfc8693" || exchangeStrategy === "entra_obo"
     ? OAUTH_TOKEN_TYPE.AccessToken
     : OAUTH_TOKEN_TYPE.IdToken;
+}
+
+type EnterpriseManagedCredentialsFormValues = NonNullable<
+  NonNullable<
+    IdentityProviderFormValues["oidcConfig"]
+  >["enterpriseManagedCredentials"]
+>;
+
+/**
+ * Drops an Entra Agent ID block without a blueprint client ID (the section was
+ * left empty), and its blank optional fields, so an untouched section neither
+ * fails validation nor turns enterprise-managed credentials on by itself.
+ */
+function withoutBlankEntraAgentId(
+  credentials: EnterpriseManagedCredentialsFormValues | undefined,
+): EnterpriseManagedCredentialsFormValues | undefined {
+  if (!credentials?.entraAgentId) return credentials;
+  const { entraAgentId, ...rest } = credentials;
+  const blueprintClientId = entraAgentId.blueprintClientId?.trim() ?? "";
+  if (!blueprintClientId) {
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+
+  const cleaned = Object.fromEntries(
+    Object.entries(entraAgentId)
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? value.trim() : value,
+      ])
+      .filter(([, value]) => value !== "" && value !== undefined),
+  ) as typeof entraAgentId;
+  return { ...rest, entraAgentId: { ...cleaned, blueprintClientId } };
+}
+
+const AGENT_IDENTITY_PRIVATE_KEY_PATH =
+  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem";
+
+/**
+ * Drops an Agent Identities block left untouched, and its blank fields. A
+ * stored key keeps the block: the backend restores the key into it, and
+ * would have nowhere to restore it without one.
+ */
+function withoutBlankAgentIdentity(params: {
+  credentials: EnterpriseManagedCredentialsFormValues | undefined;
+  privateKeyStored: boolean;
+}): EnterpriseManagedCredentialsFormValues | undefined {
+  const { credentials } = params;
+  if (!credentials?.agentIdentity) return credentials;
+  const { agentIdentity, ...rest } = credentials;
+  const cleaned = Object.fromEntries(
+    Object.entries(agentIdentity)
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? value.trim() : value,
+      ])
+      .filter(
+        ([, value]) => value !== "" && value !== undefined && value !== false,
+      ),
+  ) as typeof agentIdentity;
+  if (Object.keys(cleaned).length === 0 && !params.privateKeyStored) {
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  return { ...rest, agentIdentity: cleaned };
 }
 
 function normalizeOidcConfigForEnterpriseExchange(params: {

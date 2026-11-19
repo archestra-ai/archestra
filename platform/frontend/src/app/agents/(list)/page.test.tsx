@@ -15,14 +15,12 @@ const {
   getTeamsMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: {
-    getAgentCatalog: getAgentCatalogMock,
-    getMemberDefaultAgent: getMemberDefaultAgentMock,
-    getOrganization: getOrganizationMock,
-    getTeams: getTeamsMock,
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getAgentCatalog: getAgentCatalogMock,
+  getMemberDefaultAgent: getMemberDefaultAgentMock,
+  getOrganization: getOrganizationMock,
+  getTeams: getTeamsMock,
 }));
 
 vi.mock("@/lib/utils/server", () => ({

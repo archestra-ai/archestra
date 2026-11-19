@@ -85,6 +85,25 @@ describe("SiteNotificationBar", () => {
     expect(screen.getByText("Second announcement")).toBeInTheDocument();
   });
 
+  it("keeps a non-dismissible notification visible, even one dismissed earlier", () => {
+    localStorage.setItem("site-notification-dismissed:pinned", "true");
+
+    const { container } = render(
+      <SiteNotificationBar
+        content="Mandatory security notice"
+        notificationId="pinned"
+        dismissible={false}
+      />,
+    );
+
+    expect(screen.getByText("Mandatory security notice")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Dismiss notification" }),
+    ).not.toBeInTheDocument();
+    // The head script hides bars by this id before hydration.
+    expect(container.querySelector("[data-site-notification-id]")).toBeNull();
+  });
+
   it("never shows a dismissed bar that the server rendered, and hydrates it away", async () => {
     const bar = (
       <SiteNotificationBar

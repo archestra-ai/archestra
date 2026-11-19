@@ -11,8 +11,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { use, useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { use, useCallback, useMemo, useRef, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -27,24 +27,39 @@ import {
 } from "@/components/ui/empty";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useExportSessionInteractions,
+  useHandedOffRecords,
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionChatErrors,
+  useSessionHandoffs,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
-import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
+import {
+  LLM_LOG_FOCUS_PARAM,
+  llmSessionHref,
+} from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
+import { useModelPools } from "@/lib/model-pools.query";
 import {
   GuardrailsProvider,
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
+import { mergedRecordsQuery, pageEndsAt } from "./_parts/page-window";
+import { buildRanOn, type SessionHandoffs } from "./_parts/ran-on";
+import type { RanOnParties } from "./_parts/ran-on-strip";
+import {
+  type SessionChatError,
+  SessionChatErrors,
+} from "./_parts/session-chat-errors";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,
@@ -77,17 +92,29 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
-  // Past page one, the read also takes the previous page's newest row: it
-  // bounds this page's tool-call window, and a second read would delay them.
-  const hasNewerPage = offset > 0;
+  // Requests run oldest first, so page one is where the session began.
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: hasNewerPage ? pageSize + 1 : pageSize,
-      offset: hasNewerPage ? offset - 1 : offset,
+      limit: pageSize,
+      offset,
       sortBy: "createdAt",
-      sortDirection: "desc",
+      sortDirection: "asc",
     });
+  // The next page's oldest row bounds this page's tool-call window. It is its
+  // own read: the list endpoint caps a page at 100 rows, so a 100-row page
+  // has no room for it.
+  const hasNextPage =
+    interactionsResponse !== undefined &&
+    offset + pageSize < interactionsResponse.pagination.total;
+  const nextPageHead = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: offset + pageSize,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: hasNextPage,
+  });
 
   // Fetch session metadata (profile name, user names, etc.)
   const {
@@ -100,11 +127,41 @@ export default function SessionDetailPage({
     toastOnError: false,
   });
 
-  const pageRows = interactionsResponse?.data ?? [];
-  const newerRequest = hasNewerPage ? (pageRows[0] ?? null) : null;
+  // Past page one, the session's first request: the axis counts from it.
+  // Should it fail, the axis falls back to counting from this page's start.
+  const firstPageHead = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: 0,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: offset > 0,
+  });
+  const firstRow = offset > 0 ? (firstPageHead.data?.data[0] ?? null) : null;
+  const sessionStartPending = offset > 0 && firstPageHead.isPending;
+  const sessionStartFailed = offset > 0 && firstPageHead.isError;
+  const sessionStart = firstRow
+    ? new Date(firstRow.createdAt).getTime() -
+      Math.max(0, firstRow.durationMs ?? 0)
+    : null;
+
   const interactions = useMemo(
-    () => (hasNewerPage ? pageRows.slice(1) : pageRows),
-    [hasNewerPage, pageRows],
+    () => interactionsResponse?.data ?? [],
+    [interactionsResponse],
+  );
+  const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
+  const pageEnd = pageEndsAt({
+    requests: interactions,
+    nextRequest,
+    hasNextPage,
+  });
+  const requestsReady =
+    interactionsResponse !== undefined &&
+    !interactionsLoading &&
+    (!hasNextPage || !nextPageHead.isPending);
+  const lastPageIndex = Math.max(
+    0,
+    Math.ceil((interactionsResponse?.pagination.total ?? 0) / pageSize) - 1,
   );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
@@ -112,6 +169,28 @@ export default function SessionDetailPage({
     sessionId,
     enabled: openappaEnabled,
   });
+  // Read only for a session whose chat showed errors, so other sessions do
+  // not pay for a request that would come back empty.
+  const { data: chatErrors = NO_CHAT_ERRORS } = useSessionChatErrors({
+    sessionId,
+    enabled: (sessionData?.chatErrorCount ?? 0) > 0,
+  });
+  const requestIdByChatErrorId = useMemo(
+    () =>
+      lastRequestBeforeEachError({
+        chatErrors,
+        requests: interactions,
+        nextRequest: hasNextPage ? nextRequest : null,
+      }),
+    [chatErrors, interactions, hasNextPage, nextRequest],
+  );
+  const chatErrorsByRowId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const requestId of requestIdByChatErrorId.values()) {
+      counts.set(requestId, (counts.get(requestId) ?? 0) + 1);
+    }
+    return counts;
+  }, [requestIdByChatErrorId]);
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -153,17 +232,46 @@ export default function SessionDetailPage({
       setPagination({ pageIndex: nextPageIndex, pageSize }),
     [setPagination, pageSize],
   );
+  // A request on another page opens as a link, which finds its page.
+  const router = useRouter();
+  const openRequest = useCallback(
+    (requestId: string) =>
+      router.push(
+        `${llmSessionHref(sessionId, { request: requestId })}&pageSize=${pageSize}`,
+        { scroll: false },
+      ),
+    [router, sessionId, pageSize],
+  );
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
-    newerRequest,
-    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    nextRequest,
+    boundary: {
+      failed: hasNextPage && nextPageHead.isError,
+      retry: () => nextPageHead.refetch(),
+    },
+    requestsReady,
     pageIndex,
     pageSize,
+    lastPageIndex,
     onLocatePage: goToPage,
     targetToolCallId,
   });
   const { toolCalls } = sessionToolCalls;
+  // Work this session handed to Agent Runtime ran under the run's own
+  // session; its requests and calls in this page's time range join the trace.
+  const { data: allHandoffs } = useSessionHandoffs({ sessionId });
+  // At most a few runs join the trace; the rest are listed, not drawn.
+  const handoffs = useMemo(() => capHandoffs(allHandoffs), [allHandoffs]);
+  const omittedRuns = allHandoffs?.handedTo.slice(MAX_MERGED_RUNS) ?? [];
+  const mergedRuns = handoffs?.handedTo ?? [];
+  const handedOff = useHandedOffRecords({
+    sessionIds: mergedRuns.map((run) => run.llmSessionId),
+    ...mergedRecordsQuery({ offset, requests: interactions, nextRequest }),
+  });
+  const failedRuns = mergedRuns.filter((run) =>
+    handedOff.failedSessionIds.includes(run.llmSessionId),
+  );
   const linkedRequest = useLinkedRequest({
     sessionId,
     requests: interactions,
@@ -178,7 +286,11 @@ export default function SessionDetailPage({
   // link points at. Drawing each as it lands reflows the rows and moves the
   // selection.
   const traceLoading =
-    interactionsLoading || !sessionToolCalls.ready || !linkedRequest.ready;
+    interactionsLoading ||
+    handedOff.pending ||
+    sessionStartPending ||
+    !sessionToolCalls.ready ||
+    !linkedRequest.ready;
 
   // Whether the latest main request captured a thread: its thread is the
   // whole conversation, so the list marks it and the details offer a way to
@@ -197,12 +309,91 @@ export default function SessionDetailPage({
     [lastMainRequest],
   );
 
+  const traceRequests = useMemo(
+    () => byCreatedAt([...interactions, ...handedOff.requests]),
+    [interactions, handedOff.requests],
+  );
+  const traceToolCalls = useMemo(
+    () => byCreatedAt([...toolCalls, ...handedOff.toolCalls]),
+    [toolCalls, handedOff.toolCalls],
+  );
+
   const timeline = useMemo(
-    () => buildTimeline({ requests: interactions, toolCalls }),
-    [interactions, toolCalls],
+    () =>
+      buildTimeline({
+        requests: traceRequests,
+        toolCalls: traceToolCalls,
+        sessionStart,
+      }),
+    [traceRequests, traceToolCalls, sessionStart],
+  );
+  const ranOnView = useMemo(
+    () => buildRanOn({ timeline, handoffs: handoffs ?? undefined, sessionId }),
+    [timeline, handoffs, sessionId],
+  );
+  // The run's own session names the client it came from.
+  const originSessionId = handoffs?.handedFrom?.originLlmSessionId;
+  const { data: originSession } = useInteractionSessions({
+    sessionId: originSessionId ?? "",
+    limit: 1,
+    toastOnError: false,
+    enabled: originSessionId !== undefined,
+  });
+  const handoffRuns = handoffs
+    ? handoffs.handedTo.length > 0
+      ? handoffs.handedTo
+      : handoffs.handedFrom
+        ? [handoffs.handedFrom]
+        : []
+    : [];
+  const ranOn =
+    ranOnView && handoffRuns.length > 0
+      ? {
+          view: ranOnView,
+          parties: {
+            clientLabel:
+              (ranOnView.side === "client"
+                ? sessionData?.externalAgentIdLabels[0]
+                : originSession?.data[0]?.externalAgentIdLabels[0]) ?? "Client",
+            runs: handoffRuns.map((run) => ({
+              runId: run.runId,
+              agentName: run.agentName,
+              href: runHref(run.runId),
+            })),
+            origin: originSessionId
+              ? {
+                  label:
+                    originSession?.data[0]?.externalAgentIdLabels[0] ??
+                    "Client",
+                  href: llmSessionHref(originSessionId),
+                }
+              : null,
+          } satisfies RanOnParties,
+        }
+      : null;
+
+  // A pooled row names the member key it went to.
+  const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
+  const hasPooledRows = traceRequests.some((row) => row.modelPoolId);
+  const { data: pools } = useModelPools({
+    enabled: Boolean(canReadPools) && hasPooledRows,
+    toastOnError: false,
+  });
+  const poolKeyNames = useMemo(
+    () =>
+      new Map(
+        (pools ?? []).flatMap((pool) =>
+          pool.members.map(
+            (member) =>
+              [member.providerApiKeyId, member.providerApiKeyName] as const,
+          ),
+        ),
+      ),
+    [pools],
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const requestsSectionRef = useRef<HTMLElement>(null);
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -287,15 +478,15 @@ export default function SessionDetailPage({
     setPickedKey(spans[next].key);
   };
 
-  // Requests are listed newest first, so the latest one lives on page one.
+  // Requests run oldest first, so the latest one lives on the last page.
   const jumpToConversation =
     latestHasConversation && conversationRowId
       ? conversationOnPage
         ? () => setPickedKey(conversationKey)
-        : pageIndex > 0
+        : pageIndex !== lastPageIndex
           ? () => {
               setPickedKey(conversationKey);
-              goToPage(0);
+              goToPage(lastPageIndex);
             }
           : null
       : null;
@@ -345,21 +536,43 @@ export default function SessionDetailPage({
             trajectory={
               openappaEnabled ? { session: sessionData, lineage } : null
             }
+            status={sessionData ?? null}
+          />
+
+          <SessionChatErrors
+            chatErrors={chatErrors}
+            requestIdByErrorId={requestIdByChatErrorId}
+            onShowRequest={(requestId) => {
+              if (!interactions.some((row) => row.id === requestId)) {
+                openRequest(requestId);
+                return;
+              }
+              // The list keeps its selected row in view; bring the list
+              // itself into the page's view, or the click seems to do nothing.
+              setPickedKey(requestSpanKey(requestId));
+              requestsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
           />
 
           {/* overflow-clip, not hidden, below lg: hidden would make the card
               a scroll container and break the sticky pane headers. isolate
               keeps the list's sticky column header under the page header. */}
           <section
+            ref={requestsSectionRef}
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
             <GuardrailsProvider
               timeline={timeline}
+              pageEndsAt={pageEnd}
               sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >
               <TraceWaterfall
+                onOpenRequest={openRequest}
                 timeline={timeline}
                 loading={traceLoading}
                 profileName={profileName}
@@ -370,15 +583,29 @@ export default function SessionDetailPage({
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
                 onSelect={setPickedKey}
+                ranOn={ranOn}
+                poolKeyNames={poolKeyNames}
+                chatErrorsByRowId={chatErrorsByRowId}
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}
                     onRetry={() => sessionToolCalls.refetch()}
                     truncated={sessionToolCalls.truncated}
+                    handedOffTruncated={handedOff.truncated}
+                    omittedRuns={omittedRuns}
+                    moreRunsOmitted={allHandoffs?.handedToTruncated ?? false}
+                    failedRuns={failedRuns}
+                    onRetryFailedRuns={handedOff.retry}
                     missingToolCallId={
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
                     missingRequest={linkedRequest.targetMissing}
+                    requestLookupFailed={linkedRequest.rankFailed}
+                    onRetryRequestLookup={linkedRequest.retry}
+                    toolCallLookupFailed={sessionToolCalls.rankFailed}
+                    onRetryToolCallLookup={sessionToolCalls.retryRank}
+                    sessionStartFailed={sessionStartFailed}
+                    onRetrySessionStart={() => firstPageHead.refetch()}
                   />
                 }
                 pagination={
@@ -426,6 +653,7 @@ export default function SessionDetailPage({
                 onStep={step}
                 latestRequestId={conversationRowId}
                 onJumpToLatest={jumpToConversation}
+                requests={traceRequests}
               />
             </GuardrailsProvider>
           </section>
@@ -439,21 +667,93 @@ export default function SessionDetailPage({
 // Internal helpers
 // ============================================================================
 
+const NO_CHAT_ERRORS: SessionChatError[] = [];
+
+/**
+ * Ties each chat error to the request logged last before it on this page: the
+ * turn the chat was running when it failed. An error past the next page's
+ * first request belongs to a later page, and one before this page's first
+ * request to an earlier one; neither is tied.
+ */
+function lastRequestBeforeEachError({
+  chatErrors,
+  requests,
+  nextRequest,
+}: {
+  chatErrors: SessionChatError[];
+  requests: { id: string; createdAt: string }[];
+  nextRequest: { createdAt: string } | null;
+}): Map<string, string> {
+  const tied = new Map<string, string>();
+  const nextAt = nextRequest ? new Date(nextRequest.createdAt).getTime() : null;
+  for (const chatError of chatErrors) {
+    const at = new Date(chatError.createdAt).getTime();
+    if (nextAt !== null && nextAt <= at) continue;
+    let match: string | null = null;
+    for (const request of requests) {
+      if (new Date(request.createdAt).getTime() > at) break;
+      match = request.id;
+    }
+    if (match) tied.set(chatError.id, match);
+  }
+  return tied;
+}
+
 /** What the request list cannot show about this page's records, if anything. */
 function ToolCallsNotice({
   failed,
   onRetry,
   truncated,
+  handedOffTruncated,
+  omittedRuns,
+  moreRunsOmitted,
+  failedRuns,
+  onRetryFailedRuns,
   missingToolCallId,
   missingRequest,
+  requestLookupFailed,
+  onRetryRequestLookup,
+  toolCallLookupFailed,
+  onRetryToolCallLookup,
+  sessionStartFailed,
+  onRetrySessionStart,
 }: {
   failed: boolean;
   onRetry: () => void;
   truncated: boolean;
+  /** The Agent Runtime records merged into this page were capped. */
+  handedOffTruncated: boolean;
+  /** Runs this session started that the trace leaves out. */
+  omittedRuns: { runId: string; agentName: string; title: string | null }[];
+  /** The session started even more runs than were listed. */
+  moreRunsOmitted: boolean;
+  /** Merged runs whose records did not load. */
+  failedRuns: { runId: string; agentName: string }[];
+  onRetryFailedRuns: () => void;
   missingToolCallId: string | null;
   missingRequest: boolean;
+  /** Finding the linked request's page failed. */
+  requestLookupFailed: boolean;
+  onRetryRequestLookup: () => void;
+  /** Finding the linked tool call's page failed. */
+  toolCallLookupFailed: boolean;
+  onRetryToolCallLookup: () => void;
+  /** The session's first request didn't load, so the axis counts from this page. */
+  sessionStartFailed: boolean;
+  onRetrySessionStart: () => void;
 }) {
-  if (!failed && !truncated && !missingToolCallId && !missingRequest) {
+  if (
+    !failed &&
+    !truncated &&
+    !handedOffTruncated &&
+    omittedRuns.length === 0 &&
+    failedRuns.length === 0 &&
+    !missingToolCallId &&
+    !missingRequest &&
+    !requestLookupFailed &&
+    !toolCallLookupFailed &&
+    !sessionStartFailed
+  ) {
     return null;
   }
   return (
@@ -476,6 +776,54 @@ function ToolCallsNotice({
           </Button>
         </InlineNotice>
       ) : null}
+      {requestLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked request.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryRequestLookup}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {toolCallLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked tool call.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryToolCallLookup}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {sessionStartFailed ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            Times on the axis count from this page's first request: the
+            session's start didn't load.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetrySessionStart}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
       {/* A cap, not a problem: one quiet line. */}
       {truncated ? (
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -485,6 +833,55 @@ function ToolCallsNotice({
             smaller page size shows them all.
           </span>
         </p>
+      ) : null}
+      {handedOffTruncated ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Showing the first 100 Agent Runtime requests in this page's time
+            range. The run's own session has them all.
+          </span>
+        </p>
+      ) : null}
+      {omittedRuns.length > 0 ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            <span>
+              This trace shows the first {MAX_MERGED_RUNS} Agent Runtime runs.
+              Open the others:{" "}
+            </span>
+            {omittedRuns.map((run, i) => (
+              <span key={run.runId}>
+                {i > 0 ? <span>, </span> : null}
+                <Link
+                  href={runHref(run.runId)}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  {run.title ?? run.agentName}
+                </Link>
+              </span>
+            ))}
+            {moreRunsOmitted ? <span>, and more</span> : null}
+          </span>
+        </p>
+      ) : null}
+      {failedRuns.length > 0 ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <span className="font-medium">Agent Runtime records didn't load</span>
+          <InlineNoticeText>
+            {`${failedRuns.map((run) => run.agentName).join(", ")}: ${failedRuns.length === 1 ? "its" : "their"} requests and tool calls are missing from this trace.`}
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryFailedRuns}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
       ) : null}
       {missingToolCallId ? (
         <InlineNotice variant="neutral">
@@ -507,5 +904,35 @@ function ToolCallsNotice({
         </InlineNotice>
       ) : null}
     </div>
+  );
+}
+
+/** Runs whose records join a client's trace; later ones stay one click away. */
+const MAX_MERGED_RUNS = 3;
+
+function runHref(runId: string): string {
+  return `/chat/runs/${runId}`;
+}
+
+/** Keeps the first runs and only the moves between the client and them. */
+function capHandoffs(
+  handoffs: SessionHandoffs | null | undefined,
+): SessionHandoffs | null {
+  if (!handoffs || handoffs.handedTo.length <= MAX_MERGED_RUNS) {
+    return handoffs ?? null;
+  }
+  const handedTo = handoffs.handedTo.slice(0, MAX_MERGED_RUNS);
+  const kept = new Set(handedTo.map((run) => run.runId));
+  if (handoffs.handedFrom) kept.add(handoffs.handedFrom.runId);
+  return {
+    ...handoffs,
+    handedTo,
+    moves: handoffs.moves.filter((move) => kept.has(move.runId)),
+  };
+}
+
+function byCreatedAt<T extends { createdAt: string }>(records: T[]): T[] {
+  return [...records].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
 }

@@ -19,7 +19,11 @@ import {
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -77,7 +81,11 @@ export function CreateLlmProviderApiKeyDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
-  const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
+  // Providers a person may add a key for: GitHub Copilot also needs its
+  // personal subscriptions on, since a key made here is a personal sign-in.
+  const visibleProviderIdsKey = providerCatalog.visibleIds
+    .filter(providerCatalog.canAddKey)
+    .join(",");
   const allowedProviderIdsKey = allowedProviders?.join(",") ?? null;
   const availableProviders = useMemo(() => {
     const visibleProviders = visibleProviderIdsKey
@@ -292,7 +300,7 @@ export function CreateLlmProviderApiKeyDialog({
       className="sm:max-w-xl"
       isDirty={credentialMode === "api-key" && form.formState.isDirty}
     >
-      <form onSubmit={handleCreate} className="flex min-h-0 flex-col">
+      <DialogForm onSubmit={handleCreate} className="flex min-h-0 flex-col">
         <DialogBody>{keyForm}</DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>
@@ -303,7 +311,7 @@ export function CreateLlmProviderApiKeyDialog({
             <span>Test & Create</span>
           </Button>
         </DialogStickyFooter>
-      </form>
+      </DialogForm>
     </FormDialog>
   );
 }

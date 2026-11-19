@@ -5,6 +5,7 @@ import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { assertCopilotPlanAllowed } from "@/services/integration-overrides";
 import { ApiError, constructResponseSchema } from "@/types";
 
 /**
@@ -32,7 +33,10 @@ const githubCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeviceStartResponseSchema),
       },
     },
-    async ({ user }) => {
+    async ({ organizationId, user }) => {
+      // A sign-in only leads to a personal key, so refuse it up front when
+      // the admins turned personal Copilot subscriptions off.
+      await assertCopilotPlanAllowed({ organizationId, plan: "personal" });
       // Both endpoints relay traffic to GitHub; cap per user so a misbehaving
       // client can't drive GitHub rate-limit pressure through the backend.
       if (

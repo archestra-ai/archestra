@@ -7,6 +7,7 @@ import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { DeploymentSettingRow } from "@/components/settings/deployment-setting-row";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import {
   Select,
@@ -22,7 +23,7 @@ import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
   useUpdateAnnotatorModel,
-  useUpdateBreakTheGlassEnabled,
+  useUpdateBreakTheGlass,
   useUpdateGuardrailsDeployment,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
@@ -85,40 +86,103 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Whether a yell also turns OpenAPPA off for the session that sends it, so a
- * stuck agent can get unblocked.
+ * Break the glass, in display order: what a yell does to its session (Yell
+ * tool), what happens to a call waiting for human approval (Human approval),
+ * and to a blocked call without an approval option (Other blocked calls).
+ * One group, since together they say how much Guardrails let through.
  */
-export function OpenAppaBreakTheGlassSetting() {
+export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
-  const update = useUpdateBreakTheGlassEnabled();
+  const update = useUpdateBreakTheGlass();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const enabled = Boolean(deployment.data?.breakTheGlassEnabled);
+  const data = deployment.data;
+  const disabled = !canManage || !data?.featureEnabled || update.isPending;
+  const overriddenBy = (
+    setting: "humanApprovalMode" | "unapprovableBlockMode",
+  ) =>
+    data?.environmentOverrides?.find((each) => each.setting === setting)
+      ?.variable;
   return (
     <SettingsBlock
       id="break-the-glass"
       title="Break the glass"
-      description={
-        enabled
-          ? "A yell will disable guardrails for the session, unblocking your stuck agents."
-          : "A yell only sends a report. Guardrails stay on for the session."
-      }
-      control={
-        deployment.data ? (
-          <Switch
-            aria-label="Break the glass"
-            checked={enabled}
-            disabled={
-              !canManage || !deployment.data.featureEnabled || update.isPending
-            }
-            onCheckedChange={(checked) => update.mutate(checked)}
-          />
-        ) : (
-          <Skeleton className="h-5 w-9 rounded-full" />
-        )
-      }
-    />
+      description="Let blocked calls through and record a yell instead of stopping the agent. Use it to see what the policy would block without blocking it."
+      contentClassName="divide-y rounded-lg border"
+    >
+      <DeploymentSettingRow
+        title="Yell tool"
+        description="What a yell does to its session: the agent's own, or one for a waived call."
+        value={
+          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
+        }
+        disabled={disabled}
+        options={[
+          { value: "record", label: "Record only" },
+          { value: "off", label: "Record and turn Guardrails off" },
+        ]}
+        onChange={(value) =>
+          update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
+      <DeploymentSettingRow
+        title="Human approval"
+        description="Calls and remedy plans waiting for human approval."
+        value={data?.humanApprovalMode}
+        environmentVariable={overriddenBy("humanApprovalMode")}
+        disabled={disabled}
+        options={[
+          {
+            value: "block",
+            label: "Block until approved",
+            description: "Require human approval in every session.",
+          },
+          {
+            value: "unattended",
+            label: "Waive in unattended sessions",
+            description:
+              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
+          },
+          {
+            value: "everywhere",
+            label: "Waive everywhere",
+            description: "Waive human approval in all sessions.",
+          },
+        ]}
+        onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
+      />
+      <DeploymentSettingRow
+        title="Other blocked calls"
+        description={
+          <>
+            How to handle denials that can't be approved. An explicit
+            <code className="font-mono text-xs"> blocked </code> refusal cannot
+            trigger a waiver. After a soft refusal turns Guardrails off,
+            subsequent operations bypass all policy checks.
+          </>
+        }
+        value={data?.unapprovableBlockMode}
+        environmentVariable={overriddenBy("unapprovableBlockMode")}
+        disabled={disabled}
+        options={[
+          {
+            value: "refuse",
+            label: "Keep the block",
+            description: "Refuse operations that cannot be approved.",
+          },
+          {
+            value: "allow",
+            label: "Waive the block",
+            description:
+              "Continue and turn Guardrails off for the session. Subsequent operations bypass all policy checks, including explicit blocked marks.",
+          },
+        ]}
+        onChange={(unapprovableBlockMode) =>
+          update.mutate({ unapprovableBlockMode })
+        }
+      />
+    </SettingsBlock>
   );
 }
 
@@ -349,3 +413,5 @@ function ClientsDocsLink({
     </ExternalDocsLink>
   );
 }
+
+// ===

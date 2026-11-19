@@ -7,6 +7,11 @@ import { ApiError } from "@/types/api";
 // Pattern to match team external groups routes: /api/teams/:id/external-groups
 const TEAM_EXTERNAL_GROUPS_PATTERN = /^\/api\/teams\/[^/]+\/external-groups/;
 
+// Workload identity federation: federated credentials and the token exchange
+const FEDERATED_CREDENTIALS_PATTERN =
+  /^\/api\/service-accounts\/[^/]+\/federated-credentials(?:[/?]|$)/;
+const WORKLOAD_IDENTITY_PREFIX = "/api/workload-identity/";
+
 const ENTERPRISE_CONTACT_MESSAGE =
   "Please contact sales@archestra.ai to enable it.";
 
@@ -22,6 +27,13 @@ export function isEnterpriseOnlyRoute(url: string): boolean {
 
   // Team external groups routes (SSO Team Sync feature)
   if (TEAM_EXTERNAL_GROUPS_PATTERN.test(url)) {
+    return true;
+  }
+
+  if (
+    FEDERATED_CREDENTIALS_PATTERN.test(url) ||
+    url.startsWith(WORKLOAD_IDENTITY_PREFIX)
+  ) {
     return true;
   }
 
@@ -55,6 +67,10 @@ const enterpriseLicenseMiddlewarePlugin: FastifyPluginAsync = async (
             `Team Sync is an enterprise feature. ${ENTERPRISE_CONTACT_MESSAGE}`,
           );
         }
+        throw new ApiError(
+          403,
+          `Workload identity federation is an enterprise feature. ${ENTERPRISE_CONTACT_MESSAGE}`,
+        );
       }
     }
   });

@@ -1,8 +1,13 @@
 import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
-import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
+import type {
+  AutoRoutingPreviewBody,
+  AutoRoutingPreviewResponse,
+} from "@/types/auto-routing-api";
+import { firstUserText } from "./first-user-text";
 import { selectTier, uniform } from "./router";
-import { loadAutoRoutingSettings } from "./settings";
+import { scoringContext } from "./scoring-context";
+import { loadAutoRouter } from "./settings";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type PreRunInput, SignalSourceError } from "./signals/types";
 import { loadTrio, TIER_NAMES } from "./tiers";
@@ -12,12 +17,35 @@ import { loadTrio, TIER_NAMES } from "./tiers";
  * the active plan and a fresh `u`. Nothing is stored and no re-plan is
  * requested; the scorer call is real and billed.
  */
-export async function previewAutoRouting(params: {
-  organizationId: string;
-  text: string;
-}): Promise<AutoRoutingPreviewResponse> {
+export async function previewAutoRouting(
+  params: AutoRoutingPreviewBody & { organizationId: string; routerId: string },
+): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
-  const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
+  const router = await loadAutoRouter(organizationId, params.routerId);
+  const source =
+    "request" in params
+      ? {
+          firstUserText: firstUserText(
+            params.request.input !== undefined
+              ? "responses"
+              : "chat_completions",
+            params.request,
+          ),
+          client: params.client ?? null,
+          ...scoringContext(params.request),
+        }
+      : { firstUserText: params.text, client: null };
+  if (source.firstUserText === null) {
+    throw new ApiError(
+      400,
+      "The request must contain an opening user message with text.",
+    );
+  }
+  const input: PreRunInput = {
+    ...source,
+    firstUserText: source.firstUserText,
+  };
+  const loaded = await loadTrio(router);
   if (loaded.kind === "missing") {
     throw new ApiError(
       400,
@@ -25,16 +53,15 @@ export async function previewAutoRouting(params: {
     );
   }
   const { trio } = loaded;
-  const input: PreRunInput = { firstUserText: params.text, client: null };
-  const scored = await preRunSource
-    .read(input, { organizationId })
+  const scored = await preRunSource(router.scorerModel)
+    .read(input, { organizationId, apiKeyId: router.scorerApiKeyId })
     .catch((error: unknown) => {
       throw scorerFailure(error);
     });
-  const version = (await activeSourceVersion()).id;
+  const version = (await activeSourceVersion(router.scorerModel)).id;
   // No re-plan is requested for a stale plan: preview has no side effects.
   const outcome = selectTier({
-    active: await RoutingPlanModel.findActive(organizationId),
+    active: await RoutingPlanModel.findActive(router.id),
     scorerVersionId: version,
     trio,
     features: decisionFeatures({ version, reading: scored, input }),
@@ -59,6 +86,8 @@ export async function previewAutoRouting(params: {
 function scorerFailure(error: unknown): unknown {
   if (!(error instanceof SignalSourceError)) return error;
   switch (error.reason) {
+    case "input_too_large":
+      return new ApiError(400, error.message);
     case "no_credentials":
       return new ApiError(400, `Session scorer unavailable: ${error.message}`);
     case "timeout":

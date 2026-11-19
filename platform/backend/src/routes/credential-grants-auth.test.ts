@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";

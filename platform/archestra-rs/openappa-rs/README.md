@@ -38,32 +38,14 @@ pnpm --filter @archestra/openappa-rs build:dev
 pnpm --filter @backend db:migrate
 ```
 
-Configure the usual Archestra database and auth secret, then turn on the beta
-master switch (OpenAPPA has no flag of its own):
+Configure the usual Archestra database and auth secret.
 
-```sh
-ARCHESTRA_BETA=true
-```
-
-With this switch enabled in `platform/.env`, `tilt up` builds and load-checks the
-native addon before starting the development backend. Changes to its Rust
-sources, build configuration, or the workspace Cargo manifest/lockfile rebuild
-the addon and restart the backend after a successful build. Failed builds leave
-the previous backend running and appear as errors in Tilt. With the flag off,
-Tilt skips this build. The build uses the same lockfile-resolved OpenAPPA dependency as
-Docker; it does not use a sibling OpenAPPA checkout.
-
-The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
-Enabling it automatically adds `appa` to the effective proxy plugin list.
-An explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` cannot enable APPA
-while the flag is off. With the flag off, the existing Tool
-Guardrails run unchanged: APPA is not loaded, the session header is not read,
-and the remedy tools are neither advertised nor callable. Additive
-schema migrations still run normally.
-
-Enabling without a policy path is a configuration error. The native runtime
-validates the policy and initializes lazily on first use. Failures do not fall
-back to the old evaluator. Restart the backend after changing either setting.
+`tilt up` builds and load-checks the native addon before starting the
+development backend. Changes to its Rust sources, build configuration, or the
+workspace Cargo manifest/lockfile rebuild the addon and restart the backend
+after a successful build. Failed builds leave the previous backend running and
+appear as errors in Tilt. The build uses the same lockfile-resolved OpenAPPA
+dependency as Docker; it does not use a sibling OpenAPPA checkout.
 
 `test-policy.toml` is a narrow verification fixture, not a production policy.
 It treats `archestra__whoami` as suspicious input and requires trusted context
@@ -113,11 +95,14 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy can prepend this single-line mark to a protected session's first reply and compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can prepend this mark to a protected session's first reply and compaction summaries:
 
 ```
 ▄█▄▄▄█▄  protected session XK7-Q2M9
+██▄█▄██
 ```
+
+The second row appears only in Claude Code's terminal CLI. Markdown webviews (the Claude Code IDE extension, Kilo Code) join or split a two-row sprite, so every other client gets the first row alone.
 
 Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark shows which protected session wrote the reply. The proxy removes the mark before forwarding requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
 

@@ -1,23 +1,31 @@
 import config from "@/config";
 import type { Transaction } from "@/database";
-import { AgentModel, ModelModel } from "@/models";
-import AutoRoutingSettingsModel, {
-  mergeSettings,
-} from "@/models/auto-routing-settings";
+import {
+  AgentModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
+import AutoRouterModel, { mergeRouter } from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
+import { JEV_MODELS } from "@/routes/chat/model-fetchers/jev";
 import { ApiError } from "@/types";
 import type {
-  AutoRoutingSettings,
-  AutoRoutingTrio,
+  AutoRouter,
+  AutoRoutingTierSetting,
   RoutingPlanRecord,
   RoutingPlanTrigger,
+  UpdateAutoRouter,
 } from "@/types/auto-routing";
 import type {
+  AutoRouterChangeResponse,
+  AutoRouterResponse,
   AutoRoutingPlanDetail,
   AutoRoutingPlanSummary,
-  AutoRoutingSettingsChangeResponse,
-  AutoRoutingSettingsResponse,
-  UpdateAutoRoutingSettingsBody,
+  AutoRoutingStateResponse,
+  CreateAutoRouterBody,
+  UpdateAutoRouterBody,
 } from "@/types/auto-routing-api";
 import { scanOnFirstEnable } from "./backfill";
 import {
@@ -27,7 +35,7 @@ import {
   infeasibleBudget,
   readFitWindow,
 } from "./fit";
-import { activeSourceVersion } from "./signals";
+import { activeSourceVersion, DEFAULT_SCORER_MODEL } from "./signals";
 import { scorerState } from "./signals/jev-session";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
@@ -37,108 +45,191 @@ const TIER_FIELDS = {
   smart: "smartModelId",
 } as const;
 
-export async function getAutoRoutingSettings(
+const TIER_KEY_FIELDS = {
+  fast: "fastApiKeyId",
+  normal: "normalApiKeyId",
+  smart: "smartApiKeyId",
+} as const;
+
+/** The provider whose models score sessions today; a router's decision key is one of its keys. */
+const DECISIONS_PROVIDER = "jev";
+
+/** The organization's switch and what its routers may be built from. */
+export async function getAutoRoutingState(
   organizationId: string,
-): Promise<AutoRoutingSettingsResponse> {
-  return describe(
-    organizationId,
-    await loadAutoRoutingSettings(organizationId),
-  );
+): Promise<AutoRoutingStateResponse> {
+  const [organization, eligibleApiKeyIds] = await Promise.all([
+    OrganizationModel.getById(organizationId),
+    LlmProviderApiKeyModel.findOrganizationWideKeyIds(organizationId),
+  ]);
+  const keys = await LlmProviderApiKeyModel.findByIds(eligibleApiKeyIds);
+  return {
+    enabled: organization?.autoRoutingEnabled ?? false,
+    eligibleApiKeyIds,
+    decisionProviders: [
+      {
+        provider: DECISIONS_PROVIDER,
+        models: JEV_MODELS,
+        apiKeys: keys
+          .filter((key) => key.provider === DECISIONS_PROVIDER)
+          .map((key) => ({ id: key.id, name: key.name })),
+      },
+    ],
+  };
 }
 
 /**
- * Writes `body` with a generation bump if the merged settings are valid and
- * their budget can be met on the current usage, then fits a plan on them.
+ * Turns every router of the organization on or off. Turning it on scans the
+ * organization's past sessions once for the router that learns from them; the
+ * dispatcher fits each configured router within a minute.
  */
-export async function updateAutoRoutingSettings(
+export async function setAutoRoutingEnabled(
   organizationId: string,
-  body: UpdateAutoRoutingSettingsBody,
-): Promise<AutoRoutingSettingsChangeResponse> {
-  await AgentModel.getOrgLlmProxy(organizationId);
-  const update = {
-    enabled: body.enabled,
+  enabled: boolean,
+): Promise<AutoRoutingStateResponse> {
+  await OrganizationModel.patch(organizationId, {
+    autoRoutingEnabled: enabled,
+  });
+  if (enabled && (await AutoRouterModel.findPastSessionsRouter(organizationId)))
+    await scanOnFirstEnable(organizationId);
+  return getAutoRoutingState(organizationId);
+}
+
+export async function listAutoRouters(
+  organizationId: string,
+): Promise<AutoRouterResponse[]> {
+  const routers = await AutoRouterModel.list(organizationId);
+  const context = await describeContext(organizationId, routers);
+  return Promise.all(routers.map((router) => describe(router, context)));
+}
+
+export async function getAutoRouter(
+  organizationId: string,
+  routerId: string,
+): Promise<AutoRouterResponse> {
+  return describeOne(await loadAutoRouter(organizationId, routerId));
+}
+
+/** Creates a complete router, which starts cold: it learns from its own sessions only. */
+export async function createAutoRouter(
+  organizationId: string,
+  body: CreateAutoRouterBody,
+): Promise<AutoRouterChangeResponse> {
+  await assertValidTiers(organizationId, body.tiers);
+  if (body.decisionModel) {
+    await assertValidDecisionModel(organizationId, body.decisionModel);
+  }
+  if (await AutoRouterModel.findByName(organizationId, body.name)) {
+    throw new ApiError(409, `An auto router named "${body.name}" exists.`);
+  }
+  const created = await AutoRouterModel.create(
+    organizationId,
+    {
+      name: body.name,
+      budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+      budgetPreset: body.budgetPreset ?? null,
+      scorerApiKeyId: body.decisionModel?.apiKeyId ?? null,
+      scorerModel: body.decisionModel?.model ?? DEFAULT_SCORER_MODEL,
+      tiers: body.tiers,
+    },
+    assertValidRouter,
+  );
+  return fitAndDescribe(created.id, "initial");
+}
+
+/**
+ * Writes `body` with a generation bump if the merged router is valid and its
+ * budget can be met on the current usage, then fits a plan on it.
+ */
+export async function updateAutoRouter(
+  organizationId: string,
+  routerId: string,
+  body: UpdateAutoRouterBody,
+): Promise<AutoRouterChangeResponse> {
+  if (body.tiers) await assertValidTiers(organizationId, body.tiers);
+  if (body.decisionModel) {
+    await assertValidDecisionModel(organizationId, body.decisionModel);
+  }
+  const update: UpdateAutoRouter = {
+    name: body.name,
     budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+    // A custom budget sent on its own replaces the preset.
+    budgetPreset:
+      body.budgetPreset !== undefined
+        ? body.budgetPreset
+        : body.budgetUsdPerDay !== undefined
+          ? null
+          : undefined,
+    scorerApiKeyId: body.decisionModel?.apiKeyId,
+    scorerModel: body.decisionModel?.model,
+    tiers: body.tiers,
   };
   // The feasibility fit runs outside the routing-plan lock; the write then
-  // applies only over the settings it checked, retrying when they moved.
-  let updated: AutoRoutingSettings | null = null;
+  // applies only over the router it checked, retrying when it moved.
+  let updated: AutoRouter | null = null;
   for (let attempt = 0; !updated; attempt++) {
     if (attempt === UPDATE_ATTEMPTS) {
       throw new ApiError(
         409,
-        "Auto routing settings changed concurrently; try again.",
+        "The auto router changed concurrently; try again.",
       );
     }
-    const checked = await loadAutoRoutingSettings(organizationId);
-    await assertFeasibleBudget(organizationId, mergeSettings(checked, update));
-    updated = await AutoRoutingSettingsModel.update(
-      organizationId,
+    const checked = await loadAutoRouter(organizationId, routerId);
+    if (body.name !== undefined && body.name !== checked.name) {
+      const taken = await AutoRouterModel.findByName(organizationId, body.name);
+      if (taken) {
+        throw new ApiError(409, `An auto router named "${body.name}" exists.`);
+      }
+    }
+    await assertFeasibleBudget(mergeRouter(checked, update));
+    updated = await AutoRouterModel.update(
+      routerId,
       update,
       async (next, tx, current) => {
-        if (current.generation !== checked.generation) throw SETTINGS_MOVED;
-        await assertValidSettings(next, tx);
+        if (current.generation !== checked.generation) throw ROUTER_MOVED;
+        await assertValidRouter(next, tx);
       },
     ).catch((error) => {
-      if (error === SETTINGS_MOVED) return null;
+      if (error === ROUTER_MOVED) return null;
       throw error;
     });
+    if (!updated) await loadAutoRouter(organizationId, routerId);
   }
-  if (updated.enabled) await scanOnFirstEnable(organizationId);
-  return fitAndDescribe(organizationId, "settings");
+  return fitAndDescribe(routerId, "settings");
 }
 
 /**
- * Writes a change of the organization's model trio with `write`. While auto
- * routing is on, the trio must stay routable: every tier set, one long-context
- * threshold, and a budget the new tiers can meet. The plan is then re-fitted.
+ * Deletes the router with what it learned. Agents, chats and the organization
+ * default set to it fall back to their own model.
  */
-export async function writeOrganizationTrio<T>(params: {
-  organizationId: string;
-  /** The tiers the write sets, merged over the current row under the lock. */
-  patch: Partial<AutoRoutingTrio>;
-  write: (tx: Transaction) => Promise<T>;
-}): Promise<T> {
-  const { organizationId, patch, write } = params;
-  const checked = await AutoRoutingSettingsModel.find(organizationId);
-  // With the deployment's auto routing off, an organization's enabled flag
-  // routes nothing and cannot be turned off, so it constrains no trio.
-  const routed = config.autoRouting.enabled;
-  if (routed && checked?.enabled) {
-    await assertFeasibleBudget(organizationId, { ...checked, ...patch });
+export async function deleteAutoRouter(
+  organizationId: string,
+  routerId: string,
+): Promise<void> {
+  if (!(await AutoRouterModel.delete(organizationId, routerId))) {
+    throw new ApiError(404, "Auto router not found");
   }
-  return AutoRoutingSettingsModel.updateTrio({
-    organizationId,
-    patch,
-    write,
-    validate: async (next, tx, current) => {
-      if (current.generation !== checked?.generation) {
-        throw new ApiError(
-          409,
-          "Auto routing settings changed concurrently; try again.",
-        );
-      }
-      if (routed) await assertValidSettings(next, tx);
-    },
-  });
+  await OrganizationModel.invalidateSettingsCaches(organizationId);
 }
 
-/** Fits a new plan at the current settings, unless the active plan was fitted on exactly what a fit would read now. */
-export async function replanAutoRouting(
+/** Fits a new plan at the router's current settings, unless the active plan was fitted on exactly what a fit would read now. */
+export async function replanAutoRouter(
   organizationId: string,
-): Promise<AutoRoutingSettingsChangeResponse> {
-  const settings = await loadAutoRoutingSettings(organizationId);
-  const active = settings.enabled
-    ? await RoutingPlanModel.findActive(organizationId)
+  routerId: string,
+): Promise<AutoRouterChangeResponse> {
+  const router = await loadAutoRouter(organizationId, routerId);
+  const active = router.enabled
+    ? await RoutingPlanModel.findActive(routerId)
     : null;
-  if (active && (await fitInputsUnchanged(organizationId, settings, active))) {
+  if (active && (await fitInputsUnchanged(router, active))) {
     return {
-      ...(await describe(organizationId, settings)),
+      ...(await describeOne(router)),
       fit: { status: "unchanged", planId: active.id },
     };
   }
-  const updated = await AutoRoutingSettingsModel.update(organizationId, {});
-  if (!updated) throw new ApiError(404, "LLM Proxy not found");
-  return fitAndDescribe(organizationId, "manual");
+  const updated = await AutoRouterModel.update(routerId, {});
+  if (!updated) throw new ApiError(404, "Auto router not found");
+  return fitAndDescribe(routerId, "manual");
 }
 
 export function toPlanSummary(
@@ -152,7 +243,8 @@ export function toPlanSummary(
     status: plan.status,
     generation: plan.generation,
     inputWatermark: plan.inputWatermark,
-    budgetUsdPerDay: Number(plan.budgetUsdPerDay),
+    budgetUsdPerDay:
+      plan.budgetUsdPerDay === null ? null : Number(plan.budgetUsdPerDay),
     scorerVersion: record.scorerVersion,
     coreVersion: plan.coreVersion,
     planFormatVersion: plan.planFormatVersion,
@@ -171,46 +263,47 @@ export function toPlanDetail(record: RoutingPlanRecord): AutoRoutingPlanDetail {
   };
 }
 
+/** The organization's router, or a 404. */
+export async function loadAutoRouter(
+  organizationId: string,
+  routerId: string,
+): Promise<AutoRouter> {
+  const router = await AutoRouterModel.findInOrganization(
+    organizationId,
+    routerId,
+  );
+  if (!router) throw new ApiError(404, "Auto router not found");
+  return router;
+}
+
 // === Internal ===
 
 const UPDATE_ATTEMPTS = 3;
-const SETTINGS_MOVED = Symbol("settings moved");
-
-/** The organization's settings; its LLM Proxy row is created on first use. */
-export async function loadAutoRoutingSettings(
-  organizationId: string,
-): Promise<AutoRoutingSettings> {
-  await AgentModel.getOrgLlmProxy(organizationId);
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings) throw new ApiError(404, "LLM Proxy not found");
-  return settings;
-}
+const ROUTER_MOVED = Symbol("router moved");
 
 async function fitAndDescribe(
-  organizationId: string,
+  routerId: string,
   trigger: RoutingPlanTrigger,
-): Promise<AutoRoutingSettingsChangeResponse> {
-  // prepareFit activates the scorer version, which must not bump a disabled organization.
-  const { enabled } = await loadAutoRoutingSettings(organizationId);
-  const inline = enabled ? await fitNow(organizationId, trigger) : null;
+): Promise<AutoRouterChangeResponse> {
+  const before = await AutoRouterModel.find(routerId);
+  if (!before) throw new ApiError(404, "Auto router not found");
+  // prepareFit activates the scorer version, which must not bump a router that is off.
+  const inline = before.enabled ? await fitNow(routerId, trigger) : null;
   const fit = inline?.fit ?? null;
-  const described = await describe(
-    organizationId,
-    await loadAutoRoutingSettings(organizationId),
-    inline?.sessions ?? null,
-  );
+  const after = await AutoRouterModel.find(routerId);
+  if (!after) throw new ApiError(404, "Auto router not found");
+  const described = await describeOne(after, inline?.sessions ?? null);
   // An error before the fit recorded an outcome leaves no plan, so only `fit` carries it.
   const lastFitError =
     fit?.status === "failed" ? fit.error : described.status.lastFitError;
   return { ...described, status: { ...described.status, lastFitError }, fit };
 }
 
-/** Enabled settings need every tier, one long-context threshold across the tiers, and a budget. */
-async function assertValidSettings(
-  next: AutoRoutingSettings,
+/** A router needs every tier, tool-capable chat models, one long-context threshold across them, and a budget or a preset. */
+async function assertValidRouter(
+  next: AutoRouter,
   tx: Transaction,
 ): Promise<void> {
-  if (!next.enabled) return;
   const ids = TIER_NAMES.flatMap((tier) => {
     const id = next[TIER_FIELDS[tier]];
     return id === null ? [] : [id];
@@ -236,22 +329,96 @@ async function assertValidSettings(
   }
   const missing = TIER_NAMES.find((tier) => next[TIER_FIELDS[tier]] === null);
   if (missing) {
+    throw new ApiError(400, `Choose a ${missing} model for the auto router.`);
+  }
+  if (next.budgetUsdPerDay === null && next.budgetPreset === null) {
+    throw new ApiError(400, "Set a daily budget for the auto router.");
+  }
+}
+
+/**
+ * Each tier's key belongs to the organization, is shared with all of it (every
+ * chat, agent and virtual key on the router runs on it) and serves the tier's
+ * model.
+ */
+async function assertValidTiers(
+  organizationId: string,
+  tiers: Record<(typeof TIER_NAMES)[number], AutoRoutingTierSetting>,
+): Promise<void> {
+  const settings = TIER_NAMES.map((tier) => ({ tier, ...tiers[tier] }));
+  const [keys, models, organizationWide] = await Promise.all([
+    LlmProviderApiKeyModel.findByIds(settings.map((t) => t.providerApiKeyId)),
+    ModelModel.findByIds(settings.map((t) => t.modelId)),
+    LlmProviderApiKeyModel.findOrganizationWideKeyIds(organizationId),
+  ]);
+  for (const { tier, providerApiKeyId, modelId } of settings) {
+    const key = keys.find((candidate) => candidate.id === providerApiKeyId);
+    const model = models.find((candidate) => candidate.id === modelId);
+    if (!key || key.organizationId !== organizationId) {
+      throw new ApiError(400, `The ${tier} tier's key was not found.`);
+    }
+    if (!model) {
+      throw new ApiError(400, `The ${tier} tier's model was not found.`);
+    }
+    if (!organizationWide.includes(key.id)) {
+      throw new ApiError(
+        400,
+        `The ${tier} tier's key "${key.name}" is not shared with the whole organization. An auto router runs every chat and agent on its tiers' keys.`,
+      );
+    }
+    const linked = await LlmProviderApiKeyModelLinkModel.filterLinkedModelIds({
+      apiKeyIds: [key.id],
+      modelIds: [model.id],
+    });
+    if (!linked.has(model.id)) {
+      throw new ApiError(
+        400,
+        `The key "${key.name}" does not serve "${model.provider}/${model.modelId}" (${tier} tier).`,
+      );
+    }
+  }
+}
+
+/**
+ * A router's decision model is one the decisions provider offers, and its own
+ * key is that provider's, shared with the whole organization. An unknown
+ * model would be stored and then fail every session's scoring.
+ */
+async function assertValidDecisionModel(
+  organizationId: string,
+  { apiKeyId, model }: { apiKeyId: string | null; model: string },
+): Promise<void> {
+  if (!JEV_MODELS.some((offered) => offered.id === model)) {
     throw new ApiError(
       400,
-      `Set the organization's default ${missing} model before enabling auto routing.`,
+      `"${model}" is not a decision model. Pick one of: ${JEV_MODELS.map((offered) => offered.id).join(", ")}.`,
     );
   }
-  if (next.budgetUsdPerDay === null) {
-    throw new ApiError(400, "Set a daily budget before enabling auto routing.");
+  if (apiKeyId === null) return;
+  const [key, organizationWide] = await Promise.all([
+    LlmProviderApiKeyModel.findById(apiKeyId),
+    LlmProviderApiKeyModel.findOrganizationWideKeyIds(organizationId),
+  ]);
+  if (!key || key.organizationId !== organizationId) {
+    throw new ApiError(400, "The decision model's key was not found.");
+  }
+  if (key.provider !== DECISIONS_PROVIDER) {
+    throw new ApiError(
+      400,
+      `The key "${key.name}" is not a decision-model key. Pick a key of a provider that offers decision models.`,
+    );
+  }
+  if (!organizationWide.includes(key.id)) {
+    throw new ApiError(
+      400,
+      `The decision model's key "${key.name}" is not shared with the whole organization.`,
+    );
   }
 }
 
 /** Runs a fit on `next` that publishes nothing, so a budget the trio cannot meet is never stored. */
-async function assertFeasibleBudget(
-  organizationId: string,
-  next: AutoRoutingSettings,
-): Promise<void> {
-  const cheapest = await infeasibleBudget(organizationId, next);
+async function assertFeasibleBudget(next: AutoRouter): Promise<void> {
+  const cheapest = await infeasibleBudget(next);
   if (cheapest === null) return;
   // Rounded up, so the amount shown is itself enough.
   const minimum = (Math.ceil(cheapest * 100) / 100).toFixed(2);
@@ -261,40 +428,103 @@ async function assertFeasibleBudget(
   );
 }
 
+/** What every router of the organization is described with, read once. */
+type DescribeContext = {
+  agentCounts: Map<string, number>;
+  defaultAutoRouterId: string | null;
+  virtualApiKeyIds: Map<string, string[]>;
+  primaryScorerKey: { id: string; name: string } | null;
+};
+
+async function describeContext(
+  organizationId: string,
+  routers: AutoRouter[],
+): Promise<DescribeContext> {
+  const [agentCounts, organization, virtualApiKeyIds, primary] =
+    await Promise.all([
+      AgentModel.countOnAutoRouters(organizationId),
+      OrganizationModel.getById(organizationId),
+      AutoRouterModel.findVirtualApiKeyIds(routers.map((router) => router.id)),
+      LlmProviderApiKeyModel.findOrganizationWideKey(
+        organizationId,
+        DECISIONS_PROVIDER,
+      ),
+    ]);
+  return {
+    agentCounts,
+    defaultAutoRouterId: organization?.defaultAutoRouterId ?? null,
+    virtualApiKeyIds,
+    primaryScorerKey: primary && { id: primary.id, name: primary.name },
+  };
+}
+
+async function describeOne(
+  router: AutoRouter,
+  fitted: FitSessions | null = null,
+): Promise<AutoRouterResponse> {
+  return describe(
+    router,
+    await describeContext(router.organizationId, [router]),
+    fitted,
+  );
+}
+
 /** `fitted` is the cold-start progress a fit just read, reused when it is for the running scorer version. */
 async function describe(
-  organizationId: string,
-  settings: AutoRoutingSettings,
+  router: AutoRouter,
+  context: DescribeContext,
   fitted: FitSessions | null = null,
-): Promise<AutoRoutingSettingsResponse> {
-  const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, latest, scorerVersion, scorer, routedAgentCount] =
+): Promise<AutoRouterResponse> {
+  const tierIds = TIER_NAMES.map((tier) => router[TIER_FIELDS[tier]]);
+  const tierKeyIds = TIER_NAMES.map((tier) => router[TIER_KEY_FIELDS[tier]]);
+  const keyIds = [...tierKeyIds, router.scorerApiKeyId].filter(
+    (id): id is string => id !== null,
+  );
+  const [models, keys, active, latest, scorerVersion, scorer] =
     await Promise.all([
       ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
-      RoutingPlanModel.findActive(organizationId),
-      RoutingPlanModel.findLatestOutcome(organizationId),
-      activeSourceVersion(),
-      scorerState(organizationId),
-      AgentModel.countFollowingOrganizationRouting(organizationId),
+      LlmProviderApiKeyModel.findByIds([...new Set(keyIds)]),
+      RoutingPlanModel.findActive(router.id),
+      RoutingPlanModel.findLatestOutcome(router.id),
+      activeSourceVersion(router.scorerModel),
+      scorerState(router.organizationId, router.scorerApiKeyId),
     ]);
-  const byId = new Map(models.map((model) => [model.id, model]));
-  const tierModel = (id: string | null) => {
-    const model = id ? byId.get(id) : undefined;
-    return model
-      ? { id: model.id, provider: model.provider, modelId: model.modelId }
+  const tierSetting = (index: number) => {
+    const model = models.find((candidate) => candidate.id === tierIds[index]);
+    const key = keys.find((candidate) => candidate.id === tierKeyIds[index]);
+    return model && key
+      ? {
+          id: model.id,
+          provider: model.provider,
+          modelId: model.modelId,
+          apiKey: { id: key.id, name: key.name },
+        }
       : null;
   };
-  const [fast, normal, smart] = tierIds.map(tierModel);
+  const [fast, normal, smart] = TIER_NAMES.map((_, index) =>
+    tierSetting(index),
+  );
+  const ownScorerKey = keys.find((key) => key.id === router.scorerApiKeyId);
   return {
-    enabled: settings.enabled,
+    id: router.id,
+    name: router.name,
+    enabled: router.enabled,
     budgetUsdPerDay:
-      settings.budgetUsdPerDay === null
-        ? null
-        : Number(settings.budgetUsdPerDay),
+      router.budgetUsdPerDay === null ? null : Number(router.budgetUsdPerDay),
+    budgetPreset: router.budgetPreset,
     tiers: { fast, normal, smart },
-    routedAgentCount,
-    generation: settings.generation,
-    plannedGeneration: settings.plannedGeneration,
+    decisionModel: {
+      apiKeyId: router.scorerApiKeyId,
+      model: router.scorerModel,
+    },
+    usesPastSessions: router.usesPastSessions,
+    virtualApiKeyIds: context.virtualApiKeyIds.get(router.id) ?? [],
+    usage: {
+      agentCount: context.agentCounts.get(router.id) ?? 0,
+      organizationDefault: context.defaultAutoRouterId === router.id,
+    },
+    generation: router.generation,
+    plannedGeneration: router.plannedGeneration,
     status: {
       activePlan: active
         ? { id: active.id, createdAt: active.createdAt }
@@ -306,7 +536,7 @@ async function describe(
             ? fitted.sessions
             : (
                 await readFitWindow({
-                  organizationId,
+                  router,
                   scorerVersionId: scorerVersion.id,
                   inputWatermark: new Date(),
                 })
@@ -315,6 +545,9 @@ async function describe(
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
       scorer,
+      scorerApiKey: ownScorerKey
+        ? { id: ownScorerKey.id, name: ownScorerKey.name }
+        : context.primaryScorerKey,
     },
   };
 }

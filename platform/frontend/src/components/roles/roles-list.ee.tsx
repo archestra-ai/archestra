@@ -2,78 +2,130 @@
 
 import {
   type archestraApiTypes,
-  type Permissions,
   type PredefinedRoleName,
   roleDescriptions,
 } from "@archestra/shared";
 
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
   FilterBar,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useAllPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useAllMatchingRoles,
   useBulkDeleteRoles,
-  useCreateRole,
   useDeleteRole,
-  useRole,
+  useRoles,
   useRolesPaginated,
-  useUpdateRole,
 } from "@/lib/role.query";
+import { BuiltInRolesDialog } from "./built-in-roles-dialog.ee";
 import { downloadRoleAsJson } from "./role-export";
-import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
 /**
- * Enterprise Edition roles list with custom role management.
- * Shows both predefined roles (read-only) and custom roles (CRUD).
+ * Enterprise Edition roles page: the custom roles an organization authored,
+ * which are the only ones it manages. Built-in roles (the presets and the
+ * granular roles access is composed from) cannot be edited, so they stay out
+ * of the table and are read in a dialog the page header links to.
  */
 export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
-  // The permission builder disables what the author cannot grant — the same
-  // subset rule the server enforces on create/update.
-  const { data: authorPermissions } = useAllPermissions();
+  const router = useRouter();
   const setActionButton = useSetSettingsAction();
+  const { data: roles, isPending } = useRoles();
+  const hasCustomRoles = (roles ?? []).some((role) => !role.predefined);
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ ac: ["create"] }}
+        size="sm"
+        onClick={() => router.push("/settings/roles/new")}
+      >
+        <Plus className="h-4 w-4" />
+        Create Custom Role
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton, router]);
+
+  return (
+    <>
+      {!isPending && !hasCustomRoles ? (
+        <Empty className="border">
+          <EmptyHeader className="max-w-md">
+            <EmptyMedia variant="icon">
+              <Layers />
+            </EmptyMedia>
+            <EmptyTitle>No custom roles yet</EmptyTitle>
+            <EmptyDescription>
+              Most access can be composed from the built-in roles. Create a
+              custom role for a set of permissions none of them matches.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent className="max-w-md flex-col gap-2 sm:flex-row sm:justify-center">
+            <PermissionButton
+              permissions={{ ac: ["create"] }}
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => router.push("/settings/roles/new")}
+            >
+              <Plus className="size-4" />
+              <span>Create Custom Role</span>
+            </PermissionButton>
+            {headerAction && <div className="contents">{headerAction}</div>}
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <RolesTable headerAction={headerAction} />
+      )}
+      <BuiltInRolesDialog />
+    </>
+  );
+}
+
+/**
+ * The organization's custom roles. Each opens on its own page, and is
+ * edited, exported and deleted from here. Built-in roles are not listed:
+ * the API is asked for custom roles only, so paging counts just them.
+ */
+export function RolesTable({ headerAction }: { headerAction?: ReactNode }) {
+  const router = useRouter();
   const {
     pageIndex,
     pageSize,
@@ -92,9 +144,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     limit: pageSize,
     offset,
     name: nameFilter,
+    kind: "custom",
   });
-  const createMutation = useCreateRole();
-  const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
   const bulkDelete = useBulkDeleteRoles();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -113,177 +164,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       { enabled: allMatchingSelected },
     );
 
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  const editRoleId = searchParams.get("edit");
-  const { data: editRoleFromUrl } = useRole(editRoleId ?? undefined);
-  const {
-    entity: selectedRole,
-    open: openEditRole,
-    close: closeEditDialog,
-  } = useDialogUrlParam<Role>({
-    paramName: "edit",
-    entityFromUrl: editRoleFromUrl ?? null,
-  });
-
-  const viewRoleId = searchParams.get("view");
-  const { data: viewRoleFromUrl } = useRole(viewRoleId ?? undefined);
-  const {
-    entity: viewPermissionsRole,
-    open: openViewPermissionsDialog,
-    close: closeViewPermissionsDialog,
-  } = useDialogUrlParam<Role>({
-    paramName: "view",
-    entityFromUrl: viewRoleFromUrl ?? null,
-  });
-
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
-
-  const [roleName, setRoleName] = useState("");
-  const [roleDescription, setRoleDescription] = useState("");
-  const [permission, setPermission] = useState<Permissions>({});
-
-  // Seed the edit form whenever a role's edit dialog opens, whether from a
-  // row click or a deep-linked URL.
-  useEffect(() => {
-    if (selectedRole) {
-      setRoleName(selectedRole.name);
-      setRoleDescription(selectedRole.description ?? "");
-      setPermission(selectedRole.permission);
-    }
-  }, [selectedRole]);
-
-  // Cancel any pending `?edit=<id>` deep link before opening create, or the
-  // by-id fetch could land and overwrite the shared create form state.
-  const handleCreateOpen = useCallback(() => {
-    closeEditDialog();
-    setCreateDialogOpen(true);
-  }, [closeEditDialog]);
-
-  useEffect(() => {
-    setActionButton(
-      <PermissionButton
-        permissions={{ ac: ["create"] }}
-        size="sm"
-        onClick={handleCreateOpen}
-      >
-        <Plus className="h-4 w-4" />
-        Create Custom Role
-      </PermissionButton>,
-    );
-
-    return () => setActionButton(null);
-  }, [setActionButton, handleCreateOpen]);
-
-  const handleCreateRole = useCallback(() => {
-    if (!roleName.trim()) {
-      toast.error("Role name is required");
-      return;
-    }
-
-    if (Object.keys(permission).length === 0) {
-      toast.error("At least one permission must be granted");
-      return;
-    }
-
-    createMutation.mutate(
-      // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
-      {
-        name: roleName,
-        description: roleDescription || undefined,
-        permission,
-      } as Parameters<typeof createMutation.mutate>[0],
-      {
-        onSuccess: () => {
-          setCreateDialogOpen(false);
-          setRoleName("");
-          setRoleDescription("");
-          setPermission({});
-          toast.success("Role created successfully");
-        },
-      },
-    );
-  }, [roleDescription, roleName, permission, createMutation]);
-
-  const handleEditRole = useCallback(() => {
-    if (!selectedRole) return;
-
-    if (!roleName.trim()) {
-      toast.error("Role name is required");
-      return;
-    }
-
-    if (Object.keys(permission).length === 0) {
-      toast.error("At least one permission must be granted");
-      return;
-    }
-
-    updateMutation.mutate(
-      // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
-      {
-        roleId: selectedRole.id,
-        data: {
-          name: roleName,
-          description: roleDescription || undefined,
-          permission,
-        },
-      } as Parameters<typeof updateMutation.mutate>[0],
-      {
-        onSuccess: () => {
-          closeEditDialog();
-          setRoleName("");
-          setRoleDescription("");
-          setPermission({});
-          toast.success("Role updated successfully");
-        },
-      },
-    );
-  }, [
-    selectedRole,
-    roleDescription,
-    roleName,
-    permission,
-    updateMutation,
-    closeEditDialog,
-  ]);
-
-  const handleDeleteRole = useCallback(() => {
-    if (roleToDelete) {
-      deleteMutation.mutate(roleToDelete.id, {
-        onSuccess: () => {
-          setDeleteDialogOpen(false);
-          setRoleToDelete(null);
-          toast.success("Role deleted successfully");
-        },
-        onError: (error: Error) => {
-          toast.error(error.message || "Failed to delete role");
-        },
-      });
-    }
-  }, [roleToDelete, deleteMutation]);
-
-  const openDuplicateDialog = useCallback(
-    (role: Role) => {
-      // Cancel a pending deep-linked edit so its by-id fetch can't overwrite
-      // the duplicate form state once it resolves.
-      closeEditDialog();
-      // Role names must be lowercase letters, numbers, and underscores only
-      // (validated by better-auth at create time). Make sure the suggested
-      // copy name follows the same rule.
-      const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-      setRoleName(`${sanitized}_copy`);
-      setRoleDescription(
-        role.description ??
-          (role.predefined
-            ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
-            : ""),
-      );
-      setPermission(role.permission);
-      setCreateDialogOpen(true);
-    },
-    [closeEditDialog],
-  );
 
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
@@ -327,17 +208,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       disabledReason: () => "Predefined roles cannot be deleted",
     }),
     {
-      id: "icon",
-      size: 24,
-      enableSorting: false,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <RoleTypeIcon predefined={row.original.predefined} withTooltip />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Name",
@@ -351,7 +221,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         const description = role.description || predefinedDescription;
         return (
           <div>
-            <div className="font-medium capitalize">{role.name}</div>
+            <RowClickShield className="contents">
+              <Link
+                href={`/settings/roles/${role.id}`}
+                className="font-medium capitalize"
+              >
+                {role.name}
+              </Link>
+            </RowClickShield>
             {description && (
               <div className="text-xs text-muted-foreground">{description}</div>
             )}
@@ -365,71 +242,33 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       enableSorting: false,
       cell: ({ row }) => {
         const role = row.original;
-
-        if (role.predefined) {
-          const actions: TableRowAction[] = [
-            {
-              icon: <Eye className="h-4 w-4" />,
-              label: "View permissions",
-              onClick: () => openViewPermissionsDialog(role),
-            },
-            {
-              icon: <Download className="h-4 w-4" />,
-              label: "Export role",
-              onClick: () => downloadRoleAsJson(role),
-            },
-            {
-              icon: <Copy className="h-4 w-4" />,
-              label: "Duplicate as custom role",
-              permissions: { ac: ["create"] },
-              onClick: () => openDuplicateDialog(role),
-            },
-          ];
-          return (
-            <TableRowActions
-              actions={actions.slice(0, 1)}
-              dropdownActions={actions.slice(1)}
-              itemName={role.name}
-            />
-          );
-        }
-
-        const actions: TableRowAction[] = [
-          {
-            icon: <Pencil className="h-4 w-4" />,
-            label: "Edit role",
-            permissions: { ac: ["update"] },
-            onClick: () => openEditRole(role),
-          },
-          {
-            icon: <Download className="h-4 w-4" />,
-            label: "Export role",
-            onClick: () => downloadRoleAsJson(role),
-          },
-          {
-            icon: <Copy className="h-4 w-4" />,
-            label: "Duplicate role",
-            permissions: { ac: ["create"] },
-            onClick: () => openDuplicateDialog(role),
-          },
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: "Delete role",
-            permissions: { ac: ["delete"] },
-            variant: "destructive",
-            onClick: () => {
-              setRoleToDelete(role);
-              setDeleteDialogOpen(true);
-            },
-          },
-        ];
-        return (
-          <TableRowActions
-            actions={actions.slice(0, 1)}
-            dropdownActions={actions.slice(1)}
-            itemName={role.name}
-          />
-        );
+        const exportRole: TableRowAction = {
+          icon: <Download className="h-4 w-4" />,
+          label: "Export role",
+          onClick: () => downloadRoleAsJson(role),
+        };
+        // The row itself opens the role, so there is no View here; Edit and
+        // Delete exist only for custom roles.
+        const actions: TableRowAction[] = role.predefined
+          ? [exportRole]
+          : [
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit role",
+                permissions: { ac: ["update"] },
+                onClick: () =>
+                  router.push(`/settings/roles/${role.id}/edit?from=list`),
+              },
+              exportRole,
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete role",
+                permissions: { ac: ["delete"] },
+                variant: "destructive",
+                onClick: () => setRoleToDelete(role),
+              },
+            ];
+        return <TableRowActions actions={actions} itemName={role.name} />;
       },
     },
   ];
@@ -495,6 +334,11 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             <DataTable
               columns={columns}
               data={allRoles}
+              onRowClick={(role, event) =>
+                openRowOnPlainClick(event, () =>
+                  router.push(`/settings/roles/${role.id}`),
+                )
+              }
               getRowId={(row) => row.id}
               rowSelection={effectiveRowSelection}
               onRowSelectionChange={onRowSelectionChange}
@@ -548,215 +392,23 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         )}
       </BulkActionsScope>
 
-      {/* Create Role Dialog */}
-      <FormDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        title="Create role"
-        size="large"
-        className="h-[min(46rem,90dvh)] max-w-5xl"
-        headerClassName="text-left"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleCreateRole}
-        >
-          <RoleFormBody
-            idPrefix="create-role"
-            name={roleName}
-            onNameChange={setRoleName}
-            description={roleDescription}
-            onDescriptionChange={setRoleDescription}
-            permission={permission}
-            onPermissionChange={setPermission}
-            userPermissions={authorPermissions ?? {}}
-          />
-          <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setCreateDialogOpen(false);
-                setRoleName("");
-                setRoleDescription("");
-                setPermission({});
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creating..." : "Create role"}
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
-
-      {/* Edit Role Dialog */}
-      <FormDialog
-        open={!!selectedRole}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeEditDialog();
-          }
-        }}
-        title="Edit role"
-        description="Changes apply to everyone with this role, including through a team."
-        size="large"
-        className="h-[min(46rem,90dvh)] max-w-5xl"
-        headerClassName="text-left"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleEditRole}
-        >
-          <RoleFormBody
-            idPrefix="edit-role"
-            name={roleName}
-            onNameChange={setRoleName}
-            description={roleDescription}
-            onDescriptionChange={setRoleDescription}
-            permission={permission}
-            onPermissionChange={setPermission}
-            userPermissions={authorPermissions ?? {}}
-          />
-          <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                closeEditDialog();
-                setRoleName("");
-                setRoleDescription("");
-                setPermission({});
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
-
-      <FormDialog
-        open={!!viewPermissionsRole}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeViewPermissionsDialog();
-          }
-        }}
-        title={
-          <span className="capitalize">{viewPermissionsRole?.name ?? ""}</span>
-        }
-        titleAdornment={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="secondary" className="cursor-default font-normal">
-                Read-only
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              Predefined roles can't be changed. Duplicate it to edit.
-            </TooltipContent>
-          </Tooltip>
-        }
-        description={
-          viewPermissionsRole
-            ? viewPermissionsRole.description ||
-              roleDescriptions[viewPermissionsRole.name as PredefinedRoleName]
-            : undefined
-        }
-        size="large"
-        className="h-[min(40rem,90dvh)] max-w-5xl"
-        headerClassName="text-left"
-      >
-        {viewPermissionsRole && (
-          <DialogBody className="flex min-h-0 flex-1 flex-col p-5">
-            <RolePermissionBuilder
-              permission={viewPermissionsRole.permission}
-              onChange={() => {}}
-              userPermissions={viewPermissionsRole.permission}
-              readOnly
-            />
-          </DialogBody>
-        )}
-        <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={closeViewPermissionsDialog}
-          >
-            Close
-          </Button>
-        </DialogStickyFooter>
-      </FormDialog>
-
       <DeleteConfirmDialog
-        open={deleteDialogOpen}
+        open={!!roleToDelete}
         onOpenChange={(open) => {
-          setDeleteDialogOpen(open);
-          if (!open) {
-            setRoleToDelete(null);
-          }
+          if (!open) setRoleToDelete(null);
         }}
         title="Delete Role"
         description={`Are you sure you want to delete the role "${roleToDelete?.name ?? ""}"? This action cannot be undone.`}
         isPending={deleteMutation.isPending}
-        onConfirm={handleDeleteRole}
+        onConfirm={() => {
+          if (!roleToDelete) return;
+          deleteMutation.mutate(roleToDelete.id, {
+            onSuccess: (deleted) => {
+              if (deleted) setRoleToDelete(null);
+            },
+          });
+        }}
       />
     </>
-  );
-}
-
-function RoleFormBody(props: {
-  idPrefix: string;
-  name: string;
-  onNameChange: (name: string) => void;
-  description: string;
-  onDescriptionChange: (description: string) => void;
-  permission: Permissions;
-  onPermissionChange: (permission: Permissions) => void;
-  userPermissions: Permissions;
-}) {
-  return (
-    <DialogBody className="flex min-h-0 flex-1 flex-col gap-5 p-5">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <div className="space-y-2">
-          <Label htmlFor={`${props.idPrefix}-name`}>Name</Label>
-          <Input
-            id={`${props.idPrefix}-name`}
-            placeholder="e.g. Developer"
-            value={props.name}
-            onChange={(event) => props.onNameChange(event.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${props.idPrefix}-description`}>
-            Description{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <Input
-            id={`${props.idPrefix}-description`}
-            placeholder="What this role is for"
-            value={props.description}
-            onChange={(event) => props.onDescriptionChange(event.target.value)}
-          />
-        </div>
-      </div>
-      <section
-        className="flex min-h-0 flex-1 flex-col gap-3"
-        aria-label="Permissions"
-      >
-        <h3 className="text-sm font-medium">Permissions</h3>
-        <RolePermissionBuilder
-          permission={props.permission}
-          onChange={props.onPermissionChange}
-          userPermissions={props.userPermissions}
-        />
-      </section>
-    </DialogBody>
   );
 }

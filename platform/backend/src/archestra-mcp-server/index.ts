@@ -22,6 +22,7 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -40,7 +41,9 @@ import {
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
 import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
+import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
@@ -89,6 +92,7 @@ import {
   tools as knowledgeManagementTools,
 } from "./knowledge-management";
 import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
+import { toolEntries as logToolEntries, tools as logTools } from "./logs";
 import {
   toolEntries as mcpGatewayToolEntries,
   tools as mcpGatewayTools,
@@ -196,6 +200,7 @@ function getToolEntries(): Partial<
       ...mcpServerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
+      ...logToolEntries,
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
@@ -234,6 +239,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpServerTools,
       ...teamTools,
       ...limitTools,
+      ...logTools,
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,
@@ -642,6 +648,7 @@ async function resolveToolAssignment(params: {
   );
   if (
     openappaEnabled() &&
+    !isAgentRunGatewayToken(context.tokenAuth) &&
     isImplicitOpenAppaReadToolShortName(shortName) &&
     !isToolIdentityExcluded(
       {
@@ -652,10 +659,33 @@ async function resolveToolAssignment(params: {
     )
   )
     return null;
+  if (
+    shortName === TOOL_START_AGENT_RUN_SHORT_NAME &&
+    !context.suppressContentLogging &&
+    context.organizationId
+  ) {
+    const callerAgent = await AgentModel.findGatewayAgentById(context.agentId);
+    if (
+      callerAgent &&
+      (await callerUsesImplicitLoadBalancedRunStarter({
+        agent: callerAgent,
+        actorUserId: context.userId,
+        exclusionSets,
+        disallowOAuthApp: Boolean(
+          context.tokenAuth?.oauthExecution ||
+            (context.tokenAuth?.oauthClientId &&
+              !context.tokenAuth.isUserToken),
+        ),
+      }))
+    ) {
+      return null;
+    }
+  }
   const available = await isArchestraToolAvailableToAgent({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
+    oauthClientId: context.tokenAuth?.oauthClientId,
     organizationId: context.organizationId,
     exclusionSets,
   });

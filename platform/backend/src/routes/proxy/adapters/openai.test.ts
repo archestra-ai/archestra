@@ -911,6 +911,70 @@ describe("openaiAdapterFactory", () => {
 describe("OpenAIStreamAdapter", () => {
   type Chunk = OpenAi.Types.ChatCompletionChunk;
 
+  test.each([
+    false,
+    true,
+  ])("keeps reading until terminal usage with finish-chunk usage=%s", (finishHasUsage) => {
+    const adapter = openaiAdapterFactory.createStreamAdapter({
+      model: "test-model",
+      messages: [{ role: "user", content: "Hello" }],
+      stream: true,
+    });
+    const chunk = (choices: Chunk["choices"], tokens: number): Chunk => ({
+      id: "reply",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "test-model",
+      choices,
+      usage: {
+        prompt_tokens: tokens,
+        completion_tokens: tokens,
+        total_tokens: tokens * 2,
+      },
+    });
+    // An early usage-only chunk and an empty heartbeat are not terminal.
+    expect(adapter.processChunk(chunk([], 0)).isFinal).toBe(false);
+    expect(
+      adapter.processChunk({ ...chunk([], 0), usage: undefined }).isFinal,
+    ).toBe(false);
+    expect(
+      adapter.processChunk(
+        chunk(
+          [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "Hello" },
+              finish_reason: null,
+            },
+          ],
+          0,
+        ),
+      ).isFinal,
+    ).toBe(false);
+    expect(
+      adapter.processChunk(
+        chunk(
+          [{ index: 0, delta: { content: " world" }, finish_reason: null }],
+          2,
+        ),
+      ).isFinal,
+    ).toBe(false);
+    expect(
+      adapter.processChunk({
+        ...chunk([{ index: 0, delta: {}, finish_reason: "stop" }], 2),
+        usage: finishHasUsage ? chunk([], 2).usage : undefined,
+      }).isFinal,
+    ).toBe(false);
+    expect(adapter.processChunk(chunk([], 7)).isFinal).toBe(true);
+    expect(adapter.toProviderResponse().choices[0].message.content).toBe(
+      "Hello world",
+    );
+    expect(adapter.state.usage).toMatchObject({
+      inputTokens: 7,
+      outputTokens: 7,
+    });
+  });
+
   function usageOf(endSse: string | Uint8Array): unknown {
     const text =
       typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);

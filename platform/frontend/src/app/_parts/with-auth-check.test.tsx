@@ -44,14 +44,6 @@ vi.mock("./auth-surface-frame", () => ({
 
 // Mock shared module
 // Keep shared exports while substituting the permissions used by this suite.
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  requiredPagePermissionsMap: {
-    "/protected": { "organization:read": ["read"] },
-    "/admin": { "organization:write": ["write"] },
-  },
-}));
-
 const mockRouterPush = vi.fn();
 const mockLocationReload = vi.fn();
 const MockChild = () => (
@@ -510,41 +502,12 @@ describe("WithAuthCheck", () => {
       await waitFor(() => {
         expect(errorReporting.setUser).toHaveBeenCalledWith({
           id: "user123",
-          email: "test@example.com",
-          username: "Test User",
         });
       });
-    });
-
-    it("should use email as username when name is not available", async () => {
-      const mockUser = {
-        id: "user456",
-        email: "another@example.com",
-      };
-
-      vi.mocked(useSession).mockReturnValue({
-        data: {
-          user: mockUser,
-          session: { id: "session456" },
-        },
-        isPending: false,
-      } as unknown as ReturnType<typeof useSession>);
-
-      vi.mocked(usePathname).mockReturnValue("/dashboard");
-
-      render(
-        <WithAuthCheck>
-          <MockChild />
-        </WithAuthCheck>,
-      );
-
-      await waitFor(() => {
-        expect(errorReporting.setUser).toHaveBeenCalledWith({
-          id: "user456",
-          email: "another@example.com",
-          username: "another@example.com",
-        });
-      });
+      // Reports can leave the deployment; no email or name goes with them.
+      expect(
+        JSON.stringify(vi.mocked(errorReporting.setUser).mock.calls),
+      ).not.toContain("test@example.com");
     });
 
     it("should clear Sentry user context when user is not authenticated", async () => {

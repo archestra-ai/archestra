@@ -61,7 +61,7 @@ export function AfterConnect({
   const name = nameOf(client);
   // The installer ends with a command that starts every script agent but
   // Cursor, which has no command to start.
-  const launches = script && client.id !== "cursor";
+  const launches = script && client.id !== "cursor" && client.id !== "chatgpt";
   const close = (
     <Button
       variant="outline"
@@ -164,7 +164,9 @@ export function AfterConnect({
               <p className="px-1 text-xs text-muted-foreground">
                 {launches
                   ? `Your terminal ends with a command that starts ${name} and asks it what it can do. You can also paste this into a new ${name} session.`
-                  : `Once ${script ? "your terminal" : name} says setup is done, paste this into a new ${name} session.`}
+                  : client.id === "chatgpt" && script
+                    ? "Once the terminal says setup is done, restart ChatGPT and paste this into a new local Work or Codex conversation."
+                    : `Once ${script ? "your terminal" : name} says setup is done, paste this into a new ${name} session.`}
               </p>
               <WelcomePrompt text={welcome} />
             </section>

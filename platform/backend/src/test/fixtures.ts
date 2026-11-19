@@ -770,6 +770,7 @@ async function makeInternalMcpCatalog(
       | "authDescription"
       | "authFields"
       | "localConfig"
+      | "desktopConfig"
       | "localConfigSecretId"
       | "userConfig"
       | "oauthConfig"
@@ -1576,7 +1577,7 @@ async function removeObjectPolicies(organizationId: string): Promise<void> {
 }
 // SPDX-SnippetEnd
 
-export const beforeEach = baseBeforeEach<TestFixtures>;
+export const beforeEach: typeof baseBeforeEach<TestFixtures> = baseBeforeEach;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
     await use(makeUser);

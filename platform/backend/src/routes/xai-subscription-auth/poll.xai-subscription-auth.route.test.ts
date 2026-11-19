@@ -3,26 +3,25 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { decodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
-vi.mock("@/cache-manager");
+// The rate limiter uses cacheManager: start the real cache on this file's
+// test database, whose per-test reset clears its entries.
+setupTestCacheManager();
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      xai: {
-        subscription: {
-          issuer: "https://auth.x.ai",
-          clientId: "test-xai-client-id",
-          scopes: "openid offline_access api:access",
-        },
+overrideConfig({
+  llm: {
+    xai: {
+      subscription: {
+        issuer: "https://auth.x.ai",
+        clientId: "test-xai-client-id",
+        scopes: "openid offline_access api:access",
       },
     },
-  }),
-);
+  },
+});
 
 const DISCOVERY_URL = "https://auth.x.ai/.well-known/openid-configuration";
 const TOKEN_ENDPOINT = "https://auth.x.ai/oauth2/token";

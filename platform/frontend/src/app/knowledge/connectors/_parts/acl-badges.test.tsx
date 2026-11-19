@@ -103,6 +103,18 @@ describe("AclBadges", () => {
     ).toBeInTheDocument();
   });
 
+  it("resolves oauth_client tokens to OAuth client names", async () => {
+    render(
+      <AclBadges
+        acl={["oauth_client:oauth-row-1", "oauth_client:oauth-unknown"]}
+      />,
+    );
+    expect(
+      await screen.findByText("OAuth client: Portal App"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("OAuth client: oauth-unknown")).toBeInTheDocument();
+  });
+
   it("collapses very large ACLs into +N more with every entry in the tooltip", () => {
     const acl = Array.from(
       { length: 1000 },
@@ -133,6 +145,19 @@ const memberServer = setupServer(
         pagination: { limit: 100, hasNext: false, nextCursor: null },
       });
     },
+  ),
+  http.get("http://localhost:9000/api/oauth-clients", () =>
+    HttpResponse.json({
+      data: [{ id: "oauth-row-1", name: "Portal App", clientId: "oauth_1" }],
+      pagination: {
+        currentPage: 1,
+        limit: 100,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    }),
   ),
 );
 const clients: QueryClient[] = [];

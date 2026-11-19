@@ -15,6 +15,7 @@ import {
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
+import { agentToolSurfaceChanged } from "@/models/agent-tool-surface";
 import { type AgentToolExclusions, ApiError, type Tool } from "@/types";
 
 /**
@@ -120,10 +121,8 @@ class AgentToolExclusionsService {
     }
 
     // Evict AFTER commit only: an eviction on failure would drop a valid cache
-    // for unchanged exclusions. Dynamic import breaks the module cycle
-    // (chat-mcp-client → archestra-mcp-server → dynamic-tools → this service).
-    const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
-    clearChatMcpClient(agentId);
+    // for unchanged exclusions. The chat MCP client listens for the notice.
+    agentToolSurfaceChanged(agentId);
 
     // After the replace transaction commits and its row lock is released, so the
     // fork's own FOR UPDATE can't self-deadlock against it.
@@ -183,8 +182,7 @@ class AgentToolExclusionsService {
       throw error;
     }
 
-    const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
-    clearChatMcpClient(agentId);
+    agentToolSurfaceChanged(agentId);
 
     // After commit / lock release (see replaceExclusions).
     if (!params.deferVersionFork) {

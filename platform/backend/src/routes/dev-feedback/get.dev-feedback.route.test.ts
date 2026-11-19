@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "@/test";
 import { FakeSlack } from "@/test/fake-slack";
 import { useMswServer } from "@/test/msw";
+import { recordQueries } from "@/test/query-counter";
 import { useRouteTestApp } from "@/test/route-test-app";
 import devFeedbackRoutes from "./dev-feedback.routes";
 
@@ -24,10 +25,21 @@ describe("GET /api/dev-feedback/comments", () => {
     const second = slack.addMessage(feedbackMessage("/agents", "second"));
     slack.addMessage({ text: "on it", user: "U1", threadTs: second.ts });
 
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: "/api/dev-feedback/comments?route=/agents",
-    });
+    const measured = await recordQueries(() =>
+      ctx.app.inject({
+        method: "GET",
+        url: "/api/dev-feedback/comments?route=/agents",
+      }),
+    );
+    const response = measured.result;
+    // The setup and two Slack config records are loaded once, even on a cold
+    // history/workspace lookup. Later requests still resolve the current bot.
+    expect(
+      measured.statements.filter(
+        (statement) =>
+          statement.includes('from "secret"') && statement.includes('"name" ='),
+      ),
+    ).toHaveLength(3);
 
     expect(response.statusCode).toBe(200);
     expect(

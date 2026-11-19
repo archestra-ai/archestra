@@ -132,9 +132,13 @@ describe("PostHogProviderWrapper", () => {
         "ph_test_key",
         expect.objectContaining({
           api_host: "https://posthog.example.com",
-          // Tracing headers let backend errors/logs link to this session replay.
-          __add_tracing_headers: expect.arrayContaining(["localhost"]),
+          // Errors go to Sentry only, whatever the PostHog project's remote
+          // exception autocapture setting says.
+          capture_exceptions: false,
         }),
+      );
+      expect(mockInit.mock.calls[0][1]).not.toHaveProperty(
+        "__add_tracing_headers",
       );
       expect(mockIdentify).toHaveBeenCalledWith("user-123", {
         email: "user@example.com",

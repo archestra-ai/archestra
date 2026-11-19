@@ -8,7 +8,12 @@ import {
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isClaudeCodeRuntimeCommand,
   isClaudeOnBedrock,
+  isCodexRuntimeCommand,
+  isCopilotRuntimeCommand,
+  isGrokRuntimeCommand,
+  isKimiRuntimeCommand,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
@@ -179,72 +184,104 @@ describe("getAgentRuntimeModelCompatibility", () => {
         modelId: "claude-sonnet",
       }),
     ).toEqual({ compatible: true });
-    expect(
-      getAgentRuntimeModelCompatibility({
-        inferenceProtocol: "openai_responses",
-        runtimeCommand: ["archestra-codex"],
-        provider: "gemini",
-        modelId: "gemini-2.5-pro",
-      }),
-    ).toMatchObject({
-      compatible: false,
-      message: expect.stringContaining("Codex runtime requires an OpenAI"),
-    });
+    for (const runtimeCommand of [
+      ["archestra-codex"],
+      ["archestra-codex-runtime"],
+    ] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_responses",
+          runtimeCommand,
+          provider: "gemini",
+          modelId: "gemini-2.5-pro",
+        }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("Codex runtime requires an OpenAI"),
+      });
+    }
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code")).toBe(true);
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code-runtime")).toBe(
+      true,
+    );
+    expect(isClaudeCodeRuntimeCommand("archestra-codex")).toBe(false);
+    expect(isCodexRuntimeCommand("archestra-codex")).toBe(true);
+    expect(isCodexRuntimeCommand("archestra-codex-runtime")).toBe(true);
+    expect(isCodexRuntimeCommand("archestra-kimi")).toBe(false);
+    expect(isGrokRuntimeCommand("archestra-grok")).toBe(true);
+    expect(isGrokRuntimeCommand("archestra-grok-runtime")).toBe(true);
+    expect(isGrokRuntimeCommand("archestra-codex")).toBe(false);
+    expect(isKimiRuntimeCommand("archestra-kimi")).toBe(true);
+    expect(isKimiRuntimeCommand("archestra-kimi-runtime")).toBe(true);
+    expect(isKimiRuntimeCommand("archestra-grok")).toBe(false);
+    expect(isCopilotRuntimeCommand("archestra-copilot")).toBe(true);
+    expect(isCopilotRuntimeCommand("archestra-copilot-runtime")).toBe(true);
+    expect(isCopilotRuntimeCommand("archestra-codex")).toBe(false);
   });
 
   test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {
-    const runtime = {
-      inferenceProtocol: "openai_chat" as const,
-      runtimeCommand: ["archestra-kimi"],
-    };
-    expect(
-      getAgentRuntimeModelCompatibility({
-        ...runtime,
-        provider: "kimi-code",
-        modelId: "k3.1-pro",
-      }),
-    ).toEqual({ compatible: true });
-    // A Kimi API Platform key is the Moonshot (Kimi) provider, not Kimi Code.
-    for (const provider of ["kimi", "gemini"] as const) {
+    for (const runtimeCommand of [
+      ["archestra-kimi"],
+      ["archestra-kimi-runtime"],
+    ] as const) {
+      const runtime = {
+        inferenceProtocol: "openai_chat" as const,
+        runtimeCommand,
+      };
       expect(
-        getAgentRuntimeProviderCompatibility({ ...runtime, provider }),
-      ).toMatchObject({
-        compatible: false,
-        message: expect.stringContaining(
-          "Kimi Code runtime requires a Kimi Code model",
-        ),
-      });
+        getAgentRuntimeModelCompatibility({
+          ...runtime,
+          provider: "kimi-code",
+          modelId: "k3.1-pro",
+        }),
+      ).toEqual({ compatible: true });
+      // A Kimi API Platform key is the Moonshot (Kimi) provider, not Kimi Code.
+      for (const provider of ["kimi", "gemini"] as const) {
+        expect(
+          getAgentRuntimeProviderCompatibility({ ...runtime, provider }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining(
+            "Kimi Code runtime requires a Kimi Code model",
+          ),
+        });
+      }
     }
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
-    const runtime = {
-      inferenceProtocol: "anthropic" as const,
-      runtimeCommand: ["archestra-claude-code"],
-      provider: "bedrock" as const,
-    };
+    for (const runtimeCommand of [
+      ["archestra-claude-code"],
+      ["archestra-claude-code-runtime"],
+    ] as const) {
+      const runtime = {
+        inferenceProtocol: "anthropic" as const,
+        runtimeCommand,
+        provider: "bedrock" as const,
+      };
 
-    // Key filtering has no selected model yet, so Bedrock remains available
-    // until its model-specific eligibility is evaluated.
-    expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
-      compatible: true,
-    });
-    for (const modelId of [
-      "anthropic.claude-sonnet-4-6",
-      "us.anthropic.claude-sonnet-4-6",
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
-    ]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toEqual({ compatible: true });
-    }
-    for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toMatchObject({
-        compatible: false,
-        message: expect.stringContaining("requires a Claude model"),
+      // Key filtering has no selected model yet, so Bedrock remains available
+      // until its model-specific eligibility is evaluated.
+      expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
+        compatible: true,
       });
+      for (const modelId of [
+        "anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+      ]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toEqual({ compatible: true });
+      }
+      for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("requires a Claude model"),
+        });
+      }
     }
   });
 
@@ -577,16 +614,25 @@ describe("getAgentRuntimeAllowedProtocols", () => {
     expect(
       getAgentRuntimeAllowedProtocols(["archestra-claude-code", "--verbose"]),
     ).toEqual(["anthropic"]);
-    expect(getAgentRuntimeAllowedProtocols(["archestra-codex"])).toEqual([
-      "openai_responses",
-      "openai_chat",
-    ]);
-    expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
-      "openai_chat",
-    ]);
-    expect(getAgentRuntimeAllowedProtocols(["archestra-kimi"])).toEqual([
-      "openai_chat",
-    ]);
+    for (const command of [
+      ["archestra-codex"],
+      ["archestra-codex-runtime"],
+    ] as const) {
+      expect(getAgentRuntimeAllowedProtocols(command)).toEqual([
+        "openai_responses",
+        "openai_chat",
+      ]);
+    }
+    for (const command of [
+      ["archestra-grok"],
+      ["archestra-grok-runtime"],
+      ["archestra-kimi"],
+      ["archestra-kimi-runtime"],
+      ["archestra-copilot"],
+      ["archestra-copilot-runtime"],
+    ] as const) {
+      expect(getAgentRuntimeAllowedProtocols(command)).toEqual(["openai_chat"]);
+    }
     for (const command of [
       null,
       [],

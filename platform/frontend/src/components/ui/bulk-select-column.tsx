@@ -53,23 +53,27 @@ export function createSelectColumn<T>({
         selectableRows.length > 0 && selectedCount === selectableRows.length;
       const someSelected = selectedCount > 0 && !allSelected;
 
+      // An inline checkbox sits on the text baseline, a couple of pixels
+      // above the column names; a flex box centres it on the row instead.
       return (
-        <Checkbox
-          checked={allSelected || (someSelected && "indeterminate")}
-          onCheckedChange={(value) => {
-            table.setRowSelection((current) => {
-              const next = { ...current };
-              for (const row of selectableRows) {
-                if (value) next[row.id] = true;
-                else delete next[row.id];
-              }
-              return next;
-            });
-          }}
-          onClick={(event) => event.stopPropagation()}
-          aria-label={allLabel}
-          disabled={selectableRows.length === 0}
-        />
+        <span className="flex items-center justify-center">
+          <Checkbox
+            checked={allSelected || (someSelected && "indeterminate")}
+            onCheckedChange={(value) => {
+              table.setRowSelection((current) => {
+                const next = { ...current };
+                for (const row of selectableRows) {
+                  if (value) next[row.id] = true;
+                  else delete next[row.id];
+                }
+                return next;
+              });
+            }}
+            onClick={(event) => event.stopPropagation()}
+            aria-label={allLabel}
+            disabled={selectableRows.length === 0}
+          />
+        </span>
       );
     },
     cell: ({ row, table }) => {
@@ -103,14 +107,20 @@ export function createSelectColumn<T>({
         />
       );
 
-      if (selectable) return checkbox;
+      if (selectable)
+        return (
+          <span className="flex items-center justify-center">{checkbox}</span>
+        );
       const reason =
         disabledReason?.(row.original) ?? "Unavailable for bulk actions";
 
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-not-allowed" title={reason}>
+            <span
+              className="mx-auto flex w-fit cursor-not-allowed items-center"
+              title={reason}
+            >
               {checkbox}
             </span>
           </TooltipTrigger>

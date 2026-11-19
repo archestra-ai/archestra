@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import type { GuardrailsPolicyEdit } from "@/types/guardrails-policy-proposal";
+import {
+  GUARDRAILS_POLICY_MAX_LENGTH,
+  type GuardrailsPolicyEdit,
+} from "@/types/guardrails-policy-proposal";
 import {
   policyDiff,
   resolveProposedPolicy,
@@ -139,9 +142,26 @@ describe("applyPolicyEdits", () => {
       applyPolicyEdits({
         text: POLICY,
         revision: 1,
-        edits: [{ oldText: "# Catch-all", newText: "#".repeat(262144) }],
+        edits: [
+          {
+            oldText: "# Catch-all",
+            newText: "#".repeat(GUARDRAILS_POLICY_MAX_LENGTH),
+          },
+        ],
       }),
-    ).toThrow(/over the 262144 limit/);
+    ).toThrow(`over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit`);
+    expect(() =>
+      applyPolicyEdits({
+        text: POLICY,
+        revision: 1,
+        edits: [
+          {
+            oldText: "# Catch-all",
+            newText: "é".repeat(GUARDRAILS_POLICY_MAX_LENGTH / 2),
+          },
+        ],
+      }),
+    ).toThrow(`over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit`);
   });
 });
 
@@ -263,7 +283,9 @@ describe("policyDiff", () => {
   });
 
   test("a policy at the size limit diffs and applies back", () => {
-    const before = "x = 1\n".repeat(262144 / 6);
+    const before = "x = 1\n".repeat(
+      Math.floor(GUARDRAILS_POLICY_MAX_LENGTH / 6),
+    );
     const after = `${before.slice(0, 600)}y = 2\n${before.slice(600, -6)}`;
     const { diff, changed } = policyDiff({ before, after, path: "p" });
     expect(changed).toEqual({ added: 1, removed: 1 });
@@ -300,7 +322,7 @@ function applyUnifiedDiff(before: string, diff: string): string {
   const old = before.match(/[^\n]*\n|[^\n]+$/g) ?? [];
   const lines = diff.split("\n");
   expect(lines.slice(0, 2)).toEqual(["--- a/p", "+++ b/p"]);
-  const out: string[] = [];
+  let out: string[] = [];
   let pos = 0;
   let k = 2;
   while (k < lines.length - 1) {
@@ -311,7 +333,7 @@ function applyUnifiedDiff(before: string, diff: string): string {
       .map(Number);
     const start = oldCount === 0 ? oldStart : oldStart - 1;
     expect(start).toBeGreaterThanOrEqual(pos);
-    out.push(...old.slice(pos, start));
+    out = [...out, ...old.slice(pos, start)];
     pos = start;
     expect(newCount === 0 ? newStart : newStart - 1).toBe(out.length);
     let seenOld = 0;
@@ -334,6 +356,5 @@ function applyUnifiedDiff(before: string, diff: string): string {
     }
     expect([seenOld, seenNew]).toEqual([oldCount, newCount]);
   }
-  out.push(...old.slice(pos));
-  return out.join("");
+  return [...out, ...old.slice(pos)].join("");
 }

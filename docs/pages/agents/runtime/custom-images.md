@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,12 +29,26 @@ Give teammates a named starting point, such as Engineering workspace, with your 
 
 Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-1. Go to **Settings → Agents → Agent Runtimes** and choose **Add runtime → Create custom runtime…**.
+1. Go to **Settings → Agents → Runtimes** and choose **Add runtime → Create custom runtime…**.
 2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
-3. Set **Container image**, **Command**, and **Inference API**. Add environment variables or reusable credential bindings if needed.
-4. Click **Add template**, then **Save**. The template appears among the choices when creating an agent.
+3. Under **Container**, set the **Container image** and **Command**. Open **Inference API**, **Follow-up messages**, **Environment**, and **Limits** to change those settings; each row shows its current value while closed.
+4. Click **Add runtime**. The runtime is saved and appears among the choices when creating an agent.
 
-Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it, then **Save**. Choose **Add runtime** to add it back at the end of the list. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
+Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it. Choose **Add runtime** to add it back at the end of the list. Each change saves as you make it. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
+
+## Turn Off Custom Images
+
+Keep every new agent on a runtime you offer by taking **Custom image** out of the choices.
+
+Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Go to **Settings → Agents → Runtimes**.
+2. Under the runtime list, turn off **Allow custom images**.
+
+What to know:
+
+- Agents already on a custom image keep their configuration and keep running.
+- This removes the choice from the app. The API and MCP tools still accept an image from someone allowed to configure any runtime.
 
 ## What the Image Needs
 

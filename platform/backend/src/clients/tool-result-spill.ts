@@ -2,7 +2,10 @@ import config from "@/config";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import {
+  SKILL_SANDBOX_HOME,
+  SKILL_SANDBOX_TOOL_RESULTS_DIR,
+} from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { asSandboxId } from "@/types";
 import {
@@ -95,7 +98,7 @@ async function spillToSandbox(params: {
     });
     if (!sandbox) return null;
     const fileId = uuidv5(toolCallId, sandbox.id);
-    const path = `${SKILL_SANDBOX_HOME}/tool-results/${fileId}.txt`;
+    const path = `${SKILL_SANDBOX_TOOL_RESULTS_DIR}/${fileId}.txt`;
     await skillSandboxRuntimeService.uploadFile({
       sandboxId: asSandboxId(sandbox.id),
       path,

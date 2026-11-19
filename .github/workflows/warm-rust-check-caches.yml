@@ -19,7 +19,7 @@ permissions: {}
 jobs:
   warm-rust-check-caches:
     name: Warm ${{ matrix.cache-key }}
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 25
     permissions:
       contents: read
@@ -42,7 +42,7 @@ jobs:
         working-directory: ${{ matrix.workspace }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -60,7 +60,9 @@ jobs:
 
       - name: Install musl dependencies
         if: steps.cargo-cache.outputs.cache-hit != 'true' && matrix.targets != ''
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
+          sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Warm check and test dependencies
         if: steps.cargo-cache.outputs.cache-hit != 'true'

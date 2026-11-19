@@ -33,7 +33,7 @@ export function PageBackLink({
     <Button
       variant="ghost"
       size={labelled ? "sm" : "icon-sm"}
-      className="-ml-2 shrink-0 text-muted-foreground"
+      className="shrink-0 text-muted-foreground"
       asChild
     >
       <Link

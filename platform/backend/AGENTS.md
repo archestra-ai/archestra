@@ -19,6 +19,11 @@
   database, models, application config, server entry point, or database fixtures.
   These tests run without PGlite or a database URL. Import test APIs from
   `vitest`, not `@/test`.
+- The one models module a unit test may load is `models/ports.ts`, which has no
+  runtime imports; `check:test-imports` still follows its imports. The check
+  stops at `server/composition.ts`: its port bindings are `import()`s that load
+  only when a model calls a port, so a script that imports it stays
+  database-free.
 - Keep `*.test.ts` for database-backed and route tests. Use real PGlite and
   fixtures for database behavior.
 - In database-backed tests that do not use fixtures, import test APIs directly

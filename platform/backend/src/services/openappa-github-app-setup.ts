@@ -22,7 +22,14 @@ import {
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import { lookupAccount } from "@/services/github-app-manifest-setup";
-import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
+import {
+  githubFetch,
+  isEmptyGithubRepository,
+} from "@/services/openappa-github";
+import {
+  resolveOpenAppaGitlabAccess,
+  templateExampleBlob,
+} from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
@@ -71,8 +78,6 @@ class OpenAppaGithubAppSetup {
       manifest: JSON.stringify(
         manifest({
           appName: await OrganizationModel.getAppName(),
-          // Off github.com there is no template; setup writes the workflow itself.
-          seedsWorkflow: api !== GITHUB_API_URL,
         }),
       ),
     };
@@ -91,18 +96,12 @@ class OpenAppaGithubAppSetup {
         400,
         "GitHub App setup expired or was started elsewhere. Start again.",
       );
-    const response = await fetch(
-      `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(30_000),
-      },
-    );
+    const response = await githubFetch({
+      url: `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
+      method: "POST",
+      apiVersion: true,
+      signal: AbortSignal.timeout(30_000),
+    });
     const app = response.ok
       ? ConversionSchema.safeParse(await response.json())
       : null;
@@ -227,7 +226,9 @@ class OpenAppaGithubAppSetup {
       await deleteRuntimeCredentialDefinition({
         organizationId: params.organizationId,
         key: definition.key,
-      }).catch(() => undefined);
+      }).catch((err) =>
+        logger.warn({ err }, "OpenAPPA could not remove a keyless GitHub App"),
+      );
       throw error;
     }
     await VerificationModel.deleteByIdentifier(
@@ -246,15 +247,29 @@ class OpenAppaGithubAppSetup {
     return Promise.all(
       (await this.githubApps(organizationId)).map(async (app) => {
         try {
-          const installation = await fetchAsGithubApp<Installation>({
-            githubUrl: app.api,
-            appId: app.appId,
-            privateKey: app.privateKey,
-            path: `/app/installations/${encodeURIComponent(app.installationId)}`,
-          });
-          return { id: app.id, account: installation.account?.login ?? null };
-        } catch {
-          return { id: app.id, account: null };
+          const asApp = <T>(path: `/app${string}`) =>
+            fetchAsGithubApp<T>({
+              githubUrl: app.api,
+              appId: app.appId,
+              privateKey: app.privateKey,
+              path,
+            });
+          const [installation, profile] = await Promise.all([
+            asApp<Installation>(
+              `/app/installations/${encodeURIComponent(app.installationId)}`,
+            ),
+            // The App's own page on GitHub, so setup can link to it.
+            asApp<{ html_url?: unknown }>("/app").catch(() => null),
+          ]);
+          return {
+            id: app.id,
+            account: installation.account?.login ?? null,
+            url:
+              typeof profile?.html_url === "string" ? profile.html_url : null,
+          };
+        } catch (err) {
+          logger.warn({ err }, "OpenAPPA could not read a GitHub App account");
+          return { id: app.id, account: null, url: null };
         }
       }),
     );
@@ -279,7 +294,13 @@ class OpenAppaGithubAppSetup {
         appId: app.appId,
         privateKey: app.privateKey,
         path: `/app/installations/${encodeURIComponent(app.installationId)}`,
-      }).catch(() => null),
+      }).catch((err) => {
+        logger.warn(
+          { err },
+          "OpenAPPA could not read a GitHub App installation",
+        );
+        return null;
+      }),
     ]);
     // GitHub's page for changing which repositories the App can reach.
     return { repositories, manageUrl: installation?.html_url ?? null };
@@ -316,45 +337,52 @@ class OpenAppaGithubAppSetup {
     const token = await resolveInstallationToken({
       githubUrl: app.api,
       ...app,
-    }).catch(() => null);
+    }).catch((err) => {
+      logger.warn({ err }, "OpenAPPA could not sign in as a GitHub App");
+      return null;
+    });
     if (!token) return { status: "app_error", validations: null };
     const get = (url: string, method: "GET" | "HEAD" = "GET") =>
-      fetch(url, {
-        method,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      }).catch(() => null);
+      githubFetch({ url, method, token, apiVersion: true }).catch((err) => {
+        logger.warn({ err }, "OpenAPPA could not reach GitHub");
+        return null;
+      });
     const response = await get(`${app.api}/repos/${repo}`);
     if (!response?.ok) return { status: "unreachable", validations: null };
     const found = RepositorySchema.safeParse(await response.json());
     if (!found.success) return { status: "unreachable", validations: null };
-    // An empty repository gets the template's files written into it; GitHub
-    // answers 409 for the commits of a repository without any.
-    const commits = await get(`${app.api}/repos/${repo}/commits?per_page=1`);
-    if (commits?.status === 409) return { status: "empty", validations: null };
+    // An empty repository gets the template's files written into it.
+    if (await isEmptyGithubRepository({ api: app.api, repo, token }))
+      return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
-    if (
+    const fresh =
       !ref &&
       path === "appa.toml" &&
       directory === VALIDATION_DIRECTORY &&
-      found.data.private &&
+      found.data.private;
+    if (
+      fresh &&
       found.data.template_repository?.full_name.toLowerCase() === TEMPLATE_REPO
     )
       return { status: "template", validations: null };
-    const contents = (entry: string) =>
+    const contents = (entry: string, method: "GET" | "HEAD") =>
       get(
         `${app.api}/repos/${repo}/contents/${entry.split("/").map(encodeURIComponent).join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
-        "HEAD",
+        method,
       );
     const [policy, validations] = await Promise.all([
-      contents(path),
-      contents(directory),
+      contents(path, fresh ? "GET" : "HEAD"),
+      contents(directory, "HEAD"),
     ]);
+    // A private repository holding the template's example unchanged is a
+    // fresh copy too, however it was made: setup seeds it.
+    if (fresh && policy?.ok) {
+      const file = (await policy.json().catch(() => null)) as {
+        sha?: string;
+      } | null;
+      if (file?.sha === templateExampleBlob())
+        return { status: "template", validations: null };
+    }
     return {
       status: policy?.ok ? "policy" : "other",
       validations: !!validations?.ok,
@@ -377,7 +405,10 @@ class OpenAppaGithubAppSetup {
               organizationId,
               credentialId: definition.key,
               scope: "organization",
-            }).catch(() => null);
+            }).catch((err) => {
+              logger.warn({ err }, "OpenAPPA could not read a GitHub App key");
+              return null;
+            });
           return privateKey
             ? {
                 id: definition.id,
@@ -518,7 +549,7 @@ type Installation = {
   repository_selection: "all" | "selected";
 };
 
-function manifest(params: { appName: string; seedsWorkflow: boolean }) {
+function manifest(params: { appName: string }) {
   const { appName } = params;
   const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
@@ -530,12 +561,18 @@ function manifest(params: { appName: string; seedsWorkflow: boolean }) {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository; it never creates repositories.
+    // Contents and pull requests on the policy repository, Checks for the
+    // policy check on each pull request, and Workflows for the validation
+    // workflow setup writes and keeps current. The branch ruleset that
+    // requires the check is the administrator's to import, so no
+    // Administration. Each job's token carries only its own part; it never
+    // creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
+      checks: "write",
+      workflows: "write",
       metadata: "read",
-      ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },
     default_events: [],
     // No webhook: sync polls GitHub, and GitHub rejects hook URLs it cannot reach.
@@ -617,17 +654,13 @@ async function listRepositories(params: {
     githubUrl: params.api,
     ...params,
   });
-  const headers = {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
   const repositories: InstallationRepository[] = [];
   for (let page = 1; page <= REPOSITORY_PAGES; page++) {
-    const response = await fetch(
-      `${params.api}/installation/repositories?per_page=100&page=${page}`,
-      { headers, redirect: "error", signal: AbortSignal.timeout(15_000) },
-    );
+    const response = await githubFetch({
+      url: `${params.api}/installation/repositories?per_page=100&page=${page}`,
+      token,
+      apiVersion: true,
+    });
     if (!response.ok)
       throw new ApiError(
         502,
@@ -646,14 +679,17 @@ async function listRepositories(params: {
           .filter((entry) => entry.private)
           .slice(0, 10)
           .map(async (entry) => {
-            const found = await fetch(
-              `${params.api}/repos/${entry.full_name}`,
-              {
-                headers,
-                redirect: "error",
-                signal: AbortSignal.timeout(15_000),
-              },
-            ).catch(() => null);
+            const found = await githubFetch({
+              url: `${params.api}/repos/${entry.full_name}`,
+              token,
+              apiVersion: true,
+            }).catch((err) => {
+              logger.warn(
+                { err },
+                "OpenAPPA could not read a GitHub repository",
+              );
+              return null;
+            });
             if (!found?.ok) return null;
             const detail = RepositorySchema.safeParse(await found.json());
             return detail.success &&

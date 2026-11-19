@@ -362,7 +362,7 @@ const PROVIDER_CONFIG: Record<
     description: (name) =>
       // The upstream instance is named by whatever this deployment calls the
       // provider, so a renamed one reads consistently here too.
-      `Route through another ${name} instance. On that instance, create a virtual API key for its LLM Proxy. Set the Base URL to that instance's model router (e.g. https://your-archestra/v1/model-router) and paste the virtual API key below.`,
+      `Route through another ${name} instance. On that instance, create a virtual API key for its LLM Proxy. Set the Base URL to that instance's unified model API (e.g. https://your-archestra/v1/unified-model) and paste the virtual API key below.`,
   },
   kimi: {
     name: "Moonshot (Kimi)",
@@ -698,13 +698,14 @@ export function LlmProviderApiKeyForm({
               key as CreateLlmProviderApiKeyBody["provider"],
             ),
         )
-        // Providers the admins turned off are not offered. The one already
+        // Providers the admins turned off are not offered, and neither is
+        // GitHub Copilot with personal subscriptions off. The one already
         // selected stays in the list even when hidden, so an existing key's
         // disabled trigger still renders its own provider.
         .filter(
           ([key]) =>
             key === provider ||
-            !providerCatalog.isHidden(
+            providerCatalog.canAddKey(
               key as CreateLlmProviderApiKeyBody["provider"],
             ),
         )

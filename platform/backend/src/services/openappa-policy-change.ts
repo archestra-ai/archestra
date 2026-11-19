@@ -2,18 +2,23 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import UserModel from "@/models/user";
 import { declaredCredentials } from "@/openappa/battery-target";
 import {
   addedGrants,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { withRequester } from "@/openappa/policy-text";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
+import {
+  githubJson,
+  githubPolicyChangeErrors,
+} from "@/services/openappa-github";
 import {
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
@@ -90,6 +95,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     return {
       delivery: "revision" as const,
       revision: saved.revision,
+      warnings: saved.warnings,
       before: before.content,
       after: saved.content,
     };
@@ -122,6 +128,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
 
   const validation = await guardrailsPolicyService.validate(content, {
     organizationId: params.organizationId,
+    userId: params.userId,
     previous: before.content,
   });
   if (!validation.valid) throw new ApiError(400, validation.errors.join("\n"));
@@ -143,16 +150,18 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     source.ref ??
     (
       await githubJson<{ default_branch: string }>({
-        path: base,
+        url: base,
         token,
+        errors: githubPolicyChangeErrors,
       })
     ).default_branch;
   if (!branch || !/^[^\p{Cc}\s~^:?*[\\]+$/u.test(branch))
     throw new ApiError(409, "The configured GitHub branch is invalid");
 
   const branchData = await githubJson<{ commit: { sha: string } }>({
-    path: `${base}/branches/${encodeURIComponent(branch)}`,
+    url: `${base}/branches/${encodeURIComponent(branch)}`,
     token,
+    errors: githubPolicyChangeErrors,
   });
   const baseSha = branchData.commit?.sha;
   if (!baseSha || !/^[a-f0-9]{40}$/.test(baseSha))
@@ -163,12 +172,19 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "GitHub has changed since the last policy sync. Sync the policy, then review the new revision.",
     );
 
+  // The commit names the person who asked, in a trailer GitHub's signature
+  // for the App covers; an author of its own would leave the commit unsigned.
+  const requester = await UserModel.getById(params.userId);
+  const message = requester
+    ? withRequester(params.title, requester.email)
+    : params.title;
   let head: string;
   if (params.validationChanges) {
     await assertValidationSource(params);
     const commit = await githubJson<{ tree: { sha: string } }>({
-      path: `${base}/git/commits/${baseSha}`,
+      url: `${base}/git/commits/${baseSha}`,
       token,
+      errors: githubPolicyChangeErrors,
     });
     const baseTree = checkedSha(commit.tree?.sha);
     const changes = params.validationChanges;
@@ -182,8 +198,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     await assertBranchUnchanged({ base, branch, baseSha, token });
     const tree = await githubJson<{ sha: string }>({
       method: "POST",
-      path: `${base}/git/trees`,
+      url: `${base}/git/trees`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
         base_tree: baseTree,
         tree: [
@@ -214,10 +231,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     });
     const commitResult = await githubJson<{ sha: string }>({
       method: "POST",
-      path: `${base}/git/commits`,
+      url: `${base}/git/commits`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
       },
@@ -228,15 +246,17 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     head = `archestra/openappa-${randomUUID()}`;
     await githubJson({
       method: "POST",
-      path: `${base}/git/refs`,
+      url: `${base}/git/refs`,
       token,
+      errors: githubPolicyChangeErrors,
       body: { ref: `refs/heads/${head}`, sha: commitSha },
     });
   } else {
     const path = source.path.split("/").map(encodeURIComponent).join("/");
     const file = await githubJson<{ sha: string }>({
-      path: `${base}/contents/${path}?ref=${baseSha}`,
+      url: `${base}/contents/${path}?ref=${baseSha}`,
       token,
+      errors: githubPolicyChangeErrors,
     });
     if (!file.sha || !/^[a-f0-9]{40}$/.test(file.sha))
       throw new ApiError(502, "GitHub returned an invalid policy file");
@@ -247,16 +267,18 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     head = `archestra/openappa-${randomUUID()}`;
     await githubJson({
       method: "POST",
-      path: `${base}/git/refs`,
+      url: `${base}/git/refs`,
       token,
+      errors: githubPolicyChangeErrors,
       body: { ref: `refs/heads/${head}`, sha: baseSha },
     });
     await githubJson({
       method: "PUT",
-      path: `${base}/contents/${path}`,
+      url: `${base}/contents/${path}`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
@@ -265,8 +287,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   }
   const pull = await githubJson<{ number: number; html_url: string }>({
     method: "POST",
-    path: `${base}/pulls`,
+    url: `${base}/pulls`,
     token,
+    errors: githubPolicyChangeErrors,
     body: {
       title: params.title,
       body: params.summary,
@@ -313,13 +336,15 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     ))
   )
     throw new ApiError(403, "GitHub credential read permission is required");
+  const repo = source.repo;
   if (source.gitlabTokenId) {
+    const access = await resolveOpenAppaGitlabAccess({
+      organizationId: params.organizationId,
+      gitlabTokenId: source.gitlabTokenId,
+    });
     const request = await openappaGitlab.changeStatus({
-      access: await resolveOpenAppaGitlabAccess({
-        organizationId: params.organizationId,
-        gitlabTokenId: source.gitlabTokenId,
-      }),
-      repo: source.repo,
+      access,
+      repo,
       iid: params.number,
     });
     return {
@@ -327,6 +352,16 @@ export async function getOpenAppaPolicyChangeStatus(params: {
       url: request.webUrl,
       state: request.state,
       mergeable: request.mergeable,
+      ...(request.state === "merged"
+        ? await mergedChangeSync({
+            organizationId: params.organizationId,
+            source,
+            mergeCommit: request.mergeCommitSha,
+            mergedAt: request.mergedAt,
+            contains: (commit, ancestor) =>
+              openappaGitlab.contains({ access, repo, commit, ancestor }),
+          })
+        : {}),
       sync: {
         sourceCommit: source.sourceCommit,
         lastSyncedAt: source.lastSyncedAt,
@@ -340,11 +375,14 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     html_url: string;
     state: "open" | "closed";
     merged: boolean;
+    merged_at?: string | null;
+    merge_commit_sha?: string | null;
     mergeable: boolean | null;
     head: { ref: string };
   }>({
-    path: `${api}/repos/${source.repo}/pulls/${params.number}`,
+    url: `${api}/repos/${repo}/pulls/${params.number}`,
     token,
+    errors: githubPolicyChangeErrors,
   });
   if (!pull.head?.ref?.startsWith("archestra/openappa-"))
     throw new ApiError(404, "OpenAPPA policy pull request not found");
@@ -353,16 +391,90 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     url: checkedPullUrl({
       url: pull.html_url,
       web,
-      repo: source.repo,
+      repo,
       number: pull.number,
     }),
     state: pull.merged ? "merged" : pull.state,
     mergeable: pull.mergeable,
+    ...(pull.merged
+      ? await mergedChangeSync({
+          organizationId: params.organizationId,
+          source,
+          mergeCommit: pull.merge_commit_sha ?? null,
+          mergedAt: pull.merged_at ?? null,
+          contains: async (commit, ancestor) =>
+            commit === ancestor ||
+            ["ahead", "identical"].includes(
+              (
+                await githubJson<{ status?: string }>({
+                  url: `${api}/repos/${repo}/compare/${ancestor}...${commit}`,
+                  token,
+                  errors: githubPolicyChangeErrors,
+                })
+              ).status ?? "",
+            ),
+        })
+      : {}),
     sync: {
       sourceCommit: source.sourceCommit,
       lastSyncedAt: source.lastSyncedAt,
       lastSyncError: source.lastSyncError,
     },
+  };
+}
+
+/**
+ * Whether Git sync applied a merged change: the accepted commit contains its
+ * merge. Until it does, a pull is queued rather than left to the schedule,
+ * unless a pull since the merge failed: nothing applies until that is put
+ * right, so the failure is the answer.
+ */
+async function mergedChangeSync(params: {
+  organizationId: string;
+  source: {
+    sourceCommit: string | null;
+    lastSyncedAt: Date | null;
+    lastSyncError: string | null;
+  };
+  /** The commit the merge left on the branch; null when the host gives none. */
+  mergeCommit: string | null;
+  mergedAt: string | null;
+  contains: (commit: string, ancestor: string) => Promise<boolean>;
+}): Promise<{
+  applied: boolean;
+  syncQueued?: boolean;
+  syncFailed?: { reason: string };
+  instruction: string;
+}> {
+  const { source } = params;
+  if (
+    source.sourceCommit &&
+    params.mergeCommit &&
+    (await params.contains(source.sourceCommit, params.mergeCommit))
+  )
+    return {
+      applied: true,
+      instruction:
+        "Git sync applied the merged change: the policy it carries is the one in force.",
+    };
+  const mergedAt = params.mergedAt ? Date.parse(params.mergedAt) : Number.NaN;
+  if (
+    source.lastSyncError &&
+    source.lastSyncedAt &&
+    (Number.isNaN(mergedAt) || source.lastSyncedAt.getTime() > mergedAt)
+  )
+    return {
+      applied: false,
+      syncFailed: { reason: source.lastSyncError },
+      instruction:
+        "The change merged, but Git sync failed since: say why, from syncFailed.reason. The merged policy is not in force until that is fixed.",
+    };
+  await OpenAppaGithubSyncModel.enqueue(params.organizationId);
+  return {
+    applied: false,
+    syncQueued: true,
+    instruction:
+      "The change merged and Git sync is applying it now. Check again in a minute before you say it is in force.",
   };
 }
 
@@ -408,43 +520,6 @@ export async function refuseCredentialLines(params: {
       openappaDeclarations.rootGrants(submitted.resolution),
     ),
   });
-}
-
-async function githubJson<T = unknown>(params: {
-  /** Full API URL; the base comes from the source's credential. */
-  path: string;
-  token: string;
-  method?: "GET" | "POST" | "PUT";
-  body?: object;
-}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(params.path, {
-      method: params.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-      },
-      redirect: "error",
-      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
-    throw new ApiError(502, "Could not reach GitHub");
-  }
-  if (!response.ok)
-    throw new ApiError(
-      response.status === 404 ? 404 : 502,
-      `GitHub returned HTTP ${response.status}. Check repository access and credential permissions. PR publishing needs Contents and Pull requests read/write.`,
-    );
-  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
-  if (!bytes) throw new ApiError(502, "GitHub response is too large");
-  try {
-    return JSON.parse(bytes.toString()) as T;
-  } catch {
-    throw new ApiError(502, "GitHub returned an invalid response");
-  }
 }
 
 function checkedPullUrl(params: {
@@ -561,10 +636,14 @@ async function resolveWriteToken(source: {
   organizationId: string;
   githubPatId: string | null;
   githubAppConfigId: string | null;
+  repo: string | null;
 }) {
   if (!source.githubPatId && !source.githubAppConfigId)
     throw new ApiError(409, "A GitHub write credential is required");
-  const access = await resolveOpenAppaGithubAccess(source);
+  const access = await resolveOpenAppaGithubAccess(source, {
+    contents: "write",
+    pull_requests: "write",
+  });
   return { ...access, token: access.token as string };
 }
 
@@ -650,8 +729,9 @@ async function assertBranchUnchanged(params: {
   token: string;
 }) {
   const branch = await githubJson<{ commit: { sha: string } }>({
-    path: `${params.base}/branches/${encodeURIComponent(params.branch)}`,
+    url: `${params.base}/branches/${encodeURIComponent(params.branch)}`,
     token: params.token,
+    errors: githubPolicyChangeErrors,
   });
   if (branch.commit?.sha !== params.baseSha)
     throw new ApiError(
@@ -686,8 +766,9 @@ async function assertRegularGitPaths(params: {
           truncated: boolean;
           tree: { path: string; mode: string; type: string; sha: string }[];
         }>({
-          path: `${params.base}/git/trees/${treeSha}`,
+          url: `${params.base}/git/trees/${treeSha}`,
           token: params.token,
+          errors: githubPolicyChangeErrors,
         });
         if (result.truncated || !Array.isArray(result.tree))
           throw new ApiError(

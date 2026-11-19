@@ -40,6 +40,43 @@ describe("NetworkPolicyService", () => {
     });
   });
 
+  test("resolveEffectiveNetworkPolicy prefers the agent's own policy over its environment's", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", networkPolicy: ENVIRONMENT_POLICY },
+    });
+
+    await expect(
+      resolveEffectiveNetworkPolicy({
+        organizationId: org.id,
+        agentNetworkPolicy: DEFAULT_POLICY,
+        environmentId: env.id,
+        defaultNetworkPolicy: ENVIRONMENT_POLICY,
+      }),
+    ).resolves.toEqual({ source: "agent", policy: DEFAULT_POLICY });
+  });
+
+  test("resolveEffectiveNetworkPolicy falls back to the environment when the agent has no policy", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", networkPolicy: ENVIRONMENT_POLICY },
+    });
+
+    await expect(
+      resolveEffectiveNetworkPolicy({
+        organizationId: org.id,
+        agentNetworkPolicy: null,
+        environmentId: env.id,
+      }),
+    ).resolves.toEqual({ source: "environment", policy: ENVIRONMENT_POLICY });
+  });
+
   test("resolveEffectiveNetworkPolicy uses the organization default when environment has none", async ({
     makeOrganization,
   }) => {

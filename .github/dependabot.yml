@@ -54,6 +54,183 @@ updates:
     cooldown:
       default-days: 7
 
+  # The Docker compatibility module that platform/Dockerfile swaps into the
+  # Dagger engine build in place of github.com/docker/docker.
+  - package-ecosystem: gomod
+    directory: platform/docker/dagger-dockercompat
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  # Base images of the release images. A release scan holds a release on any
+  # fixable critical/high CVE, so bases are checked daily; the organization's
+  # 7-day cooldown still applies. Each supported release line gets its own
+  # entries; keep them equal to .github/backport-targets.json
+  # (test_base_image_pins.py enforces it). New majors, and minors outside Node,
+  # stay deliberate.
+  - package-ecosystem: docker
+    directories:
+      - platform
+      - platform/docker_images/agent
+      - platform/docker_images/mcp_server
+      - platform/docker_images/p4_shim
+    schedule:
+      interval: daily
+    groups:
+      base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*uv"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  # The sandbox base: its uv base image is pinned to sandbox-core's
+  # DEFAULT_BASE_IMAGE, so only its other bases are bumped here.
+  - package-ecosystem: docker
+    directories:
+      - platform/docker_images/sandbox_base
+    schedule:
+      interval: daily
+    groups:
+      sandbox-base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+      # The uv base must equal DEFAULT_BASE_IMAGE in sandbox-core's dagger.rs
+      # (check:sandbox-base), so it is bumped by hand together with that constant.
+      - dependency-name: "*uv"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  # Same as above, for a supported release line.
+  - package-ecosystem: docker
+    target-branch: release/1.4
+    directories:
+      - platform
+      - platform/docker_images/agent
+      - platform/docker_images/mcp_server
+      - platform/docker_images/p4_shim
+    schedule:
+      interval: daily
+    groups:
+      base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*uv"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: docker
+    target-branch: release/1.4
+    directories:
+      - platform/docker_images/sandbox_base
+    schedule:
+      interval: daily
+    groups:
+      sandbox-base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+      # The uv base must equal DEFAULT_BASE_IMAGE in sandbox-core's dagger.rs
+      # (check:sandbox-base), so it is bumped by hand together with that constant.
+      - dependency-name: "*uv"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directories:
       - /

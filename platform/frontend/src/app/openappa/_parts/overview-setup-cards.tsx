@@ -5,6 +5,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useFinishSetupPieces } from "./finish-setup-dialog";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
@@ -13,15 +14,16 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
  * only a GitHub sync that needs attention shows here; enforcement sits in the
- * page header.
+ * page header, and Finish setup when the Git sync setup still waits.
  */
 export function OverviewSetupCards() {
   const { isFresh } = useOpenAppaSetupState();
   const sync = useAppaGithubSync();
+  const pieces = useFinishSetupPieces();
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
-  const source = sync.data?.source;
-  if (!source?.lastSyncError && !source?.setupPullRequestNumber) return null;
+  // A failed sync, or a setup that still waits on something.
+  if (!sync.data?.source?.lastSyncError && !pieces) return null;
   return <GithubManagedPolicyNotice />;
 }
 

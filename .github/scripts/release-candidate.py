@@ -25,6 +25,20 @@ def command(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
+def published_index(reference):
+    """Return the image index at reference, or None when the tag has no image."""
+    result = subprocess.run(("docker", "buildx", "imagetools", "inspect", reference, "--raw"),
+                            capture_output=True, text=True)
+    if result.returncode == 0:
+        return json.loads(result.stdout)
+    sys.stderr.write(result.stderr)
+    # Only the registry's explicit answer means the version never published;
+    # rate limits, authentication and outages still fail the candidate.
+    if f"{reference}: not found" in result.stderr:
+        return None
+    raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+
+
 def build_inputs(image, arch):
     if arch not in ("amd64", "arm64"):
         raise ValueError("Unsupported release architecture")
@@ -40,8 +54,14 @@ def build_inputs(image, arch):
             tag = command("git", "describe", "--tags", "--abbrev=0", "--match", "platform-v*", "HEAD^")
             if tag == f"platform-v{version}":
                 raise ValueError("Candidate version is already a release ancestor")
-            reference = f"{PLATFORM}:{tag.removeprefix('platform-v')}"
-            index = json.loads(command("docker", "buildx", "imagetools", "inspect", reference, "--raw"))
+            # An abandoned version keeps its tag but never publishes an image
+            # (platform/dev/RELEASE.md, "Abandon an unpublished candidate").
+            # Carry the chunks of the newest release before it that did: that
+            # is the version deployments upgrade from. With no older tag left,
+            # git describe fails the candidate.
+            while (index := published_index(f"{PLATFORM}:{tag.removeprefix('platform-v')}")) is None:
+                print(f"{tag} has no published platform image; using the release before it", file=sys.stderr)
+                tag = command("git", "describe", "--tags", "--abbrev=0", "--match", "platform-v*", f"{tag}^")
             matches = [row["digest"] for row in index["manifests"]
                        if row.get("platform", {}).get("os") == "linux"
                        and row.get("platform", {}).get("architecture") == arch]

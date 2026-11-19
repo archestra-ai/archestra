@@ -34,8 +34,8 @@ export default function AccountProfilePage() {
   return (
     <SettingsSectionGroup className="max-w-5xl">
       <ProfileSection />
-      <AccessSection />
       <SecuritySection />
+      <AccessSection />
     </SettingsSectionGroup>
   );
 }

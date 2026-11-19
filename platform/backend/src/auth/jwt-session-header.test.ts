@@ -1,5 +1,5 @@
 import { makeSignature } from "better-auth/crypto";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { expect, test } from "@/test";
 
 // The jwt plugin's /get-session after-hook can mint a JWT (a jwks table read

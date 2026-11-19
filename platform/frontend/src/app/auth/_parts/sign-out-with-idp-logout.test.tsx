@@ -9,10 +9,9 @@ import {
 import { rumClient } from "@/lib/rum.ee";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getIdentityProviderIdpLogoutUrl: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getIdentityProviderIdpLogoutUrl: vi.fn(),
 }));
 
 describe("SignOutWithIdpLogout", () => {

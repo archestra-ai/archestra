@@ -15,6 +15,7 @@ import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -33,7 +34,12 @@ import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
 import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
+import {
+  createRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -854,6 +860,240 @@ describe("model-facing runtime tools", () => {
     });
   });
 
+  test("records credentials_admin_only rather than OpenAPPA refusal when a member launches an Agent with a shared organization credential", async ({
+    makeAdmin,
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeAdmin();
+    const member = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await makeMember(member.id, org.id, { role: "member" });
+    await createRuntimeCredentialDefinition({
+      organizationId: org.id,
+      userId: admin.id,
+      definition: {
+        key: "org-router-secret",
+        name: "Organization router secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await setRuntimeCredentialConnection({
+      organizationId: org.id,
+      userId: admin.id,
+      credentialId: "org-router-secret",
+      scope: "organization",
+      value: "shared-secret-value",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: admin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "ORG_ROUTER_SECRET",
+            label: "Organization router secret",
+            scope: "shared",
+            credentialId: "org-router-secret",
+            required: false,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(org.id);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: member.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "credentials_admin_only",
+    });
+  });
+
+  test("records not_allowed for service-account shared-credential denials and failed for contended GitHub connection leases", async ({
+    makeAdmin,
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeServiceAccount,
+    makeUser,
+    removeObjectPolicies,
+  }) => {
+    const admin = await makeAdmin();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await createRuntimeCredentialDefinition({
+      organizationId: org.id,
+      userId: admin.id,
+      definition: {
+        key: "org-shared-secret",
+        name: "Organization shared secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await removeObjectPolicies(org.id);
+    await setRuntimeCredentialConnection({
+      organizationId: org.id,
+      userId: admin.id,
+      credentialId: "org-shared-secret",
+      scope: "organization",
+      value: "shared-secret-value",
+    });
+    const sharedAgent = await makeAgent({
+      organizationId: org.id,
+      authorId: admin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "ORG_SHARED_SECRET",
+            label: "Organization shared secret",
+            scope: "shared",
+            credentialId: "org-shared-secret",
+            required: true,
+          },
+        ],
+      },
+    });
+    const role = await makeCustomRole(org.id, {
+      permission: {
+        agent: ["read", "use", "update"],
+      },
+    });
+    const account = await makeServiceAccount(org.id, { role: role.role });
+    await releasedSpawn(org.id);
+
+    const saDenied = await startDelegatedTask({
+      agentId: sharedAgent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: sharedAgent.id, name: sharedAgent.name },
+        userId: serviceAccountUserId(account.id),
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(saDenied.isError).toBe(true);
+    expect(JSON.stringify(saDenied.content)).toContain(
+      "Service account cannot use this shared credential.",
+    );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "not_allowed",
+    });
+
+    const busyOrg = await makeOrganization();
+    const busyAdmin = await makeAdmin();
+    const busyMember = await makeUser();
+    await makeMember(busyAdmin.id, busyOrg.id, { role: "admin" });
+    await makeMember(busyMember.id, busyOrg.id, { role: "member" });
+    await createRuntimeCredentialDefinition({
+      organizationId: busyOrg.id,
+      userId: busyAdmin.id,
+      definition: {
+        key: "repository-app",
+        name: "Repository App",
+        description: "",
+        icon: null,
+        kind: "github_app",
+        allowPersonal: false,
+        allowOrganization: true,
+        githubUrl: "https://api.github.com",
+        appId: "123",
+        installationId: "456",
+        githubClientId: "test-client",
+      },
+    });
+    await createRuntimeCredentialDefinition({
+      organizationId: busyOrg.id,
+      userId: busyAdmin.id,
+      definition: {
+        key: "github-user",
+        name: "GitHub",
+        description: "",
+        icon: null,
+        kind: "github_app_user",
+        allowPersonal: true,
+        allowOrganization: false,
+        githubAppCredentialKey: "repository-app",
+      },
+    });
+    const personalAgent = await makeAgent({
+      organizationId: busyOrg.id,
+      authorId: busyAdmin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub",
+            scope: "per_user",
+            credentialId: "github-user",
+            required: false,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(busyOrg.id);
+    vi.spyOn(githubUserConnectionManager, "resolve").mockRejectedValueOnce(
+      new ApiError(409, "GitHub connection is busy. Try again shortly."),
+    );
+
+    const busyResult = await startDelegatedTask({
+      agentId: personalAgent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: personalAgent.id, name: personalAgent.name },
+        userId: busyMember.id,
+        organizationId: busyOrg.id,
+        openappaRuntimeCall: {
+          session: proofSession(busyOrg.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(busyResult.isError).toBe(true);
+    expect(JSON.stringify(busyResult.content)).toContain(
+      "GitHub connection is busy",
+    );
+    expect(await recordedLaunch(busyOrg.id)).toEqual({
+      kind: "failed",
+      reason: "failed",
+    });
+  });
+
   test("a parent gets only the exact admitted turn value", async ({
     makeAgent,
     makeMember,
@@ -1076,6 +1316,151 @@ describe("model-facing runtime tools", () => {
 });
 
 describe("crossRuntimeOutput", () => {
+  test("waives a failed first return lookup and retrieves the raw output with yell disabled", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    config.openappa.yellEnabled = false;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW RETURN AFTER LOOKUP FAILURE" }],
+    });
+    const lookup = vi
+      .spyOn(openappa, "loadChildReturns")
+      .mockRejectedValue(new Error("Native return lookup unavailable"));
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      output: "RAW RETURN AFTER LOOKUP FAILURE",
+    });
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(1);
+  });
+
+  test.for([
+    null,
+    "another-parent",
+  ])("waived runtime access releases raw output with parent %s", async (parentId, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    config.openappa.yellEnabled = false;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "WAIVED OUTPUT" }],
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ output: "WAIVED OUTPUT" });
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(1);
+  });
+
+  test.for([
+    { mode: "refuse" as const, reason: "Native return lookup unavailable" },
+    {
+      mode: "allow" as const,
+      reason: "requires attention: policy hard-block",
+    },
+  ])("preserves return lookup failure in $mode mode for $reason", async ({
+    mode,
+    reason,
+  }, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: mode,
+    };
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const error = new Error(reason);
+    vi.spyOn(openappa, "loadChildReturns").mockRejectedValue(error);
+    const call = seeded.context.openappaRuntimeCall;
+
+    await expect(
+      crossRuntimeOutput({
+        organizationId: seeded.organizationId,
+        workspaceId: seeded.task.id,
+        taskId: seeded.task.id,
+        crossing: {
+          source: call.session,
+          callId: call.toolCallId,
+          spawn: false,
+        },
+      }),
+    ).rejects.toBe(error);
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(0);
+  });
+
   test("returns the latest admitted value and narrows the native lookup to this child and task", async ({
     makeAgent,
     makeMember,

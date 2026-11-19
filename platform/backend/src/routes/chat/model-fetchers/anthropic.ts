@@ -10,6 +10,7 @@ import {
 } from "@/clients/azure-url";
 import config from "@/config";
 import logger from "@/logging";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "@/routes/proxy/common";
 import type { Anthropic } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { type ModelInfo, modelFetchError } from "./types";
@@ -23,7 +24,11 @@ export async function fetchAnthropicModels(
     return fetchAnthropicModelsViaVertexAi();
   }
 
-  const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
+  const isClaudeSubscriptionToken =
+    apiKey.startsWith("sk-ant-oat") || apiKey.startsWith("Bearer:sk-ant-oat");
+  const baseUrl = isClaudeSubscriptionToken
+    ? ANTHROPIC_SUBSCRIPTION_UPSTREAM
+    : baseUrlOverride || config.llm.anthropic.baseUrl;
   if (isAzureAiFoundryBaseUrl(baseUrl)) {
     return fetchAnthropicFoundryDeployments({ apiKey, baseUrl, extraHeaders });
   }
@@ -112,15 +117,16 @@ export async function fetchAnthropicModelsViaVertexAi(): Promise<ModelInfo[]> {
 export async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
 ): Promise<Record<string, string>> {
-  if (apiKey?.startsWith("sk-ant-oat")) {
+  const rawKey = apiKey?.startsWith("Bearer:") ? apiKey.slice(7) : apiKey;
+  if (rawKey?.startsWith("sk-ant-oat")) {
     return {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${rawKey}`,
       "anthropic-beta": "oauth-2025-04-20",
     };
   }
 
-  if (apiKey) {
-    return { "x-api-key": apiKey };
+  if (rawKey) {
+    return { "x-api-key": rawKey };
   }
 
   if (isAnthropicAzureFoundryEntraIdEnabled()) {

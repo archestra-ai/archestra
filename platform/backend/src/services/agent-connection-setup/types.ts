@@ -26,6 +26,7 @@ export interface SetupScriptMcpSection {
   legacyServerNames?: string[];
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
+  oauthIssuer?: string;
 }
 
 export interface SetupScriptProxySection {
@@ -120,10 +121,13 @@ export interface SetupScriptProxySection {
 
 export interface SetupScriptSkillsSection {
   cloneUrl: string;
+  organizationId?: string;
   marketplaceName: string;
   /** Existing skills plugin is present. Defaults true for older callers/tests. */
   hasSkills?: boolean;
-  /** Opaque hook-bearing plugin entries advertised by the same marketplace. */
+  /** The marketplace carries the complete ChatGPT connection plugin. */
+  connectionPlugin?: boolean;
+  /** Plugin entries installed and tracked for refresh and disconnect. */
   pluginNames?: string[];
 }
 
@@ -144,6 +148,26 @@ export interface SetupScriptContext {
   /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
   managedInstructionsSource?: { url: string; token: string } | null;
+  /**
+   * The deployment's own address, whatever the setup includes. Cursor's
+   * setup tells by it whether a model setting in Cursor points here.
+   */
+  deploymentOrigin?: string;
+  /**
+   * Cursor only: where Cursor's hooks report each chat step to Guardrails, and
+   * the installation's hook credential. Hooks reach chats on Cursor's own
+   * models, which never pass through the LLM proxy.
+   */
+  cursorGuardrailsHook?: {
+    url: string;
+    token: string;
+    /**
+     * Ends setup by installing and signing in Cursor's command-line agent,
+     * which the web tools run through. Only the script a person runs asks for
+     * it: the step downloads an installer and opens a browser page.
+     */
+    finishWebSetup?: boolean;
+  } | null;
   /** Explicit executable-update capability, distinct from data-only instructions. */
   managedRuntimeSource?: {
     url: string;
@@ -174,6 +198,12 @@ export interface AgentEnding {
    * `howTo` is printed otherwise, or when the command fails.
    */
   signIn?: { command: string[] | null; howTo: string } | null;
+  /** A provider login separate from gateway OAuth, offered before launch. */
+  providerSignIn?: {
+    label: string;
+    command: string[];
+    howTo: string;
+  };
   /** Starts the agent with a first prompt. Null when it has no CLI to start. */
   launch?: string[] | null;
   /** Anything else the person still has to do or should know. */
@@ -207,6 +237,12 @@ export interface SetupEnding {
     /** The gateway as the client lists it, e.g. in Claude Code's /mcp. */
     gatewayName: string;
   } | null;
+  providerSignIn?: {
+    label: string;
+    command: string[];
+    text: string;
+    howTo: string;
+  };
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];

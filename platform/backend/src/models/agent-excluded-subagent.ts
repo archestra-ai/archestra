@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 
 /**
@@ -21,6 +21,39 @@ class AgentExcludedSubagentModel {
       .orderBy(asc(schema.agentExcludedSubagentsTable.targetAgentId));
 
     return rows.map((row) => row.targetAgentId);
+  }
+
+  static async findTargetAgentIdsByAgents(
+    agentIds: string[],
+    tx?: Transaction,
+  ): Promise<Map<string, Set<string>>> {
+    const map = new Map<string, Set<string>>();
+    if (agentIds.length === 0) {
+      return map;
+    }
+
+    const rows = await (tx ?? db)
+      .select({
+        agentId: schema.agentExcludedSubagentsTable.agentId,
+        targetAgentId: schema.agentExcludedSubagentsTable.targetAgentId,
+      })
+      .from(schema.agentExcludedSubagentsTable)
+      .where(inArray(schema.agentExcludedSubagentsTable.agentId, agentIds))
+      .orderBy(
+        asc(schema.agentExcludedSubagentsTable.agentId),
+        asc(schema.agentExcludedSubagentsTable.targetAgentId),
+      );
+
+    for (const row of rows) {
+      let targetSet = map.get(row.agentId);
+      if (!targetSet) {
+        targetSet = new Set();
+        map.set(row.agentId, targetSet);
+      }
+      targetSet.add(row.targetAgentId);
+    }
+
+    return map;
   }
 
   /**

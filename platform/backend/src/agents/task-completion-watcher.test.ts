@@ -21,7 +21,10 @@ import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import { describe, expect, test } from "@/test";
 import type { AgentRunCompletionTarget } from "@/types";
-import { watchTaskCompletion } from "./task-completion-watcher";
+import {
+  notifyRunCredentialReconnect,
+  watchTaskCompletion,
+} from "./task-completion-watcher";
 
 describe("watchTaskCompletion", () => {
   test("a UI continuation preserves Teams routing without reusing the prior turn's placeholder or mute marker", async ({
@@ -326,5 +329,71 @@ describe("watchTaskCompletion", () => {
         (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
       ).toEqual(expect.any(Date));
     }
+  });
+});
+
+describe("notifyRunCredentialReconnect", () => {
+  test("posts a reconnect link to the chat thread the run reports to", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    notifyBindingThread.mockClear();
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const bindingId = crypto.randomUUID();
+
+    await notifyRunCredentialReconnect({
+      session: {
+        taskId: crypto.randomUUID(),
+        agentId: agent.id,
+        organizationId: organization.id,
+        completionTarget: {
+          type: "chatops",
+          bindingId,
+          threadId: "slack-thread",
+        },
+      },
+      credentials: [{ key: "GITHUB_TOKEN", credentialId: "github" }],
+    });
+
+    expect(notifyBindingThread).toHaveBeenCalledTimes(1);
+    const notice = notifyBindingThread.mock.calls[0][0];
+    expect(notice).toMatchObject({
+      bindingId,
+      threadId: "slack-thread",
+      agentName: agent.name,
+    });
+    expect(notice.text).toContain("stopped working during this run");
+    expect(notice.text).toContain(
+      `/agents/${agent.id}?setup=credentials&keys=GITHUB_TOKEN`,
+    );
+  });
+
+  test("posts nothing for a run that reports by email", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    notifyBindingThread.mockClear();
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+
+    await notifyRunCredentialReconnect({
+      session: {
+        taskId: crypto.randomUUID(),
+        agentId: agent.id,
+        organizationId: organization.id,
+        completionTarget: {
+          type: "email",
+          providerId: "microsoft-graph",
+          originalMessageId: "message-1",
+          fromAddress: "agent@example.com",
+          toAddress: "person@example.com",
+          subject: null,
+        },
+      },
+      credentials: [{ key: "GITHUB_TOKEN", credentialId: "github" }],
+    });
+
+    expect(notifyBindingThread).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RESTORE_APP_VERSION_SHORT_NAME,
@@ -23,6 +24,7 @@ import config, { parseOpenAppaConfig } from "@/config";
 import { AgentModel, SkillModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
+import { SKILL_CATALOG_CHAR_BUDGET } from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
@@ -352,6 +354,49 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("{{user.name}}");
     // Only the expression Handlebars cannot read stays as the author wrote it.
     expect(prompt).toContain("Available: {{user.*}}.");
+  });
+
+  test("an over-budget catalog drops descriptions and names list_skills only when the agent has it", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: agent.organizationId,
+        name: "oversized",
+        description: "x".repeat(SKILL_CATALOG_CHAR_BUDGET + 1),
+        content: "# Oversized",
+        metadata: {},
+        sourceType: "manual",
+      },
+      files: [],
+      ...accessGrants("org"),
+    });
+    const listSkillsToolName = brand(TOOL_LIST_SKILLS_SHORT_NAME);
+    const build = (mcpTools: Record<string, Tool>) =>
+      buildAgentSystemPrompt({
+        agent,
+        mcpTools,
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+
+    const searchable = await build({
+      ...withLoadSkill,
+      [listSkillsToolName]: {} as Tool,
+    });
+    expect(searchable).toContain('<skill name="oversized"/>');
+    expect(searchable).not.toContain("xxxx");
+    expect(searchable).toContain(listSkillsToolName);
+    expect(await build(withLoadSkill)).not.toContain(listSkillsToolName);
   });
 
   test("includes the skill catalog only when the load-skill tool is present", async ({

@@ -13,6 +13,7 @@ class OAuthAccessTokenModel {
    * Create an OAuth access token row.
    */
   static async create(params: {
+    id?: string;
     tokenHash: string;
     clientId: string;
     userId: string;
@@ -25,7 +26,7 @@ class OAuthAccessTokenModel {
     const [accessToken] = await db
       .insert(schema.oauthAccessTokensTable)
       .values({
-        id: crypto.randomUUID(),
+        id: params.id ?? crypto.randomUUID(),
         token: params.tokenHash,
         clientId: params.clientId,
         userId: params.userId,
@@ -36,9 +37,32 @@ class OAuthAccessTokenModel {
         refreshId: params.refreshId ?? null,
         createdAt: new Date(),
       })
+      .onConflictDoUpdate({
+        target: schema.oauthAccessTokensTable.id,
+        set: {
+          token: params.tokenHash,
+          clientId: params.clientId,
+          userId: params.userId,
+          expiresAt: params.expiresAt,
+          scopes: params.scopes,
+          referenceId: params.referenceId ?? null,
+          sessionId: params.sessionId ?? null,
+          refreshId: params.refreshId ?? null,
+          createdAt: new Date(),
+        },
+      })
       .returning();
 
     return accessToken;
+  }
+
+  /** Delete one access token by its id; true when it existed. */
+  static async deleteById(id: string): Promise<boolean> {
+    const rows = await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.id, id))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return rows.length > 0;
   }
 
   /**

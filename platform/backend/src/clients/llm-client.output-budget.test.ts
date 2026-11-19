@@ -179,6 +179,47 @@ describe("connection-local output limits", () => {
 });
 
 describe("default output budget", () => {
+  test.for([
+    { effort: "high", explicit: undefined, expected: undefined },
+    { effort: "low", explicit: undefined, expected: 32768 },
+    { effort: "medium", explicit: undefined, expected: 32768 },
+    { effort: undefined, explicit: undefined, expected: 32768 },
+    { effort: "high", explicit: 1234, expected: 1234 },
+  ] as const)("preserves Nova $effort output budget with explicit=$explicit", async ({
+    effort,
+    explicit,
+    expected,
+  }) => {
+    const modelName = "us.amazon.nova-2-lite-v1:0";
+    await ModelModel.create({
+      externalId: `bedrock/${modelName}`,
+      provider: "bedrock",
+      modelId: modelName,
+      outputLength: 128_000,
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const body = await sentBody({
+      provider: "bedrock",
+      modelName,
+      maxOutputTokens: explicit,
+      providerOptions: effort
+        ? {
+            bedrock: {
+              reasoningConfig: {
+                type: "enabled",
+                maxReasoningEffort: effort,
+              },
+            },
+          }
+        : undefined,
+    });
+    expect(body.inferenceConfig).toEqual(
+      expected === undefined ? undefined : { maxTokens: expected },
+    );
+  });
+
   test("a catalogued model gets its catalog budget on every provider", async () => {
     for (const provider of ["anthropic", "openai", "gemini"] as const) {
       await ModelModel.create({

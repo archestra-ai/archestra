@@ -1,5 +1,7 @@
+import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import {
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -21,6 +23,11 @@ const modelPoolsTable = pgTable(
     organizationId: text("organization_id").notNull(),
     /** The model name clients request, e.g. `glm-5` or `claude-opus-4-8`. */
     name: text("name").notNull(),
+    /** Selection within an order; existing pools retain weighted affinity. */
+    routingStrategy: text("routing_strategy")
+      .$type<"weighted" | "least-tokens">()
+      .notNull()
+      .default("weighted"),
     /**
      * Seconds a member may take to send a stream's first chunk before the
      * request moves on (LiteLLM's `stream_timeout`). Null keeps the default.
@@ -38,6 +45,8 @@ const modelPoolsTable = pgTable(
      * (LiteLLM's `cooldown_time`). Null keeps the default.
      */
     cooldownSeconds: integer("cooldown_seconds"),
+    /** Null preserves legacy behavior (pool) or inherits the pool (member). */
+    retrySettings: jsonb("retry_settings").$type<ModelPoolRetrySettings>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

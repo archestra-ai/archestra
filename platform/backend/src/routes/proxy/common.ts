@@ -1,6 +1,7 @@
 import config from "@/config";
 
 export { MODEL_ROUTER_PREFIX, PROXY_API_PREFIX } from "@/routes/route-paths";
+export const ANTHROPIC_SUBSCRIPTION_UPSTREAM = "https://api.anthropic.com";
 export const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 export const RESPONSES_SUFFIX = "/responses";
 export const RESPONSES_COMPACT_SUFFIX = "/responses/compact";

@@ -64,6 +64,7 @@ export function ConnectionSettingsForm() {
   const appName = useAppName();
   const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
 
+  const [pageHidden, setPageHidden] = useState(false);
   const [gatewayId, setGatewayId] = useState<string | null>(null);
   const { data: mcpGateways } = useAgentOptionsByIds({
     ids: gatewayId ? [gatewayId] : [],
@@ -101,6 +102,7 @@ export function ConnectionSettingsForm() {
 
   useEffect(() => {
     if (!organization) return;
+    setPageHidden(organization.connectionPageHidden ?? false);
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
@@ -133,6 +135,7 @@ export function ConnectionSettingsForm() {
     "Failed to update connection settings",
   );
 
+  const serverPageHidden = organization?.connectionPageHidden ?? false;
   const serverGatewayId = organization?.connectionDefaultMcpGatewayId ?? null;
   const serverDefaultClientId = organization?.connectionDefaultClientId ?? null;
   const serverShownClients = (
@@ -189,6 +192,7 @@ export function ConnectionSettingsForm() {
   });
 
   const hasChanges =
+    pageHidden !== serverPageHidden ||
     JSON.stringify(clientFutureProviders) !==
       JSON.stringify(organization?.connectionClientFutureProviders ?? {}) ||
     JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
@@ -215,6 +219,9 @@ export function ConnectionSettingsForm() {
   const handleSave = () => {
     if (runtimeHandoffEnabled && !runtimeHandoffInstructions.trim()) return;
     updateMutation.mutate({
+      ...(pageHidden !== serverPageHidden
+        ? { connectionPageHidden: pageHidden }
+        : {}),
       connectionDefaultMcpGatewayId: gatewayId,
       connectionDefaultClientId: defaultClientId,
       connectionRuntimeHandoffEnabled: runtimeHandoffEnabled,
@@ -243,6 +250,7 @@ export function ConnectionSettingsForm() {
   };
 
   const handleCancel = () => {
+    setPageHidden(serverPageHidden);
     setGatewayId(serverGatewayId);
     setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
@@ -300,6 +308,18 @@ export function ConnectionSettingsForm() {
         return (
           <>
             <SettingsSectionStack>
+              <SettingRow
+                title="Hide Connect page"
+                description="Hide Connect from the sidebar and search for everyone. Existing connections keep working."
+              >
+                <Switch
+                  aria-label="Hide Connect page"
+                  checked={pageHidden}
+                  onCheckedChange={setPageHidden}
+                  disabled={locked}
+                />
+              </SettingRow>
+
               <SettingRow
                 title="Default client"
                 description="Pre-selected client tile."

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
@@ -10,13 +11,13 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { port } from "@/models/ports";
 import * as metrics from "@/observability/metrics";
 import {
   SandboxRuntimeError,
   type SandboxRuntimeStatus,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
-import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
 import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
@@ -119,6 +120,10 @@ class SkillSandboxRuntimeService {
         params.caller,
       );
       const cwd = params.cwd ?? sandbox.defaultCwd;
+      // the row id is chosen before the run: it keys the engine's cache, so
+      // this sandbox's later replays reuse this result, while the same command
+      // in any other sandbox runs for real.
+      const commandId = randomUUID();
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -127,6 +132,7 @@ class SkillSandboxRuntimeService {
       try {
         executed = await sandboxRuntimeService.runCommand({
           command: params.command,
+          commandId,
           cwd,
           timeoutSeconds,
           replayEntries,
@@ -150,6 +156,7 @@ class SkillSandboxRuntimeService {
         });
         if (shouldRecordOnFailure(error)) {
           await this.appendSyntheticRow({
+            id: commandId,
             sandboxId: params.sandboxId,
             organizationId: sandbox.organizationId,
             command: params.command,
@@ -170,6 +177,7 @@ class SkillSandboxRuntimeService {
       >;
       try {
         row = await SkillSandboxReplayEventModel.appendCommand({
+          id: commandId,
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
           command: params.command,
@@ -536,6 +544,7 @@ class SkillSandboxRuntimeService {
    * what the caller cares about.
    */
   private async appendSyntheticRow(args: {
+    id: string;
     sandboxId: SandboxId;
     organizationId: string;
     command: string;
@@ -544,6 +553,7 @@ class SkillSandboxRuntimeService {
   }): Promise<void> {
     try {
       await SkillSandboxReplayEventModel.appendCommand({
+        id: args.id,
         sandboxId: args.sandboxId,
         organizationId: args.organizationId,
         command: args.command,
@@ -643,13 +653,16 @@ class SkillSandboxRuntimeService {
   /**
    * Fail-closed before materializing: every mounted skill must still be readable
    * by the caller and allowed by the current agent policy. A revoked, blocked,
-   * or deleted skill stops the run before any bytes execute (see
-   * {@link assertMountedSkillsReadable}).
+   * or deleted skill stops the run before any bytes execute. The readability
+   * port keeps policy evaluation out of the runtime layer.
    */
   private async assertMountsReadable(
     sandboxId: SandboxId,
     caller: SandboxCaller,
   ): Promise<void> {
+    const { assertMountedSkillsReadable } = await port(
+      "mountedSkillsReadability",
+    );
     const result = await assertMountedSkillsReadable({
       sandboxId,
       userId: caller.userId,
@@ -701,6 +714,7 @@ class SkillSandboxRuntimeService {
             return {
               kind: "command",
               command: {
+                id: entry.command.id,
                 command: entry.command.command,
                 // pin replays to defaultCwd when the original entry has no
                 // stored cwd, so the Rust fallback doesn't pick up the live

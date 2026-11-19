@@ -49,6 +49,7 @@ import { metrics } from "@/observability";
 import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -125,14 +126,19 @@ export function normalizeToolCallsForPolicy(
   toolCallName: string;
   toolCallArgs: string;
   isRunToolDispatchTarget?: boolean;
+  isNativeDispatchTarget?: boolean;
 }> {
   return toolCalls.map((tc) => {
+    const nativeDispatch = resolution.nativeDispatch?.(tc);
+    if (nativeDispatch)
+      return { ...nativeDispatch, isNativeDispatchTarget: true };
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
@@ -279,7 +285,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }
@@ -368,6 +374,8 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (usage.usageUnavailable || usage.costUnavailable) return undefined;
@@ -379,6 +387,8 @@ export async function calculateUsageCost(params: {
         provider,
         mode: "enforce",
         providerApiKeyId: params.providerApiKeyId,
+        billingEndpoint: params.billingEndpoint,
+        requestedModel: params.requestedModel,
       })
     ).cost,
   );
@@ -399,6 +409,8 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   autoRouting?: AutoRoutingRequestContext;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
@@ -422,6 +434,8 @@ export async function calculateInteractionCosts(params: {
     provider: params.providerName,
     mode: "enforce",
     providerApiKeyId: params.providerApiKeyId,
+    billingEndpoint: params.billingEndpoint,
+    requestedModel: params.requestedModel,
   });
   const actualCost = Number(billingUsage.cost);
   const componentsCache = billingUsage.components.map(componentCacheCosts);
@@ -629,6 +643,8 @@ export async function estimateCutOffAttemptUsage(params: {
     provider?: SupportedProvider;
     modelId?: string;
     providerApiKeyId?: string;
+    billingEndpoint?: "fireworks" | "other";
+    requestedModel?: string;
   };
 }): Promise<{ inputTokens: number; cost: string | null } | undefined> {
   const { member } = params;
@@ -649,6 +665,8 @@ export async function estimateCutOffAttemptUsage(params: {
     usage: { inputTokens, outputTokens: 0 },
     provider: member.provider,
     providerApiKeyId: member.providerApiKeyId,
+    billingEndpoint: member.billingEndpoint,
+    requestedModel: member.requestedModel,
   });
   return { inputTokens, cost: cost?.toFixed(10) ?? null };
 }
@@ -891,12 +909,27 @@ export function upstreamErrorMessage(
  */
 export function poolFailoverReason(
   error: unknown,
+  provider?: SupportedProvider,
 ): { reason: string; status: number; retryAfterMs?: number } | undefined {
   if (error instanceof ObservedProviderUsageError) return undefined;
   if (error instanceof ApiError || isClientAbortError(error)) return undefined;
   const status =
     explicitHttpStatus(error) ?? classifyTransientUpstreamError(error);
   if (status === undefined) return undefined;
+  // Credit exhaustion is not a transient rate limit. Match structured quota
+  // codes and Anthropic's specific balance refusal, never arbitrary 400 text.
+  const payload = asRecord(asRecord(error)?.error);
+  const detail = asRecord(payload?.error) ?? payload;
+  const codes = [detail?.code, detail?.type, asRecord(error)?.code];
+  const creditExhausted =
+    status === 402 ||
+    (status === 429 && codes.includes("insufficient_quota")) ||
+    (status === 400 &&
+      provider === "anthropic" &&
+      typeof detail?.message === "string" &&
+      /^your credit balance is too low\b/i.test(detail.message.trim()));
+  if (creditExhausted)
+    return { reason: `credit_exhausted (${status})`, status };
   const failsOver =
     status === 401 ||
     status === 403 ||

@@ -7,6 +7,9 @@ export const SKILL_SANDBOX_HOME = "/home/sandbox";
 /** Where the user's chat attachments are auto-staged inside the container. */
 export const SKILL_SANDBOX_ATTACHMENTS_DIR = `${SKILL_SANDBOX_HOME}/attachments`;
 
+/** Where a chat tool result too large for the model's context is saved in full. */
+export const SKILL_SANDBOX_TOOL_RESULTS_DIR = `${SKILL_SANDBOX_HOME}/tool-results`;
+
 /** Per-skill root inside the container, e.g. `/skills/<skill-name>`. */
 export function skillRootPath(skillName: string): string {
   // Mirrors `skill_root_path` in sandbox-core/src/validation.rs. Reject ""/"."

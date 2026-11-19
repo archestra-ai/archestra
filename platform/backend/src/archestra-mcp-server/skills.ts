@@ -54,7 +54,10 @@ import {
   formatSkillActivation,
   neutralizeFrameTags,
 } from "@/skills/skill-activation";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
+import {
+  buildSkillCatalogPrompt,
+  SKILL_CATALOG_CHAR_BUDGET,
+} from "@/skills/skill-catalog-prompt";
 import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
@@ -83,6 +86,8 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
+import { prepareSearchQuery, rankByKeyword } from "./search-ranking";
+import { normalizeSearchText } from "./search-text";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -115,7 +120,23 @@ import type { ArchestraContext } from "./types";
  * @see https://agentskills.io/specification
  */
 
-const ListSkillsSchema = z.object({});
+const LIST_ALL_SKILLS_QUERY = "*";
+
+// The first page of matches is what a model reads; more of them only adds
+// context, and a different query is how it reaches the rest.
+const MAX_SKILL_SEARCH_RESULTS = 20;
+
+const ListSkillsSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe(
+      `Words describing the task or the skill. Returns the best matches with their full descriptions. Required when the catalog is too large to list. The exact value "${LIST_ALL_SKILLS_QUERY}" returns the entire catalog and can be very long, so use it only when search has not found the skill.`,
+    ),
+});
 
 const LoadSkillSchema = z.object({
   name: z
@@ -258,16 +279,16 @@ const registry = defineArchestraTools([
     title: "List Skills",
     description:
       "List the Agent Skills available in this organization — one line per " +
-      "skill (name and description). Call load_skill with a skill name " +
-      "to load its full instructions.",
+      "skill (name and description). Pass `query` to search them by task or " +
+      "keyword. Call load_skill with a skill name to load its full instructions.",
     schema: ListSkillsSchema,
-    async handler({ context }) {
+    async handler({ args, context }) {
       const ctx = requireOrgContext(context);
       if (!ctx) {
         return errorResult("This tool requires an organization context.");
       }
 
-      return listSkillCatalog(ctx, context.agent.id);
+      return listSkillCatalog(ctx, context.agent.id, args.query);
     },
   }),
   defineArchestraTool({
@@ -279,7 +300,7 @@ const registry = defineArchestraTools([
     // (see formatSkillActivation) only when they are genuinely available.
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
-      "Call list_skills first to discover what is available. Call load_skill " +
+      "Use list_skills to discover what is available. Call load_skill " +
       "with just a name to load the skill's instructions and its bundled-file " +
       "list; load it before attempting the task it covers. Call it with a name " +
       "and a path from that list to read one bundled file.",
@@ -1068,12 +1089,93 @@ function parseManifest(raw: string) {
 async function listSkillCatalog(
   ctx: SkillReadContext,
   agentId: string | undefined,
+  query: string | undefined,
 ) {
   const availableSkills = await listAvailableAgentSkills({
     organizationId: ctx.organizationId,
     userId: ctx.userId,
     agentId,
   });
+  const noSkillsMessage = agentId
+    ? "No skills are available through this agent. Check its skill policy and environment, and verify that you can access the skill you need."
+    : "No skills are available in this organization. Skills can be added under Agents → Skills.";
+
+  if (query === undefined || query === LIST_ALL_SKILLS_QUERY) {
+    const catalog = await renderSkillCatalog(ctx, agentId, availableSkills);
+    if (catalog === null) return successResult(noSkillsMessage);
+    if (query === undefined && catalog.length > SKILL_CATALOG_CHAR_BUDGET) {
+      return errorResult(
+        `This catalog is too large to list. Pass \`query\` with words describing the task to search it, or the exact value "${LIST_ALL_SKILLS_QUERY}" for the entire catalog, which can be very long.`,
+      );
+    }
+    return successResult(catalog);
+  }
+
+  if (availableSkills.length === 0) return successResult(noSkillsMessage);
+  const matches = rankSkillsByQuery(availableSkills, query);
+  if (matches.length === 0) {
+    return successResult(
+      `No skills match this query. Try different words, or pass the exact value "${LIST_ALL_SKILLS_QUERY}" for the entire catalog.`,
+    );
+  }
+  const shown = takeSkillSearchResults(matches);
+  if (shown.length === 0) {
+    return errorResult(
+      `The best match for this query is too long to show. Use a more specific query, or pass the exact value "${LIST_ALL_SKILLS_QUERY}" for the entire catalog, which can be very long.`,
+    );
+  }
+  const catalog = await renderSkillCatalog(ctx, agentId, shown);
+  const truncationNote =
+    shown.length < matches.length
+      ? `\nShowing ${shown.length} of ${matches.length} matches. Use a more specific query to narrow them.`
+      : "";
+  return successResult(`${catalog ?? ""}${truncationNote}`);
+}
+
+function rankSkillsByQuery(
+  skills: AvailableAgentSkill[],
+  query: string,
+): AvailableAgentSkill[] {
+  return rankByKeyword({
+    candidates: skills,
+    query: prepareSearchQuery(query),
+    nameOf: skillWireName,
+    searchTextOf: (available) => ({
+      name: normalizeSearchText(skillWireName(available)),
+      title: "",
+      description: normalizeSearchText(available.skill.description ?? ""),
+      argNames: "",
+      argDescriptions: "",
+      generated: "",
+    }),
+  });
+}
+
+function skillWireName(available: AvailableAgentSkill): string {
+  return available.source === "native"
+    ? available.activationName
+    : available.wireName;
+}
+
+function takeSkillSearchResults(
+  matches: AvailableAgentSkill[],
+): AvailableAgentSkill[] {
+  const shown: AvailableAgentSkill[] = [];
+  let length = 0;
+  for (const match of matches.slice(0, MAX_SKILL_SEARCH_RESULTS)) {
+    length +=
+      skillWireName(match).length + (match.skill.description ?? "").length;
+    if (length > SKILL_CATALOG_CHAR_BUDGET) break;
+    shown.push(match);
+  }
+  return shown;
+}
+
+async function renderSkillCatalog(
+  ctx: SkillReadContext,
+  agentId: string | undefined,
+  availableSkills: AvailableAgentSkill[],
+): Promise<string | null> {
   const nativeSkills = availableSkills
     .filter((available) => available.source === "native")
     .map((available) => available.skill);
@@ -1125,17 +1227,11 @@ async function listSkillCatalog(
       ].join("\n")
     : "";
   if (catalog === null && externalCatalog === "" && pluginCatalog === "") {
-    return successResult(
-      agentId
-        ? "No skills are available through this agent. Check its skill policy and environment, and verify that you can access the skill you need."
-        : "No skills are available in this organization. Skills can be added under Agents → Skills.",
-    );
+    return null;
   }
-  return successResult(
-    [catalog, externalBlock, pluginBlock]
-      .filter((value): value is string => !!value)
-      .join("\n"),
-  );
+  return [catalog, externalBlock, pluginBlock]
+    .filter((value): value is string => !!value)
+    .join("\n");
 }
 
 async function resolveSkillReference(

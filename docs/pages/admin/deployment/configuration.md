@@ -1,8 +1,8 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 6
-lastUpdated: 2026-10-31
+order: 8
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -43,6 +43,21 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` disables the timeout.
   - Raise it if you run legitimate long queries.
 
+- **`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`** - Signs a fresh 15-minute Amazon RDS or Aurora IAM token for each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification with the RDS CA bundle.
+  - Default: `false`
+  - Values: `true`, `false`
+  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS and Aurora](/docs/admin/deployment/database/aws).
+
+- **`ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED`** - Signs in to Azure Database for PostgreSQL flexible server with a Microsoft Entra ID access token for the pod's Azure identity on each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification.
+  - Default: `false`
+  - Values: `true`, `false`
+  - Put the managed identity's name as the user in [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL). Cannot be combined with [`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_IAM_AUTH_ENABLED).
+  - In Helm, set `archestra.database.entraAuth.enabled: true`. See [Azure Database for PostgreSQL](/docs/admin/deployment/database/azure).
+
+- **`ARCHESTRA_DATABASE_AWS_REGION`** - AWS region used to sign RDS IAM database authentication tokens.
+  - Default: derived from an `*.rds.amazonaws.com` database hostname, falling back to `AWS_REGION` or `AWS_DEFAULT_REGION`
+  - Set it when connecting to RDS or Aurora through a custom DNS name without `AWS_REGION` set.
+
 ## Server and Network
 
 - **`ARCHESTRA_API_BASE_URL`** - Public URL of the Archestra API, shown in the connection instructions for the LLM Proxy, MCP Gateway, and A2A Gateway.
@@ -64,11 +79,13 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: unset (no extra port)
   - Values: `1`–`65535`. Any other value disables the extra port and logs a warning.
   - The main API port keeps serving these endpoints. In Helm, set `archestra.publicEndpointsPort`, which also exposes the port on the Service.
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 - **`ARCHESTRA_TRUST_PROXY`** - Trusts the `X-Forwarded-*` headers of a reverse proxy or load balancer. Rate limits and audit logs then see each client's IP.
   - Default: `false`
-  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `35.191.0.0/16,130.211.0.0/22`
+  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `10.0.0.0/23,10.0.2.2`
   - Prefer the IP list. With `true`, any caller can set `X-Forwarded-For` and pick the IP it is rate-limited and audited under.
+  - List every proxy between the client and Archestra, including a load balancer's own IP when it adds one to `X-Forwarded-For`, as Google Cloud Application Load Balancers do. A list always trusts loopback, which is how the web UI reaches the API.
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long the API and web servers keep an idle keep-alive connection open, in milliseconds.
   - Default: `620000`
@@ -89,11 +106,9 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 ## General
 
-- **`ARCHESTRA_BETA`** - Turns on beta features.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
-  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Releases](/docs/admin/deployment/verify-releases).
+  - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
+  - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
@@ -105,6 +120,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
   - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
+  - Turns [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) off unless that variable is set.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Activates the enterprise Knowledge Base features, such as team-scoped connectors.
   - Default: `false`
@@ -128,8 +144,8 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `json` (one JSON object per line), `pretty` (colorized text)
   - The OTLP log exporter always receives structured records.
 
-- **`ARCHESTRA_ANALYTICS`** - Sends product analytics, instance heartbeats, and backend error reports to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
-  - Default: on in production builds, including the released Docker images; off in development
+- **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
+  - Default: on in production builds, including the released Docker images. Off in development, and off when [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/admin/deployment/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) is `true`.
   - Values: `disabled` turns it off. Any other value turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
@@ -156,7 +172,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 - **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password of the default admin user, set on first startup.
   - Default: `password`
-  - Change it for any deployment other people can reach.
+  - Change it for any deployment other people can reach. It applies only when the admin is created; to change the password later, see [Default Admin Password](/docs/admin/deployment/secret-rotation#default-admin-password).
 
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra origins allowed for CORS and sign-in, besides [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL).
   - Default: unset
@@ -197,22 +213,30 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` or more. `0` treats every replay as reuse.
   - The window lets a client retry after a lost token response.
 
-- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
+- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints. Credentials and permissions are still checked.
   - Default: `false`
   - Values: `true`, `false`
   - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY).
+  - If the MCP gateway returns HTTP `429` or `503`, wait before retrying and follow `Retry-After` when provided.
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.
   - Default: unset
   - Ignored in production builds. The session has that user's normal permissions.
 
+- **`ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`** - SPIFFE trust domain of agents' SPIFFE IDs (`spiffe://<trust domain>/agent/<agent ID>`). See [SPIFFE Agent Identities](/docs/agents/identity/spiffe).
+  - Default: the hostname of [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL)
+  - Values: lowercase letters, digits, dots, dashes, and underscores
+  - Changing it changes every agent's SPIFFE ID, so update the policies that name them.
+
 ## Encryption and Secrets
+
+To change any of these secrets, follow [Secret Rotation](/docs/admin/deployment/secret-rotation).
 
 - **`ARCHESTRA_AUTH_SESSION_SECRET`** - Signs session cookies and encrypts JWT signing keys and two-factor secrets.
   - Default: Helm generates one in the `<release>-auth` Secret under `session-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SECRET).
   - Values: a random string of at least 32 characters, for example from `openssl rand -base64 32`
-  - Changing it signs out every user, invalidates issued JWTs, and makes users with two-factor authentication enroll again.
+  - Changing it signs out every user and makes users with two-factor authentication set up their authenticator again. See [Session Secret](/docs/admin/deployment/secret-rotation#session-secret).
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Encrypts secrets stored in the database, such as API keys and tokens.
   - Default: Helm generates one in the `<release>-auth` Secret under `secrets-encryption-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SECRET).
@@ -228,9 +252,10 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - Set it for one boot, then unset it. Secrets encrypted with the old key stay unreadable. Enter them again.
 
-- **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset.
+- **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset. To change it safely, see [Legacy Combined Secret](/docs/admin/deployment/secret-rotation#legacy-combined-secret).
   - Default: generated on first start. Helm stores it in the `<release>-auth` Secret; the Docker image saves it to `/app/data/.auth_secret`.
   - Set the two dedicated secrets instead, so you can rotate them separately.
+  - Once both are set, Archestra uses this secret only as [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) when that is unset.
 
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Turns on encryption at rest for LLM Logs, chat messages, and MCP tool call arguments and results. Requires an enterprise license.
   - Default: unset (content encryption off)
@@ -243,7 +268,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`** - Turns on [encrypted chats](/docs/chat#encrypted-chats). Archestra escrows each chat key to this RSA public key for recovery.
   - Default: unset (encrypted chats unavailable)
   - Values: an RSA public key of at least 2048 bits, as PEM or base64-encoded PEM. Startup fails on any other value.
-  - Set it in its own rollout, after the release is deployed. See [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/content-encryption#recovering-an-encrypted-chat).
+  - Set it in its own rollout, after the release is deployed. To replace it, see [Encrypted Chat Escrow Key](/docs/admin/deployment/secret-rotation#encrypted-chat-escrow-key). See [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/content-encryption#recovering-an-encrypted-chat).
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
@@ -300,6 +325,13 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 ## LLM Providers
 
 These variables set each provider's deployment-wide endpoint and authentication. A base URL saved on a key in **Settings → LLM → Model providers** overrides the variable for that key. See [Supported LLM Providers](/docs/llm-proxy/providers) for setup.
+
+- **`ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED`** - Deletes the automatic provider key of a keyless provider once that provider is no longer enabled in this deployment's environment, along with the key's virtual key mappings and model pool members. Keyless providers are Gemini on Vertex AI, Azure with Entra ID, keyless Anthropic and Bedrock with IAM.
+  - Default: `true`
+  - Values: `true`, `false`
+  - Set it to `false` on every deployment that shares one database with another. Otherwise a deployment deletes the keys of providers that only the other one enables.
+  - A deployment that does not enable a provider still lists that provider's key. Requests it sends with the key fail, and **Refresh models** reports the key as failed there. Send that provider's traffic to a deployment that enables it.
+  - While it is `false`, the key of a provider you turn off everywhere stays listed and fails when used. Set it to `true` for one restart to remove it.
 
 ### OpenAI
 
@@ -527,10 +559,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Model Router.
-  - Default: unset (off)
-  - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
-
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
@@ -608,10 +636,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
-
-- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
-  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
 
 ## Chat
 
@@ -692,6 +716,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: `32768`
   - Values: `1` to `1000000`
   - A turn uses the lower of this value and the model's own output limit. Models without a known limit use `8192`.
+  - In Chat, Nova 2 Lite High reasoning omits the automatic output cap. Setting this variable explicitly, even to `32768`, or setting a custom model output limit blocks High; use Low or Medium instead.
 
 - **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output token limit for Groq, which charges the requested output budget against a per-minute token allowance.
   - Default: `4096`
@@ -757,6 +782,21 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Set it below your proxy's maximum request duration, which Archestra cannot detect. A GKE Ingress backend without `timeoutSec` allows 30 seconds.
   - Some clients stop reconnecting after repeated ends and then miss tool-list changes. Test your client first.
 
+## MCP Bridge
+
+- **`ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS`** - Longest time Archestra holds one poll of a user's MCP bridge open while it has no work, in milliseconds.
+  - Default: `8000` (8 seconds)
+  - Keep it below the request timeout of the load balancer in front of the API. Otherwise the load balancer ends every idle poll with an error.
+
+- **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
+  - Default: `true`
+  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
+
+- **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
+  - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".
+  - One file per system and CPU, named `archestra-<system>-<cpu>`: `archestra-darwin-arm64`, `archestra-darwin-x86_64`, `archestra-linux-x86_64`, `archestra-linux-arm64`, `archestra-windows-x86_64.exe`, `archestra-windows-arm64.exe`. A system with no file gets no download.
+  - `manifest.json` in the folder holds the version of the programs, as `{ "version": "0.2.0" }`. The Device tab of Personal Settings shows it when a device needs an update.
+
 ## MCP Servers
 
 - **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.
@@ -778,6 +818,10 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 
 ## MCP Server Orchestrator
 
+- **`ARCHESTRA_ORCHESTRATOR_ENABLED`** - Set to `false` to turn the Kubernetes orchestrator off. Archestra then loads no Kubernetes credentials, including the in-cluster service account, and creates, changes or deletes nothing in the cluster.
+  - Default: `true`. The Helm chart sets it from `archestra.orchestrator.enabled`.
+  - Use it for an install that shares its database with another install that runs the MCP servers. Self-hosted MCP servers, Agent Runtime and the code sandbox it provisions are unavailable on that install.
+
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Uses the in-cluster service account to reach Kubernetes.
   - Default: `false`. The Helm chart sets `true`.
   - When Archestra runs outside the target cluster, leave it `false` and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG).
@@ -786,12 +830,19 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (default kubeconfig locations)
   - Example: `/etc/archestra/kubeconfig`
 
-- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Namespace that MCP server pods run in.
-  - Default: `default`. The Helm chart sets the release namespace.
+- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Namespace that MCP servers, Agent Runtime sessions, and code sandbox engines run in, unless an [environment](/docs/admin/environments) names another one.
+  - Default: `default`. The Helm chart sets `archestra.orchestrator.kubernetes.namespace`, or the release namespace.
+  - To run them in a namespace of their own, follow [Cluster Security](/docs/admin/deployment/production#cluster-security).
 
 - **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Namespaces the platform service account has permissions in, offered as a dropdown in the [environment](/docs/admin/environments) editor.
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
+
+- **`ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES`** - Namespaces workloads ran in before a namespace change. The platform cleans up what it left there.
+  - Default: unset
+  - Values: comma-separated namespaces, for example `archestra-mcp-old`. A namespace that is still in use is ignored.
+  - Removes MCP servers, warm pools, and code sandbox engines with their disks at once. Agent Runtime sessions there keep running until they end. Then it deletes its runtime owner Role there, so Kubernetes removes the rest, and logs that the namespace is clean. Only objects this install created are deleted.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.rbac.retiredNamespaces` and keeps the platform's Roles in those namespaces. Remove a namespace from the list after the platform logs that it is clean. See [Cluster Security](/docs/admin/deployment/production#cluster-security).
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
   - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
@@ -805,7 +856,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `localhost`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base image for MCP servers that do not set their own image.
-  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`
+  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for each MCP server container.
   - Default: `50m`
@@ -840,7 +891,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `1800` (30 minutes)
   - Values: `0`, or `120` and above. Lower values are raised to `120`.
   - `0` turns hibernation off for the whole deployment, whatever the organization setting.
-  - Hibernation also needs [`ARCHESTRA_BETA=true`](/docs/admin/deployment/configuration#ARCHESTRA_BETA), an enterprise license, and the organization setting turned on.
+  - Hibernation also needs an enterprise license and the organization setting turned on.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without pulling from the registry.
   - Default: `true`
@@ -960,6 +1011,11 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
+- **`ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE`** - Runs every code sandbox engine in its own namespace, apart from MCP servers. Engines run privileged, so this lets the MCP namespaces enforce a stricter Pod Security level.
+  - Default: unset (each engine runs in its [environment's](/docs/admin/environments) namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - When set, it wins over environment namespaces. Each environment still gets its own engine and egress policy there. At startup, the platform removes engines from the namespaces they ran in before.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.daggerRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
   - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
   - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.
@@ -1003,12 +1059,13 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Set it when you mirror these images to a private registry.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
-  - Default: `latest` on stable releases, otherwise the platform version
+  - Default: the platform version, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
   - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
   - Values: `true`, `false`
+  - Turning it off also stops Agents already set to privileged: their new runs and follow-up turns fail until an Agent administrator turns privileged mode off.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`** - URL a runtime pod uses to reach the LLM proxy and MCP gateway. It must be reachable from inside the cluster.
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
@@ -1038,9 +1095,26 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum number of warm pools. Agents outside them start containers on demand.
   - Default: `4`
 
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED`** - Pulls every catalog Agent image onto each runtime node at startup and after each upgrade, so the first run of an Agent does not wait for its image. Turn it off when node disk or registry bandwidth is tight; each run then pulls only its own image.
+  - Default: `true`
+
+- **`ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE`** - Runs Agent Runtime sessions and warm pools in their own namespace, apart from MCP servers, so each can get its own Pod Security, NetworkPolicy, and RBAC. An Agent whose [environment](/docs/admin/environments) names a namespace still runs there.
+  - Default: unset (the default environment's namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.agentRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Schedules runtime pods onto a dedicated node pool.
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.
+
+- **`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`** - Schedules [privileged](/docs/agents/runtime/setup#privileged-containers) runtime pods onto their own node pool, away from unprivileged runs and other workloads.
+  - Default: unset (privileged pods use [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR))
+  - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime-privileged=true`. Each pair also adds a matching `NoSchedule` toleration, so taint the pool with the same pairs.
+  - The [runtime image cache](/docs/agents/runtime/setup#runtime-image-cache) fills only the [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) pool, so the first privileged run on a new node pulls its image.
+
+- **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
+  - Default: unset (the cluster's default runtime)
+  - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).
+  - If the RuntimeClass does not exist, unprivileged runs fail at once with a reason that names it. The platform checks with a dry-run pod create in the Agent Runtime namespace, so it needs no extra permissions.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector for the platform's API pods. Runtime pods may send traffic only to pods that match.
   - Default: `archestra.io/platform-api=true` (set on API pods by the Helm chart)
@@ -1178,7 +1252,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 ### M-Files
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Turns on the beta [M-Files connector](/docs/knowledge/connectors/m-files).
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
+  - Default: `false`
   - Values: `true`, `false`. Existing M-Files connectors keep syncing while it is off.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory that serves the VAF Add On package to the install script and the connector form.
@@ -1189,7 +1263,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 [Perforce permission sync](/docs/knowledge/connectors/perforce) runs the `p4` CLI in a per-connector pod and needs the Kubernetes orchestrator. Archestra downloads the `p4` binary from Perforce and checks its SHA-256. Air-gapped installs point the URLs at an internal mirror and set matching checksums.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Image of the pod that runs `p4` for permission sync.
-  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`
+  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** - Download URL of the `p4` binary for x86-64 nodes.
   - Default: `https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4`
@@ -1279,6 +1353,7 @@ These variables connect an Outlook mailbox so people can [email agents](/docs/ag
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`** - Public URL that receives new-mail notifications. When set, Archestra creates the subscription on startup.
   - Default: unset (create the subscription in **Settings → Messaging Channels → Email**)
   - Values: a URL ending in `/api/webhooks/incoming-email`, for example `https://archestra.example.com/api/webhooks/incoming-email`
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 ## ChatOps
 
@@ -1288,6 +1363,7 @@ The Microsoft Teams, Slack, and Telegram variables apply only on first startup, 
   - Default: the ngrok tunnel URL, or the frontend URL when no tunnel is active.
   - Values: an HTTP(S) base URL, for example `https://hooks.example.com`.
   - Used when creating or retargeting Slack apps. Existing app URLs require a separate update. Browser OAuth redirects keep using the frontend or tunnel URL.
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Sends a welcome message to users who are created automatically when they first message an agent.
   - Default: `true`
@@ -1364,7 +1440,7 @@ See [Telegram](/docs/agents/triggers-and-channels/telegram) for setup. Telegram 
 
 ### Public URL
 
-Microsoft Teams and Slack webhook mode need Archestra reachable from the internet. These variables open an [ngrok](https://ngrok.com) tunnel to Archestra on startup.
+These variables open an [ngrok](https://ngrok.com) tunnel to Archestra on startup, for a local instance. [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints) lists what must be reachable from the internet.
 
 - **`ARCHESTRA_NGROK_AUTH_TOKEN`** - ngrok auth token.
   - Default: unset (no tunnel)
@@ -1413,7 +1489,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token that clients must send to read `/metrics`.
   - Default: unset (no authentication)
-  - Clients send `Authorization: Bearer <token>`.
+  - Clients send `Authorization: Bearer <token>`. To change it, see [Metrics Token](/docs/admin/deployment/secret-rotation#metrics-token).
 
 - **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics/llm#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
@@ -1461,12 +1537,17 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 ## Log Content
 
-Keep prompts and tool data out of the logs while usage, cost, and the audit trail stay complete.
+Choose whether stored LLM proxy logs, MCP gateway logs, and Guardrails consult records include prompts and tool data.
 
 - **`ARCHESTRA_LOGS_CONTENT_MODE`** - What LLM proxy logs, MCP gateway logs, and Guardrails consult records store.
   - Default: `full`
   - Values: `full` stores prompts, responses, tool arguments, and tool results. `metadata_only` stores who, when, the model or tool, tokens, cost, and whether the call failed. Any other value stores metadata only.
   - Applies to records written after a restart. Stored records keep their content.
+  - Metadata-only mode also omits captured prompt/response and tool argument/result fields from LLM proxy and MCP tool-call trace spans.
+
+Application error logs omit attached SDK request bodies, including those in retry histories. In `metadata_only` mode, logged errors keep type, status and retry metadata; free-text messages, stacks, attached payloads and raw provider error diagnostics are withheld from stdout and OTLP logs. In `full` mode, error messages and provider responses can still contain sensitive content.
+
+To disable captured prompt/response and tool argument/result fields on trace spans independently, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`. MCP trace error messages can still contain sensitive content.
 
 ## Data Retention
 
@@ -1484,6 +1565,24 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`** - Set to `true` to export persisted administrative audit event metadata as OTLP logs through the configured OpenTelemetry endpoint. Default: `false`. Delivery is best-effort; see [Audit log export](/docs/admin/observability/audit-logs).
 
+- **`ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT`** - OTLP/HTTP endpoint that receives the audit export instead of [`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT). Set it to keep audit records apart from backend logs and traces, such as in a collector only your security team reads.
+  - Default: unset (audit records use the shared endpoint)
+  - Records go to `/v1/logs`. The shared endpoint's credentials are never sent here.
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY`** - Set to `true` to add the actor's email and display name to each exported audit record, so security alerts can name who acted without looking up the actor ID.
+  - Default: `false`
+  - The collector then receives personal data; restrict who can read it.
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME`** - Username for basic authentication to the audit endpoint.
+  - Default: unset. Used only together with [`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD).
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD`** - Password for basic authentication to the audit endpoint.
+  - Default: unset. Used only together with [`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME).
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER`** - Bearer token for the audit endpoint.
+  - Default: unset
+  - Takes precedence over basic authentication.
+
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.
   - Default: `0` (keep forever)
 
@@ -1494,11 +1593,34 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs Guardrails delegation between agents and agent-to-agent messages.
   - Default: Helm generates one and keeps it across upgrades. Without Helm, it derives from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
-  - Set it to rotate this key separately from the session secret.
+  - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
+
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset you import to require it.
+  - Default: `Check OpenAPPA Guardrails`.
+  - Values: up to 100 characters. After a rename, edit the imported ruleset so it requires the check under the new name.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Controls the MCP Guardrails Self-Service feature - whether the MCP owners can edit Guardrail policies for these MCPs themselves. Overrides related configuration from Settings.
+  - Default: unset.
+  - Values: `enabled`, `disabled`.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
+  - Default: unset (the saved setting applies, off unless changed).
+  - Values: `enabled`, `disabled`. Other values stop startup.
+
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
+  - Default: unset (the saved setting applies, `block` unless changed)
+  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Sets **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells): an emergency override for soft refusals across tool calls and results, child returns, runtime exports, peer messages, failed helpers, and fork or compaction admission. `allow` releases the operation and turns Guardrails off for the session, even at its first refusal and even if yell reporting is disabled or fails. Platform authentication and access checks remain enforced. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. An explicit `blocked` refusal cannot trigger a waiver. After a soft refusal turns Guardrails off, subsequent operations bypass all policy checks, including explicit `blocked` marks.
+  - Default: unset (the saved setting applies, `refuse` unless changed)
+  - Values: `refuse`, `allow`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
+  - With reports off, no yell is recorded. [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) still waives soft refusals and turns session enforcement off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

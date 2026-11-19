@@ -7,6 +7,10 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
+  AutoRoutersField,
+  useCanSetAutoRouters,
+} from "@/components/credential-billing/auto-routers-field";
+import {
   BudgetFields,
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
@@ -22,6 +26,7 @@ import type { InitialPermissionGrant } from "@/components/initial-resource-permi
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderAccessField } from "@/components/provider-access-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
@@ -34,6 +39,7 @@ import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-g
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
@@ -63,7 +69,7 @@ export function CreateVirtualKeyDialogWithData({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   keyType: VirtualKeyType;
-  /** What the key is for, named in the title (e.g. "Model Router"). */
+  /** What the key is for, named in the title (e.g. "Unified Model API"). */
   targetLabel?: string;
   /**
    * Provider keys the new key starts mapped to (standard keys only). Omitted,
@@ -163,6 +169,8 @@ export function CreateVirtualKeyDialog({
   const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
   const [modelPoolIds, setModelPoolIds] = useState<string[]>([]);
   const canSetModelPools = useCanSetModelPools();
+  const [autoRouterIds, setAutoRouterIds] = useState<string[]>([]);
+  const canSetAutoRouters = useCanSetAutoRouters();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
@@ -184,8 +192,30 @@ export function CreateVirtualKeyDialog({
   const generatedNameRef = useRef("");
 
   const isPassthrough = keyType === "passthrough";
-  const effectiveOwnerId = currentUser?.id;
-  const effectiveOwnerName = currentUser?.name;
+  const [ownerId, setOwnerId] = useState<string | undefined>();
+  const { data: myTeams = [] } = useMyTeams({ includeDescendants: true });
+  const isKeyAdmin = capabilities?.some(
+    (grant) =>
+      grant.resource === "llmVirtualKey" &&
+      grant.scope === "*" &&
+      grant.action === "update",
+  );
+  const canChooseOwner =
+    isKeyAdmin ||
+    (!!billingTeamId &&
+      myTeams.some(
+        (team) =>
+          team.myRole === "admin" &&
+          (team.id === billingTeamId ||
+            team.descendantTeams?.some((child) => child.id === billingTeamId)),
+      ));
+  const effectiveOwnerId = canChooseOwner
+    ? (ownerId ?? currentUser?.id)
+    : currentUser?.id;
+  const ownerManagesAccess =
+    effectiveOwnerId !== currentUser?.id && !isKeyAdmin;
+  const effectiveOwnerName =
+    effectiveOwnerId === currentUser?.id ? currentUser?.name : undefined;
   const generatedName = useMemo(
     () =>
       isPassthrough
@@ -203,6 +233,7 @@ export function CreateVirtualKeyDialog({
     prevOpenRef.current = open;
     if (open && !wasOpen) {
       setCreatedKey(null);
+      setOwnerId(undefined);
       setIncludeFutureProviders(false);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
@@ -224,6 +255,7 @@ export function CreateVirtualKeyDialog({
       setSpendCap(null);
       setGrants([]);
       setModelPoolIds([]);
+      setAutoRouterIds([]);
       setLabels([]);
       initialSnapshotRef.current = {
         keyType,
@@ -236,6 +268,7 @@ export function CreateVirtualKeyDialog({
         grants: [],
         modelPoolIds: [],
         labels: [],
+        ownerId: undefined,
       };
     }
   }, [open, defaultExpirationSeconds, keyType, generatedName, isPassthrough]);
@@ -274,12 +307,13 @@ export function CreateVirtualKeyDialog({
     });
   }, [createdKeyValue, generatedName, open]);
 
-  const hasProviderKeys =
-    isPassthrough || includeFutureProviders || providerApiKeyIds.length > 0;
+  const hasAccess =
+    isPassthrough ||
+    includeFutureProviders ||
+    providerApiKeyIds.length > 0 ||
+    (canSetModelPools && modelPoolIds.length > 0);
   const canSubmit =
-    newKeyName.trim().length > 0 &&
-    hasProviderKeys &&
-    !createMutation.isPending;
+    newKeyName.trim().length > 0 && hasAccess && !createMutation.isPending;
 
   // Once the key is created the form is replaced by the reveal view, so there
   // is nothing left to lose — only guard the editable form.
@@ -297,6 +331,7 @@ export function CreateVirtualKeyDialog({
       grants,
       modelPoolIds,
       labels,
+      ownerId,
     });
 
   const handleCreate = useCallback(async () => {
@@ -308,6 +343,9 @@ export function CreateVirtualKeyDialog({
       labels: finalLabels,
       billingTeamId: billingTeamId ?? undefined,
       spendCap: spendCap ?? undefined,
+      ...(effectiveOwnerId !== currentUser?.id && {
+        ownerId: effectiveOwnerId,
+      }),
     };
     try {
       const result = await createMutation.mutateAsync({
@@ -318,15 +356,21 @@ export function CreateVirtualKeyDialog({
               keyType: "standard",
               includeFutureProviders,
               providerApiKeys: providerApiKeyIds,
-              initialGrants: grants.map(({ subject, actions }) => ({
-                subject,
-                actions,
-              })),
+              initialGrants: (ownerManagesAccess ? [] : grants).map(
+                ({ subject, actions }) => ({
+                  subject,
+                  actions,
+                }),
+              ),
               ...(canSetModelPools && { modelPoolIds }),
+              ...(canSetAutoRouters &&
+                autoRouterIds.length > 0 && { autoRouterIds }),
             },
       });
       setNewKeyName("");
-      if (result?.value) {
+      if (result && !result.value) {
+        onOpenChange(false);
+      } else if (result?.value) {
         if (onCreated) {
           onCreated(result);
           onOpenChange(false);
@@ -338,11 +382,16 @@ export function CreateVirtualKeyDialog({
       // handled by mutation
     }
   }, [
+    effectiveOwnerId,
+    ownerManagesAccess,
+    currentUser?.id,
     canSetModelPools,
     createMutation,
     expiresAt,
     grants,
     modelPoolIds,
+    canSetAutoRouters,
+    autoRouterIds,
     isPassthrough,
     labels,
     includeFutureProviders,
@@ -355,7 +404,7 @@ export function CreateVirtualKeyDialog({
   ]);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const noProviderKeys = !isPassthrough && parentableKeys.length === 0;
+  const noProviderKeys = !hasAccess && parentableKeys.length === 0;
 
   return (
     <FormDialog
@@ -376,7 +425,7 @@ export function CreateVirtualKeyDialog({
           ? undefined
           : isPassthrough
             ? "It links requests that carry your own provider key to you."
-            : "Requests with this key go through the provider keys below."
+            : "Requests with this key use the provider keys or model pools selected below."
       }
       size={createdKeyValue ? "large" : "small"}
       className={createdKeyValue ? "max-w-4xl" : "sm:max-w-[720px]"}
@@ -398,6 +447,7 @@ export function CreateVirtualKeyDialog({
             <VirtualKeyConnectionGuide
               keyValue={createdKey.value}
               keyType={createdKey.keyType}
+              virtualApiKeyId={createdKey.id}
               mappedProviderKeys={createdKey.providerApiKeys}
               includeFutureProviders={createdKey.includeFutureProviders}
               connectionBaseUrl={connectionBaseUrl}
@@ -461,6 +511,34 @@ export function CreateVirtualKeyDialog({
                   onChange={setModelPoolIds}
                 />
               )}
+              {!isPassthrough && canSetAutoRouters && (
+                <AutoRoutersField
+                  value={autoRouterIds}
+                  onChange={setAutoRouterIds}
+                />
+              )}
+              {canChooseOwner && (
+                <div className="space-y-2">
+                  <Label>Key owner</Label>
+                  <RemoteUserSelect
+                    value={effectiveOwnerId ?? ""}
+                    onValueChange={setOwnerId}
+                    ariaLabel="Key owner"
+                    pinnedOption={
+                      currentUser
+                        ? {
+                            value: currentUser.id,
+                            label: currentUser.name ?? "You",
+                          }
+                        : undefined
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The owner must belong to the billing team or one of its
+                    child teams.
+                  </p>
+                </div>
+              )}
               <AdvancedSection keepMounted>
                 <BudgetFields
                   subject="key"
@@ -471,12 +549,18 @@ export function CreateVirtualKeyDialog({
                   spendCap={spendCap}
                   onSpendCapChange={setSpendCap}
                 />
-                {!isPassthrough && (
+                {!isPassthrough && !ownerManagesAccess && (
                   <ResourceAccessSection
                     resource="llmVirtualKey"
                     grants={grants}
                     onGrantsChange={setGrants}
                   />
+                )}
+                {!isPassthrough && ownerManagesAccess && (
+                  <p className="text-sm text-muted-foreground">
+                    The selected owner controls who can use this key and can
+                    copy it from Virtual Keys after creation.
+                  </p>
                 )}
                 <AdvancedLabelsSection
                   attributionSource="credential"
@@ -491,7 +575,11 @@ export function CreateVirtualKeyDialog({
         <DialogStickyFooter className="mt-0">
           {noProviderKeys && !createdKeyValue && (
             <p className="mr-auto text-xs text-muted-foreground">
-              <span>Add a provider key first.</span>
+              <span>
+                {canSetModelPools
+                  ? "Add a provider key or select a model pool."
+                  : "Add a provider key first."}
+              </span>
             </p>
           )}
           <DialogCancelButton>

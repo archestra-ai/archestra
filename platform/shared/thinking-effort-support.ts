@@ -1,3 +1,4 @@
+import { getBedrockReasoningFamily } from "./bedrock-models";
 import { supportsGeminiThinkingEffort } from "./gemini-models";
 import {
   anthropicSupportsThinkingEffort,
@@ -33,11 +34,13 @@ export function supportsThinkingEffort(
       return supportsGeminiThinkingEffort(modelId);
     case "openai":
       return supportsOpenAiThinkingEffort(modelId);
+    case "bedrock":
+      return getBedrockReasoningFamily(modelId) !== null;
     case "anthropic":
       return anthropicSupportsThinkingEffort(modelId);
     default:
-      // Providers that reach the same models through another surface (bedrock,
-      // azure, github-copilot, …) are deliberately out: each speaks its own
+      // Providers that reach the same models through another surface (azure,
+      // github-copilot, …) are deliberately out: each speaks its own
       // reasoning dialect, and none is wired through the chat route yet.
       return false;
   }

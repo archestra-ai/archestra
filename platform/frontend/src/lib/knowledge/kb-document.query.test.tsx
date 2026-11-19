@@ -8,15 +8,14 @@ const mockGetConnectorDocument = vi.fn();
 const mockDeleteConnectorDocument = vi.fn();
 const mockHandleApiError = vi.fn();
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getConnectorDocuments: (...args: unknown[]) =>
-      mockGetConnectorDocuments(...args),
-    getConnectorDocument: (...args: unknown[]) =>
-      mockGetConnectorDocument(...args),
-    deleteConnectorDocument: (...args: unknown[]) =>
-      mockDeleteConnectorDocument(...args),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getConnectorDocuments: (...args: unknown[]) =>
+    mockGetConnectorDocuments(...args),
+  getConnectorDocument: (...args: unknown[]) =>
+    mockGetConnectorDocument(...args),
+  deleteConnectorDocument: (...args: unknown[]) =>
+    mockDeleteConnectorDocument(...args),
 }));
 
 vi.mock("@/lib/utils/api", () => ({

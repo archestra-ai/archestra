@@ -48,7 +48,7 @@ export function AppearanceSettings() {
     APPEARANCE_PAGES[0];
   const setPageHeader = useSetSettingsPageHeader();
   useEffect(() => {
-    setPageHeader({ title: "Appearance", description: page.description });
+    setPageHeader({ title: page.label, description: page.description });
     return () => setPageHeader(null);
   }, [page, setPageHeader]);
   const { data: canRead } = useHasPermissions({
@@ -167,6 +167,7 @@ function AppearanceForm({
     const notificationChanged = !!(
       dirtyFields.notificationContent ||
       dirtyFields.notificationExpiresAt ||
+      dirtyFields.notificationDismissible ||
       dirtyFields.notificationDeleted
     );
     setSaving(true);
@@ -198,12 +199,14 @@ function AppearanceForm({
                   content,
                   expiresAt:
                     current.notificationExpiresAt?.toISOString() ?? null,
+                  dismissible: current.notificationDismissible,
                   isActive: true,
                 },
               })
             : await createNotification.mutateAsync({
                 content,
                 expiresAt: current.notificationExpiresAt?.toISOString(),
+                dismissible: current.notificationDismissible,
               });
           if (!result) return;
           savedNotification = result;

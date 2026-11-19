@@ -47,7 +47,7 @@ function uploadPaths(
 
 describe("skillSandboxRuntimeService", () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   test("is disabled when no Dagger runner host is configured", () => {
@@ -98,6 +98,63 @@ describe("skillSandboxRuntimeService", () => {
     expect((error as Error).message).toBe(message);
   });
 
+  test("keys each command by its own id, live and on replay", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    // The engine caches by exec definition, so the id is what keeps two
+    // sandboxes running equal commands from sharing one result, and what lets a
+    // replay reuse the live run instead of executing it again.
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const newSandbox = () =>
+      SkillSandboxModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: null,
+        defaultCwd: "/home/sandbox",
+      });
+    const first = await newSandbox();
+    const second = await newSandbox();
+    enableService();
+    const runtime = vi
+      .spyOn(sandboxRuntimeService, "runCommand")
+      .mockResolvedValue({
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 1,
+        timedOut: false,
+        truncated: false,
+      });
+    const run = (sandboxId: string) =>
+      skillSandboxRuntimeService.runCommand({
+        sandboxId: asSandboxId(sandboxId),
+        caller: { userId: user.id, organizationId: org.id },
+        command: "date +%N",
+      });
+
+    const firstRun = await run(first.id);
+    const secondRun = await run(second.id);
+    await run(first.id);
+
+    const sent = runtime.mock.calls.map(([params]) => params);
+    expect(sent[0]?.commandId).toBe(firstRun.commandId);
+    expect(sent[1]?.commandId).toBe(secondRun.commandId);
+    expect(firstRun.commandId).not.toBe(secondRun.commandId);
+    expect(sent[2]?.replayEntries).toEqual([
+      {
+        kind: "command",
+        command: {
+          id: firstRun.commandId,
+          command: "date +%N",
+          cwd: "/home/sandbox",
+          timeoutSeconds: sent[0]?.timeoutSeconds,
+        },
+      },
+    ]);
+  });
+
   test("exportArtifact rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({
@@ -114,7 +171,7 @@ describe("skillSandboxRuntimeService", () => {
     1.5,
     Number.NaN,
   ])("runCommand rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
 
     await expect(
       enabled.runCommand({
@@ -127,7 +184,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("runCommand rejects empty commands", async () => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
 
     await expect(
       enabled.runCommand({
@@ -139,7 +196,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("runCommand rejects NUL bytes in command or cwd before executing", async () => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
     const NUL = String.fromCharCode(0);
 
     await expect(
@@ -161,7 +218,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
     const sandboxId = asSandboxId(crypto.randomUUID());
@@ -179,8 +236,7 @@ describe("skillSandboxRuntimeService", () => {
           }),
       ),
     );
-    // use message check rather than instanceof: vi.resetModules creates a fresh
-    // class so instanceof against the top-level import would always be false.
+    // Missing sandbox rows also reject; count only queue-limit rejections.
     const queueErrors = results.filter(
       (r) =>
         r.status === "rejected" &&
@@ -190,7 +246,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("queue guard resets after the saturated queue drains", async () => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
     const sandboxId = asSandboxId(crypto.randomUUID());
@@ -222,7 +278,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("a call enqueued right as the previous one settles is not lost", async () => {
-    const enabled = await importEnabledService();
+    const enabled = enableService();
 
     const sandboxId = asSandboxId(crypto.randomUUID());
     const run = () =>
@@ -246,25 +302,11 @@ describe("skillSandboxRuntimeService", () => {
   });
 });
 
-/**
- * the queue tests need the service compiled with the sandbox feature on; each
- * gets a fresh module registry so the singleton's queue state starts empty.
- */
-async function importEnabledService() {
-  vi.resetModules();
-  vi.stubEnv(
-    "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-    "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-  );
-  // The runner host enables the runtime, but the ARCHESTRA_CODE_RUNTIME_ENABLED
-  // kill switch (via .env, whose shipped default is "false") would win. Set it
-  // to a non-"false" value so enablement is deterministic regardless of the
-  // developer's .env.
-  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "");
-  const { skillSandboxRuntimeService: enabled } = await import(
-    "./skill-sandbox-runtime-service"
-  );
-  return enabled;
+/** Each test uses its own sandbox id and waits for its queue to drain. */
+function enableService() {
+  config.skillsSandbox.enabled = true;
+  vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+  return skillSandboxRuntimeService;
 }
 
 describe("__internals", () => {

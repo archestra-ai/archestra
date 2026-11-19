@@ -1,3 +1,4 @@
+import { DesktopMcpInstallDialog } from "@/app/mcp/registry/_parts/desktop-mcp-install-dialog";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { ManageUsersDialog } from "@/app/mcp/registry/_parts/manage-users-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -51,6 +52,16 @@ export default function McpInstallDialogsImpl({
           catalogItem={orchestrator.localServerCatalogItem}
           isInstalling={orchestrator.isInstalling}
           isReauth={orchestrator.isReauth}
+        />
+      )}
+
+      {orchestrator.desktopCatalogItem && (
+        <DesktopMcpInstallDialog
+          isOpen={orchestrator.isDialogOpened("desktop-install")}
+          onClose={orchestrator.closeDesktopInstall}
+          onAdd={orchestrator.handleDesktopAdd}
+          catalogItem={orchestrator.desktopCatalogItem}
+          isAdding={orchestrator.isInstalling}
         />
       )}
 

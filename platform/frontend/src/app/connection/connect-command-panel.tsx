@@ -95,7 +95,10 @@ import {
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { organizationSubscriptionSubtitle } from "@/lib/organization-subscription";
+import {
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import {
   isDeliverablePlugin,
   type PluginListItem,
@@ -114,7 +117,12 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
-import { ScriptBlock, useCopy } from "./connect-page-parts";
+import {
+  ScriptBlock,
+  SetupActionArea,
+  SetupActionRow,
+  useCopy,
+} from "./connect-page-parts";
 import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
@@ -126,6 +134,7 @@ import {
   defaultPerUserKeyId,
   initialConnectProvider,
   kimiCodeDefaultModel,
+  perUserAccountChoiceNeeded,
 } from "./connection-setup-payload";
 import {
   CopilotAccountCards,
@@ -356,7 +365,10 @@ export function ConnectCommandPanel({
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({ plugin: ["read", "update"] }, "*");
   const pluginsQueryEnabled =
-    client.id !== "pi" && pluginsEnabled && canAdminPlugins === true;
+    client.id !== "pi" &&
+    client.id !== "grok-build" &&
+    pluginsEnabled &&
+    canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
@@ -394,12 +406,17 @@ export function ConnectCommandPanel({
   // OpenCode and Kilo Code get one virtual key for many providers. Other
   // clients get a virtual key when an admin mapped keys for them, and
   // otherwise keep the user's own provider key or subscription.
+  const [grokAuthChoice, setGrokAuthChoice] = useState<
+    "native-session" | "provider-key" | "virtual-key" | null
+  >(null);
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || client.id === "pi" || openCodeFamily
-      ? "primary-providers"
-      : adminMappedProviders.size > 0 && canAttribute === true
-        ? "virtual-key"
-        : "provider-key";
+    client.id === "grok-build"
+      ? (grokAuthChoice ?? "native-session")
+      : client.id === "cursor" || client.id === "pi" || openCodeFamily
+        ? "primary-providers"
+        : adminMappedProviders.size > 0 && canAttribute === true
+          ? "virtual-key"
+          : "provider-key";
   const allPrimaryProviders =
     (openCodeFamily || client.id === "cursor" || client.id === "pi") &&
     proxyAuth === "primary-providers";
@@ -492,8 +509,20 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  const { data: availableKeys, isPending: availableKeysPending } =
+  // A GitHub Copilot account whose plan the admins turned off is never offered,
+  // so a setup can't bind it: each plan's own switch decides. Other providers
+  // keep their own rules here (the provider list already drops hidden ones).
+  const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
+  const availableKeys = useMemo(
+    () =>
+      allAvailableKeys?.filter(
+        (key) =>
+          key.provider !== "github-copilot" ||
+          !providerCatalog.isKeyHidden(key),
+      ),
+    [allAvailableKeys, providerCatalog],
+  );
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -553,13 +582,17 @@ export function ConnectCommandPanel({
             );
       return supportedProviders.filter((provider) => backing.has(provider));
     }
+    if (proxyAuth === "native-session")
+      return supportedProviders.filter((provider) => provider === "xai");
     if (proxyAuth !== "virtual-key") return supportedProviders;
     // Virtual-key mode means an admin mapped keys for this client, so its
     // providers are the mapped ones. Per-user providers (GitHub Copilot) stay:
     // the user connects their own account inline before a key is minted.
     return supportedProviders.filter(
       (p) =>
-        (adminMappedProviders.has(p) && configuredProviders.has(p)) ||
+        ((adminMappedProviders.has(p) ||
+          (client.id === "grok-build" && adminMappedProviders.size === 0)) &&
+          configuredProviders.has(p)) ||
         providerRequiresPerUserCredential(p),
     );
   }, [
@@ -569,6 +602,7 @@ export function ConnectCommandPanel({
     allPrimaryProviders,
     usableOpenCodeKeys,
     adminMappedProviders,
+    client.id,
   ]);
   // The provider the setup starts on: with the person's own account routing
   // the models, the client's own comes first (Copilot CLI → GitHub Copilot);
@@ -600,7 +634,8 @@ export function ConnectCommandPanel({
   // A per-user provider can have more than one account the user may use: their
   // own sign-in and organization plans shared with them (GitHub Copilot paid by
   // a GitHub organization). Nothing picked binds the user's own sign-in, as the
-  // server does; without one, the first plan.
+  // server does; without one, their only plan. Plans of several organizations
+  // wait for a pick: each bills its own organization and serves its own models.
   const perUserKeys = useMemo(
     () =>
       providerIsPerUser
@@ -621,12 +656,27 @@ export function ConnectCommandPanel({
     ownSignIns.find((key) => key.isPrimary) ??
     ownSignIns[0] ??
     null;
+  const accountChoiceNeeded =
+    !!activeLlmProxyId &&
+    !!provider &&
+    !boundPerUserKey &&
+    perUserAccountChoiceNeeded(perUserKeys, provider);
+  // On the command page the choice is in the proxy editor, as the cards are.
+  useEffect(() => {
+    if (accountChoiceNeeded && !connectRequest) setEditing("proxy");
+  }, [accountChoiceNeeded, connectRequest]);
   const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
     key.isGithubAppKey
-      ? `Enterprise plan · ${key.githubOrganization ?? key.name}`
+      ? organizationSubscriptionName(key, providerCatalog.enterprisePlanName)
       : ownSignIns.length > 1
         ? `Personal subscription · ${key.name}`
         : "Personal subscription";
+  // An enterprise plan's name already says GitHub Copilot, so it stands alone
+  // where a personal subscription follows the provider's name.
+  const routedAccountLabel = (key: (typeof perUserKeys)[number]) =>
+    key.isGithubAppKey
+      ? perUserKeyLabel(key)
+      : `${provider ? providerCatalog.label(provider) : "Your provider"} · ${perUserKeyLabel(key)}`;
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -637,10 +687,15 @@ export function ConnectCommandPanel({
     client.id === "copilot-cli" ||
     client.id === "claude-desktop" ||
     client.id === "pi" ||
-    client.id === "kimi-code";
+    client.id === "kimi-code" ||
+    client.id === "grok-build";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
+  const [grokCustomModel, setGrokCustomModel] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
-  useEffect(() => setModelChoice(null), [provider]);
+  useEffect(() => {
+    setModelChoice(null);
+    setGrokCustomModel(false);
+  }, [provider]);
   const piModelKeyId =
     client.id === "pi" && provider
       ? (organization?.connectionClientProviderKeys?.pi?.find(
@@ -678,7 +733,8 @@ export function ConnectCommandPanel({
     boundCatalogPending ? {} : modelCatalog.modelsByProvider;
   // The provider's models this client can run over the API its setup uses:
   // Copilot CLI's Responses setups leave out models served only on Chat
-  // Completions, such as Claude on GitHub Copilot.
+  // Completions, such as Claude on GitHub Copilot. Grok is not filtered here,
+  // so a native Automatic choice never inherits that list.
   const providerModels = useMemo(
     () =>
       provider
@@ -753,22 +809,40 @@ export function ConnectCommandPanel({
   })();
   const modelCatalogWaiting =
     perUserCatalogLoading || (perUserCatalogEmpty && modelSyncOutcome === null);
-  const effectiveModel =
+  const recommendedModel =
     supportsModelChoice && provider
-      ? (modelChoice ??
-        (client.id === "claude-desktop"
-          ? "claude-haiku-4-5-20251001"
-          : (defaultConnectionModel({
-              provider,
-              modelIds: providerModels.map((model) => model.id),
-            }) ?? kimiCodeDefaultModel(client.id, provider))))
+      ? client.id === "claude-desktop"
+        ? "claude-haiku-4-5-20251001"
+        : (defaultConnectionModel({
+            provider,
+            allowProviderDefault:
+              client.id === "grok-build" && proxyAuth === "provider-key",
+            modelIds: providerModels.map((model) => model.id),
+          }) ?? kimiCodeDefaultModel(client.id, provider))
       : null;
+  const selectedModel =
+    supportsModelChoice && provider ? (modelChoice ?? recommendedModel) : null;
+  const grokAutomaticModel =
+    client.id === "grok-build" && provider === "xai" && modelChoice === null;
+  const effectiveModel = grokAutomaticModel
+    ? null
+    : client.id === "grok-build"
+      ? selectedModel?.trim() || null
+      : selectedModel;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
     const ids = providerModels.map((m) => m.id);
     // the current value stays selectable even when it's not in the synced list
     return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
   }, [supportsModelChoice, provider, providerModels, effectiveModel]);
+  const grokCatalogModels = providerModels.map((model) => model.id);
+  const grokModelSelection =
+    grokCustomModel ||
+    (modelChoice !== null && !grokCatalogModels.includes(modelChoice))
+      ? "custom"
+      : modelChoice === null
+        ? "automatic"
+        : `catalog:${modelChoice}`;
 
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
@@ -853,28 +927,37 @@ export function ConnectCommandPanel({
   const accountProblem =
     needsPerUserConnect && provider
       ? `Connect ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} account${optionsPlace} to approve.`
-      : null;
-  const selectionProblem =
-    [
-      supportsModelChoice &&
-      proxyActive &&
-      // Without an account, the connect gate names the next step.
-      !needsPerUserConnect &&
-      !modelCatalogWaiting &&
-      (!effectiveModel ||
-        (client.id === "pi" &&
-          (!provider ||
-            !(modelsByProvider[provider] ?? []).some(
-              (item) => item.id === effectiveModel,
-            ))))
-        ? providerIsPerUser && boundPerUserKey
+      : accountChoiceNeeded && provider
+        ? `Choose the ${providerCatalog.label(provider)} account this setup uses${optionsPlace}. Each organization's plan is billed for its own requests.`
+        : null;
+  const modelProblem =
+    supportsModelChoice &&
+    proxyActive &&
+    !grokAutomaticModel &&
+    !needsPerUserConnect &&
+    !accountChoiceNeeded &&
+    !modelCatalogWaiting &&
+    (!effectiveModel ||
+      (client.id === "grok-build" &&
+        !/^[\x20-\x7E]{1,128}$/.test(effectiveModel)) ||
+      (client.id === "pi" &&
+        (!provider ||
+          !(modelsByProvider[provider] ?? []).some(
+            (item) => item.id === effectiveModel,
+          ))))
+      ? client.id === "grok-build"
+        ? "Enter a model ID served by the selected provider (1–128 printable characters)."
+        : providerIsPerUser && boundPerUserKey
           ? perUserCatalogEmpty
             ? `${modelSyncOutcome} Retry the refresh in Setup options.`
             : `None of the models your ${perUserKeyLabel(boundPerUserKey)} serves is available through the Responses API, which ${client.label} connects through. Choose another account.`
           : provider && !modelSourceConnected
             ? `Add ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} key to list the models ${client.label} can run, or choose a provider with one${optionsPlace}.`
             : "Choose a model served by your provider, or sync its model catalog before connecting."
-        : null,
+      : null;
+  const selectionProblem =
+    [
+      modelProblem,
       supportsModelChoice &&
       proxyActive &&
       provider &&
@@ -897,19 +980,30 @@ export function ConnectCommandPanel({
   // What the approval page reports above the card and on the Approve button.
   const approvalProblem = accountProblem ?? selectionProblem;
   useEffect(() => {
+    if (client.id === "grok-build" && modelProblem) setCustomizing(true);
+  }, [client.id, modelProblem]);
+  useEffect(() => {
     // The download band prepares nothing until asked, so it stays quiet too.
-    if (selectionProblem && preparationEnabled) {
+    if (
+      selectionProblem &&
+      preparationEnabled &&
+      !(client.id === "grok-build" && selectionProblem === modelProblem)
+    ) {
       toast.error(selectionProblem, { id: SETUP_LIMIT_TOAST_ID });
     }
-  }, [selectionProblem, preparationEnabled]);
+  }, [selectionProblem, preparationEnabled, client.id, modelProblem]);
   // The approval page can't approve until the problem is fixed in Setup
   // options, so they open by themselves and stay open once the user has
   // something to change there; an account still to connect counts, its cards
   // are there. Judged only after the lists that decide it load: the model
-  // default is unknown until the catalog arrives.
+  // default is unknown until the catalog arrives. A Grok model problem is
+  // opened by its own effect and stays off this page-level notice.
   const optionsRequired =
     !!connectRequest &&
-    (selectionProblem !== null || needsPerUserConnect) &&
+    ((selectionProblem !== null &&
+      !(client.id === "grok-build" && selectionProblem === modelProblem)) ||
+      needsPerUserConnect ||
+      accountChoiceNeeded) &&
     !availableKeysPending &&
     !modelCatalog.isLoading &&
     !modelCatalogWaiting;
@@ -956,11 +1050,14 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      ((client.id === "codex" || client.id === "pi") &&
+      ((client.id === "codex" ||
+        client.id === "chatgpt" ||
+        client.id === "pi") &&
         provider === "openai") ||
       (client.id === "kimi-code" &&
         (provider === "kimi-code" || provider === "kimi")) ||
-      openCodeFamily);
+      openCodeFamily ||
+      client.id === "grok-build");
 
   // The backend's reason for refusing each setup request, by its body, so a
   // request's reason cannot be mixed up with another's.
@@ -1138,6 +1235,7 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
+      accountChoiceNeeded ||
       modelCatalogWaiting ||
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
@@ -1195,6 +1293,7 @@ export function ConnectCommandPanel({
     skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
+    accountChoiceNeeded,
     modelCatalogWaiting,
     selectionProblem,
     primaryRoutingBlocked,
@@ -1259,6 +1358,37 @@ export function ConnectCommandPanel({
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
   const canPickGateway =
     !!gateway && mcpGateways !== null && mcpGateways.length > 1;
+  const grokCredentialPicker =
+    client.id === "grok-build" ? (
+      <EditorField label="Credentials">
+        <Select
+          value={proxyAuth}
+          onValueChange={(value) =>
+            setGrokAuthChoice(
+              value as "native-session" | "provider-key" | "virtual-key",
+            )
+          }
+        >
+          <SelectTrigger aria-label="Grok credentials" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="native-session">
+              Your SuperGrok subscription (native login)
+            </SelectItem>
+            <SelectItem value="provider-key">
+              Your own API key (passthrough)
+            </SelectItem>
+            <SelectItem
+              value="virtual-key"
+              disabled={!canAttribute || configuredProviders.size === 0}
+            >
+              A personal virtual key
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </EditorField>
+    ) : null;
   const gatewayEditor = canPickGateway ? (
     <div className="grid gap-3">
       {mcpGateways && mcpGateways.length > 1 && gateway && (
@@ -1332,7 +1462,7 @@ export function ConnectCommandPanel({
           </span>
         ) : providers.length ? (
           <span>
-            {`Cursor's models go through the ${appName} Model Router with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
+            {`Cursor's models go through the ${appName} Unified Model API with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
           </span>
         ) : (
           <span>{CURSOR_NO_KEYS_MESSAGE}</span>
@@ -1342,14 +1472,22 @@ export function ConnectCommandPanel({
   );
 
   // Which of the user's accounts the provider bills, when there is a choice.
+  // Empty until the person picks one of several organizations' plans.
   const accountPicker =
-    proxyActive && provider && perUserKeys.length > 1 && boundPerUserKey ? (
-      <Select value={boundPerUserKey.id} onValueChange={setPerUserKeyChoice}>
+    proxyActive &&
+    provider &&
+    perUserKeys.length > 1 &&
+    (boundPerUserKey || accountChoiceNeeded) ? (
+      <Select
+        value={boundPerUserKey?.id ?? ""}
+        onValueChange={setPerUserKeyChoice}
+      >
         <SelectTrigger
           aria-label={`${providerCatalog.label(provider)} account`}
+          aria-invalid={accountChoiceNeeded}
           size="sm"
         >
-          <SelectValue />
+          <SelectValue placeholder="Choose an account" />
         </SelectTrigger>
         <SelectContent>
           {perUserKeys.map((key) => (
@@ -1371,13 +1509,18 @@ export function ConnectCommandPanel({
   // The GitHub Copilot accounts still to connect, as on the Model Providers
   // page: both before any is connected, then the one not in use. They have one
   // place, under the provider, on the command page and the approval page alike.
+  const hiddenCopilotPlans = {
+    personal: providerCatalog.isCopilotPlanHidden("personal"),
+    enterprise: providerCatalog.isCopilotPlanHidden("enterprise"),
+  };
   const accountCards =
     proxyActive &&
     provider === "github-copilot" &&
     providerIsPerUser &&
-    copilotAccountMissing(perUserKeys) ? (
+    copilotAccountMissing(perUserKeys, hiddenCopilotPlans) ? (
       <CopilotAccountCards
         keys={perUserKeys}
+        hiddenPlans={hiddenCopilotPlans}
         pending={createPerUserKey.isPending}
         onToken={connectOwnCopilot}
       />
@@ -1387,6 +1530,7 @@ export function ConnectCommandPanel({
     cursorProxyEditor
   ) : (
     <div className="grid gap-3">
+      {grokCredentialPicker}
       {/* Users pick a provider only for their own key or subscription; an
           admin-mapped virtual key already fixes it. */}
       {proxyAuth === "provider-key" && providers.length > 1 && (
@@ -1427,11 +1571,31 @@ export function ConnectCommandPanel({
                   ? `Create a personal virtual key for all primary model providers you can access, and make their models available in ${client.label}. Providers you sign in to from ${client.label} itself, such as a ChatGPT or Claude subscription, go through the proxy too.`
                   : "No usable primary model providers are available. Mark a compatible model provider key as primary."}
               </span>
+            ) : effectiveProxyAuth === "native-session" ? (
+              <span>
+                Reuses your native SuperGrok login, model names and model
+                selection. Grok refreshes its original credentials directly;
+                nothing is copied. Use /login inside Grok to renew your login.
+                {appName} protection appears in the session receipt. No API key
+                or organization model catalog is required. MCP authorization is
+                a separate sign-in.
+              </span>
             ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
                 <span>
                   The installer opens Claude subscription sign-in and configures
                   Desktop. Your token stays on your computer.
+                </span>
+              ) : client.id === "grok-build" ? (
+                <span>
+                  {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy. Choose native login instead to use your SuperGrok subscription.`}
+                  {passthroughAttributes ? (
+                    <span>
+                      {" "}
+                      A personal passthrough key attributes requests to you
+                      without replacing your provider credential.
+                    </span>
+                  ) : null}
                 </span>
               ) : passthroughAttributes ? (
                 <span>
@@ -1481,7 +1645,9 @@ export function ConnectCommandPanel({
 
   // What gets a model list, while there is none to choose from.
   const modelSourceHint =
-    !provider || modelSourceConnected ? null : providerIsPerUser ? (
+    !provider || modelSourceConnected ? null : accountChoiceNeeded ? (
+      <span>Choose an account above to list the models it serves.</span>
+    ) : providerIsPerUser ? (
       <span>
         {`Connect your ${providerCatalog.label(provider)} account above to list the models it serves.`}
       </span>
@@ -1509,9 +1675,59 @@ export function ConnectCommandPanel({
     );
   const modelEditor =
     supportsModelChoice && provider ? (
-      <div className="grid gap-1.5">
+      <div
+        className={
+          client.id === "grok-build" ? "grid min-w-0 gap-1.5" : "grid gap-1.5"
+        }
+      >
         <EditorField label="Model">
-          {modelCatalogWaiting ? (
+          {client.id === "grok-build" ? (
+            <div className="grid min-w-0 gap-2">
+              <Select
+                value={grokModelSelection}
+                onValueChange={(value) => {
+                  setGrokCustomModel(value === "custom");
+                  setModelChoice(
+                    value === "automatic"
+                      ? null
+                      : value === "custom"
+                        ? (modelChoice ?? "")
+                        : value.slice("catalog:".length),
+                  );
+                }}
+              >
+                <SelectTrigger aria-label="Model" className="w-full min-w-0">
+                  <SelectValue className="min-w-0 truncate" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatic">
+                    {provider === "xai"
+                      ? proxyAuth === "native-session"
+                        ? "Automatic — current subscription default"
+                        : "Automatic — latest available at setup"
+                      : `Automatic (recommended)${recommendedModel ? ` — ${recommendedModel}` : ""}`}
+                  </SelectItem>
+                  {Array.from(new Set(grokCatalogModels)).map((id) => (
+                    <SelectItem key={id} value={`catalog:${id}`}>
+                      {id}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom model…</SelectItem>
+                </SelectContent>
+              </Select>
+              {grokModelSelection === "custom" && (
+                <EditorField label="Custom model ID (advanced)">
+                  <Input
+                    value={modelChoice ?? ""}
+                    onChange={(event) => setModelChoice(event.target.value)}
+                    placeholder="Model id"
+                    aria-label="Custom model ID"
+                    aria-invalid={!!modelProblem}
+                  />
+                </EditorField>
+              )}
+            </div>
+          ) : modelCatalogWaiting ? (
             <div className="grid gap-1.5" data-testid="connect-model-loading">
               <Skeleton className="h-9 w-full" />
               <p className="text-xs text-muted-foreground">
@@ -1559,6 +1775,7 @@ export function ConnectCommandPanel({
               value={effectiveModel ?? ""}
               onChange={(event) => setModelChoice(event.target.value || null)}
               placeholder="Model id"
+              aria-label="Model"
             />
           )}
         </EditorField>
@@ -1570,7 +1787,15 @@ export function ConnectCommandPanel({
                   ? "Selected by default in Claude Desktop after setup"
                   : client.id === "pi"
                     ? "Selected by the printed Pi launch command"
-                    : "Saved as Copilot CLI's model by the setup script"}
+                    : client.id === "kimi-code"
+                      ? "Saved in Kimi Code's provider entry by the setup script"
+                      : client.id === "grok-build"
+                        ? provider === "xai"
+                          ? proxyAuth === "native-session"
+                            ? "Automatic keeps your native model preference or the account default. Reuses your native login and authenticated catalog; no API key or organization catalog is required. Select models inside Grok with /model or -m; each selection stays protected"
+                            : "Automatic verifies xAI’s current coding recommendation against models available to your account, locally at setup or launch. Catalog and Custom choices stay pinned"
+                          : "Automatic is recommended; choose Custom model only for an advanced deployment"
+                        : "Saved as Copilot CLI's model by the setup script"}
                 {providerIsPerUser && boundPerUserKey
                   ? ` — the models your ${perUserKeyLabel(boundPerUserKey)} serves.`
                   : ` — pick a model your ${providerCatalog.label(provider)} access serves.`}
@@ -1583,6 +1808,12 @@ export function ConnectCommandPanel({
             </>
           )}
         </p>
+        {client.id === "grok-build" && modelProblem && (
+          <InlineNotice variant="error" role="alert">
+            <TriangleAlert aria-hidden />
+            <InlineNoticeText>{modelProblem}</InlineNoticeText>
+          </InlineNotice>
+        )}
       </div>
     ) : null;
 
@@ -1678,17 +1909,19 @@ export function ConnectCommandPanel({
     ? "Loading plugins"
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
-      : modelCatalogWaiting
-        ? "Loading the models your account serves"
-        : selectionProblem
-          ? selectionProblem
-          : failed
-            ? "Setup command generation failed"
-            : result || adoptedSetupId
-              ? "Setup command ready"
-              : hasRunnableAnything
-                ? "Generating setup command"
-                : "No setup command selected";
+      : accountChoiceNeeded
+        ? `Choose the ${provider ? providerCatalog.label(provider) : "provider"} account to generate the setup command`
+        : modelCatalogWaiting
+          ? "Loading the models your account serves"
+          : selectionProblem
+            ? selectionProblem
+            : failed
+              ? "Setup command generation failed"
+              : result || adoptedSetupId
+                ? "Setup command ready"
+                : hasRunnableAnything
+                  ? "Generating setup command"
+                  : "No setup command selected";
 
   // The approval page's setup options: how models authenticate is shown, not
   // chosen — an admin's per-client key mapping decides it.
@@ -1707,7 +1940,11 @@ export function ConnectCommandPanel({
   const consentProviderPicker =
     proxyAuth === "provider-key" && providers.length > 1 ? (
       <Select value={provider ?? undefined} onValueChange={onProviderSelect}>
-        <SelectTrigger aria-label="Provider" size="sm">
+        <SelectTrigger
+          aria-label="Provider"
+          size={client.id === "grok-build" ? "default" : "sm"}
+          className={client.id === "grok-build" ? "w-full" : undefined}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1742,7 +1979,9 @@ export function ConnectCommandPanel({
               ? "Everything is left out. Choose at least one thing to include."
               : needsPerUserConnect
                 ? `${commandStatus}. Use the Prompt option, or ask your admin.`
-                : selectionProblem
+                : accountChoiceNeeded
+                  ? `${commandStatus}.`
+                  : selectionProblem
         }
       />
     );
@@ -1811,7 +2050,7 @@ export function ConnectCommandPanel({
                 {client.id === "cursor" ? (
                   <span>
                     {!cursorRoutingUnavailable
-                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Model Router using a virtual key`
+                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Unified Model API using a virtual key`
                       : "Cursor keeps its own models"}
                   </span>
                 ) : allPrimaryProviders ? (
@@ -1826,11 +2065,15 @@ export function ConnectCommandPanel({
                   <>
                     Route{" "}
                     <span className="font-medium text-foreground">
-                      {providerCatalog.label(provider)}
+                      {providerIsPerUser && boundPerUserKey?.isGithubAppKey
+                        ? perUserKeyLabel(boundPerUserKey)
+                        : providerCatalog.label(provider)}
                     </span>{" "}
-                    {providerIsPerUser && boundPerUserKey && (
-                      <span>({perUserKeyLabel(boundPerUserKey)}) </span>
-                    )}
+                    {providerIsPerUser &&
+                      boundPerUserKey &&
+                      !boundPerUserKey.isGithubAppKey && (
+                        <span>({perUserKeyLabel(boundPerUserKey)}) </span>
+                      )}
                     through{" "}
                     <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                     using{" "}
@@ -1869,7 +2112,11 @@ export function ConnectCommandPanel({
               >
                 Run <span>{client.label}</span> with{" "}
                 <span className="font-medium text-foreground">
-                  {effectiveModel ?? "a model you choose"}
+                  {grokAutomaticModel
+                    ? proxyAuth === "native-session"
+                      ? "your current native subscription default"
+                      : "the latest available xAI coding model"
+                    : (effectiveModel ?? "a model you choose")}
                 </span>
               </SetupSummaryRow>
             )}
@@ -2000,6 +2247,12 @@ export function ConnectCommandPanel({
                     include: includeProxy,
                     setInclude: setIncludeProxy,
                     mode: consentProxyMode,
+                    ownKeyLabel:
+                      client.id === "grok-build"
+                        ? proxyAuth === "native-session"
+                          ? "Your SuperGrok subscription (native login)"
+                          : "Your own API key (passthrough)"
+                        : undefined,
                     providerLabels:
                       (effectiveProxyAuth === "provider-key" ||
                         providerIsPerUser) &&
@@ -2008,12 +2261,32 @@ export function ConnectCommandPanel({
                         : providers.map((p) => providerCatalog.label(p)),
                     accountLabel:
                       providerIsPerUser && boundPerUserKey
-                        ? perUserKeyLabel(boundPerUserKey)
-                        : null,
-                    providerPicker: consentProviderPicker,
+                        ? routedAccountLabel(boundPerUserKey)
+                        : accountChoiceNeeded
+                          ? "Choose an account"
+                          : null,
+                    providerPicker: grokCredentialPicker ? (
+                      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                        {grokCredentialPicker}
+                        <EditorField label="Provider">
+                          {consentProviderPicker ?? (
+                            <Input
+                              aria-label="Provider"
+                              value={
+                                provider ? providerCatalog.label(provider) : ""
+                              }
+                              readOnly
+                            />
+                          )}
+                        </EditorField>
+                      </div>
+                    ) : (
+                      consentProviderPicker
+                    ),
                     accountPicker,
                     accountCards,
                     modelPicker: proxyActive ? modelEditor : null,
+                    stackedModelFields: client.id === "grok-build",
                   }
                 : null
             }
@@ -2166,7 +2439,8 @@ export function ConnectCommandPanel({
                 />
               </div>
             ) : null)}
-          {approvalProblem ? (
+          {approvalProblem &&
+          !(client.id === "grok-build" && approvalProblem === modelProblem) ? (
             <InlineNotice variant="error" role="alert">
               <TriangleAlert aria-hidden />
               <InlineNoticeText>{approvalProblem}</InlineNoticeText>
@@ -2199,9 +2473,12 @@ export function ConnectCommandPanel({
                 operating system. Choose another platform or add a connection
                 resource.
               </div>
-            ) : needsPerUserConnect && provider && !connectRequest ? (
+            ) : (needsPerUserConnect || accountChoiceNeeded) &&
+              provider &&
+              !connectRequest ? (
               <PerUserConnectNotice
                 providerLabel={providerCatalog.label(provider)}
+                choose={accountChoiceNeeded}
               />
             ) : connectRequest ? (
               <ClientConnectionApproval
@@ -2417,7 +2694,7 @@ function DesktopDownload({
     const shown = wrappedCommand(command);
     return (
       // The command box every agent uses.
-      <ActionArea sizingCommand={command}>
+      <SetupActionArea sizingCommand={shown}>
         <ScriptBlock
           command={shown}
           copied={copied}
@@ -2430,13 +2707,13 @@ function DesktopDownload({
           // with the link, may use the full width.
           className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
         />
-      </ActionArea>
+      </SetupActionArea>
     );
   }
   if (terminal)
     return (
-      <ActionArea sizingCommand={sizingCommand}>
-        <ActionRow>
+      <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+        <SetupActionRow>
           {failed ? (
             <>
               <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -2469,13 +2746,13 @@ function DesktopDownload({
               </span>
             </>
           )}
-        </ActionRow>
-      </ActionArea>
+        </SetupActionRow>
+      </SetupActionArea>
     );
   const downloaded = !!installerUrl && downloadedUrl === installerUrl;
   return (
-    <ActionArea sizingCommand={sizingCommand}>
-      <ActionRow>
+    <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+      <SetupActionRow>
         <Download className="size-4 shrink-0 text-muted-foreground" />
         {failed ? (
           <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -2532,50 +2809,8 @@ function DesktopDownload({
             </span>
           </Button>
         )}
-      </ActionRow>
-    </ActionArea>
-  );
-}
-
-/**
- * Where the Desktop band's download box and command box sit. An invisible
- * command box under them sets the height: as tall as the command, wrapped at
- * this width, so switching between the two, or a command arriving, moves
- * nothing.
- */
-function ActionArea({
-  sizingCommand,
-  children,
-}: {
-  sizingCommand: string;
-  children: React.ReactNode;
-}) {
-  return (
-    // minmax(0, 1fr): the column follows the card's width, not the command's
-    // longest line, which scrolls inside its box on a narrow window.
-    <div className="mt-2 grid grid-cols-[minmax(0,1fr)]">
-      <div aria-hidden data-sizer className="invisible min-w-0 [grid-area:1/1]">
-        <ScriptBlock
-          command={wrappedCommand(sizingCommand)}
-          copied={false}
-          disabled
-          onCopy={() => {}}
-          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
-        />
-      </div>
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] [grid-area:1/1]">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/** The download box: the command box's surface, filling the action area. */
-function ActionRow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-20 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
-      {children}
-    </div>
+      </SetupActionRow>
+    </SetupActionArea>
   );
 }
 
@@ -2613,10 +2848,19 @@ function wrappedCommand(command: string): string {
  * selected and the person has no account for it yet. The accounts are
  * connected in the setup review, under the provider; this names that step.
  */
-function PerUserConnectNotice({ providerLabel }: { providerLabel: string }) {
+function PerUserConnectNotice({
+  providerLabel,
+  choose,
+}: {
+  providerLabel: string;
+  /** Accounts exist, but the person must pick which one the setup uses. */
+  choose: boolean;
+}) {
   return (
     <p className="px-5 py-4 text-[13px] text-foreground">
-      {`Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
+      {choose
+        ? `Choose the ${providerLabel} account in the setup review above to generate the command. Each organization's plan is billed for its own requests.`
+        : `Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
     </p>
   );
 }
@@ -2779,7 +3023,7 @@ function EditorField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>

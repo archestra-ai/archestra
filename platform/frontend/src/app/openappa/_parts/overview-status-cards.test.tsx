@@ -61,6 +61,9 @@ const source = {
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
   setupPullRequestNumber: null,
+  selfService: false,
+  selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 const validationRun: PolicyTestRun = {
   id: "latest-run",
@@ -108,6 +111,12 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source: null,
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -116,6 +125,9 @@ beforeEach(() => {
         featureEnabled: true,
         active: enabled,
         unsupportedClientAction: "bypass",
+        breakTheGlassEnabled: true,
+        humanApprovalMode: "unattended",
+        unapprovableBlockMode: "refuse",
       }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
@@ -192,7 +204,7 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(screen.getByText("Failed", statusBadge)).toBeVisible();
   expect(
     screen.getByRole("link", { name: "View Validations" }),
-  ).toHaveAttribute("href", "/openappa/validation");
+  ).toHaveAttribute("href", "/openappa/policy");
 });
 
 test.each([
@@ -228,6 +240,15 @@ test.each([
   );
   show();
   expect(await screen.findByText(status, statusBadge)).toBeVisible();
+});
+
+test("the Yells card lists the Break the glass settings that let calls through", async () => {
+  show();
+  expect(await screen.findByText("Human approval:")).toBeInTheDocument();
+  expect(screen.getByText("waived in unattended sessions")).toBeInTheDocument();
+  expect(screen.getByText("Yell:")).toBeInTheDocument();
+  // Other blocked calls keep the block by default, so it says nothing.
+  expect(screen.queryByText("Other blocked calls:")).toBeNull();
 });
 
 test("unavailable runs show cannot run without detailed errors or invented counts", async () => {
@@ -361,7 +382,7 @@ test("a failed sync says so and links to the sync settings", async () => {
   );
 });
 
-test("shows the initial merge link while sync waits for setup", async () => {
+test("says sync waits for the initial merge, and leaves the merge to the Finish setup notice", async () => {
   sync = {
     ...sync,
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
@@ -369,11 +390,15 @@ test("shows the initial merge link while sync waits for setup", async () => {
   show();
   expect(await screen.findByText("Awaiting initial merge")).toBeVisible();
   expect(
-    screen.getByRole("link", { name: "Review and merge PR" }),
-  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
-  expect(
     screen.getByText(/Your current policy stays active until it merges/),
   ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Review and merge PR" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Sync settings" })).toHaveAttribute(
+    "href",
+    "/settings/guardrails",
+  );
 });
 
 test("a connected sync links to its repository", async () => {

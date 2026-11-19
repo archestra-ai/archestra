@@ -3,6 +3,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { MemberModel } from "@/models";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -80,6 +81,40 @@ describe("bootstrap route", () => {
     });
     expect(Object.keys(bootstrap.permissions).length).toBeGreaterThan(0);
     expect(bootstrap.memberDefaultAgent.defaultAgentId).toBe(agent.id);
+  });
+
+  test("bootstrap and capability discovery both expose only current team key management", async ({
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+    makeMember,
+  }) => {
+    const parent = await makeTeam(organizationId, user.id);
+    const child = await makeTeam(organizationId, user.id, {
+      parentId: parent.id,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    await makeTeamMember(parent.id, user.id, { role: "admin" });
+    await makeTeamMember(child.id, owner.id);
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Managed key",
+      authorId: owner.id,
+      billingTeamId: child.id,
+      keyType: "passthrough",
+      initialPermissionGrants: [],
+    });
+    const bootstrap = await get("/api/bootstrap");
+    expect(bootstrap.scopedCapabilities).toEqual(
+      await get("/api/resource-permissions"),
+    );
+    expect(
+      bootstrap.scopedCapabilities
+        .filter((grant: { scope: string }) => grant.scope === virtualKey.id)
+        .map((grant: { action: string }) => grant.action)
+        .sort(),
+    ).toEqual(["delete", "read", "update"]);
   });
 
   async function get(url: string) {

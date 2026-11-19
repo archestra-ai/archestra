@@ -7,17 +7,13 @@ vi.mock("sonner");
 
 const getInteractionsMock = vi.hoisted(() => vi.fn());
 const getUniqueUserIdsMock = vi.hoisted(() => vi.fn());
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getInteractions: getInteractionsMock,
-      getUniqueUserIds: getUniqueUserIdsMock,
-    },
-  };
-});
+const getChatErrorsMock = vi.hoisted(() => vi.fn());
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getLlmProxyLogs: getInteractionsMock,
+  getLlmProxyLogSessionChatErrors: getChatErrorsMock,
+  getLlmProxyLogUserIds: getUniqueUserIdsMock,
+}));
 
 import {
   isSessionId,
@@ -148,6 +144,44 @@ describe("useExportSessionInteractions", () => {
     // tests otherwise.
     vi.restoreAllMocks();
     getInteractionsMock.mockReset();
+    getChatErrorsMock.mockReset();
+    getChatErrorsMock.mockResolvedValue({ data: { chatErrors: [] } });
+  });
+
+  it("includes the errors the chat showed, which no request row carries", async () => {
+    getInteractionsMock.mockResolvedValueOnce(
+      makePage({ ids: ["row-1"], total: 1, hasNext: false }),
+    );
+    const chatError = {
+      id: "chat-error-1",
+      conversationId: sessionId,
+      createdAt: "2026-11-17T19:27:21.000Z",
+      error: {
+        code: "unknown",
+        message: "Guardrails could not settle a withheld tool call",
+        isRetryable: false,
+      },
+    };
+    getChatErrorsMock.mockResolvedValue({ data: { chatErrors: [chatError] } });
+    let downloadedJson: string | null = null;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      void (blob as Blob).text().then((text) => {
+        downloadedJson = text;
+      });
+      return "blob:mock";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const { result } = renderExportHook();
+    result.current.mutate({ sessionId });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getChatErrorsMock).toHaveBeenCalledWith({ path: { sessionId } });
+    await waitFor(() => expect(downloadedJson).not.toBeNull());
+    const payload = JSON.parse(downloadedJson ?? "{}");
+    expect(payload.chatErrorCount).toBe(1);
+    expect(payload.chatErrors).toEqual([chatError]);
   });
 
   it("pages through the whole session and downloads every interaction", async () => {

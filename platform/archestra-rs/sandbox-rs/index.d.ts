@@ -65,6 +65,11 @@ export interface ReadArtifactInput {
 }
 
 export interface ReplayCommand {
+  /**
+   * the command's persisted id. it keys the replayed exec in the engine
+   * cache, so it must be the id the live run used (`RunSandboxInput.commandId`).
+   */
+  id: string
   command: string
   cwd?: string
   timeoutSeconds: number
@@ -142,6 +147,12 @@ export interface RunSandboxInput {
    * definition (not a filesystem layer), so it never persists in the sandbox.
    */
   stdin?: string
+  /**
+   * The id the live command will be persisted under. Replaying it later as a
+   * `ReplayCommand` with the same id reuses this run's cached layer. Omit for
+   * a one-off run: a fresh id is minted, so the command always executes.
+   */
+  commandId?: string
 }
 
 /**

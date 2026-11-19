@@ -12,7 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AuthField,
+  AwsIamMcpAuthConfig,
   CatalogItemApprovalStatus,
+  DesktopMcpConfig,
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalConfig,
@@ -38,6 +40,16 @@ const internalMcpCatalogTable = softDeletablePgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /**
+     * The prefix this item's tools carry, when it is not the slugified name:
+     * a shorter one, cut at a word boundary, when the name leaves a tool no
+     * room under the 64-character tool-name limit, with a `-2`, `-3` suffix
+     * when another item already carries that cut; and for an app, its own
+     * prefix, so two apps of one name never share tool names. NULL means
+     * the slugified name. Written only by the tool-name allocation
+     * (`services/mcp-tool-names.ts`), never from input.
+     */
+    toolPrefix: text("tool_prefix"),
     version: text("version"),
     description: text("description"),
     instructions: text("instructions"),
@@ -97,6 +109,9 @@ const internalMcpCatalogTable = softDeletablePgTable(
     ), // For local config secret env vars storage
     // Local server configuration - uses LocalConfig type from @/types
     localConfig: jsonb("local_config").$type<LocalConfig>(),
+    // Desktop MCP servers: the command or URL that each device gets for this
+    // catalog item
+    desktopConfig: jsonb("desktop_config").$type<DesktopMcpConfig>(),
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
@@ -105,6 +120,8 @@ const internalMcpCatalogTable = softDeletablePgTable(
     enterpriseManagedConfig: jsonb(
       "enterprise_managed_config",
     ).$type<EnterpriseManagedCredentialConfig>(),
+    // AWS IAM (SigV4) sign-in for remote servers behind an AWS service
+    awsIamConfig: jsonb("aws_iam_config").$type<AwsIamMcpAuthConfig>(),
     /** Catalog item icon: emoji character or base64-encoded image data URL */
     icon: text("icon"),
     organizationId: text("organization_id"),

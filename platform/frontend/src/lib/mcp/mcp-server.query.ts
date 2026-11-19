@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  MAX_BULK_IDS,
   type McpDeploymentStatusEntry,
   type McpDeploymentStatusesMessage,
   type McpInstallationStatusMessage,
@@ -24,7 +25,11 @@ import {
 import { toast } from "sonner";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  type BulkOutcome,
+  reportBulkOutcome,
+  toBulkOutcome,
+} from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
 import {
@@ -300,10 +305,13 @@ export function useInstallMcpServer() {
     mutationFn: async (
       data: archestraApiTypes.InstallMcpServerData["body"] & {
         dontShowToast?: boolean;
+        /** A desktop MCP server: its toasts speak of the user's computer. */
+        desktop?: boolean;
       },
     ) => {
+      const { desktop, ...body } = data;
       const { data: installedServer, error } = await installMcpServer({
-        body: data,
+        body,
       });
       if (error) {
         // `handleApiError` doesn't throw, so API rejections still flow
@@ -315,9 +323,51 @@ export function useInstallMcpServer() {
           stage: "request",
           errorMessage: clipErrorMessage(getApiErrorMessage(error)),
         });
-        handleApiError(error);
+        handleApiError(error, { toastOnError: false });
+        const rawErrorMessage = getApiErrorMessage(error);
+        // Some MCP servers return an entire tool schema in a malformed
+        // discovery response. It is neither useful nor safe in a dialog.
+        const boundedErrorMessage = rawErrorMessage.includes(
+          "Streamable HTTP error: Error POSTing to endpoint: {",
+        )
+          ? "The upstream MCP server returned an unexpected response while listing tools."
+          : rawErrorMessage.length > 1000
+            ? `${rawErrorMessage.slice(0, 1000)}…`
+            : rawErrorMessage;
+        const redundantPrefix = `Failed to connect to MCP server ${data.name}: `;
+        const errorMessage = boundedErrorMessage.startsWith(redundantPrefix)
+          ? boundedErrorMessage.slice(redundantPrefix.length)
+          : boundedErrorMessage;
+        if (desktop) {
+          toast.error(`Couldn't connect ${data.name} from your device`, {
+            description: errorMessage,
+          });
+          return {
+            installedServer,
+            errorMessage,
+            dontShowToast: data.dontShowToast,
+          };
+        }
+        toast.error(`Failed to install ${data.name}`, {
+          description: errorMessage.includes(
+            "Upstream MCP server returned HTTP 401",
+          )
+            ? "The MCP server rejected the connection (HTTP 401)."
+            : errorMessage.includes("Upstream MCP server returned HTTP 403")
+              ? "The MCP server denied access (HTTP 403)."
+              : "Check the server configuration and try again.",
+        });
+        return {
+          installedServer,
+          errorMessage,
+          dontShowToast: data.dontShowToast,
+        };
       }
-      return { installedServer, dontShowToast: data.dontShowToast };
+      return {
+        installedServer,
+        errorMessage: null,
+        dontShowToast: data.dontShowToast,
+      };
     },
     onSuccess: async ({ installedServer, dontShowToast }, variables) => {
       if (installedServer) {
@@ -417,10 +467,99 @@ export function useBulkUninstallMcpServers() {
   });
 }
 
+/** The words a bulk removal of connections reports itself in. */
+export interface BulkRemoveConnectionsCopy {
+  /** Past tense, e.g. "Revoked". */
+  verb: string;
+  /** Bare infinitive, e.g. "revoke". */
+  failureVerb: string;
+  /** "could not be …" when adding "d" to the infinitive is wrong. */
+  failureParticiple?: string;
+  noun: string;
+}
+
+/**
+ * Removes a selection of one server's connections — credentials or
+ * installations — and reports the whole selection as one outcome.
+ *
+ * The bulk route takes at most `MAX_BULK_IDS` ids, so a larger selection goes
+ * in consecutive requests. Every connection of a server carries the server's
+ * name, so each one is reported under the label the caller gives it (its
+ * owner), which is what tells them apart in a failure toast.
+ */
+export function useBulkRemoveMcpConnections() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      connections: readonly { id: string; label: string }[];
+      copy: BulkRemoveConnectionsCopy;
+    }) => {
+      const { connections } = params;
+      const labelById = new Map(
+        connections.map((connection) => [connection.id, connection.label]),
+      );
+      const outcome: BulkOutcome & { succeededIds: string[] } = {
+        succeeded: [],
+        failed: [],
+        succeededIds: [],
+      };
+      for (let start = 0; start < connections.length; start += MAX_BULK_IDS) {
+        const batch = connections.slice(start, start + MAX_BULK_IDS);
+        const { data, error } = await bulkDeleteMcpServers({
+          body: { ids: batch.map((connection) => connection.id) },
+        });
+        if (error || !data) {
+          // The request itself was refused: nothing in it applied, and the
+          // batches after it would meet the same refusal.
+          const message = getApiErrorMessage(error);
+          for (const connection of connections.slice(start)) {
+            outcome.failed.push({ label: connection.label, error: message });
+          }
+          break;
+        }
+        for (const entry of data.succeeded) {
+          outcome.succeeded.push(labelById.get(entry.id) ?? entry.name);
+          outcome.succeededIds.push(entry.id);
+        }
+        for (const entry of data.failed) {
+          outcome.failed.push({
+            label: labelById.get(entry.id) ?? entry.name ?? "Unknown",
+            error: entry.error,
+          });
+        }
+      }
+      return outcome;
+    },
+    onSuccess: (outcome, { copy }) => {
+      removeExternalMcpSkillCachesForSources({
+        queryClient,
+        serverIds: outcome.succeededIds,
+      });
+      reportBulkOutcome({ outcome, ...copy });
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
+      invalidateToolAssignmentQueries(queryClient);
+    },
+  });
+}
+
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { id: string; name: string }) => {
+    mutationFn: async (data: {
+      id: string;
+      name: string;
+      /**
+       * A desktop MCP server: its toasts speak of the computer it is removed
+       * from, the viewer's own or another user's.
+       */
+      desktop?: "mine" | "theirs";
+    }) => {
       const response = await deleteMcpServer({ path: { id: data.id } });
       // The generated client runs with `throwOnError: false`, so a refusal
       // resolves like a success: without this, a 403 fell straight through to
@@ -447,13 +586,20 @@ export function useDeleteMcpServer() {
       ]);
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
       invalidateToolAssignmentQueries(queryClient);
-      toast.success(`Successfully uninstalled ${variables.name}`);
+      toast.success(
+        variables.desktop
+          ? `${variables.name} disconnected from ${variables.desktop === "mine" ? "your" : "their"} device`
+          : `Successfully uninstalled ${variables.name}`,
+      );
     },
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
-      toast.error(`Failed to uninstall ${variables.name}`, {
-        description: error.message,
-      });
+      toast.error(
+        variables.desktop
+          ? `Couldn't disconnect ${variables.name} from ${variables.desktop === "mine" ? "your" : "their"} device`
+          : `Failed to uninstall ${variables.name}`,
+        { description: error.message },
+      );
     },
   });
 }

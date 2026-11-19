@@ -70,6 +70,7 @@ import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import { CredentialAccess } from "@/services/credential-access";
 import { preflightMcpCredentials } from "@/services/credentials";
+import { desktopBridgeControlService } from "@/services/desktop-mcp/desktop-bridge-control";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -83,7 +84,10 @@ import {
 } from "@/services/mcp-advanced-settings";
 import {
   assertCatalogCredentialRecovery,
+  enterpriseManagedOverrideRecoveryKeys,
+  enterpriseManagedOverrideSecretValues,
   extractLocalConfigSecrets,
+  moveEnterpriseManagedOverrideSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { refreshCatalogImage } from "@/services/mcp-image-refresh";
@@ -105,15 +109,16 @@ import {
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
+import { reallocateCatalogToolPrefix } from "@/services/mcp-tool-names";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  awsIamConfigConflict,
   CreateInternalMcpCatalogBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
-  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
@@ -124,6 +129,7 @@ import {
   McpServerDismissibleAlertKindSchema,
   McpServerListEntrySchema,
   MuteMcpServerAlertBodySchema,
+  mergedAwsIamSettings,
   PartialUpdateInternalMcpCatalogSchema,
   RetiredSharingUpdateFieldSchema,
   SelectInternalMcpCatalogSchema,
@@ -285,6 +291,7 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   appId: true,
   appEnabled: true,
   docsUrl: true,
+  desktopConfig: true,
 }).extend({
   /** An emoji icon; image icons are served from `iconUrl` instead. */
   icon: z.string().nullable(),
@@ -326,6 +333,8 @@ const McpRegistryIssueIndexSchema = z.object({
       serverType: true,
       multitenant: true,
     }).extend({
+      /** Present when the item's tools carry a prefix other than its slugified name. */
+      toolPrefix: z.string().optional(),
       dynamicConnectionMcpServerId: z.string().optional(),
       environmentId: z.string().optional(),
       authorId: z.string().optional(),
@@ -695,6 +704,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogReinstallRequired: item.catalogReinstallRequired,
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
             docsUrl: item.docsUrl,
+            desktopConfig: item.desktopConfig,
             appId:
               item.serverType === "app"
                 ? (appIdByCatalog.get(item.id) ?? null)
@@ -985,6 +995,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      if (restBody.localConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          restBody.localConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1042,6 +1060,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
       });
 
       let clientSecretId: string | undefined;
@@ -1065,20 +1084,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: restBody.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-        });
-        clientSecretId = result.id;
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+        enterpriseManagedConfig: restBody.enterpriseManagedConfig,
+        clientSecretId,
+        catalogName: restBody.name,
+      });
+      if (movedOverrides.clientSecretId !== clientSecretId) {
+        clientSecretId = movedOverrides.clientSecretId ?? undefined;
         restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
+      // SPDX-SnippetEnd
 
       if (
         restBody.localConfig?.environment ||
@@ -1179,6 +1197,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         ),
       );
+      await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
       return reply.send(catalogItem);
     },
   );
@@ -1508,6 +1527,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // injected (then later installed). The normal scope/team/environment
       // authorization below still applies; the change is propagated to the linked
       // app + server after the update.
+      // A partial update may not name the server type: check the command for
+      // devices against the type the item will have.
+      if (
+        restBody.desktopConfig &&
+        (restBody.serverType ?? originalCatalogItem.serverType) !==
+          "desktop_mcp"
+      ) {
+        throw new ApiError(
+          400,
+          "Only a desktop MCP server has a command for devices.",
+        );
+      }
+
+      const awsIamConflict = awsIamConfigConflict(
+        mergedAwsIamSettings({
+          update: restBody,
+          current: originalCatalogItem,
+        }),
+      );
+      if (awsIamConflict) throw new ApiError(400, awsIamConflict);
+
       const isAppCatalog = originalCatalogItem.serverType === "app";
       const linkedAppId = isAppCatalog
         ? (await AppModel.getAppIdsByCatalogIds([id])).get(id)
@@ -1619,6 +1659,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
       });
+      const effectiveLocalConfig =
+        restBody.localConfig === undefined
+          ? originalCatalogItem.localConfig
+          : restBody.localConfig;
+      if (effectiveLocalConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          effectiveLocalConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType ?? originalCatalogItem.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1637,9 +1689,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ...(originalCatalogItem.enterpriseManagedConfig
-            ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
-            : []),
+          ...enterpriseManagedOverrideRecoveryKeys(
+            originalCatalogItem.enterpriseManagedConfig,
+          ),
           // SPDX-SnippetEnd
         ],
         values: {
@@ -1649,12 +1701,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ...(restBody.enterpriseManagedConfig?.clientSecretOverride
-            ? {
-                [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
-                  restBody.enterpriseManagedConfig.clientSecretOverride,
-              }
-            : {}),
+          ...enterpriseManagedOverrideSecretValues(
+            restBody.enterpriseManagedConfig,
+          ),
           // SPDX-SnippetEnd
         },
       };
@@ -1698,10 +1747,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // pass has frozen every row that HAS a live deployment. Block a
         // rename issued during the startup window until the pass completes;
         // fail it if the pass failed (churn-prevention outranks
-        // availability).
+        // availability). With the orchestrator turned off there is no adopt
+        // pass to wait for, and the rename stays a pure DB change.
         const k8sRuntimeConfigured =
-          Boolean(config.orchestrator.kubernetes.kubeconfig) ||
-          config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+          config.orchestrator.enabled !== false &&
+          (Boolean(config.orchestrator.kubernetes.kubeconfig) ||
+            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster);
         if (k8sRuntimeConfigured) {
           await mcpServerRuntimeManager.deploymentNamesAdopted;
         }
@@ -1712,7 +1763,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        const renamedTools = await InternalMcpCatalogModel.renameCascade({
+        const cascadedTools = await InternalMcpCatalogModel.renameCascade({
           id,
           newName: newCatalogName,
           flagReinstallRequired:
@@ -1722,6 +1773,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ),
           freezeDeploymentNames: k8sRuntimeConfigured,
         });
+        // A new name too long for one of the tools moves them all to a
+        // shorter prefix; the policy sees each tool's old name and final one.
+        const renamedTools = composeRenames(
+          cascadedTools,
+          await reallocateCatalogToolPrefix(id),
+        );
         // The rename moved every tool prefix a policy's alias targets spell, so
         // those targets follow it where the deployment owns the text, and the
         // recompose shows `server_missing` where the repository owns it.
@@ -1774,21 +1831,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: originalCatalogItem.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-          recovery: clientSecretRecovery,
-        });
-        clientSecretId = result.id;
-        if (result.rotated) catalogSharedSecretValuesRotated = true;
-
+      const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+        enterpriseManagedConfig: restBody.enterpriseManagedConfig,
+        clientSecretId,
+        catalogName: originalCatalogItem.name,
+        recovery: clientSecretRecovery,
+      });
+      if (movedOverrides.rotated) catalogSharedSecretValuesRotated = true;
+      if (movedOverrides.clientSecretId !== clientSecretId) {
+        clientSecretId = movedOverrides.clientSecretId ?? null;
         restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
 
       // SPDX-SnippetEnd
@@ -1853,6 +1905,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
           userId: request.user.id,
+          resource: "mcpRegistry",
         });
       }
 
@@ -2029,6 +2082,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
       return reply.send(catalogItem);
     },
   );
@@ -2302,6 +2356,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
       const success = await InternalMcpCatalogModel.delete(id);
       if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
@@ -2372,6 +2427,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       const success = await InternalMcpCatalogModel.delete(catalogItem.id);
       if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
@@ -2446,10 +2502,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const success = await InternalMcpCatalogModel.restore(id);
       // The restored tools rejoin the composed aliases.
-      if (success)
+      if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
+      }
       return reply.send({ success });
     },
   );
@@ -2537,6 +2595,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2649,6 +2714,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2799,6 +2871,12 @@ async function cascadeReinstallForCatalog(
    */
   override?: { forceAutoRestart?: boolean },
 ): Promise<void> {
+  // A desktop MCP server has no pod and no credential to redo. Its tunnel
+  // clients get the changed config by themselves (notifyCatalogItemChanged),
+  // and a reinstall here would ask every user's computer for its tools and
+  // mark the installation of each offline computer as failed.
+  if (catalogItem.serverType === "desktop_mcp") return;
+
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
 
@@ -3453,3 +3531,22 @@ const MAX_REGISTRY_QUERY_IDS = 10_000;
  * parses before the combined id check (about 13,000 UUIDs).
  */
 const REGISTRY_QUERY_BODY_LIMIT_BYTES = 512 * 1024;
+
+/**
+ * Two rounds of tool renames as one: a tool renamed in both keeps its first
+ * old name and its last new one.
+ */
+function composeRenames(
+  first: ReadonlyArray<{ oldName: string; newName: string }>,
+  second: ReadonlyArray<{ oldName: string; newName: string }>,
+): Array<{ oldName: string; newName: string }> {
+  const secondByOld = new Map(second.map((pair) => [pair.oldName, pair]));
+  const composed = first.map((pair) => {
+    const next = secondByOld.get(pair.newName);
+    if (next) secondByOld.delete(pair.newName);
+    return { oldName: pair.oldName, newName: next?.newName ?? pair.newName };
+  });
+  return [...composed, ...secondByOld.values()].filter(
+    (pair) => pair.oldName !== pair.newName,
+  );
+}

@@ -8,6 +8,9 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { KbFileModel, KnowledgeBaseModel } from "@/models";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./knowledge-file.routes";
@@ -63,6 +66,27 @@ describe("PUT knowledge file content", () => {
       organizationId,
       viewer: { userId: user.id, teamIds: [], canManageAll: true },
     });
+
+  test("creates the upload connector in the configured landing environment", async () => {
+    const environment = await createEnvironment({
+      organizationId,
+      userId: user.id,
+      data: { name: "Support" },
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "knowledgeSource",
+      environmentId: environment.id,
+    });
+    const response = await put();
+    expect(response.statusCode, response.body).toBe(200);
+    const connectors = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+      knowledgeBaseId,
+      { canReadAll: true },
+    );
+    expect(connectors).toHaveLength(1);
+    expect(connectors[0].environmentId).toBe(environment.id);
+  });
 
   test("creates, retries, and replaces one document and its searchable chunks", async () => {
     expect((await put()).statusCode).toBe(200);

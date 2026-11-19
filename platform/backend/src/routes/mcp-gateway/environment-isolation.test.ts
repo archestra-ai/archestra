@@ -22,7 +22,10 @@ import {
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 /**
  * Route-level environment isolation for the agent-facing surface. Everything an

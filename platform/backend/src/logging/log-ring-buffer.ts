@@ -1,6 +1,5 @@
 /**
- * A single retained log record, trimmed to the fields worth cross-referencing
- * alongside a captured backend exception (see `error-tracking.ts`).
+ * A single retained log record, trimmed to the fields worth reading back.
  */
 export type RetainedLogRecord = {
   /** Epoch milliseconds (pino `time`). */
@@ -32,11 +31,8 @@ const PINO_LEVEL_LABELS: Record<number, string> = {
 /**
  * Fixed-size, in-memory ring buffer of the most recent log records.
  *
- * PostHog error tracking shows a stack trace, but the log lines that led up to
- * a failure are just as useful for diagnosis. We keep a small rolling window of
- * recent logs here so the Fastify error handler can attach the lines preceding
- * an exception (scoped to the failing request's trace) directly onto the
- * captured `$exception` event — no separate log-ingestion pipeline required.
+ * Keeps a small rolling window of recent logs, scoped by trace and session,
+ * so what the process logged can be read back without a log pipeline.
  *
  * The buffer is bounded (both in record count and per-message length) so it can
  * never grow without limit or retain large payloads.

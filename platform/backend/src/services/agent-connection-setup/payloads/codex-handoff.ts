@@ -1,4 +1,121 @@
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
+import { CODEX_SANDBOX_PREFLIGHT } from "./codex-sandbox-preflight";
+
+const CODEX_TOML_PARSER = String.raw`
+function tomlTables(lines) {
+  const tables = [];
+  const active = new Set();
+  let quoted = '';
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (!quoted) {
+      active.add(index);
+      const match = /^\s*(\[\[?)([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
+      if (match) tables.push({ index, name: (match[1] === '[[' ? '[' : '') + tomlKey(match[2].trim()) });
+    }
+    for (let i = 0; i < line.length; i++) {
+      const next = line.slice(i, i + 3);
+      if (quoted === '"""' || quoted === "'''") {
+        if (quoted === '"""' && line[i] === '\\') { i++; continue; }
+        if (next === quoted) { quoted = ''; i += 2; }
+      } else if (quoted) {
+        if (quoted === '"' && line[i] === '\\') { i++; continue; }
+        if (line[i] === quoted) quoted = '';
+      } else if (line[i] === '#') {
+        break;
+      } else if (next === '"""' || next === "'''") {
+        quoted = next;
+        i += 2;
+      } else if (line[i] === '"' || line[i] === "'") {
+        quoted = line[i];
+      }
+    }
+    if (quoted === '"' || quoted === "'") quoted = '';
+  }
+  return { tables, active };
+}
+function tomlKey(text) {
+  // A dot inside a quoted key is not a dotted-key separator.
+  return [...text.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+/g)].map(match => {
+    const key = match[0];
+    if (key.startsWith('"')) return JSON.parse(key.replace(/\\(?:U([0-9a-fA-F]{8})|.)/g, (escape, hex) => hex ? JSON.stringify(String.fromCodePoint(parseInt(hex, 16))).slice(1, -1) : escape));
+    return key.startsWith("'") ? key.slice(1, -1) : key;
+  }).join('\0');
+}
+function tomlAssignment(line) {
+  const match = /^\s*((?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*'))*)\s*=\s*(.*)$/.exec(line);
+  return match ? { key: tomlKey(match[1]), value: match[2] } : undefined;
+}
+`;
+
+/**
+ * The ChatGPT desktop app can run Codex in WSL, with the same config.toml as
+ * Codex for Windows. Setup writes its paths relative to that folder, so both
+ * load the config. Codex in WSL cannot read the Windows keyring, so while that
+ * mode is on, the gateway sign-in is saved in the folder too.
+ *
+ * @public — asserted by the preflight unit tests, which knip --production ignores.
+ */
+export const CODEX_WSL_SETUP_HINT = String.raw`
+${CODEX_TOML_PARSER}
+// The desktop app keeps this switch in the [desktop] table of config.toml.
+function runsCodexInWsl(config) {
+  const lines = config.split(/\r?\n/);
+  const { tables, active } = tomlTables(lines);
+  const headers = new Map(tables.map(table => [table.index, table.name]));
+  let table = '';
+  for (let index = 0; index < lines.length; index++) {
+    if (headers.has(index)) { table = headers.get(index); continue; }
+    if (!active.has(index)) continue;
+    const assignment = tomlAssignment(lines[index]);
+    if (!assignment) continue;
+    const key = table ? table + '\0' + assignment.key : assignment.key;
+    const values = key === 'desktop' ? inlineTomlAssignments(assignment.value).map(field => ({ key: 'desktop\0' + field.key, value: field.value })) : [{ key, value: assignment.value }];
+    if (values.some(field => field.key === 'desktop\0runCodexInWindowsSubsystemForLinux' && /^true\s*(?:#.*)?$/.test(field.value))) return true;
+  }
+  return false;
+}
+// Inline tables are also a valid way to set the desktop switch. Split only
+// top-level fields, leaving commas in strings, arrays and nested tables alone.
+function inlineTomlAssignments(value) {
+  const text = value.trim();
+  if (!text.startsWith('{')) return [];
+  const fields = [];
+  let start = 1, depth = 1, quoted = '';
+  for (let i = 1; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (quoted === '"' && c === '\\') { i++; continue; }
+      if (c === quoted) quoted = '';
+    } else if (c === '"' || c === "'") quoted = c;
+    else if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') {
+      depth--;
+      if (depth === 0) {
+        if (!/^\s*(?:#.*)?$/.test(text.slice(i + 1))) return [];
+        fields.push(text.slice(start, i));
+        return fields.map(tomlAssignment).filter(Boolean);
+      }
+    } else if (c === ',' && depth === 1) { fields.push(text.slice(start, i)); start = i + 1; }
+  }
+  return [];
+}
+// While the desktop app runs Codex in WSL, it writes WSL paths itself. After
+// that mode is turned off, they stay behind.
+function wslSetupHint(home, config) {
+  const drive = /^([A-Za-z]):[\\/](.*)$/.exec(home);
+  if (!drive || runsCodexInWsl(config) || !/^[^#\r\n]*["']\/mnt\/[a-z]\//m.test(config)) return '';
+  const windowsHome = home.replace(/[\\/]+$/, '');
+  const linuxHome = '/mnt/' + drive[1].toLowerCase() + '/' + drive[2].replace(/\\/g, '/').replace(/\/+$/, '');
+  return '\nThis config has WSL paths from a time when Codex ran in WSL. Codex for Windows cannot open these paths. Change them to Windows paths, for example ' + linuxHome + ' to ' + windowsHome + '.';
+}
+// Codex in WSL cannot read the Windows keyring. While the desktop app runs
+// Codex in WSL, a Windows sign-in uses Codex's file store, .credentials.json in
+// the Codex folder. Codex for Windows reads it there too when its keyring has
+// no sign-in for the server.
+function signInArgs(platform, config, server) {
+  return [...(platform === 'win32' && runsCodexInWsl(config) ? ['-c', 'mcp_oauth_credentials_store=file'] : []), 'mcp', 'login', server];
+}`;
 
 /** Local helper installed beside the guard. Prepares direct mode and reads native config. */
 export const CODEX_HANDOFF_HELPER = String.raw`
@@ -174,6 +291,23 @@ function codexErrorDetail(result, shadow, home) {
   const output = String(result.stderr || result.error?.message || '').split(shadow).join(home).trim();
   return output ? ' Codex reported:\n  ' + output.split(/\r?\n/).slice(0, 12).join('\n  ').slice(0, 1200) : '';
 }
+// Discovery reads a copy without model_catalog_json, and a gateway-only setup
+// skips it. Codex must load the real config too, or the first native command
+// fails after setup has started editing.
+function assertConfigLoads(executable) {
+  const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  const file = path.join(home, 'config.toml');
+  if (!existsSync(file)) return;
+  const config = readFileSync(file, 'utf8');
+  if (!executable) return;
+  const { command, args } = codexEntry(executable);
+  // A neutral working directory, so no project's .codex/config.toml is layered in.
+  const result = spawnSync(command, [...args, 'mcp', 'list'], { cwd: os.tmpdir(), encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000 });
+  if (!result.error && result.status === 0) return;
+  throw new Error('Codex could not load ' + file + '.' + codexErrorDetail(result, home, home) + wslSetupHint(home, config));
+}
+${CODEX_WSL_SETUP_HINT}
+${CODEX_SANDBOX_PREFLIGHT}
 function modelCompatibilityError(requested, executable, catalog) {
   let version = 'version unavailable';
   if (executable) {
@@ -185,50 +319,6 @@ function modelCompatibilityError(requested, executable, catalog) {
   return new Error('Selected model is missing from the current Codex catalog: ' + JSON.stringify(requested) + ' (' + version + (executable ? '; CLI: ' + executable : '') + '). '
     + 'The desktop app and terminal CLI can expose different catalogs. Update the terminal Codex CLI to a version that supports this model, then rerun setup; or explicitly choose a model supported by that CLI. '
     + 'Catalog models: ' + available + '. Your selected model and permission settings have not been changed. This check does not test LLM proxy inference.');
-}
-function tomlTables(lines) {
-  const tables = [];
-  const active = new Set();
-  let quoted = '';
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    if (!quoted) {
-      active.add(index);
-      const match = /^\s*(\[\[?)([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
-      if (match) tables.push({ index, name: (match[1] === '[[' ? '[' : '') + tomlKey(match[2].trim()) });
-    }
-    for (let i = 0; i < line.length; i++) {
-      const next = line.slice(i, i + 3);
-      if (quoted === '"""' || quoted === "'''") {
-        if (quoted === '"""' && line[i] === '\\') { i++; continue; }
-        if (next === quoted) { quoted = ''; i += 2; }
-      } else if (quoted) {
-        if (quoted === '"' && line[i] === '\\') { i++; continue; }
-        if (line[i] === quoted) quoted = '';
-      } else if (line[i] === '#') {
-        break;
-      } else if (next === '"""' || next === "'''") {
-        quoted = next;
-        i += 2;
-      } else if (line[i] === '"' || line[i] === "'") {
-        quoted = line[i];
-      }
-    }
-    if (quoted === '"' || quoted === "'") quoted = '';
-  }
-  return { tables, active };
-}
-function tomlKey(text) {
-  // A dot inside a quoted key is not a dotted-key separator.
-  return [...text.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+/g)].map(match => {
-    const key = match[0];
-    if (key.startsWith('"')) return JSON.parse(key.replace(/\\(?:U([0-9a-fA-F]{8})|.)/g, (escape, hex) => hex ? JSON.stringify(String.fromCodePoint(parseInt(hex, 16))).slice(1, -1) : escape));
-    return key.startsWith("'") ? key.slice(1, -1) : key;
-  }).join('\0');
-}
-function tomlAssignment(line) {
-  const match = /^\s*((?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*'))*)\s*=\s*(.*)$/.exec(line);
-  return match ? { key: tomlKey(match[1]), value: match[2] } : undefined;
 }
 function assertSingleLineManagedRootValues(lines, scanned) {
   const rootEnd = scanned.tables[0]?.index ?? lines.length;
@@ -334,7 +424,9 @@ function reusePreparedDirectCatalog(clientArgs) {
   const maxAgeMs = 24 * 60 * 60 * 1000;
   if (!existsSync(filename)) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
   const age = Date.now() - statSync(filename).mtimeMs;
-  if (!Number.isFinite(age) || age < 0 || age > maxAgeMs) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
+  // Filesystem timestamps have sub-millisecond precision; Date.now() does not.
+  // Match the fresh-download check's one-second clock tolerance.
+  if (!Number.isFinite(age) || age < -1000 || age > maxAgeMs) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
   const original = existsSync(path.join(home, 'config.toml')) ? readFileSync(path.join(home, 'config.toml'), 'utf8') : '';
   let catalog;
   try { catalog = JSON.parse(readFileSync(filename, 'utf8')); }
@@ -384,8 +476,10 @@ function updateDirectConfig(home, filename) {
   const inlineFeatures = rootAssignments.find(assignment => assignment.key === 'features');
   const dottedFeatures = rootAssignments.some(assignment => assignment.key.startsWith('features\0'));
   const hasFeaturesTable = existingTables.some(table => table.name === 'features');
+  // Relative to the Codex folder: Codex for Windows and the desktop app's Codex
+  // in WSL share this file, and neither can open the other's absolute path.
   const sections = [
-    { name: '', values: { web_search: '"disabled"', model_catalog_json: JSON.stringify(filename),
+    { name: '', values: { web_search: '"disabled"', model_catalog_json: JSON.stringify(path.basename(filename)),
       ...(inlineFeatures ? { features: disableInlineCodeMode(inlineFeatures.value) } : {}),
       ...(dottedFeatures && !hasFeaturesTable ? { 'features.code_mode_host': 'false' } : {}) }, marker: 'root' },
     ...(!inlineFeatures && (!dottedFeatures || hasFeaturesTable) ? [{ name: 'features', values: { code_mode_host: 'false' }, marker: 'features' }] : []),
@@ -420,8 +514,18 @@ function updateDirectConfig(home, filename) {
     throw error;
   }
 }
-if (process.argv[2] === '--setup-only') {
-  // Gateway/skills-only setup does not require model discovery.
+if (process.argv[2] === '--setup-only' || process.argv[2] === '--preflight') {
+  try {
+    assertConfigLoads(process.argv[3]);
+    assertSandboxReady(process.argv[3]);
+    // Gateway/skills-only setup does not require model discovery.
+    if (process.argv[2] === '--preflight') prepareDirectCatalog(process.argv[3], [], false);
+  } catch (error) {
+    const next = error instanceof CatalogFailure ? '' : ' Fix the problem above, then start a new installer run.';
+    process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
+    // The cause and the next step are printed; the setup script stops quietly.
+    process.exitCode = ${SETUP_STOPPED_EXIT_CODE};
+  }
 } else if (process.argv[2] === '--remove-direct') {
   try {
     const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
@@ -429,18 +533,10 @@ if (process.argv[2] === '--setup-only') {
     if (existsSync(configFile)) updateDirectConfig(home);
     const catalog = path.join(home, 'archestra-direct-model-catalog.json');
     const config = existsSync(configFile) ? readFileSync(configFile, 'utf8') : '';
-    if (!config.includes(catalog) && !config.includes(JSON.stringify(catalog))) rmSync(catalog, { force: true });
+    if (![catalog, JSON.stringify(catalog), JSON.stringify(path.basename(catalog))].some(value => config.includes(value))) rmSync(catalog, { force: true });
   } catch (error) {
     process.stderr.write('Codex direct tool mode could not be removed: ' + error.message + '\n');
     process.exitCode = 1;
-  }
-} else if (process.argv[2] === '--preflight') {
-  try { prepareDirectCatalog(process.argv[3], [], false); }
-  catch (error) {
-    const next = error instanceof CatalogFailure ? '' : ' Fix the problem above, then start a new installer run.';
-    process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
-    // The cause and the next step are printed; the setup script stops quietly.
-    process.exitCode = ${SETUP_STOPPED_EXIT_CODE};
   }
 } else if (process.argv[2] === '--direct' || process.argv[2] === '--install-direct') {
   try {
@@ -455,6 +551,16 @@ if (process.argv[2] === '--setup-only') {
     process.stderr.write('Codex direct tool mode could not be prepared: ' + withNextStep(error, 'start Codex again') + '\n');
     process.exitCode = 1;
   }
+} else if (process.argv[2] === '--sign-in') {
+  const server = process.argv[3] || '';
+  const file = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'config.toml');
+  const config = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  // A plain name, because on Windows cmd.exe runs the command line and finds codex.cmd too.
+  const args = signInArgs(process.platform, config, server);
+  const result = !/^[\w-]+$/.test(server) ? { status: 1 }
+    : process.platform === 'win32' ? spawnSync(['codex', ...args].join(' '), { stdio: 'inherit', shell: true })
+    : spawnSync('codex', args, { stdio: 'inherit' });
+  process.exitCode = result.error ? 1 : (result.status ?? 1);
 } else if (process.argv[2] === '--launch') {
   // PowerShell 5.1 passes a quoted TOML override through npm's .cmd shim as
   // multiple words. Bypass the shell/shim and give the CLI its exact argv.

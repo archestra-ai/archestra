@@ -1154,7 +1154,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       { name: "mcp__many__probe_tool_3", defer_loading: true },
     ];
 
-    test("issues its own question for the gateway ask_user, and still refuses a tool the request does not declare as not loaded", async () => {
+    test("preserves the gateway question, and still refuses a tool the request does not declare as not loaded", async () => {
       block = false;
       claudeCode.modelCalls({
         name: claudeCode.spell("archestra", ASK_USER),
@@ -1169,19 +1169,11 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       expect(asked.body).not.toContain("is not loaded in this session");
       expect(claudeCode.released(asked.body)).toEqual([
         {
-          name: "AskUserQuestion",
+          name: claudeCode.spell("archestra", ASK_USER),
           input: {
-            questions: [
-              {
-                question: "Which probe?",
-                header: "Probe",
-                options: [
-                  { label: "3", description: "3" },
-                  { label: "7", description: "7" },
-                ],
-                multiSelect: false,
-              },
-            ],
+            question: "Which probe?",
+            header: "Probe",
+            options: [{ label: "3" }, { label: "7" }],
           },
         },
       ]);
@@ -1277,7 +1269,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       );
     });
 
-    test("issues request_user_input in place of the namespaced gateway ask_user", async () => {
+    test("preserves the namespaced gateway ask_user when native questions are declared", async () => {
       block = false;
       const label = "mcp__archestra";
       codex.modelCalls({
@@ -1319,20 +1311,12 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       expect(response.body).not.toContain("is not loaded in this session");
       expect(codex.released(response.body)).toEqual([
         {
-          name: "request_user_input",
-          namespace: undefined,
+          name: ASK_USER,
+          namespace: label,
           input: {
-            questions: [
-              {
-                id: "archestra_question",
-                header: "Probe",
-                question: "Which probe?",
-                options: [
-                  { label: "3", description: "3" },
-                  { label: "7", description: "7" },
-                ],
-              },
-            ],
+            header: "Probe",
+            question: "Which probe?",
+            options: [{ label: "3" }, { label: "7" }],
           },
         },
       ]);

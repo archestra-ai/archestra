@@ -15,7 +15,7 @@ This is an execution skill, not only a guide. Use `git`, `gh`, and the GitHub AP
 - **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It moves only `archestra/platform:latest`; companion and agent images keep `latest` on the stable line.
 - **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. After all builds succeed, the workflow automatically publishes the release and updates the companion and agent images' `latest`. It moves `archestra/platform:latest` only when no newer release is published.
 
-Neither release channel uses a GitHub environment. Merging a release PR authorizes automatic publication after successful builds; finish qualification before that merge. Starting a new stable branch adds configuration steps and uses the same stable publication pipeline.
+Both channels publish only after a second Engineering member (not whoever merged or started it) approves it in archestra-ai/release-publisher's `stable-release` environment; the release run waits up to 6 hours for it, and an expired wait is retried by re-running the run's failed jobs. Finish qualification before merging a release PR. Starting a new stable branch adds configuration steps and uses the same stable publication pipeline.
 
 ## Backporting Fixes
 
@@ -24,7 +24,7 @@ Neither release channel uses a GitHub environment. Merging a release PR authoriz
 3. Monitor the resulting backport PRs and their checks — including the cross-track migration compatibility check and the released-tag upgrade replay. Review the release-specific diff before queueing them under the user's merge authorization.
 4. On conflicts, use the manual `cherry-pick -x` procedure in `platform/dev/RELEASE.md`. Include only necessary fixes; no features, refactors, or schema changes. Never merge `main` into release or candidate branches. A migration backport is only permissible under the prefix rule in `platform/dev/RELEASE.md` (the stable branch's migration history must remain a prefix of main's, matched by SQL content); forward repairs on `main` recover already-shipped gaps and are never a planned backport path.
 5. Retry API failures through **Open Backport PRs** workflow dispatch. Existing PRs are not duplicated or reopened, and existing branches are not overwritten. Investigate an unexpected existing branch instead of deleting it.
-6. During stable cutover, update the configured targets and their labels to include the new branch and remove the retired line. The automation's source of truth is the default branch.
+6. During stable cutover, update the configured targets and their labels to include the new branch and remove the retired line. In the same PR, change the release-line `docker` entry's `target-branch` in `.github/dependabot.yml` to match (`test_base_image_pins.py` fails until they agree). The automation's source of truth is the default branch.
 
 ## Cutting A New Stable Line End To End
 
@@ -59,8 +59,9 @@ Do not hard-code ruleset IDs, check names, integration IDs, or queue parameters 
    - `draft: true`
 2. Open the release-configuration PR against `release/X.Y`, monitor its required checks, and merge it through the new queue.
 3. Inventory open PRs against the previous stable line. Recreate every still-required fix that already landed on `main` as a `cherry-pick -x` backport to `release/X.Y` and merge it before the initial release. Wait for Release Please to update the release PR.
-4. Wait for Release Please to create or update the `X.Y.0` PR. Verify its base, manifest version, changelog, release configuration, and required checks. Finish qualification before merging; the release workflow publishes automatically.
-5. Complete the old-line retirement below before merging the release PR. The selected beta and backported fixes must already have passed qualification.
+4. Write the upgrade guide from the previous line to `X.Y` (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), with the `archestra-upgrade-guide` skill. Merge it to `release/X.Y` through the queue. The `Release Freeze Check` on the `X.Y.0` release PR fails until it exists; never bypass that failure.
+5. Wait for Release Please to create or update the `X.Y.0` PR. Verify its base, manifest version, changelog, release configuration, and required checks. Finish qualification before merging; the release workflow publishes automatically.
+6. Complete the old-line retirement below before merging the release PR. The selected beta and backported fixes must already have passed qualification.
 
 ### 4. Commit The Cutover And Publish
 
@@ -90,7 +91,7 @@ The initial migration from stable `1.3.x` started `1.4.0-beta.1`; do not use tha
 
 - **Qualification:** Finish release qualification before merging the release PR. Preserve required CI, image CVE checks, migration checks, the release freeze, and publication ordering guards. Verify the exact saved build artifacts (`release-helm-chart` and `release-image-*`) after automatic publication.
 - **Workflow owns publication:** The GitHub Actions workflow handles container image pushes, chart publication, and git tags. Never push release images, publish Helm charts, or update `latest` tags manually.
-- **Failed build:** Re-run failed jobs in the same workflow run.
+- **Failed build:** Re-run all jobs in the same workflow run (not only the failed ones: build digests are per-attempt artifacts). It promotes the same queue-scanned archives again while that scan is under 24 hours old.
 - **Failed qualification:** Do not merge the release PR. If an unpublished candidate already exists, cancel the run and delete its GitHub draft release only with explicit recovery authorization, but keep its tag. Fix on `main`, backport to `release/X.Y`, set temporary `release-as` to the next patch (for example, `X.Y.1` after a rejected `X.Y.0`), qualify the fix before merging the new release PR, and verify the new artifacts after publication. Never reuse a failed version number.
 - **Cutover failure before publication:** If the old line was locked but the new workflow cannot begin publication, stop. With explicit recovery authorization, cancel the new run, delete its blocking draft but keep its tag, restore the old exact merge queue, and remove its EOL rule before accepting old-line changes. When the cut resumes, fix and backport the cause and use the next patch version; never recreate the tagged candidate.
 - **Partial publication:** Keep the draft release and tag. With explicit retry authorization, re-run failed jobs in the original run using the saved artifacts; the retry can publish automatically. Never rebuild already published versions or move `latest` backward.

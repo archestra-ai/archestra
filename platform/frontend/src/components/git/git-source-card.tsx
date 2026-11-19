@@ -3,6 +3,7 @@
 import type { GitProvider } from "@archestra/shared";
 import {
   AlertTriangle,
+  Clock,
   ExternalLink,
   GitBranch,
   RefreshCw,
@@ -159,9 +160,20 @@ export function GitSourceBranch({ branch }: { branch: string | null }) {
   );
 }
 
+/** How often a source is checked, such as "Every 15 minutes". */
+export function GitSourceSchedule({ schedule }: { schedule: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Clock className="size-3.5" aria-hidden />
+      {schedule}
+    </span>
+  );
+}
+
 /** A notice inside the card, between the summary and the footer. */
 export function GitSourceNotice({ children }: { children: ReactNode }) {
-  return <div className="px-4 pb-4">{children}</div>;
+  // Lines up with the header's text, past its icon, where the icon shows.
+  return <div className="px-4 pb-4 sm:pl-[4.25rem]">{children}</div>;
 }
 
 export function GitSourceError({

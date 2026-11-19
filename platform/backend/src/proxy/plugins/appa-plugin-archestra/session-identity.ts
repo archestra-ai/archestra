@@ -1,9 +1,10 @@
-import type { OpenAppaSession } from "@/openappa/service";
+import { isWellFormedAppaId, type OpenAppaSession } from "@/openappa/service";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
   appaSessionIdentity,
 } from "@/openappa/wire";
+import { ApiError } from "@/types/api";
 import { AppaChatAdapter } from "./adapters/chat";
 import {
   AppaClaudeCodeAdapter,
@@ -11,6 +12,8 @@ import {
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
+import { AppaCursorAdapter } from "./adapters/cursor";
+import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPiAdapter } from "./adapters/pi";
@@ -32,6 +35,7 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     new AppaKimiCodeAdapter(),
     // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
     new AppaClaudeDesktopAdapter(),
+    new AppaGrokAdapter(),
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
     // Before OpenCode: Kilo's setup also sends OpenCode's session header.
@@ -39,6 +43,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     new AppaOpenCodeAdapter(),
     // Matched on the agent id its setup sends: its User-Agent is the OpenAI SDK's.
     new AppaCopilotCliAdapter(),
+    // Last of the external clients: Cursor's only signal is its User-Agent,
+    // so a client's own session header outranks a copied Cursor UA.
+    new AppaCursorAdapter(),
     new AppaChatAdapter(),
   ],
 );
@@ -49,7 +56,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
  * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
- *    headers, Kimi Code's and Copilot CLI's Responses prompt cache keys).
+ *    headers, Kimi Code's and Copilot CLI's Responses prompt cache keys,
+ *    the opening of a Cursor chat). A client that sets
+ *    `genericSessionFallback: false` skips step 3.
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
@@ -62,9 +71,14 @@ export function extractAppaSessionIdentity(params: {
   family: AppaWireFamily | undefined;
   body: unknown;
   headers: Readonly<Record<string, string | string[] | undefined>>;
+  /**
+   * True when the request is bound to an authenticated Agent Runtime workspace,
+   * where `X-Appa-Session-ID` carries the workspace name while the client's
+   * native header carries its ephemeral process session ID.
+   */
+  agentRuntimeRun?: boolean;
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
-  if (generic.provenance === "appa-header") return generic;
   const matchContext = {
     headers: params.headers,
     requestBody: params.family ? params.body : undefined,
@@ -72,8 +86,32 @@ export function extractAppaSessionIdentity(params: {
   const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
     candidate.matches(matchContext),
   );
+  if (generic.provenance === "appa-header" && adapter?.id !== "grok-build")
+    return generic;
   const native = adapter?.extractSessionIdentity?.(matchContext);
-  if (!native?.sessionId) return generic;
+  if (
+    adapter?.id === "grok-build" &&
+    !params.agentRuntimeRun &&
+    native?.sessionId
+  ) {
+    const explicit = Object.entries(params.headers)
+      .filter(([name]) => name.toLowerCase() === "x-appa-session-id")
+      .flatMap(([, value]) => (Array.isArray(value) ? value : [value]));
+    if (
+      explicit.some(
+        (value) => value !== undefined && value !== native.sessionId,
+      )
+    )
+      throw new ApiError(
+        400,
+        "Grok native and MCP session headers must identify the same session.",
+      );
+  }
+  if (generic.provenance === "appa-header") return generic;
+  if (!native?.sessionId)
+    return adapter?.genericSessionFallback === false
+      ? { parentId: generic.parentId, provenance: "none" }
+      : generic;
   return {
     ...native,
     parentId: generic.parentId ?? native.parentId,
@@ -144,4 +182,22 @@ export function appaTrajectory(params: {
     child,
     matchContext,
   };
+}
+
+/**
+ * The session a side review assesses: the root of its tree, scoped like the
+ * review's own session, and the native id of the agent that asked for the
+ * review. Undefined for a request that is not a side review.
+ */
+export function appaReviewedSession(params: {
+  adapter: AppaClientAdapter | undefined;
+  matchContext: AppaMatchContext;
+  session: OpenAppaSession;
+}): { rootSessionId: string; requesterId: string } | undefined {
+  const reviewed = params.adapter?.reviewedSession?.(params.matchContext);
+  if (!reviewed) return undefined;
+  const rootSessionId = withCallerScope(params.session, reviewed.rootId);
+  return isWellFormedAppaId(rootSessionId)
+    ? { rootSessionId, requesterId: reviewed.requesterId }
+    : undefined;
 }

@@ -526,6 +526,8 @@ builtin = "hitl"
     assert.match(review.text, /email/);
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
+    assert.ok(email.review[0].scope, JSON.stringify(email.review[0]));
+    assert.deepEqual(JSON.parse(review.scope), email.review[0].scope);
 
     // Binary output and arguments can carry U+0000, which PostgreSQL text and
     // jsonb refuse. Their receipts are stored escaped, replay exactly, and the
@@ -554,6 +556,7 @@ builtin = "hitl"
     const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
     assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
     assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
+    assert.deepEqual(JSON.parse(binaryReview.scope), binaryEmail.review[0].scope);
     const binaryRemedy = await hook(session, {
       event: 'remedy', operation_id: 'remedy:binary-email', arguments: { offer_id: binaryEmail.review[0].offer_id },
     });
@@ -1246,7 +1249,10 @@ builtin = "hitl"
     });
     assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
     const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
-    assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
+    assert.equal(
+      prefix,
+      '[appa] Authorized. The call is checked again and can still be blocked for another reason; then follow that block. Call the my_gateway_archestra__run_tool tool again with ',
+    );
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
 
     const direct = scope();

@@ -23,6 +23,7 @@ import type {
   ModelDefaultParameters,
   ModelInputModality,
   ModelOutputModality,
+  SyncedLongContextPricing,
 } from "@/types";
 
 /**
@@ -171,6 +172,11 @@ const modelsTable = pgTable(
       },
     ),
 
+    /** Refreshed from the provider catalog; never overwrites manual tier prices. */
+    syncedLongContextPricing: jsonb(
+      "synced_long_context_pricing",
+    ).$type<SyncedLongContextPricing>(),
+
     /**
      * Long-context pricing: once a request's prompt (input + cache read +
      * cache write) exceeds this many tokens, the long prices below replace
@@ -194,7 +200,7 @@ const modelsTable = pgTable(
       { precision: 16, scale: 8 },
     ),
 
-    /** Whether this model should be excluded from chat model selection. */
+    /** Whether this model is unavailable for selection and execution. */
     ignored: boolean("ignored").notNull().default(false),
 
     /**

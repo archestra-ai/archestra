@@ -84,18 +84,6 @@ describe("deployBattery", () => {
       sandboxEnabled: true,
     },
     {
-      case: "with the sandbox off",
-      battery: battery({}),
-      isBound: everyBound,
-      sandboxEnabled: false,
-    },
-    {
-      case: "with one credential unbound",
-      battery: battery({}),
-      isBound: (variable: string) => variable !== TOKEN,
-      sandboxEnabled: true,
-    },
-    {
       case: "when its multi-user target reads no credential of its own",
       battery: battery({ targetCredentials: [] }),
       isBound: everyBound,

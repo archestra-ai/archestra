@@ -181,7 +181,9 @@ describe("Grok Build image entrypoint", () => {
         cwd: root,
         env: {
           ...runtimeEnv({ root, mode: "one_shot" }),
-          PATH: process.env.PATH,
+          // System tools only: a developer machine may have a real grok on
+          // its own PATH.
+          PATH: "/usr/bin:/bin",
         },
       }).catch((error) => error);
       expect(result.code).toBe(78);

@@ -3,7 +3,7 @@ title: MCP Gateway Authentication
 sidebarTitle: Gateway Authentication
 description: Authenticate a client to an MCP Gateway with OAuth, a platform token, your identity provider's JWT, or a GitHub Actions token
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,7 +13,7 @@ Each client proves who it is before the gateway shows any tools. Pick the method
 | Your client | Use | Each call acts as |
 | --- | --- | --- |
 | Claude Code, Cursor, or another MCP client | [OAuth](#oauth-21): the client opens a browser for you | The person who signs in |
-| A script or CI job | [Platform token](#bearer-token): one header | You, a team, or the organization |
+| A script or CI job | [Platform token](#bearer-token): one header | You or a service account |
 | A client that already holds a token from your identity provider | [Identity provider JWT](#identity-provider-jwks): pass that token | The person in the token |
 | A GitHub Actions workflow on a pull request | [GitHub Actions](#github-actions): trade the job's GitHub token | The pull request's author, or whoever started the run |
 | Your own app or service | [OAuth client](/docs/mcp/authentication/applications): the app gets its own identity | The app, or the person using it |
@@ -50,13 +50,14 @@ Authorization: Bearer arch_<token>
 | Token | Find it under | Calls act as |
 | --- | --- | --- |
 | **Personal Token** | Your name in the sidebar | You, with your own server accounts |
-| **Team** | **Settings → Teams** | The team, with its shared accounts |
-| **Organization Token** | **Settings → Auth** | The organization, with its shared accounts |
+| **Service Account API Key** | **Settings → Service Accounts** | The account, with its granted access |
+| **Legacy Team or Organization Token** | Its migrated account in **Settings → Service Accounts** | The service account created for that token |
 
-The gateway's **Connect** tab also shows your tokens, ready to copy.
+Use a service-account API key for automation; keep personal tokens for calls acting as you.
 
-- Keep a token secret. Anyone who has it acts as its owner. Click **Rotate Token** if it leaks.
-- Team and organization tokens have no person behind them. They cannot use per-person tools, such as knowledge search.
+- Keep a token secret. Anyone who has it acts as its owner. If a personal token leaks, click **Rotate Token**. For a service-account key, use **Revoke API key**, then **Create API key**, and update the clients that used it.
+- Legacy team and organization tokens keep their values when migrated to service accounts. A team token retains its team; an organization token receives an account without a team.
+- These accounts can use [knowledge search](/docs/knowledge#permissions) when the gateway offers it and the account can access the sources. Migration does not grant access to every source.
 - For your own app, use an [OAuth client](/docs/mcp/authentication/applications) instead. Its tokens expire, and you can limit what it reaches.
 
 <span id="identity-provider-jwks"></span>
@@ -65,7 +66,7 @@ The gateway's **Connect** tab also shows your tokens, ready to copy.
 
 Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
-The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/servers#identity-provider-token-exchange) for a token each MCP server accepts.
+The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/idp-token-exchange) for a token each MCP server accepts.
 
 1. Add your OIDC provider under **Settings → Identity Providers**. See [Identity Providers](/docs/admin/identity#adding-a-provider).
 2. On the gateway, go to **Advanced** and pick that provider.
@@ -134,12 +135,6 @@ A refusal names its reason in `error`:
 
 ## ID-JAG
 
-ID-JAG lets your identity provider decide which MCP servers each person can use. It is the core of MCP's [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) extension. Nobody approves each server one by one:
+The gateway does not accept an ID-JAG yet. After accepting one, it would have to pass the person's identity on to each MCP server behind it, and no standard defines that step yet. The IETF [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/) proposes one, and gateway support waits on it.
 
-1. The person signs in once, through your company's single sign-on.
-2. The client asks your identity provider for an ID-JAG for one MCP server. The provider checks its access policy first.
-3. The client trades the ID-JAG for that server's access token.
-
-Archestra plays the client role today, not the server role. It gets ID-JAGs from your identity provider to authenticate to MCP servers for a person. See [MCP Server Credentials](/docs/mcp/authentication/servers#identity-provider-token-exchange). The gateway does not accept an ID-JAG yet.
-
-Gateway support waits on the [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/). Without it, Archestra cannot pass the person's identity on to the next server after it accepts an ID-JAG.
+Archestra uses ID-JAG the other way today: it gets one from your identity provider to sign a person in to an MCP server. See [ID-JAG](/docs/mcp/authentication/idp-token-exchange#id-jag).

@@ -4,6 +4,7 @@ import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
+  MCP_SKILLS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_ASK_USER_FULL_NAME,
@@ -39,6 +40,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import {
   afterEach,
   beforeEach,
@@ -47,7 +49,11 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
+
 import { MCP_SERVER_INFO_META_KEY } from "./protocol";
 
 /**
@@ -154,32 +160,22 @@ describe("MCP Gateway (stateless mode)", () => {
     // Create a service account token for authentication
     const token = await makeServiceAccountToken({ organizationId: org.id });
 
-    // Pin the skills flag rather than inherit it from the developer's .env:
-    // this test asserts the flag-off extension set, and the flag-on
-    // declaration is protocol.test.ts's business.
-    const original = config.mcpGateway.skillsEnabled;
-    let initResponse: Awaited<ReturnType<typeof app.inject>>;
-    try {
-      config.mcpGateway.skillsEnabled = false;
-      // Send initialize request
-      initResponse = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agent.id}`,
-        headers: makeMcpHeaders(token.value),
-        payload: {
-          jsonrpc: "2.0",
-          method: "initialize",
-          params: {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "test-client", version: "1.0.0" },
-          },
-          id: 1,
+    // Send initialize request
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
         },
-      });
-    } finally {
-      config.mcpGateway.skillsEnabled = original;
-    }
+        id: 1,
+      },
+    });
 
     expect(initResponse.statusCode).toBe(200);
 
@@ -191,6 +187,7 @@ describe("MCP Gateway (stateless mode)", () => {
       [MCP_APPS_EXTENSION_ID]: {},
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
+      [MCP_SKILLS_EXTENSION_ID]: { directoryRead: true },
     });
   });
 
@@ -330,15 +327,15 @@ describe("MCP Gateway (stateless mode)", () => {
     }
   });
 
-  test("dispatches skills/list only while the skills surface is enabled", async ({
+  test("dispatches skills/list ahead of the SDK", async ({
     makeAgent,
     makeOrganization,
     makeServiceAccountToken,
   }) => {
     // Everything else about the skills surface is tested by calling its
     // handlers directly. This is the one test that proves the handlers are
-    // REACHABLE: an inverted guard, a wrong config key, or a dropped
-    // `isSkillMethod` check would ship the whole feature dead — the method
+    // REACHABLE: a dropped `isSkillMethod` check would ship the whole feature
+    // dead — the method
     // falling through to the SDK, which answers -32601 — with the rest of the
     // suite still green.
     const org = await makeOrganization();
@@ -353,27 +350,17 @@ describe("MCP Gateway (stateless mode)", () => {
         payload: { jsonrpc: "2.0", method: "skills/list", params: {}, id: 3 },
       });
 
-    const original = config.mcpGateway.skillsEnabled;
-    try {
-      config.mcpGateway.skillsEnabled = false;
-      const off = (await listSkills()).json();
-      expect(off.error.code).toBe(-32601);
-
-      config.mcpGateway.skillsEnabled = true;
-      const on = (await listSkills()).json();
-      expect(on.error).toBeUndefined();
-      expect(on.result.skills).toEqual([]);
-      // The current revision's result envelope. The skill methods are
-      // dispatched ahead of the SDK, so nothing downstream stamps this for
-      // them — dropping the wrap here would ship results without the
-      // mandatory `resultType`.
-      expect(on.result.resultType).toBe("complete");
-      expect(on.result._meta[MCP_SERVER_INFO_META_KEY]).toMatchObject({
-        name: `archestra-agent-${agent.id}`,
-      });
-    } finally {
-      config.mcpGateway.skillsEnabled = original;
-    }
+    const on = (await listSkills()).json();
+    expect(on.error).toBeUndefined();
+    expect(on.result.skills).toEqual([]);
+    // The current revision's result envelope. The skill methods are
+    // dispatched ahead of the SDK, so nothing downstream stamps this for
+    // them — dropping the wrap here would ship results without the
+    // mandatory `resultType`.
+    expect(on.result.resultType).toBe("complete");
+    expect(on.result._meta[MCP_SERVER_INFO_META_KEY]).toMatchObject({
+      name: `archestra-agent-${agent.id}`,
+    });
   });
 
   test("a skills notification gets 202 and no JSON-RPC response", async ({
@@ -389,32 +376,26 @@ describe("MCP Gateway (stateless mode)", () => {
     const agent = await makeAgent({ organizationId: org.id });
     const token = await makeServiceAccountToken({ organizationId: org.id });
 
-    const original = config.mcpGateway.skillsEnabled;
-    try {
-      config.mcpGateway.skillsEnabled = true;
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agent.id}`,
-        headers: makeMcpHeaders(token.value),
-        payload: { jsonrpc: "2.0", method: "skills/list", params: {} },
-      });
-      expect(response.statusCode).toBe(202);
-      expect(response.body).toBe("");
-    } finally {
-      config.mcpGateway.skillsEnabled = original;
-    }
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "skills/list", params: {} },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.body).toBe("");
   });
 
-  test("serves a skill:// read only while the skills surface is enabled", async ({
+  test("serves a skill:// read through resources/read", async ({
     makeAgent,
     makeOrganization,
     makeSkill,
     makeServiceAccountToken,
   }) => {
     // The read half of the reachability check above. `resources/read` is an
-    // ordinary SDK request whose handler branches on the flag, so an inverted
-    // guard there ships every skill read as not-found while listings work —
-    // and no other test reaches that branch with the flag on.
+    // ordinary SDK request whose handler branches on the `skill://` URI, so a
+    // broken branch there ships every skill read as not-found while listings
+    // work.
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
@@ -443,22 +424,13 @@ describe("MCP Gateway (stateless mode)", () => {
         },
       });
 
-    const original = config.mcpGateway.skillsEnabled;
-    try {
-      config.mcpGateway.skillsEnabled = false;
-      expect((await readManifest()).json().error.code).toBe(-32602);
-
-      config.mcpGateway.skillsEnabled = true;
-      const on = (await readManifest()).json();
-      expect(on.error).toBeUndefined();
-      expect(on.result.contents[0]).toMatchObject({
-        uri: "skill://archestra/shared/reachable-skill/SKILL.md",
-        mimeType: "text/markdown",
-      });
-      expect(on.result.contents[0].text).toContain("name: reachable-skill");
-    } finally {
-      config.mcpGateway.skillsEnabled = original;
-    }
+    const on = (await readManifest()).json();
+    expect(on.error).toBeUndefined();
+    expect(on.result.contents[0]).toMatchObject({
+      uri: "skill://archestra/shared/reachable-skill/SKILL.md",
+      mimeType: "text/markdown",
+    });
+    expect(on.result.contents[0].text).toContain("name: reachable-skill");
   });
 
   test("handles tools/list request successfully (stateless)", async ({
@@ -1430,6 +1402,83 @@ describe("MCP Gateway (stateless mode)", () => {
       sessionId: null,
       llmToolCallId: null,
     });
+  });
+
+  test("links a Claude Code tool call to the LLM session the proxy handed it out in, for that user only", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const [owner, other] = [await makeUser(), await makeUser()];
+    for (const user of [owner, other])
+      await makeMember(user.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    // What the proxy leaves when it hands Claude Code a response: one MCP
+    // call through the gateway and one built-in call that never reaches it.
+    await llmToolCallSessions.remember({
+      organizationId: org.id,
+      userId: owner.id,
+      sessionId: "claude-session",
+      toolCalls: [
+        { id: "toolu_gateway", name: "mcp__archestra__archestra__whoami" },
+        { id: "toolu_builtin", name: "Bash" },
+      ],
+    });
+    const tokens = new Map([
+      [owner.id, (await UserTokenModel.create(owner.id, org.id)).value],
+      [other.id, (await UserTokenModel.create(other.id, org.id)).value],
+    ]);
+    const callWhoami = async (params: {
+      userId: string;
+      toolUseId: string;
+    }) => {
+      const token = mustExist(tokens.get(params.userId));
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token),
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__whoami",
+            arguments: {},
+            _meta: { "claudecode/toolUseId": params.toolUseId },
+          },
+          id: 2,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const page = await McpToolCallModel.findAllCursorPaginated(
+        { limit: 1 },
+        undefined,
+        undefined,
+        { agentId: agent.id },
+      );
+      return mustExist(page.data[0]);
+    };
+
+    expect(
+      await callWhoami({ userId: owner.id, toolUseId: "toolu_gateway" }),
+    ).toMatchObject({
+      sessionId: "claude-session",
+      llmToolCallId: "toolu_gateway",
+    });
+    // A call id the proxy never handed out, or one claimed by another user,
+    // names no session.
+    expect(
+      await callWhoami({ userId: owner.id, toolUseId: "toolu_builtin" }),
+    ).toMatchObject({ sessionId: null });
+    expect(
+      await callWhoami({ userId: other.id, toolUseId: "toolu_gateway" }),
+    ).toMatchObject({ sessionId: null });
   });
 
   test("refuses a direct call to a tool the gateway does not have, without running it", async ({

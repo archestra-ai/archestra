@@ -17,7 +17,7 @@ import type { User } from "@/types";
 import { ApiError } from "@/types";
 
 // Mock the Vertex AI check
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
@@ -78,7 +78,7 @@ vi.mock("@/services/model-sync", () => ({
 import { hasPermission, userHasPermission } from "@/auth";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -572,6 +572,55 @@ describe("LLM Provider API Keys CRUD", () => {
       "System API keys cannot be deleted",
     );
     expect(await LlmProviderApiKeyModel.findById(systemKey.id)).not.toBeNull();
+  });
+
+  test.for([
+    ["an API key value", { apiKey: "sk-override" }],
+    ["a base URL", { baseUrl: "https://example.com/v1" }],
+    ["extra headers", { extraHeaders: { "x-test": "1" } }],
+  ] as const)("refuses to give a system API key %s", async ([
+    _label,
+    payload,
+  ]) => {
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "System Gemini",
+      provider: "gemini",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${systemKey.id}`,
+      payload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "System API keys are configured through environment variables; their credentials and connection settings cannot be changed",
+    );
+    const stored = await LlmProviderApiKeyModel.findById(systemKey.id);
+    expect(stored?.secretId).toBeNull();
+    expect(stored?.baseUrl).toBeNull();
+    expect(stored?.extraHeaders).toBeNull();
+  });
+
+  test("renames a system API key", async () => {
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "System Gemini",
+      provider: "gemini",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${systemKey.id}`,
+      payload: { name: "Vertex AI" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect((await LlmProviderApiKeyModel.findById(systemKey.id))?.name).toBe(
+      "Vertex AI",
+    );
   });
 
   test("deleting a key backing the organization's OCR configuration clears that setting", async () => {
@@ -2022,6 +2071,33 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     });
   });
 
+  test("refuses to reconnect a GitHub Copilot sign-in once personal subscriptions are off", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "gho_old" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: memberUser.id,
+    });
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: "gho_fresh" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+    const { secretManager } = await import("@/secrets-manager");
+    expect(secretManager().updateSecret).not.toHaveBeenCalled();
+  });
+
   test("404s for another user's personal key", async ({
     makeSecret,
     makeLlmProviderApiKey,
@@ -2212,6 +2288,108 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
       url: `/api/llm-provider-api-keys/${keyId}`,
     });
     expect(removal.statusCode).toBe(200);
+  });
+});
+
+describe("LLM Provider API Keys — GitHub Copilot plans the organization turned off", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const turnOffPlan = async (plan: "personal" | "enterprise") => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { [plan]: { hidden: true } } },
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+  };
+
+  const createCopilotKey = () =>
+    app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My Copilot",
+        provider: "github-copilot",
+        apiKey: "gho_personal_token",
+      },
+    });
+
+  test("refuses a personal Copilot sign-in once personal subscriptions are off", async () => {
+    await turnOffPlan("personal");
+
+    const response = await createCopilotKey();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "GitHub Copilot personal subscriptions are turned off",
+    );
+  });
+
+  test("still takes a personal Copilot sign-in when only enterprise plans are off", async () => {
+    await turnOffPlan("enterprise");
+
+    const response = await createCopilotKey();
+
+    expect(response.statusCode, response.body).toBe(200);
+  });
+
+  test("freezes an existing personal Copilot key once personal subscriptions are off, but keeps it deletable", async () => {
+    const created = await createCopilotKey();
+    expect(created.statusCode, created.body).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOffPlan("personal");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+
+  test("leaves a personal Copilot key editable when only enterprise plans are off", async () => {
+    const created = await createCopilotKey();
+    const keyId = created.json().id;
+
+    await turnOffPlan("enterprise");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode, update.body).toBe(200);
   });
 });
 

@@ -5,22 +5,26 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
-import {
-  isCommandExecutionTool,
-  withoutArgumentCopies,
-} from "./command-normalization";
+import { isCommandExecutionTool } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 import {
   type HitlReviewCard,
   hitlInspectionDigest,
   hitlReviewCard,
+  hitlReviewForm,
+  hitlReviewInspectionResult,
   renderHitlReviewText,
+  toolDescriptionLine,
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
+  acceptedScope,
+  displayedReview,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
 } from "./review-display";
+import type { ReviewScopeItem } from "./review-scope";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -160,11 +164,23 @@ export function closureFromReviewOutcome(
 type PendingHitlReview = {
   offerId: string;
   text: string;
+  /**
+   * What approving accepts, `null` when unknown. Absent only on a review
+   * staged before scope was stored, whose coverage is read from `text`.
+   */
+  scope?: ReviewScopeItem[] | null;
+  /** The ruling authority's own hint to the reviewer. */
+  hint?: string;
   tool?: string;
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
   /** Generated reading aid, never part of the approved tool arguments. */
   summary?: string;
+  /**
+   * The reviewed tool's own definition text, resolved when the review is
+   * staged. Cards show it when the call carries no description of its own.
+   */
+  toolDescription?: string;
 };
 
 type HitlAskUserArguments = HitlReviewCard;
@@ -280,8 +296,9 @@ export async function stageHitlReview(params: {
   if (!samePayload && params.prepareSummary !== false) {
     try {
       summary = await summarizeHitlReview(params);
-    } catch {
+    } catch (err) {
       logger.warn(
+        { err },
         "OpenAPPA approval summary unavailable; retaining the complete review",
       );
     }
@@ -310,7 +327,8 @@ export async function stageHitlReview(params: {
       // Another request may have staged this offer while we generated the
       // reading aid. An already-issued presentation of the same call wins,
       // even without a summary. The remedy plan is not part of the
-      // presentation: a repeated remedy call keeps the stage it finds.
+      // presentation: a repeated remedy call keeps the stage it finds. Nor is
+      // the tool description: the stage keeps the one it was issued with.
       const issued = await cache.get<PendingHitlReview>(
         stagePresenceKey(params.session, params.review.offerId),
       );
@@ -491,22 +509,55 @@ export async function peekHitlDecision(params: {
 export async function getHitlAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];
+  /** Some MCP form renderers discard every line break in the message. */
+  presentation?: "form";
 }): Promise<HitlAskUserArguments | undefined> {
   if (params.offerIds.length !== 1) return undefined;
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
-  return buildHitlAskUserCard(review);
+  const card = buildHitlAskUserCard(review);
+  if (params.presentation !== "form" || !review.tool) return card;
+  const shown = displayedReview(review);
+  const args = parseReviewedArguments(shown.arguments);
+  const accepted = acceptedOf(shown);
+  // Grok's MCP form removes line breaks and renders Markdown literally.
+  // Flow YAML keeps complete typed values (including multiline strings) on a
+  // single logical line, while the client wraps to the actual terminal width.
+  return {
+    ...card,
+    question: [
+      card.shortQuestion ?? "Approve this call?",
+      ...(args
+        ? [
+            `Arguments: ${dumpYaml(withoutProxyCopies(shown.tool ?? "", args), { flowLevel: 0, lineWidth: -1, noRefs: true }).trimEnd()}`,
+          ]
+        : shown.arguments
+          ? [`Arguments (unparsed): ${JSON.stringify(shown.arguments)}`]
+          : []),
+      ...(accepted
+        ? accepted.map((line) => `Also accepts: ${JSON.stringify(line)}`)
+        : [
+            `Policy review: ${JSON.stringify(formatReviewQuestion(shown.text))}`,
+          ]),
+      ...(shown.summary
+        ? [
+            `Generated summary (may omit details): ${JSON.stringify(shown.summary)}`,
+          ]
+        : []),
+      "Approve allows only this exact call. Deny keeps it blocked.",
+    ].join("  •  "),
+  };
 }
 
 /**
  * The review as one card: the call by the name the user knows it under, its
  * arguments as named values, and what an approval accepts besides the
- * person's attention, such as a wider audience. Where the coverage is not in
- * the shape read here, the full text is shown and nothing it covers is left
- * out.
+ * person's attention, such as a wider audience. Where the coverage is
+ * unknown, the full text is shown and nothing it covers is left out.
  */
-function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
+function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
+  const review = displayedReview(staged);
   const offerId = review.offerId;
   const options = [
     { label: "Approve", description: "Allow this exact tool call." },
@@ -528,16 +579,22 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
   const parsed = parseReviewedArguments(review.arguments);
   if (review.arguments && !parsed) {
     return {
-      question: `${formatReviewQuestion(review.text)}\n\nExact arguments (unparsed):\n${review.arguments}`,
+      question: `${formatReviewQuestion(review.text)}\n\nArguments (unparsed, credential values hidden):\n${review.arguments}`,
       header: "Approval",
       options,
       allowMultiple: false,
       remedy_offer_ids: [offerId],
     };
   }
-  const args = withoutArgumentCopies(review.tool, parsed ?? {});
-  const accepted = acceptedCoverage(review.text);
-  const preview = callPreview(review.tool, args);
+  const args = withoutProxyCopies(review.tool, parsed ?? {});
+  const accepted = acceptedOf(review);
+  const called = callPreview(review.tool, args);
+  // A call that says nothing about itself shows its tool's description.
+  const described =
+    called.summary === undefined && review.toolDescription
+      ? toolDescriptionLine(review.toolDescription)
+      : undefined;
+  const preview = described ? { ...called, summary: described } : called;
   return {
     question:
       approvalQuestion({
@@ -550,7 +607,28 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
         "\n\n",
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
-    callPreview: previewText({ preview, accepted, summary: review.summary }),
+    callPreview: previewText({
+      preview,
+      accepted,
+      summary: review.summary,
+      // A review staged before scope was stored keeps the preview it had.
+      ...(review.scope === null
+        ? { reviewText: formatReviewQuestion(review.text) }
+        : {}),
+    }),
+    // Grok's preview is plain text and wraps to the actual terminal width.
+    // Generate it from the reviewed data; stripping Markdown from the other
+    // preview would also strip literal payload characters and retain its wraps.
+    plainCallPreview: [
+      ...(accepted
+        ? acceptedBlock(accepted)
+        : [formatReviewQuestion(review.text)]),
+      ...summaryBlock(review.summary),
+      Object.keys(args).length
+        ? `Full arguments (YAML, not summarized):\n${dumpYaml(args, { lineWidth: -1, noRefs: true })}`
+        : "This call has no arguments.",
+      "Approve lets this exact call run. Deny keeps it blocked.",
+    ].join("\n\n"),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -560,12 +638,25 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
 
 /**
  * The inspectable card for a review: the call in the preview pane, with
- * Allow, Deny and Inspect. When a signed Inspect answer is still pending, the
+ * Inspect, Allow and Deny. When a signed Inspect answer is still pending, the
  * card carries the complete review text for the transport to place above
  * it; the pending state is not consumed here, only when an answer to that
  * very card comes back. Returns undefined when the review is already ruled
  * on, so the caller falls back to the ordinary card.
  */
+/**
+ * What ask_user returns after an Inspect answer on a form: the complete
+ * review of the live offer, for the agent to print in the chat. Undefined
+ * when the review is gone.
+ */
+export async function getHitlInspectionResult(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<string | undefined> {
+  const review = await getHitlReview(params);
+  return review ? hitlReviewInspectionResult(review) : undefined;
+}
+
 export async function getHitlInspectableAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];
@@ -573,6 +664,12 @@ export async function getHitlInspectableAskUserArguments(params: {
   emit?: boolean;
   /** The card being read was issued with the complete review text above it. */
   carriedReviewText?: boolean;
+  /**
+   * A form whose message is one paragraph, on a client that cannot be handed
+   * assistant text: the complete review reaches the chat as the asking
+   * tool's result, so `reviewText` here only says an inspection is pending.
+   */
+  presentation?: "form";
 }): Promise<
   | {
       card: HitlAskUserArguments;
@@ -629,7 +726,9 @@ export async function getHitlInspectableAskUserArguments(params: {
       : undefined;
   // A card that carries the complete text, or follows its delivery, may offer
   // Allow even when it cannot show the whole call itself.
-  const { card } = hitlReviewCard({
+  const { card } = (
+    params.presentation === "form" ? hitlReviewForm : hitlReviewCard
+  )({
     base,
     review,
     inspected:
@@ -671,6 +770,8 @@ export async function resolveHitlInspectableAnswer(params: {
   carriedReviewText: boolean;
   /** The payload digest the answered card was issued with. */
   claimDigest: string;
+  /** The answer came from the one-paragraph form, read against its limits. */
+  presentation?: "form";
 }): Promise<
   | { status: "recorded"; ruling: "approve" | "deny" }
   | { status: "inspect-pending" | "inspect-shown" }
@@ -725,6 +826,18 @@ export async function resolveHitlInspectableAnswer(params: {
           { offerId, digest, status: "pending" as const },
           HITL_REVIEW_TTL_MS,
         );
+        if (params.presentation === "form") {
+          // Reading the complete review takes time the review window did not
+          // plan for: a native card renews its review when it is issued, and
+          // a form does when its reviewer asks to inspect.
+          const lifetime = HITL_QUESTION_TTL_MS + HITL_REVIEW_TTL_MS;
+          const pending = await cache.get<PendingHitlReview>(
+            reviewKey(session, offerId),
+          );
+          await cache.set(stagePresenceKey(session, offerId), staged, lifetime);
+          if (pending?.offerId === offerId)
+            await cache.set(reviewKey(session, offerId), pending, lifetime);
+        }
         return { status: "inspect-pending" as const };
       }
       // No approval while a requested inspection has not been delivered:
@@ -736,7 +849,7 @@ export async function resolveHitlInspectableAnswer(params: {
       // reviewer received this payload's complete review text, offers Allow.
       if (
         params.answer === "approve" &&
-        !hitlReviewCard({
+        !(params.presentation === "form" ? hitlReviewForm : hitlReviewCard)({
           base: buildHitlAskUserCard(staged),
           review: staged,
           inspected: inspection?.status === "delivered",
@@ -763,6 +876,14 @@ export async function resolveHitlInspectableAnswer(params: {
         await cache.delete(rulingKey(session, offerId, "none"));
       } else {
         await cache.delete(rulingKey(session, offerId, "none"));
+        // A form's review was not renewed when it was shown: it lives as
+        // long as the approval, which the remedy call is spent with.
+        if (params.presentation === "form")
+          await cache.set(
+            stagePresenceKey(session, offerId),
+            staged,
+            HITL_REVIEW_TTL_MS,
+          );
       }
       return { status: "recorded" as const, ruling: params.answer };
     },
@@ -1107,10 +1228,14 @@ function approvalQuestion(params: {
 
 /**
  * What an approval accepts besides the person's attention, or undefined when
- * the review text's coverage is not in the shape read here.
+ * that is unknown and the review text must be shown.
  */
-function acceptedCoverage(text: string): string[] | undefined {
-  return reviewCoverage(text)?.filter(
+function acceptedOf(review: PendingHitlReview): string[] | undefined {
+  if (review.scope !== undefined)
+    return acceptedScope(review.scope ?? undefined);
+  // A review staged before scope was stored: its card, still answerable for
+  // HITL_QUESTION_TTL_MS after a deploy, read the coverage from the text.
+  return reviewCoverage(review.text)?.filter(
     (line) => !line.startsWith("attention: "),
   );
 }
@@ -1161,6 +1286,8 @@ function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
   summary?: string;
+  /** The whole review, for a review whose coverage is unknown. */
+  reviewText?: string;
 }): string {
   const { subject, summary, body } = params.preview;
   const accepted = params.accepted ?? [];
@@ -1174,6 +1301,9 @@ function previewText(params: {
     heading.join("\n"),
     ...summaryBlock(params.summary).map(escapeMarkdown),
     ...body,
+    ...(params.reviewText === undefined
+      ? []
+      : [`Policy review:\n${codeBlock(wrapCode(params.reviewText))}`]),
     ...(accepted.length > 0
       ? [
           [
@@ -1388,7 +1518,7 @@ function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.
   // Replace only the runtime's decorative prefix, never the reviewed payload.
   return text.startsWith(PIXEL_REVIEW_HEADING)
-    ? `[OpenAPPA] Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
+    ? `Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
     : text;
 }
 

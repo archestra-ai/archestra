@@ -25,9 +25,6 @@ class PreflightTests(unittest.TestCase):
         self.git("init", "-q")
         self.git("config", "user.email", "ci@example.test")
         self.git("config", "user.name", "CI")
-        self.git("add", ".")
-        self.git("commit", "-qm", "fixture")
-        self.head = self.git("rev-parse", "HEAD")
         self.marker = self.root / "calls"
         bin_dir = self.root / "bin"
         bin_dir.mkdir()
@@ -48,6 +45,18 @@ class PreflightTests(unittest.TestCase):
             "    sys.exit(23)\n"
         )
         pnpm.chmod(0o755)
+        # The workspace runner is a subprocess boundary too; its real dispatch
+        # is covered by check-sequence.unit.test.ts. Keep these tests about
+        # preflight's fail-fast and exact-revision contract.
+        (scripts / "check-workspace.mjs").write_text(
+            "import { spawnSync } from 'node:child_process';\n"
+            "const result = spawnSync('pnpm', process.argv.slice(2), "
+            "{ stdio: 'inherit' });\n"
+            "process.exit(result.status ?? 1);\n"
+        )
+        self.git("add", ".")
+        self.git("commit", "-qm", "fixture")
+        self.head = self.git("rev-parse", "HEAD")
         self.env = os.environ | {
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "ARCHESTRA_TEST_PREFLIGHT_CALLS": str(self.marker),
@@ -75,7 +84,17 @@ class PreflightTests(unittest.TestCase):
         result = self.run_preflight(self.head)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"Preflight passed for {self.head}", result.stdout)
-        self.assertTrue(self.calls())
+        self.assertEqual(
+            [c["args"] for c in self.calls()],
+            [
+                ["all-commit"],
+                ["check:white-label"],
+                [
+                    "--filter", "@frontend", "--filter", "@archestra/shared",
+                    "--workspace-concurrency=1", "test", "run",
+                ],
+            ],
+        )
         self.assertTrue(all(c["cwd"] == str(self.platform.resolve()) for c in self.calls()))
 
     def test_failure_stops_later_checks_and_cannot_report_success(self):

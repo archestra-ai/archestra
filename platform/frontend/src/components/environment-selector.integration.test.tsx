@@ -35,12 +35,21 @@ const savedEnvironment = {
   // The listing answers deploy authority per environment; this one is closed
   // to the caller, which is what makes its option disabled below.
   canDeploy: false,
+  deployKinds: [] as string[],
   description: null,
 };
 const otherEnvironment = {
   id: "10000000-0000-4000-8000-000000000002",
   name: "Other test environment",
   canDeploy: true,
+  deployKinds: [
+    "agent",
+    "mcpGateway",
+    "mcpRegistry",
+    "skill",
+    "app",
+    "knowledgeSource",
+  ],
   description: null,
 };
 const server = setupServer();
@@ -156,6 +165,34 @@ describe("EnvironmentSelector modes", () => {
     expect(
       screen.getByRole("option", { name: /^Restricted test environment/ }),
     ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("an environment open to some kinds of object is offered to the picker for those kinds only", async () => {
+    // The caller may put agents here and nothing else.
+    availableEnvironments = [
+      { ...savedEnvironment, deployKinds: ["agent"] },
+      otherEnvironment,
+    ];
+    const optionFor = async (resource: "agent" | "mcpRegistry") => {
+      const view = render(
+        <QueryClientProvider client={client}>
+          <EnvironmentSelector
+            resource={resource}
+            value={null}
+            onChange={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      await warmUntilLoaded();
+      await userEvent.click(trigger());
+      const disabled = screen
+        .getByRole("option", { name: /^Restricted test environment/ })
+        .getAttribute("aria-disabled");
+      view.unmount();
+      return disabled;
+    };
+    expect(await optionFor("agent")).not.toBe("true");
+    expect(await optionFor("mcpRegistry")).toBe("true");
   });
 
   test("cost scopes allow restricted environments without deployment permission and disable already-used scopes", async () => {

@@ -268,6 +268,15 @@ export function isCatalogInAppEnvironment(
 }
 
 /**
+ * What the tools picker says in place of the connection selector for a
+ * desktop MCP server: there is nothing to choose, each call runs on the
+ * computer of the person who makes it.
+ */
+export function desktopToolsRunNote(name: string): string {
+  return `Runs on the device of the person who uses the agent. Each person connects ${name} from their linked device.`;
+}
+
+/**
  * Whether a catalog item may be assigned to an agent in the tools picker, and
  * how it should read when it is.
  *
@@ -278,6 +287,11 @@ export function isCatalogInAppEnvironment(
  * prompting install/reconnect when invoked. A catalog item with no discovered
  * tool has nothing to assign. Environment incompatibility is a separate,
  * orthogonal gate.
+ *
+ * A desktop MCP server has no connection to resolve for the assigning caller:
+ * each call runs on the computer of the person who makes it. It is never
+ * `unavailable`, and with no discovered tool it is not "installed" anywhere
+ * but waits for a first computer.
  */
 export function getCatalogAssignmentGate(params: {
   hasDiscoveredTools: boolean;
@@ -286,6 +300,8 @@ export function getCatalogAssignmentGate(params: {
   environmentName?: string | null;
   /** A disabled app backing: listed for its author but not assignable. */
   isDisabledApp?: boolean;
+  /** A desktop MCP server: it runs on each caller's own computer. */
+  isDesktop?: boolean;
 }): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
   const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
     params;
@@ -316,11 +332,16 @@ export function getCatalogAssignmentGate(params: {
     return {
       disabled: true,
       unavailable: false,
-      disabledReason: "Not installed",
+      disabledReason: params.isDesktop
+        ? "Not connected from a device yet"
+        : "Not installed",
     };
   }
 
-  return { disabled: false, unavailable: !hasResolvableInstall };
+  return {
+    disabled: false,
+    unavailable: !params.isDesktop && !hasResolvableInstall,
+  };
 }
 
 /**

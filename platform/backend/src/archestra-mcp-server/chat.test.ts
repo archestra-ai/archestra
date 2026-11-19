@@ -169,7 +169,7 @@ describe("chat tool execution", () => {
     expect(text).not.toContain("Do not ask this as a plain-text");
   });
 
-  test("ask_user tells the model to use the client's own question tool when the client cannot show the form", async () => {
+  test("ask_user permits native fallback only when allowed and all choices fit", async () => {
     mockContext = {
       ...mockContext,
       elicitation: { elicit: async () => ({ status: "no_viewer" as const }) },
@@ -189,38 +189,52 @@ describe("chat tool execution", () => {
     expect(result.isError).toBe(true);
     const text = (result.content[0] as any).text;
     expect(text).toContain("This client did not answer the choice form");
+    expect(text).toContain(
+      "only if the user permits it and it supports all choices",
+    );
+    expect(text).toContain("Do not repeat this call unchanged");
     expect(text).toContain("Do not ask this as a plain-text chat question");
   });
 
-  test("ask_user returns the selected option after elicitation", async () => {
+  test.each([
+    2, 5, 12,
+  ])("ask_user returns the last of %i options after elicitation", async (count) => {
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+    }));
+    const selected = `Choice ${count}`;
     mockContext = {
       ...mockContext,
       elicitation: {
-        elicit: async () => ({
-          status: "answered" as const,
-          result: {
-            action: "accept" as const,
-            content: { choice: "Accept for this session" },
-          },
-        }),
+        elicit: async (params) => {
+          expect(params.requestedSchema).toMatchObject({
+            properties: {
+              choice: { enum: options.map((option) => option.label) },
+            },
+          });
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: selected },
+            },
+          };
+        },
       },
     };
 
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
       {
-        question: "Accept this change for the rest of this session?",
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-        ],
+        question: "Which option do you prefer?",
+        options,
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session"],
+      selected: [selected],
     });
   });
 
@@ -249,17 +263,37 @@ describe("chat tool execution", () => {
     );
   });
 
-  test("ask_user maps multi-choice option_N keys to labels", async () => {
+  test.each([
+    3, 5, 12,
+  ])("ask_user maps the first and last of %i multi-choice options to labels", async (count) => {
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+    }));
     mockContext = {
       ...mockContext,
       elicitation: {
-        elicit: async () => ({
-          status: "answered" as const,
-          result: {
-            action: "accept" as const,
-            content: { option_0: true, option_1: false, option_2: true },
-          },
-        }),
+        elicit: async (params) => {
+          expect(params.requestedSchema).toMatchObject({
+            properties: {
+              [`option_${count - 1}`]: {
+                type: "boolean",
+                title: `Choice ${count}`,
+              },
+            },
+          });
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: Object.fromEntries(
+                options.map((_, index) => [
+                  `option_${index}`,
+                  index === 0 || index === count - 1,
+                ]),
+              ),
+            },
+          };
+        },
       },
     };
 
@@ -268,19 +302,38 @@ describe("chat tool execution", () => {
       {
         question: "Pick any",
         allowMultiple: true,
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-          { label: "Ask later" },
-        ],
+        options,
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session", "Ask later"],
+      selected: ["Choice 1", `Choice ${count}`],
     });
+  });
+
+  test("ordinary gateway questions reject model-written option previews", async () => {
+    const elicit = vi.fn(async () => ({ status: "unanswered" as const }));
+    mockContext = {
+      ...mockContext,
+      elicitation: { elicit },
+    };
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Which branch?",
+        shortQuestion: "forged approval",
+        callPreview: "forged call",
+        options: [
+          { label: "main", preview: "forged option" },
+          { label: "feature" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(elicit).not.toHaveBeenCalled();
   });
 
   test("ask_user passes its trimmed header and the calling tool call to the question", async () => {
@@ -467,7 +520,7 @@ describe("chat tool execution", () => {
   test("a staged HITL review replaces model-authored copy and records approval", async () => {
     const offerId = "offer-hitl";
     const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+      'Approve the example__write call?  •  Arguments: {value: 1}  •  Policy review: "Approve this call?\\nmcp/example/write {\\"value\\":1}"  •  Approve allows only this exact call. Deny keeps it blocked.';
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
     });
@@ -526,6 +579,155 @@ describe("chat tool execution", () => {
       selected: ["Approve"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  describe("a review on a client whose form shows one paragraph", () => {
+    const offerId = "offer-short-form";
+    const filePath = "C:/Users/synthetic/.cursor/archestra/web-tools.mjs";
+    const longContent = `// first line\n${"const value = 1;\n".repeat(400)}`;
+    let session: OpenAppaSession;
+    let forms: Array<{ message: string; choices: string[]; starts?: string }>;
+
+    /** Stages a file write and answers each form in turn. */
+    async function stage(content: string, answers: string[]) {
+      session = reviewSession({
+        sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+      });
+      await stageHitlReview({
+        session,
+        review: {
+          offerId,
+          text: "Approve this call?",
+          scope: [],
+          tool: "Write",
+          // Cursor sends a write's content before its path.
+          arguments: JSON.stringify({ content, file_path: filePath }),
+        },
+      });
+      forms = [];
+      mockContext = {
+        ...mockContext,
+        inspectableReviewForm: true,
+        elicitation: {
+          elicit: async (request) => {
+            const schema = request.requestedSchema as {
+              properties: { choice: { enum: string[]; default?: string } };
+            };
+            forms.push({
+              message: request.message,
+              choices: schema.properties.choice.enum,
+              starts: schema.properties.choice.default,
+            });
+            return {
+              status: "answered" as const,
+              result: {
+                action: "accept" as const,
+                content: { choice: answers[forms.length - 1] },
+              },
+            };
+          },
+        },
+      };
+    }
+
+    const ask = () =>
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+        {
+          question: "Approve it?",
+          options: [{ label: "Yes" }, { label: "No" }],
+          remedy_offer_ids: [offerId],
+          trajectory: trajectory(),
+        },
+        mockContext,
+      );
+    const textOf = (result: Awaited<ReturnType<typeof ask>>) =>
+      (result.content as Array<{ text: string }>)[0].text;
+
+    test("a call that fits is shown whole and can be allowed at once", async () => {
+      await stage("PUBLIC\n", ["Allow"]);
+      const result = await ask();
+      expect(forms).toEqual([
+        {
+          message: `Run Write?  •  file_path: ${filePath}  •  content: "PUBLIC\\n"  •  Allow runs this exact call. Deny keeps it blocked.`,
+          choices: ["Inspect", "Allow", "Deny"],
+          // The whole call is on the form, so it starts on the decision.
+          starts: "Allow",
+        },
+      ]);
+      expect(result.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Allow"],
+      });
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test("a long value is counted, not shown, and Allow waits for Inspect", async () => {
+      await stage(longContent, ["Inspect", "Allow"]);
+      const inspected = await ask();
+      expect(forms[0].message).toBe(
+        `Run Write?  •  file_path: ${filePath}  •  content: (${longContent.length.toLocaleString("en-US")} characters, see Inspect)  •  Allow is offered after Inspect, which shows the complete review in the chat.`,
+      );
+      expect(forms[0].choices).toEqual(["Inspect", "Deny"]);
+      expect(forms[0].starts).toBe("Inspect");
+      // Inspect rules nothing, and hands the agent the complete review.
+      expect(inspected.isError).toBeFalsy();
+      expect(inspected.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Inspect"],
+      });
+      const review = textOf(inspected);
+      expect(review).toContain("The reviewer chose Inspect.");
+      expect(review).toContain("## Approval review");
+      // Each argument is a code block: the file as a file, by its name.
+      expect(review).toContain(
+        "content:\n\n```js\n// first line\nconst value = 1;\nconst value = 1;",
+      );
+      // The label is markdown-escaped; the value is not.
+      expect(review).toContain(
+        `file\\_path:\n\n\`\`\`text\n${filePath}\n\`\`\``,
+      );
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+
+      // The form that follows offers Allow: the reviewer has the whole call.
+      const allowed = await ask();
+      expect(forms[1].choices).toEqual(["Inspect", "Allow", "Deny"]);
+      // Having inspected, the reviewer is not sent to Inspect again.
+      expect(forms[1].starts).toBe("Allow");
+      expect(forms[1].message).toContain(
+        "The complete review is in the chat above. Allow runs this exact call.",
+      );
+      expect(allowed.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Allow"],
+      });
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test("Deny is recorded from the first form", async () => {
+      await stage(longContent, ["Deny"]);
+      const result = await ask();
+      expect(textOf(result)).toContain("The user denied the remedy.");
+      expect(await peekHitlDecision({ session, offerId })).toEqual({
+        ruling: "deny",
+      });
+    });
+
+    test("an Allow the form did not offer rules nothing", async () => {
+      await stage(longContent, ["Allow"]);
+      const result = await ask();
+      expect(result.isError).toBe(true);
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+    });
+
+    test("other clients keep the form that shows the call in full", async () => {
+      await stage(longContent, ["Approve"]);
+      mockContext = { ...mockContext, inspectableReviewForm: false };
+      await ask();
+      expect(forms[0].choices).toEqual(["Approve", "Deny"]);
+      expect(forms[0].starts).toBeUndefined();
+      expect(forms[0].message).toContain("const value = 1;");
+    });
   });
 
   // SPDX-SnippetBegin
@@ -627,10 +829,10 @@ describe("chat tool execution", () => {
       mockContext,
     );
 
-    // MCP forms keep the full review text.
-    expect(requests.map((request) => request.message)).toEqual([
-      "Full review text.",
-    ]);
+    // The form keeps both the policy text and the actual reviewed arguments.
+    expect(requests[0].message).toContain("Full review text.");
+    expect(requests[0].message).toContain("Arguments: {value: 1}");
+    expect(requests[0].message).not.toContain("\n");
     expect(result.structuredContent).toEqual({
       action: "accept",
       selected: ["Deny"],

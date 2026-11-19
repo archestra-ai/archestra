@@ -5,27 +5,27 @@ import {
 } from "@archestra/shared/access-control";
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import {
-  OrganizationModel,
-  ServiceAccountModel,
-  SessionModel,
-  UserModel,
-} from "@/models";
+import { OrganizationModel, SessionModel, UserModel } from "@/models";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
   ARCHESTRA_CATALOG_PROXY_PREFIX,
+  ARCHESTRA_CLI_DOWNLOAD_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
+  CONNECTION_HOOKS_CURSOR_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   CONNECTION_STARTUP_GUARD_PATH,
+  DESKTOP_DEVICE_SIGN_IN_PATH,
+  DESKTOP_TUNNEL_PREFIX,
   GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
@@ -41,13 +41,16 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
+  SPIFFE_ISSUER_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
+  WORKLOAD_IDENTITY_TOKEN_PATH,
 } from "@/routes/route-paths";
 import {
   appIdFromConnectorPath,
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { ApiError } from "@/types";
 
 /**
@@ -103,7 +106,7 @@ export class Authnz {
     }
 
     // Set Sentry user context after successful authentication
-    this.setSentryUserContext(request.user, request);
+    this.setSentryUserContext(request.user);
 
     logger.trace(
       {
@@ -198,6 +201,14 @@ export class Authnz {
       (method === "POST" &&
         (url === "/api/client-connections" ||
           url === "/api/client-connections/poll")) ||
+      // Tunnel client of a desktop device: the tunnel endpoints check the
+      // device key in-route, and sign-in start and poll carry a polling proof.
+      url.startsWith(`${DESKTOP_TUNNEL_PREFIX}/`) ||
+      (method === "POST" &&
+        (url === DESKTOP_DEVICE_SIGN_IN_PATH ||
+          url === `${DESKTOP_DEVICE_SIGN_IN_PATH}/poll`)) ||
+      // The download of the `archestra` program is not secret.
+      (isGetOrHead && url.startsWith(`${ARCHESTRA_CLI_DOWNLOAD_PREFIX}/`)) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
       (isGetOrHead && url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
       // Public Archestra VAF Add On install bootstrap and package proxy:
@@ -234,6 +245,8 @@ export class Authnz {
       (isGetOrHead && url === AUTH_STATE_PATH) ||
       // Managed instructions authenticate their installation credential in the handler.
       (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
+      // Cursor hooks authenticate their installation credential in the handler.
+      (method === "POST" && url === CONNECTION_HOOKS_CURSOR_PATH) ||
       // Executable updates have a distinct installation capability and live access checks.
       (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
       // Pure public code rendering: accepts no credential and grants no access.
@@ -241,6 +254,12 @@ export class Authnz {
       // GitHub Actions token exchange: the OIDC token in the body is the
       // proof, verified in-route against the gateway's GitHub Actions setting.
       (method === "POST" && url === GITHUB_ACTIONS_TOKEN_PATH) ||
+      // Workload identity token exchange: the OIDC token in the body is the
+      // proof, verified in-route against the account's federated credentials.
+      (method === "POST" && url === WORKLOAD_IDENTITY_TOKEN_PATH) ||
+      // The SPIFFE issuer's discovery document, key set and trust bundle are
+      // public by design: verifiers fetch them to trust agents' JWT-SVIDs.
+      (isGetOrHead && url.startsWith(`${SPIFFE_ISSUER_PATH}/`)) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&
@@ -285,6 +304,21 @@ export class Authnz {
 
   private isAuthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
+    const authHeader = headers.get("authorization");
+
+    // Service-account tokens go before the session lookup. With
+    // enableSessionForAPIKeys, Better Auth's api-key hook reads the
+    // Authorization header on every getSession call and throws "Invalid API
+    // key" for anything that is not an API key, so a service-account request
+    // could never resolve a session anyway. Asking first spares each one a
+    // failed hook, which tracing records as an error span.
+    if (
+      authHeader &&
+      (await this.verifyServiceAccountToken(request, authHeader))
+    ) {
+      logger.trace("[Authnz] Service account token verification succeeded");
+      return true;
+    }
 
     try {
       logger.trace("[Authnz] Attempting session-based authentication");
@@ -307,19 +341,11 @@ export class Authnz {
       );
     }
 
-    const authHeader = headers.get("authorization");
     if (authHeader) {
-      // Service-account tokens go first. Both token kinds carry the platform
-      // prefix, but a service-account token is one indexed lookup by hash,
-      // while Better Auth's API-key check reads the apikey table by key and
-      // logs an error on every miss. Checking API keys first charged every
-      // service-account request that miss twice: here and again in
-      // populateUserInfo.
-      if (await this.verifyServiceAccountToken(request, authHeader)) {
-        logger.trace("[Authnz] Service account token verification succeeded");
-        return true;
-      }
-
+      // Service-account tokens were checked above. Both token kinds carry the
+      // platform prefix, but a service-account token is one indexed lookup by
+      // hash, while Better Auth's API-key check reads the apikey table by key
+      // and logs an error on every miss.
       const apiKey = await this.verifyApiKey(request, authHeader);
       if (apiKey?.valid) {
         logger.trace("[Authnz] API key verification succeeded");
@@ -530,7 +556,19 @@ export class Authnz {
       return request.serviceAccountAuthResult;
     }
     try {
-      const result = await ServiceAccountModel.verifyToken(authHeader);
+      // RFC 6750 clients send `Bearer <token>`; the API has always taken the
+      // bare token. Both name the same service-account token.
+      const result = await verifyServiceAccountBearer({
+        token: authHeader.replace(/^Bearer\s+/i, ""),
+        request: {
+          method: request.method,
+          path: request.url.split("?")[0],
+          route: request.routeOptions.url ?? null,
+          requestId: request.id,
+          sourceIp: request.ip,
+          userAgent: request.headers["user-agent"] ?? null,
+        },
+      });
       if (result) {
         request.serviceAccountAuthResult = result;
       }
@@ -685,25 +723,12 @@ export class Authnz {
   };
 
   /**
-   * Sets the Sentry user context for better error tracking and attribution
+   * Attribute error reports to the signed-in user by opaque id only. Error
+   * reports can leave the deployment, so no email, name or IP goes with them.
    */
-  public setSentryUserContext = (
-    user: { id: string; email?: string; name?: string },
-    request: FastifyRequest,
-  ): void => {
+  public setSentryUserContext = (user: { id: string }): void => {
     try {
-      // Extract IP address from request headers
-      const ipAddress =
-        (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-        (request.headers["x-real-ip"] as string) ||
-        request.ip;
-
-      Sentry.setUser({
-        id: user.id,
-        email: user.email,
-        username: user.name || user.email,
-        ip_address: ipAddress,
-      });
+      Sentry.setUser({ id: user.id });
     } catch (_error) {
       // Silently fail if Sentry is not configured or there's an error
       // We don't want authentication to fail due to Sentry issues

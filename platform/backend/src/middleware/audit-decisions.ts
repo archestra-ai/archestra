@@ -5,8 +5,11 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import AutoRouterModel from "@/models/auto-router";
+import BlobProviderModel from "@/models/blob-provider";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
+import CostExportModel from "@/models/cost-export";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -19,8 +22,8 @@ import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
-import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
@@ -38,6 +41,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -174,6 +178,8 @@ export const AUDIT_DECISIONS = {
     model: KnowledgeBaseConnectorModel,
   },
   limitsTable: { audited: true, model: LimitModel },
+  blobProvidersTable: { audited: true, model: BlobProviderModel },
+  costExportsTable: { audited: true, model: CostExportModel },
   userLimitUsageResetsTable: {
     audited: true,
     model: UserLimitUsageResetModel,
@@ -183,10 +189,11 @@ export const AUDIT_DECISIONS = {
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
   modelPoolsTable: { audited: true, model: ModelPoolModel },
-  // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
-  // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
-  // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
-  oauthClientsTable: { audited: true, model: LlmOauthClientModel },
+  autoRoutersTable: { audited: true, model: AutoRouterModel },
+  // oauthClientsTable stores every managed OAuth client (/api/oauth-clients).
+  // Admin CRUD is audited at the route level via AUDITABLE_ROUTES, which
+  // snapshots through the same managed-client model.
+  oauthClientsTable: { audited: true, model: ManagedOauthClientModel },
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },
@@ -336,6 +343,20 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "MCP session-level transport state",
   },
+  desktopDevicesTable: {
+    audited: false,
+    reason:
+      "A user's own tunnel client registration; the sign-in decision (desktopDeviceSignIn.updated) and removing the device (desktopDevice.deleted) carry the audit signal",
+  },
+  desktopDeviceServersTable: {
+    audited: false,
+    reason:
+      "Which MCP servers a user stopped on their own device, and the states its tunnel client reports; the route audit (desktopDevice.updated) carries Start and Stop",
+  },
+  desktopMcpRequestsTable: {
+    audited: false,
+    reason: "Short-lived queue of MCP messages waiting for a device",
+  },
   mcpPresetEntriesTable: {
     audited: false,
     reason: "preset definitions; static config, audited via catalog",
@@ -390,6 +411,10 @@ export const AUDIT_DECISIONS = {
     reason: "better-auth verification flow state",
   },
   jwksTable: { audited: false, reason: "better-auth signing key material" },
+  spiffeSigningKeysTable: {
+    audited: false,
+    reason: "SPIFFE JWT-SVID signing key material, minted by the server",
+  },
 
   // =========================================================================
   // OAuth runtime
@@ -441,6 +466,11 @@ export const AUDIT_DECISIONS = {
   agentSkillsTable: {
     audited: false,
     reason: "join: agent × skill assignment; parent (agent) audited",
+  },
+  agentIdentityBindingsTable: {
+    audited: false,
+    reason:
+      "join: agent × identity provider; changes audited on the agent (agent.updated)",
   },
   agentLabelsTable: {
     audited: false,
@@ -888,6 +918,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child: pool × provider key; parent (model pool) audited",
   },
+  autoRouterVirtualApiKeysTable: {
+    audited: false,
+    reason: "join: auto router × virtual key; parent (virtual key) audited",
+  },
   modelPoolVirtualApiKeysTable: {
     audited: false,
     reason: "join: pool × virtual key; parent (model pool) audited",
@@ -895,6 +929,11 @@ export const AUDIT_DECISIONS = {
   llmProviderApiKeyModelsTable: {
     audited: false,
     reason: "join: provider key × model; parent audited",
+  },
+  githubAppAccountsTable: {
+    audited: false,
+    reason:
+      "child: a GitHub Copilot plan's GitHub organization, written with its provider key; parent (LLM provider API key) audited",
   },
   limitModelUsageTable: {
     audited: false,
@@ -925,7 +964,7 @@ export const AUDIT_DECISIONS = {
   chatopsMsTeamsUserConnectionsTable: {
     audited: false,
     reason:
-      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+      "a Teams user's own sign-in for reading the files they share with the bot, created and removed only by that user from Teams; tokens live in the secrets manager",
   },
   chatopsUserAdmissionsTable: {
     audited: false,
@@ -980,6 +1019,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountsTable: {
     audited: true,
     model: ServiceAccountModel,
+  },
+  serviceAccountFederatedCredentialsTable: {
+    audited: true,
+    model: ServiceAccountFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,
@@ -1130,10 +1173,6 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
-  orgTrioPendingNormalTierTable: {
-    audited: false,
-    reason: "migration-written normal tiers the startup check consumes once",
-  },
   interactionUserActivityTable: {
     audited: false,
     reason: "derived log user activity counts",
@@ -1162,6 +1201,22 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "internal backfill progress marker",
   },
+  llmUsageHourlyTable: {
+    audited: false,
+    reason: "derived hourly totals of interactions for cost statistics",
+  },
+  llmUsageDailyTable: {
+    audited: false,
+    reason: "derived daily totals of interactions for cost statistics",
+  },
+  llmUsageRollupStateTable: {
+    audited: false,
+    reason: "internal rollup progress marker",
+  },
+  llmUsageRollupDirtyTable: {
+    audited: false,
+    reason: "internal queue of rollup hours to recompute",
+  },
   interactionBillingTable: {
     audited: false,
     reason: "content-free idempotent billing receipts",
@@ -1177,6 +1232,10 @@ export const AUDIT_DECISIONS = {
   routingUsageTable: {
     audited: false,
     reason: "auto-routing usage written with each interaction",
+  },
+  autoRoutingTiersTable: {
+    audited: false,
+    reason: "child of an auto router; parent audited",
   },
   routingPlansTable: {
     audited: false,
@@ -1202,6 +1261,10 @@ export const AUDIT_DECISIONS = {
   routingHistoryScoresTable: {
     audited: false,
     reason: "worker-written scorer readings of past sessions",
+  },
+  toolSearchTextsTable: {
+    audited: false,
+    reason: "worker-written search vocabulary derived from tool definitions",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

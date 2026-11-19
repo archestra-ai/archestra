@@ -469,6 +469,21 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2190,6 +2205,21 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2831,6 +2861,21 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -3350,6 +3395,21 @@ export type PerplexityChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -3874,6 +3934,21 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4392,6 +4467,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4413,10 +4492,6 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -5947,6 +6022,21 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -6467,6 +6557,21 @@ export type ArchestraChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -7558,6 +7663,21 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -8146,6 +8266,21 @@ export type OpenAiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -9869,6 +10004,21 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10510,6 +10660,21 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -11029,6 +11194,21 @@ export type PerplexityChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -11553,6 +11733,21 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12071,6 +12266,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12092,10 +12291,6 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -13626,6 +13821,21 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -14146,6 +14356,21 @@ export type ArchestraChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -15237,6 +15462,21 @@ export type XaiChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -15934,13 +16174,16 @@ export type CreateA2aRemoteAgentData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -16832,7 +17075,7 @@ export type GetAgentCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -16845,13 +17088,14 @@ export type GetAgentCatalogData = {
         selectableOnly?: boolean;
         labels?: string;
         status?: 'active' | 'deleted';
+        runtime?: 'chat' | 'custom' | 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
         providerApiKeyId?: string | 'organization-default';
         /**
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
          */
         pinned?: boolean;
         /**
-         * Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include each internal agent's assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         limit?: number;
@@ -16958,8 +17202,15 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
+                autoRouterId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -17007,6 +17258,15 @@ export type GetAgentCatalogResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -17015,6 +17275,8 @@ export type GetAgentCatalogResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -17200,7 +17462,7 @@ export type GetAgentsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -17232,7 +17494,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         /**
@@ -17341,8 +17603,15 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -17390,6 +17659,15 @@ export type GetAgentsResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -17398,6 +17676,8 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -17491,8 +17771,15 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
+        autoRouterId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -17529,6 +17816,15 @@ export type CreateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -17537,6 +17833,8 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -17643,13 +17941,16 @@ export type CreateAgentData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -17753,8 +18054,15 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -17802,6 +18110,15 @@ export type CreateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -17810,6 +18127,8 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -18144,6 +18463,8 @@ export type GetChatAgentRosterResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         runtime: {
             image: string;
@@ -18179,6 +18500,8 @@ export type GetChatAgentRosterResponses = {
         modelId: string | null;
         llmApiKeyId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
+        sharedByName: boolean;
     }>;
 };
 
@@ -18287,6 +18610,8 @@ export type GetChatAgentRosterPageResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -18322,6 +18647,8 @@ export type GetChatAgentRosterPageResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
+            sharedByName: boolean;
         }>;
         pagination: {
             limit: number;
@@ -18905,7 +19232,7 @@ export type GetDefaultMcpGatewayData = {
     path?: never;
     query?: {
         /**
-         * Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need the gateway or its counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned. `sandboxAvailable` is omitted too.
          */
         includeTools?: boolean;
     };
@@ -19005,8 +19332,15 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19054,6 +19388,15 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19062,6 +19405,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19307,8 +19652,15 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -19356,6 +19708,15 @@ export type ImportAgentResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -19364,6 +19725,8 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -19618,8 +19981,15 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19667,6 +20037,15 @@ export type GetAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19675,6 +20054,8 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19750,8 +20131,15 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
+        autoRouterId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -19795,6 +20183,15 @@ export type UpdateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19803,6 +20200,8 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -19921,8 +20320,15 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19970,6 +20376,15 @@ export type UpdateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19978,6 +20393,8 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20035,6 +20452,193 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentIdentityBindingsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type GetAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentIdentityBindingsError = GetAgentIdentityBindingsErrors[keyof GetAgentIdentityBindingsErrors];
+
+export type GetAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type GetAgentIdentityBindingsResponse = GetAgentIdentityBindingsResponses[keyof GetAgentIdentityBindingsResponses];
+
+export type ReplaceAgentIdentityBindingsData = {
+    body: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type ReplaceAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplaceAgentIdentityBindingsError = ReplaceAgentIdentityBindingsErrors[keyof ReplaceAgentIdentityBindingsErrors];
+
+export type ReplaceAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type ReplaceAgentIdentityBindingsResponse = ReplaceAgentIdentityBindingsResponses[keyof ReplaceAgentIdentityBindingsResponses];
 
 export type GetAgentDefaultSuggestedPromptsData = {
     body?: never;
@@ -20343,6 +20947,21 @@ export type GetAgentVersionResponses = {
             } | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
+            subagentLoadBalancing: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;
@@ -20498,8 +21117,15 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20547,6 +21173,15 @@ export type RestoreAgentVersionResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20555,6 +21190,8 @@ export type RestoreAgentVersionResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20626,13 +21263,16 @@ export type CloneAgentData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -20738,8 +21378,15 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20787,6 +21434,15 @@ export type CloneAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20795,6 +21451,8 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -23217,8 +23875,15 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -23266,6 +23931,15 @@ export type RestoreAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -23274,6 +23948,8 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -24135,6 +24811,7 @@ export type GetAgentRuntimePreflightResponses = {
             description?: string;
             canConnect?: boolean;
             adminOnly?: boolean;
+            reconnect?: boolean;
         }>;
         misconfigured: Array<{
             key: string;
@@ -24143,6 +24820,7 @@ export type GetAgentRuntimePreflightResponses = {
             description?: string;
             canConnect?: boolean;
             adminOnly?: boolean;
+            reconnect?: boolean;
         }>;
         incompatible: string | null;
     };
@@ -24909,7 +25587,12 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         initiatorName: string | null;
+        workspace: {
+            state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
+            expiresAt: string;
+        } | null;
         canAttach?: boolean;
         shareVisibility: 'organization' | 'team' | 'user' | null;
         /**
@@ -25787,6 +26470,306 @@ export type CancelAgentRunResponses = {
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
 
+export type BulkDeleteAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk';
+};
+
+export type BulkDeleteAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentRunsError = BulkDeleteAgentRunsErrors[keyof BulkDeleteAgentRunsErrors];
+
+export type BulkDeleteAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentRunsResponse = BulkDeleteAgentRunsResponses[keyof BulkDeleteAgentRunsResponses];
+
+export type BulkDeleteAgentWorkspacesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk/workspace';
+};
+
+export type BulkDeleteAgentWorkspacesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentWorkspacesError = BulkDeleteAgentWorkspacesErrors[keyof BulkDeleteAgentWorkspacesErrors];
+
+export type BulkDeleteAgentWorkspacesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentWorkspacesResponse = BulkDeleteAgentWorkspacesResponses[keyof BulkDeleteAgentWorkspacesResponses];
+
+export type BulkCancelAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk-cancel';
+};
+
+export type BulkCancelAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkCancelAgentRunsError = BulkCancelAgentRunsErrors[keyof BulkCancelAgentRunsErrors];
+
+export type BulkCancelAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkCancelAgentRunsResponse = BulkCancelAgentRunsResponses[keyof BulkCancelAgentRunsResponses];
+
 export type StartAgentWorkspaceTransferData = {
     body: {
         direction: 'download';
@@ -26088,6 +27071,369 @@ export type ListAgentRuntimeTemplatesResponses = {
 
 export type ListAgentRuntimeTemplatesResponse = ListAgentRuntimeTemplatesResponses[keyof ListAgentRuntimeTemplatesResponses];
 
+export type ListBuiltInAgentRuntimeSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/built-ins';
+};
+
+export type ListBuiltInAgentRuntimeSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListBuiltInAgentRuntimeSettingsError = ListBuiltInAgentRuntimeSettingsErrors[keyof ListBuiltInAgentRuntimeSettingsErrors];
+
+export type ListBuiltInAgentRuntimeSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        settings: {
+            tier?: string | null;
+            maxTier?: string | null;
+            ttlHours?: number | null;
+            maxCostUsd?: number | null;
+            idleTimeoutMinutes?: number | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+            };
+        };
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
+    }>;
+};
+
+export type ListBuiltInAgentRuntimeSettingsResponse = ListBuiltInAgentRuntimeSettingsResponses[keyof ListBuiltInAgentRuntimeSettingsResponses];
+
+export type ListAgentRuntimeAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/access';
+};
+
+export type ListAgentRuntimeAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListAgentRuntimeAccessError = ListAgentRuntimeAccessErrors[keyof ListAgentRuntimeAccessErrors];
+
+export type ListAgentRuntimeAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        runtimes: Array<{
+            id: string;
+            canUse: boolean;
+            canConfigure: boolean;
+        }>;
+        canConfigureAny: boolean;
+    };
+};
+
+export type ListAgentRuntimeAccessResponse = ListAgentRuntimeAccessResponses[keyof ListAgentRuntimeAccessResponses];
+
+export type CountAgentsBehindRuntimeData = {
+    body?: never;
+    path: {
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot' | string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}/apply-to-agents';
+};
+
+export type CountAgentsBehindRuntimeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CountAgentsBehindRuntimeError = CountAgentsBehindRuntimeErrors[keyof CountAgentsBehindRuntimeErrors];
+
+export type CountAgentsBehindRuntimeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agents: number;
+    };
+};
+
+export type CountAgentsBehindRuntimeResponse = CountAgentsBehindRuntimeResponses[keyof CountAgentsBehindRuntimeResponses];
+
+export type ApplyAgentRuntimeToAgentsData = {
+    body?: never;
+    path: {
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot' | string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}/apply-to-agents';
+};
+
+export type ApplyAgentRuntimeToAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApplyAgentRuntimeToAgentsError = ApplyAgentRuntimeToAgentsErrors[keyof ApplyAgentRuntimeToAgentsErrors];
+
+export type ApplyAgentRuntimeToAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+    };
+};
+
+export type ApplyAgentRuntimeToAgentsResponse = ApplyAgentRuntimeToAgentsResponses[keyof ApplyAgentRuntimeToAgentsResponses];
+
 export type GetRuntimeTemplateSettingsData = {
     body?: never;
     path?: never;
@@ -26208,6 +27554,20 @@ export type GetRuntimeTemplateSettingsResponses = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns: {
+            [key: string]: {
+                settings: {
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -26240,6 +27600,9 @@ export type GetRuntimeTemplateSettingsResponses = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -26289,6 +27652,20 @@ export type SaveRuntimeTemplateSettingsData = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns?: {
+            [key: string]: {
+                settings: {
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -26321,6 +27698,9 @@ export type SaveRuntimeTemplateSettingsData = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -26442,6 +27822,20 @@ export type SaveRuntimeTemplateSettingsResponses = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns: {
+            [key: string]: {
+                settings: {
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -26474,6 +27868,9 @@ export type SaveRuntimeTemplateSettingsResponses = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -28844,7 +30241,7 @@ export type GetAppsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -29024,13 +30421,16 @@ export type CreateAppData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name: string;
         slug?: string;
@@ -32241,6 +33641,22 @@ export type AssignToolToAppResponses = {
 
 export type AssignToolToAppResponse = AssignToolToAppResponses[keyof AssignToolToAppResponses];
 
+export type DownloadArchestraCliData = {
+    body?: never;
+    path: {
+        target: string;
+    };
+    query?: never;
+    url: '/api/archestra-cli/{target}';
+};
+
+export type DownloadArchestraCliResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type ArchestraChatCompletionsWithDefaultAgentData = {
     body: ArchestraChatCompletionRequestInput;
     headers: {
@@ -32450,7 +33866,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -32460,7 +33876,7 @@ export type GetAuditLogsData = {
          */
         actorType?: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
         /**
-         * Filter by resource type (e.g. agent, role)
+         * Filter by resource type (e.g. agent, role); a comma-separated list matches any of them
          */
         resourceType?: string;
         /**
@@ -32557,7 +33973,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -32599,6 +34015,10 @@ export type GetAuditLogResourcesData = {
          * Return only this resource, e.g. to label a preselected filter
          */
         resourceId?: string;
+        /**
+         * Offer only resources of these types (comma-separated), e.g. the type picked in the event filter
+         */
+        resourceType?: string;
         /**
          * Maximum number of resources to return
          */
@@ -32684,6 +34104,10 @@ export type GetAuditLogResourcesResponses = {
             resourceType: string;
             resourceId: string;
             name: string;
+            /**
+             * A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource's row is gone
+             */
+            detail: string | null;
         }>;
     };
 };
@@ -32782,7 +34206,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -33081,14 +34505,14 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
-export type GetAutoRoutingSettingsData = {
+export type GetAutoRoutingStateData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/auto-routing/settings';
+    url: '/api/auto-routing/state';
 };
 
-export type GetAutoRoutingSettingsErrors = {
+export type GetAutoRoutingStateErrors = {
     /**
      * Default Response
      */
@@ -33154,64 +34578,41 @@ export type GetAutoRoutingSettingsErrors = {
     };
 };
 
-export type GetAutoRoutingSettingsError = GetAutoRoutingSettingsErrors[keyof GetAutoRoutingSettingsErrors];
+export type GetAutoRoutingStateError = GetAutoRoutingStateErrors[keyof GetAutoRoutingStateErrors];
 
-export type GetAutoRoutingSettingsResponses = {
+export type GetAutoRoutingStateResponses = {
     /**
      * Default Response
      */
     200: {
         enabled: boolean;
-        budgetUsdPerDay: number | null;
-        tiers: {
-            fast: {
+        eligibleApiKeyIds: Array<string>;
+        decisionProviders: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            models: Array<{
                 id: string;
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                modelId: string;
-            } | null;
-            normal: {
+                displayName: string;
+            }>;
+            apiKeys: Array<{
                 id: string;
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                modelId: string;
-            } | null;
-            smart: {
-                id: string;
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                modelId: string;
-            } | null;
-        };
-        routedAgentCount: number;
-        generation: number;
-        plannedGeneration: number;
-        status: {
-            activePlan: {
-                id: string;
-                createdAt: string;
-            } | null;
-            coldStart: {
-                scorerVersionId: string;
-                sessions: number;
-                required: number;
-            };
-            lastFitError: string | null;
-            scorer: 'ready' | 'no_jev_key';
-        };
+                name: string;
+            }>;
+        }>;
     };
 };
 
-export type GetAutoRoutingSettingsResponse = GetAutoRoutingSettingsResponses[keyof GetAutoRoutingSettingsResponses];
+export type GetAutoRoutingStateResponse = GetAutoRoutingStateResponses[keyof GetAutoRoutingStateResponses];
 
-export type UpdateAutoRoutingSettingsData = {
+export type UpdateAutoRoutingStateData = {
     body: {
-        enabled?: boolean;
-        budgetUsdPerDay?: number;
+        enabled: boolean;
     };
     path?: never;
     query?: never;
-    url: '/api/auto-routing/settings';
+    url: '/api/auto-routing/state';
 };
 
-export type UpdateAutoRoutingSettingsErrors = {
+export type UpdateAutoRoutingStateErrors = {
     /**
      * Default Response
      */
@@ -33277,33 +34678,155 @@ export type UpdateAutoRoutingSettingsErrors = {
     };
 };
 
-export type UpdateAutoRoutingSettingsError = UpdateAutoRoutingSettingsErrors[keyof UpdateAutoRoutingSettingsErrors];
+export type UpdateAutoRoutingStateError = UpdateAutoRoutingStateErrors[keyof UpdateAutoRoutingStateErrors];
 
-export type UpdateAutoRoutingSettingsResponses = {
+export type UpdateAutoRoutingStateResponses = {
     /**
      * Default Response
      */
     200: {
         enabled: boolean;
+        eligibleApiKeyIds: Array<string>;
+        decisionProviders: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            models: Array<{
+                id: string;
+                displayName: string;
+            }>;
+            apiKeys: Array<{
+                id: string;
+                name: string;
+            }>;
+        }>;
+    };
+};
+
+export type UpdateAutoRoutingStateResponse = UpdateAutoRoutingStateResponses[keyof UpdateAutoRoutingStateResponses];
+
+export type GetAutoRoutersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/routers';
+};
+
+export type GetAutoRoutersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutersError = GetAutoRoutersErrors[keyof GetAutoRoutersErrors];
+
+export type GetAutoRoutersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             normal: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             smart: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
         };
-        routedAgentCount: number;
+        decisionModel: {
+            apiKeyId: string | null;
+            model: string;
+        };
+        usesPastSessions: boolean;
+        virtualApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33318,6 +34841,180 @@ export type UpdateAutoRoutingSettingsResponses = {
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
+        };
+    }>;
+};
+
+export type GetAutoRoutersResponse = GetAutoRoutersResponses[keyof GetAutoRoutersResponses];
+
+export type CreateAutoRouterData = {
+    body: {
+        name: string;
+        budgetUsdPerDay?: number;
+        budgetPreset?: 'cost_efficient' | 'balanced' | 'intelligence';
+        tiers: {
+            fast: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            normal: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            smart: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+        };
+        decisionModel?: {
+            apiKeyId: string | null;
+            model: string;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/routers';
+};
+
+export type CreateAutoRouterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateAutoRouterError = CreateAutoRouterErrors[keyof CreateAutoRouterErrors];
+
+export type CreateAutoRouterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+        };
+        decisionModel: {
+            apiKeyId: string | null;
+            model: string;
+        };
+        usesPastSessions: boolean;
+        virtualApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
         };
         fit: {
             status: 'active';
@@ -33336,15 +35033,629 @@ export type UpdateAutoRoutingSettingsResponses = {
     };
 };
 
-export type UpdateAutoRoutingSettingsResponse = UpdateAutoRoutingSettingsResponses[keyof UpdateAutoRoutingSettingsResponses];
+export type CreateAutoRouterResponse = CreateAutoRouterResponses[keyof CreateAutoRouterResponses];
+
+export type GetAvailableAutoRoutersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/routers/available';
+};
+
+export type GetAvailableAutoRoutersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAvailableAutoRoutersError = GetAvailableAutoRoutersErrors[keyof GetAvailableAutoRoutersErrors];
+
+export type GetAvailableAutoRoutersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        virtualApiKeyIds: Array<string>;
+    }>;
+};
+
+export type GetAvailableAutoRoutersResponse = GetAvailableAutoRoutersResponses[keyof GetAvailableAutoRoutersResponses];
+
+export type DeleteAutoRouterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/auto-routing/routers/{id}';
+};
+
+export type DeleteAutoRouterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteAutoRouterError = DeleteAutoRouterErrors[keyof DeleteAutoRouterErrors];
+
+export type DeleteAutoRouterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAutoRouterResponse = DeleteAutoRouterResponses[keyof DeleteAutoRouterResponses];
+
+export type GetAutoRouterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/auto-routing/routers/{id}';
+};
+
+export type GetAutoRouterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRouterError = GetAutoRouterErrors[keyof GetAutoRouterErrors];
+
+export type GetAutoRouterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+        };
+        decisionModel: {
+            apiKeyId: string | null;
+            model: string;
+        };
+        usesPastSessions: boolean;
+        virtualApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
+        };
+    };
+};
+
+export type GetAutoRouterResponse = GetAutoRouterResponses[keyof GetAutoRouterResponses];
+
+export type UpdateAutoRouterData = {
+    body: {
+        name?: string;
+        budgetUsdPerDay?: number;
+        budgetPreset?: 'cost_efficient' | 'balanced' | 'intelligence' | null;
+        tiers?: {
+            fast: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            normal: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            smart: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+        };
+        decisionModel?: {
+            apiKeyId: string | null;
+            model: string;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/auto-routing/routers/{id}';
+};
+
+export type UpdateAutoRouterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAutoRouterError = UpdateAutoRouterErrors[keyof UpdateAutoRouterErrors];
+
+export type UpdateAutoRouterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
+            } | null;
+        };
+        decisionModel: {
+            apiKeyId: string | null;
+            model: string;
+        };
+        usesPastSessions: boolean;
+        virtualApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
+        };
+        fit: {
+            status: 'active';
+            planId: string;
+        } | {
+            status: 'unchanged';
+            planId: string;
+        } | {
+            status: 'cold_start';
+            planId: string | null;
+        } | {
+            status: 'failed';
+            planId: string | null;
+            error: string;
+        } | null;
+    };
+};
+
+export type UpdateAutoRouterResponse = UpdateAutoRouterResponses[keyof UpdateAutoRouterResponses];
+
+export type GetAutoRoutingUsageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        days?: number;
+    };
+    url: '/api/auto-routing/routers/{id}/usage';
+};
+
+export type GetAutoRoutingUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingUsageError = GetAutoRoutingUsageErrors[keyof GetAutoRoutingUsageErrors];
+
+export type GetAutoRoutingUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        windowDays: number;
+        sessions: number;
+        requests: number;
+        costUsd: number;
+        allSmartCostUsd: number | null;
+        tiers: Array<{
+            tier: 'fast' | 'normal' | 'smart';
+            sessions: number;
+            requests: number;
+            costUsd: number;
+        }>;
+    };
+};
+
+export type GetAutoRoutingUsageResponse = GetAutoRoutingUsageResponses[keyof GetAutoRoutingUsageResponses];
 
 export type GetAutoRoutingPlansData = {
     body?: never;
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: {
         limit?: number;
     };
-    url: '/api/auto-routing/plans';
+    url: '/api/auto-routing/routers/{id}/plans';
 };
 
 export type GetAutoRoutingPlansErrors = {
@@ -33426,7 +35737,7 @@ export type GetAutoRoutingPlansResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -33452,9 +35763,10 @@ export type GetAutoRoutingPlanData = {
     body?: never;
     path: {
         id: string;
+        planId: string;
     };
     query?: never;
-    url: '/api/auto-routing/plans/{id}';
+    url: '/api/auto-routing/routers/{id}/plans/{planId}';
 };
 
 export type GetAutoRoutingPlanErrors = {
@@ -33536,7 +35848,7 @@ export type GetAutoRoutingPlanResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -33566,9 +35878,11 @@ export type GetAutoRoutingPlanResponse = GetAutoRoutingPlanResponses[keyof GetAu
 
 export type ReplanAutoRoutingData = {
     body?: never;
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: never;
-    url: '/api/auto-routing/replan';
+    url: '/api/auto-routing/routers/{id}/replan';
 };
 
 export type ReplanAutoRoutingErrors = {
@@ -33644,26 +35958,50 @@ export type ReplanAutoRoutingResponses = {
      * Default Response
      */
     200: {
+        id: string;
+        name: string;
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             normal: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             smart: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
         };
-        routedAgentCount: number;
+        decisionModel: {
+            apiKeyId: string | null;
+            model: string;
+        };
+        usesPastSessions: boolean;
+        virtualApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33678,6 +36016,10 @@ export type ReplanAutoRoutingResponses = {
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
         };
         fit: {
             status: 'active';
@@ -33701,10 +36043,20 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
+    } | {
+        /**
+         * An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.
+         */
+        request: {
+            [key: string]: unknown;
+        };
+        client?: string;
     };
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: never;
-    url: '/api/auto-routing/preview';
+    url: '/api/auto-routing/routers/{id}/preview';
 };
 
 export type PreviewAutoRoutingErrors = {
@@ -33808,10 +36160,15 @@ export type SimulateAutoRoutingData = {
     body: {
         budgetUsdPerDay: number;
         volumeMultiplier: number;
+    } | {
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence';
+        volumeMultiplier: number;
     };
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: never;
-    url: '/api/auto-routing/simulate';
+    url: '/api/auto-routing/routers/{id}/simulate';
 };
 
 export type SimulateAutoRoutingErrors = {
@@ -33898,6 +36255,7 @@ export type SimulateAutoRoutingResponses = {
      */
     200: {
         status: 'feasible';
+        budgetUsdPerDay: number;
         summary: {
             [key: string]: unknown;
         };
@@ -33926,11 +36284,13 @@ export type SimulateAutoRoutingResponse = SimulateAutoRoutingResponses[keyof Sim
 
 export type GetAutoRoutingDiagnosticsData = {
     body?: never;
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: {
         budgetUsdPerDay?: number;
     };
-    url: '/api/auto-routing/diagnostics';
+    url: '/api/auto-routing/routers/{id}/diagnostics';
 };
 
 export type GetAutoRoutingDiagnosticsErrors = {
@@ -34185,6 +36545,19 @@ export type CancelAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -34309,6 +36682,19 @@ export type GetAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -34433,6 +36819,19 @@ export type ScanAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -34565,6 +36964,19 @@ export type ScoreAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36293,6 +38705,21 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -36910,6 +39337,21 @@ export type AzureRealtimeTurnWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -38702,6 +41144,18 @@ export type BedrockConverseWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -39064,6 +41518,18 @@ export type BedrockConverseWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -39428,6 +41894,18 @@ export type BedrockConverseStreamWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -39645,6 +42123,18 @@ export type BedrockConverseStreamWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -39864,6 +42354,18 @@ export type BedrockConverseWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -40229,6 +42731,18 @@ export type BedrockConverseStreamWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -41600,6 +44114,650 @@ export type BedrockInvokeStreamWithAgentAndModelResponses = {
     200: unknown;
 };
 
+export type ListBlobProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/blob-providers';
+};
+
+export type ListBlobProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListBlobProvidersError = ListBlobProvidersErrors[keyof ListBlobProvidersErrors];
+
+export type ListBlobProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 's3' | 'gcs' | 'azure_blob';
+        config: {
+            type: 's3';
+            bucket: string;
+            region: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            forcePathStyle: boolean;
+            authMethod: 'default_chain' | 'access_key' | 'assume_role';
+            roleArn: string | null;
+            externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
+        };
+        createdAt: string;
+        updatedAt: string;
+        /**
+         * Whether static credentials are stored for this provider.
+         */
+        hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
+    }>;
+};
+
+export type ListBlobProvidersResponse = ListBlobProvidersResponses[keyof ListBlobProvidersResponses];
+
+export type CreateBlobProviderData = {
+    body: {
+        name: string;
+        config: {
+            type: 's3';
+            bucket: string;
+            region: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            forcePathStyle?: boolean;
+            authMethod: 'default_chain' | 'access_key' | 'assume_role';
+            roleArn?: string | null;
+            externalId?: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix?: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId?: string | null;
+            clientId?: string | null;
+        };
+        /**
+         * Write-only secrets for the auth method: `accessKeyId`, `secretAccessKey`, `sessionToken` (S3); `serviceAccountKey` (GCS); `clientSecret`, `accountKey` or `sasToken` (Azure).
+         */
+        credentials?: {
+            [key: string]: string;
+        };
+        /**
+         * Save without first writing and deleting a test object. By default a failed test rejects the request.
+         */
+        skipConnectionTest?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/blob-providers';
+};
+
+export type CreateBlobProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateBlobProviderError = CreateBlobProviderErrors[keyof CreateBlobProviderErrors];
+
+export type CreateBlobProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 's3' | 'gcs' | 'azure_blob';
+        config: {
+            type: 's3';
+            bucket: string;
+            region: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            forcePathStyle: boolean;
+            authMethod: 'default_chain' | 'access_key' | 'assume_role';
+            roleArn: string | null;
+            externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
+        };
+        createdAt: string;
+        updatedAt: string;
+        /**
+         * Whether static credentials are stored for this provider.
+         */
+        hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
+    };
+};
+
+export type CreateBlobProviderResponse = CreateBlobProviderResponses[keyof CreateBlobProviderResponses];
+
+export type DeleteBlobProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/blob-providers/{id}';
+};
+
+export type DeleteBlobProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteBlobProviderError = DeleteBlobProviderErrors[keyof DeleteBlobProviderErrors];
+
+export type DeleteBlobProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteBlobProviderResponse = DeleteBlobProviderResponses[keyof DeleteBlobProviderResponses];
+
+export type UpdateBlobProviderData = {
+    body: {
+        name?: string;
+        config?: {
+            type: 's3';
+            bucket: string;
+            region: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            forcePathStyle?: boolean;
+            authMethod: 'default_chain' | 'access_key' | 'assume_role';
+            roleArn?: string | null;
+            externalId?: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix?: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId?: string | null;
+            clientId?: string | null;
+        };
+        /**
+         * Write-only. Send only to replace the stored credentials.
+         */
+        credentials?: {
+            [key: string]: string;
+        };
+        /**
+         * Remove the stored credentials.
+         */
+        clearCredentials?: boolean;
+        /**
+         * Save without first writing and deleting a test object. By default a failed test rejects the request.
+         */
+        skipConnectionTest?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/blob-providers/{id}';
+};
+
+export type UpdateBlobProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateBlobProviderError = UpdateBlobProviderErrors[keyof UpdateBlobProviderErrors];
+
+export type UpdateBlobProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 's3' | 'gcs' | 'azure_blob';
+        config: {
+            type: 's3';
+            bucket: string;
+            region: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            forcePathStyle: boolean;
+            authMethod: 'default_chain' | 'access_key' | 'assume_role';
+            roleArn: string | null;
+            externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
+        };
+        createdAt: string;
+        updatedAt: string;
+        /**
+         * Whether static credentials are stored for this provider.
+         */
+        hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
+    };
+};
+
+export type UpdateBlobProviderResponse = UpdateBlobProviderResponses[keyof UpdateBlobProviderResponses];
+
+export type TestBlobProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/blob-providers/{id}/test';
+};
+
+export type TestBlobProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TestBlobProviderError = TestBlobProviderErrors[keyof TestBlobProviderErrors];
+
+export type TestBlobProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        message: string;
+    };
+};
+
+export type TestBlobProviderResponse = TestBlobProviderResponses[keyof TestBlobProviderResponses];
+
 export type GetBootstrapData = {
     body?: never;
     path?: never;
@@ -41681,13 +44839,13 @@ export type GetBootstrapResponses = {
      */
     200: {
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
             scope: '*' | string;
-            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
+            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source';
         }>;
         organization: {
             id: string;
@@ -41725,6 +44883,8 @@ export type GetBootstrapResponses = {
             defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             defaultModelId: string | null;
             defaultLlmApiKeyId: string | null;
+            defaultAutoRouterId: string | null;
+            autoRoutingEnabled: boolean;
             defaultFastModelId: string | null;
             defaultSmartModelId: string | null;
             defaultUserLimitValue: number | null;
@@ -41756,6 +44916,7 @@ export type GetBootstrapResponses = {
             requireTwoFactor: boolean;
             sessionMaxAgeSeconds: number | null;
             oauthAccessTokenLifetimeSeconds: number;
+            connectionPageHidden: boolean;
             connectionDefaultMcpGatewayId: string | null;
             connectionDefaultLlmProxyId: string | null;
             connectionDefaultClientId: string | null;
@@ -41786,6 +44947,15 @@ export type GetBootstrapResponses = {
                 [key: string]: {
                     hidden?: boolean;
                     displayName?: string | null;
+                    plans?: {
+                        personal?: {
+                            hidden?: boolean;
+                        };
+                        enterprise?: {
+                            hidden?: boolean;
+                            displayName?: string | null;
+                        };
+                    };
                 };
             } | null;
             messagingChannelOverrides: {
@@ -41813,6 +44983,15 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            mcpRuntimeTiers: {
+                tiers: Array<{
+                    name: string;
+                    cpuRequest: number;
+                    cpuLimit: number | null;
+                    memoryRequestMiB?: number | null;
+                    memoryLimitMiB?: number | null;
+                }>;
+            } | null;
             agentRuntimeTiers: {
                 [key: string]: unknown;
             } | null;
@@ -41838,9 +45017,19 @@ export type GetBootstrapResponses = {
                 communicate: boolean;
             };
             features: {
-                betaEnabled: boolean;
                 orchestratorK8sRuntime: boolean;
-                mcpIdleHibernationBetaEnabled: boolean;
+                agentIdentitySpiffe: {
+                    trustDomain: string;
+                    issuer: string;
+                    jwksUri: string;
+                    bundleUri: string;
+                };
+                /**
+                 * Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.
+                 *
+                 * @deprecated
+                 */
+                mcpIdleHibernationBetaEnabled?: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
                 agentRuntimeCatalogImages: {
@@ -41883,7 +45072,6 @@ export type GetBootstrapResponses = {
                 agentHooksEnabled: boolean;
                 chatopsTelegramEnabled: boolean;
                 kbMfilesConnectorEnabled: boolean;
-                llmModelPoolsEnabled: boolean;
                 kbMfilesOauthEnabled: boolean;
                 kbBm25DefaultK1: number;
                 kbBm25DefaultB: number;
@@ -41892,9 +45080,7 @@ export type GetBootstrapResponses = {
                     configured: boolean;
                     redirectUri: string;
                 };
-                mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
-                autoRoutingEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -42047,6 +45233,8 @@ export type GetNewChatBootstrapResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -42082,6 +45270,8 @@ export type GetNewChatBootstrapResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
+            sharedByName: boolean;
         }>;
         apiKeys: Array<{
             id: string;
@@ -42117,6 +45307,7 @@ export type GetNewChatBootstrapResponses = {
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
             githubOrganization?: string | null;
+            githubOrganizationName?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -42158,6 +45349,7 @@ export type GetNewChatBootstrapResponses = {
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
             githubOrganization?: string | null;
+            githubOrganizationName?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -42227,8 +45419,15 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
+                autoRouterId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -42276,6 +45475,15 @@ export type GetNewChatBootstrapResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -42284,6 +45492,8 @@ export type GetNewChatBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -42528,6 +45738,7 @@ export type GetConversationBootstrapResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -42577,6 +45788,10 @@ export type GetConversationBootstrapResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -42620,6 +45835,8 @@ export type GetConversationBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 runtime: {
                     image: string;
@@ -42655,6 +45872,8 @@ export type GetConversationBootstrapResponses = {
                 modelId: string | null;
                 llmApiKeyId: string | null;
                 modelPoolId: string | null;
+                autoRouterId: string | null;
+                sharedByName: boolean;
             }>;
             apiKeys: Array<{
                 id: string;
@@ -42690,6 +45909,7 @@ export type GetConversationBootstrapResponses = {
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
                 githubOrganization?: string | null;
+                githubOrganizationName?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -42731,6 +45951,7 @@ export type GetConversationBootstrapResponses = {
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
                 githubOrganization?: string | null;
+                githubOrganizationName?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -42800,8 +46021,15 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
+                    autoRouterId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
+                    networkPolicy?: {
+                        egressMode: 'off' | 'restricted' | 'unrestricted';
+                        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                        allowedDomains: Array<string>;
+                        allowedCidrs: Array<string>;
+                    } | null;
                     runtime: {
                         image: string;
                         command: Array<string> | null;
@@ -42849,6 +46077,15 @@ export type GetConversationBootstrapResponses = {
                     activationSkillMode: 'all' | 'manual';
                     activationSkillPolicyRevision: number;
                     accessAllSubagents: boolean;
+                    subagentLoadBalancing?: {
+                        enabled: boolean;
+                        algorithm: 'round_robin' | 'weighted' | 'random';
+                        weights?: {
+                            [key: string]: number;
+                        };
+                        retries: number;
+                        fallbackEnabled: boolean;
+                    } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';
                     } | {
@@ -42857,6 +46094,8 @@ export type GetConversationBootstrapResponses = {
                         name: 'chat-title-generation-subagent';
                     } | {
                         name: 'app-runtime-llm-agent';
+                    } | {
+                        name: 'sre-agent';
                     } | null;
                     builtIn: boolean | null;
                     latestVersion: number;
@@ -43929,6 +47168,7 @@ export type GetChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -43978,6 +47218,10 @@ export type GetChatConversationsResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -44020,6 +47264,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoRouterId?: string | null;
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
@@ -44112,6 +47357,7 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44160,6 +47406,10 @@ export type CreateChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -44279,6 +47529,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44327,6 +47578,10 @@ export type GetDeletedChatConversationsResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -44541,6 +47796,7 @@ export type GetChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44590,6 +47846,10 @@ export type GetChatConversationResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -44624,6 +47884,7 @@ export type UpdateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoRouterId?: string | null;
         agentId?: string;
         artifact?: string | null;
         projectId?: string | null;
@@ -44720,6 +47981,7 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44768,6 +48030,10 @@ export type UpdateChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -45434,6 +48700,7 @@ export type ForkChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45482,6 +48749,10 @@ export type ForkChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -45696,6 +48967,7 @@ export type RestoreChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45744,6 +49016,10 @@ export type RestoreChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -45968,6 +49244,7 @@ export type CompactChatConversationResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouterId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -46016,6 +49293,10 @@ export type CompactChatConversationResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -46143,6 +49424,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -46191,6 +49473,10 @@ export type GenerateChatConversationTitleResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -46317,6 +49603,7 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -46365,6 +49652,10 @@ export type UpdateChatMessageResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -50936,7 +54227,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code' | 'grok-build';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway?: string;
@@ -51202,7 +54493,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code' | 'grok-build';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway: string | null;
@@ -51303,7 +54594,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code' | 'grok-build';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -51562,9 +54853,19 @@ export type GetConfigResponses = {
             communicate: boolean;
         };
         features: {
-            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
-            mcpIdleHibernationBetaEnabled: boolean;
+            agentIdentitySpiffe: {
+                trustDomain: string;
+                issuer: string;
+                jwksUri: string;
+                bundleUri: string;
+            };
+            /**
+             * Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.
+             *
+             * @deprecated
+             */
+            mcpIdleHibernationBetaEnabled?: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
             agentRuntimeCatalogImages: {
@@ -51607,7 +54908,6 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
-            llmModelPoolsEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
             kbBm25DefaultB: number;
@@ -51616,9 +54916,7 @@ export type GetConfigResponses = {
                 configured: boolean;
                 redirectUri: string;
             };
-            mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
-            autoRoutingEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -52211,6 +55509,7 @@ export type RenderStartupGuardData = {
                 marketplaceName: string;
                 cloneUrl: 'ARCH_GUARD_PRIVATE_CLONE_URL';
                 hasSkills?: boolean;
+                connectionPlugin?: boolean;
                 pluginNames?: Array<string>;
             } | null;
         };
@@ -52579,13 +55878,13 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code' | 'grok-build';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
         llmProxyId?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
+        proxyAuth?: 'native-session' | 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
         providerApiKeyId?: string;
         model?: string;
@@ -52686,7 +55985,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code' | 'grok-build';
         }>;
     };
 };
@@ -52892,6 +56191,558 @@ export type GetConnectionSetupScriptResponses = {
      */
     200: unknown;
 };
+
+export type ListCostExportsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cost-exports';
+};
+
+export type ListCostExportsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListCostExportsError = ListCostExportsErrors[keyof ListCostExportsErrors];
+
+export type ListCostExportsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        blobProviderId: string;
+        name: string;
+        enabled: boolean;
+        format: 'focus_csv';
+        schedule: 'hourly' | 'daily';
+        pathPrefix: string;
+        exportedThrough: string;
+        lastRunAt: string | null;
+        lastRunStatus: 'success' | 'failed';
+        lastRunError: string | null;
+        lastObjectKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
+    }>;
+};
+
+export type ListCostExportsResponse = ListCostExportsResponses[keyof ListCostExportsResponses];
+
+export type CreateCostExportData = {
+    body: {
+        name: string;
+        blobProviderId: string;
+        format?: 'focus_csv';
+        schedule?: 'hourly' | 'daily';
+        /**
+         * Key prefix for the export's files, under the blob provider's own prefix.
+         */
+        pathPrefix?: string;
+        enabled?: boolean;
+        /**
+         * Export usage from this time on, including the past (a backfill). Defaults to now: the first file is the period in progress.
+         */
+        startFrom?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/cost-exports';
+};
+
+export type CreateCostExportErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateCostExportError = CreateCostExportErrors[keyof CreateCostExportErrors];
+
+export type CreateCostExportResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        blobProviderId: string;
+        name: string;
+        enabled: boolean;
+        format: 'focus_csv';
+        schedule: 'hourly' | 'daily';
+        pathPrefix: string;
+        exportedThrough: string;
+        lastRunAt: string | null;
+        lastRunStatus: 'success' | 'failed';
+        lastRunError: string | null;
+        lastObjectKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
+    };
+};
+
+export type CreateCostExportResponse = CreateCostExportResponses[keyof CreateCostExportResponses];
+
+export type DeleteCostExportData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cost-exports/{id}';
+};
+
+export type DeleteCostExportErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteCostExportError = DeleteCostExportErrors[keyof DeleteCostExportErrors];
+
+export type DeleteCostExportResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteCostExportResponse = DeleteCostExportResponses[keyof DeleteCostExportResponses];
+
+export type UpdateCostExportData = {
+    body: {
+        name?: string;
+        blobProviderId?: string;
+        format?: 'focus_csv';
+        schedule?: 'hourly' | 'daily';
+        /**
+         * Key prefix for the export's files, under the blob provider's own prefix.
+         */
+        pathPrefix?: string;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cost-exports/{id}';
+};
+
+export type UpdateCostExportErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateCostExportError = UpdateCostExportErrors[keyof UpdateCostExportErrors];
+
+export type UpdateCostExportResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        blobProviderId: string;
+        name: string;
+        enabled: boolean;
+        format: 'focus_csv';
+        schedule: 'hourly' | 'daily';
+        pathPrefix: string;
+        exportedThrough: string;
+        lastRunAt: string | null;
+        lastRunStatus: 'success' | 'failed';
+        lastRunError: string | null;
+        lastObjectKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
+    };
+};
+
+export type UpdateCostExportResponse = UpdateCostExportResponses[keyof UpdateCostExportResponses];
+
+export type RunCostExportData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cost-exports/{id}/run';
+};
+
+export type RunCostExportErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RunCostExportError = RunCostExportErrors[keyof RunCostExportErrors];
+
+export type RunCostExportResponses = {
+    /**
+     * Default Response
+     */
+    202: {
+        id: string;
+        organizationId: string;
+        blobProviderId: string;
+        name: string;
+        enabled: boolean;
+        format: 'focus_csv';
+        schedule: 'hourly' | 'daily';
+        pathPrefix: string;
+        exportedThrough: string;
+        lastRunAt: string | null;
+        lastRunStatus: 'success' | 'failed';
+        lastRunError: string | null;
+        lastObjectKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
+    };
+};
+
+export type RunCostExportResponse = RunCostExportResponses[keyof RunCostExportResponses];
 
 export type DeepseekChatCompletionsWithDefaultAgentData = {
     body: DeepSeekChatCompletionRequestInput;
@@ -53699,6 +57550,1522 @@ export type UpdateDefaultUserLimitResponses = {
 };
 
 export type UpdateDefaultUserLimitResponse = UpdateDefaultUserLimitResponses[keyof UpdateDefaultUserLimitResponses];
+
+export type GetDesktopDevicesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-devices';
+};
+
+export type GetDesktopDevicesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopDevicesError = GetDesktopDevicesErrors[keyof GetDesktopDevicesErrors];
+
+export type GetDesktopDevicesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        platform: 'macos' | 'linux' | 'windows';
+        online: boolean;
+        lastPolledAt: string | null;
+        createdAt: string;
+        programVersion: string | null;
+        programUpdate: {
+            version: string | null;
+        } | null;
+        programAutoUpdate: boolean;
+        servers: Array<{
+            catalogId: string;
+            name: string;
+            state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
+            lastError: string | null;
+            command: string | null;
+            url: string | null;
+            enabled: boolean;
+            toolCount: number;
+        }>;
+    }>;
+};
+
+export type GetDesktopDevicesResponse = GetDesktopDevicesResponses[keyof GetDesktopDevicesResponses];
+
+export type DeleteDesktopDeviceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/{id}';
+};
+
+export type DeleteDesktopDeviceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteDesktopDeviceError = DeleteDesktopDeviceErrors[keyof DeleteDesktopDeviceErrors];
+
+export type DeleteDesktopDeviceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteDesktopDeviceResponse = DeleteDesktopDeviceResponses[keyof DeleteDesktopDeviceResponses];
+
+export type UpdateDesktopDeviceServerData = {
+    body: {
+        enabled: boolean;
+    };
+    path: {
+        id: string;
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/{id}/servers/{catalogId}';
+};
+
+export type UpdateDesktopDeviceServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateDesktopDeviceServerError = UpdateDesktopDeviceServerErrors[keyof UpdateDesktopDeviceServerErrors];
+
+export type UpdateDesktopDeviceServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        platform: 'macos' | 'linux' | 'windows';
+        online: boolean;
+        lastPolledAt: string | null;
+        createdAt: string;
+        programVersion: string | null;
+        programUpdate: {
+            version: string | null;
+        } | null;
+        programAutoUpdate: boolean;
+        servers: Array<{
+            catalogId: string;
+            name: string;
+            state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
+            lastError: string | null;
+            command: string | null;
+            url: string | null;
+            enabled: boolean;
+            toolCount: number;
+        }>;
+    };
+};
+
+export type UpdateDesktopDeviceServerResponse = UpdateDesktopDeviceServerResponses[keyof UpdateDesktopDeviceServerResponses];
+
+export type RestartDesktopDeviceServerData = {
+    body?: never;
+    path: {
+        id: string;
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/{id}/servers/{catalogId}/restart';
+};
+
+export type RestartDesktopDeviceServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestartDesktopDeviceServerError = RestartDesktopDeviceServerErrors[keyof RestartDesktopDeviceServerErrors];
+
+export type RestartDesktopDeviceServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RestartDesktopDeviceServerResponse = RestartDesktopDeviceServerResponses[keyof RestartDesktopDeviceServerResponses];
+
+export type TestDesktopDeviceServerData = {
+    body?: never;
+    path: {
+        id: string;
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/{id}/servers/{catalogId}/test';
+};
+
+export type TestDesktopDeviceServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TestDesktopDeviceServerError = TestDesktopDeviceServerErrors[keyof TestDesktopDeviceServerErrors];
+
+export type TestDesktopDeviceServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        toolCount: number;
+        durationMs: number;
+    };
+};
+
+export type TestDesktopDeviceServerResponse = TestDesktopDeviceServerResponses[keyof TestDesktopDeviceServerResponses];
+
+export type GetDesktopDeviceServerLogData = {
+    body?: never;
+    path: {
+        id: string;
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/{id}/servers/{catalogId}/log';
+};
+
+export type GetDesktopDeviceServerLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopDeviceServerLogError = GetDesktopDeviceServerLogErrors[keyof GetDesktopDeviceServerLogErrors];
+
+export type GetDesktopDeviceServerLogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        lines: Array<string>;
+    };
+};
+
+export type GetDesktopDeviceServerLogResponse = GetDesktopDeviceServerLogResponses[keyof GetDesktopDeviceServerLogResponses];
+
+export type StartDesktopDeviceSignInData = {
+    body: {
+        deviceName: string;
+        platform: 'macos' | 'linux' | 'windows';
+        setupCode?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/desktop-devices/sign-in';
+};
+
+export type StartDesktopDeviceSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartDesktopDeviceSignInError = StartDesktopDeviceSignInErrors[keyof StartDesktopDeviceSignInErrors];
+
+export type StartDesktopDeviceSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        deviceCode: string;
+        userCode: string;
+        verificationPath: string;
+        expiresAt: string;
+        interval: number;
+        approveInArchestra: boolean;
+    };
+};
+
+export type StartDesktopDeviceSignInResponse = StartDesktopDeviceSignInResponses[keyof StartDesktopDeviceSignInResponses];
+
+export type CreateDesktopDeviceSetupCodeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-devices/setup-codes';
+};
+
+export type CreateDesktopDeviceSetupCodeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDesktopDeviceSetupCodeError = CreateDesktopDeviceSetupCodeErrors[keyof CreateDesktopDeviceSetupCodeErrors];
+
+export type CreateDesktopDeviceSetupCodeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        setupCode: string;
+        expiresAt: string;
+    };
+};
+
+export type CreateDesktopDeviceSetupCodeResponse = CreateDesktopDeviceSetupCodeResponses[keyof CreateDesktopDeviceSetupCodeResponses];
+
+export type GetDesktopDeviceSetupSignInData = {
+    body?: never;
+    path: {
+        setupCode: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/setup-codes/{setupCode}/sign-in';
+};
+
+export type GetDesktopDeviceSetupSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopDeviceSetupSignInError = GetDesktopDeviceSetupSignInErrors[keyof GetDesktopDeviceSetupSignInErrors];
+
+export type GetDesktopDeviceSetupSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        deviceName: string;
+        platform: 'macos' | 'linux' | 'windows';
+        userCode: string;
+        expiresAt: string;
+    } | null;
+};
+
+export type GetDesktopDeviceSetupSignInResponse = GetDesktopDeviceSetupSignInResponses[keyof GetDesktopDeviceSetupSignInResponses];
+
+export type PollDesktopDeviceSignInData = {
+    body: {
+        deviceCode: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/desktop-devices/sign-in/poll';
+};
+
+export type PollDesktopDeviceSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PollDesktopDeviceSignInError = PollDesktopDeviceSignInErrors[keyof PollDesktopDeviceSignInErrors];
+
+export type PollDesktopDeviceSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'pending' | 'approved' | 'denied' | 'expired';
+        tunnelId?: string;
+    };
+};
+
+export type PollDesktopDeviceSignInResponse = PollDesktopDeviceSignInResponses[keyof PollDesktopDeviceSignInResponses];
+
+export type GetDesktopDeviceSignInData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/sign-in/{id}';
+};
+
+export type GetDesktopDeviceSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopDeviceSignInError = GetDesktopDeviceSignInErrors[keyof GetDesktopDeviceSignInErrors];
+
+export type GetDesktopDeviceSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deviceName: string;
+        platform: 'macos' | 'linux' | 'windows';
+        userCode: string;
+        expiresAt: string;
+    };
+};
+
+export type GetDesktopDeviceSignInResponse = GetDesktopDeviceSignInResponses[keyof GetDesktopDeviceSignInResponses];
+
+export type DecideDesktopDeviceSignInData = {
+    body: {
+        decision: 'approve' | 'deny';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/sign-in/{id}/decision';
+};
+
+export type DecideDesktopDeviceSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DecideDesktopDeviceSignInError = DecideDesktopDeviceSignInErrors[keyof DecideDesktopDeviceSignInErrors];
+
+export type DecideDesktopDeviceSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'approved' | 'denied';
+    };
+};
+
+export type DecideDesktopDeviceSignInResponse = DecideDesktopDeviceSignInResponses[keyof DecideDesktopDeviceSignInResponses];
+
+export type DeleteDesktopTunnelData = {
+    body?: never;
+    path: {
+        tunnelId: string;
+    };
+    query?: never;
+    url: '/v1/tunnels/{tunnelId}';
+};
+
+export type DeleteDesktopTunnelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteDesktopTunnelError = DeleteDesktopTunnelErrors[keyof DeleteDesktopTunnelErrors];
+
+export type DeleteDesktopTunnelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: string;
+    };
+};
+
+export type DeleteDesktopTunnelResponse = DeleteDesktopTunnelResponses[keyof DeleteDesktopTunnelResponses];
+
+export type GetDesktopTunnelData = {
+    body?: never;
+    path: {
+        tunnelId: string;
+    };
+    query?: never;
+    url: '/v1/tunnels/{tunnelId}';
+};
+
+export type GetDesktopTunnelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopTunnelError = GetDesktopTunnelErrors[keyof GetDesktopTunnelErrors];
+
+export type GetDesktopTunnelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string;
+        catalog_items: Array<{
+            id: string;
+            name: string;
+            command: string | null;
+            arguments: Array<string>;
+            url: string | null;
+            enabled: boolean;
+        }>;
+        program: {
+            version: string | null;
+            sha256: string;
+            auto_update: boolean;
+        } | null;
+    };
+};
+
+export type GetDesktopTunnelResponse = GetDesktopTunnelResponses[keyof GetDesktopTunnelResponses];
+
+export type PollDesktopTunnelData = {
+    body?: never;
+    path: {
+        tunnelId: string;
+    };
+    query?: {
+        limit?: number;
+        timeout_ms?: number;
+    };
+    url: '/v1/tunnels/{tunnelId}/poll';
+};
+
+export type PollDesktopTunnelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PollDesktopTunnelError = PollDesktopTunnelErrors[keyof PollDesktopTunnelErrors];
+
+export type PollDesktopTunnelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        commands: Array<{
+            request_id: string;
+            command_type: 'jsonrpc';
+            channel: string;
+            created_at: string;
+            response_timeout: string;
+            headers: {
+                [key: string]: Array<string>;
+            };
+            jsonrpc: {
+                [key: string]: unknown;
+            };
+        }>;
+    };
+    /**
+     * Default Response
+     */
+    204: void;
+};
+
+export type PollDesktopTunnelResponse = PollDesktopTunnelResponses[keyof PollDesktopTunnelResponses];
+
+export type RespondDesktopTunnelData = {
+    body: {
+        request_id: string;
+        channel?: string;
+        resp_json?: {
+            [key: string]: unknown;
+        } | null;
+        resp_headers?: {
+            [key: string]: Array<string>;
+        };
+        resp_code: number;
+        resp_type?: 'jsonrpc_response' | 'jsonrpc_notify' | 'notify_ack' | 'session_termination_response';
+        resp_timing?: unknown;
+    };
+    path: {
+        tunnelId: string;
+    };
+    query?: never;
+    url: '/v1/tunnels/{tunnelId}/response';
+};
+
+export type RespondDesktopTunnelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RespondDesktopTunnelError = RespondDesktopTunnelErrors[keyof RespondDesktopTunnelErrors];
+
+export type RespondDesktopTunnelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: string;
+    };
+};
+
+export type RespondDesktopTunnelResponse = RespondDesktopTunnelResponses[keyof RespondDesktopTunnelResponses];
 
 export type GetDevFeedbackSetupData = {
     body?: never;
@@ -54826,6 +60193,7 @@ export type ListEnvironmentsResponses = {
                 valueId?: string;
             }>;
             canDeploy: boolean;
+            deployKinds: Array<'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'knowledgeSource'>;
         }>;
         defaultAssignedCatalogCount: number;
         resourceDefaults: {
@@ -57761,13 +63129,16 @@ export type InstallCopilotGithubAppData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         replaceKeyId?: string;
         name?: string;
@@ -57877,13 +63248,16 @@ export type ConnectCopilotGithubAppCredentialData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name?: string;
     };
@@ -58062,6 +63436,7 @@ export type CheckCopilotGithubOrganizationResponses = {
      */
     200: {
         organization: string;
+        organizationName: string | null;
     };
 };
 
@@ -58177,13 +63552,16 @@ export type ConnectExistingCopilotGithubAppData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name?: string;
     };
@@ -58980,6 +64358,21 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -59592,6 +64985,21 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -59776,6 +65184,944 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
 };
 
 export type GithubCopilotChatCompletionsWithAgentResponse = GithubCopilotChatCompletionsWithAgentResponses[keyof GithubCopilotChatCompletionsWithAgentResponses];
+
+export type GithubCopilotMessagesWithDefaultAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/github-copilot/v1/messages';
+};
+
+export type GithubCopilotMessagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithDefaultAgentError = GithubCopilotMessagesWithDefaultAgentErrors[keyof GithubCopilotMessagesWithDefaultAgentErrors];
+
+export type GithubCopilotMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithDefaultAgentResponse = GithubCopilotMessagesWithDefaultAgentResponses[keyof GithubCopilotMessagesWithDefaultAgentResponses];
+
+export type GithubCopilotMessagesWithAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/github-copilot/{agentId}/v1/messages';
+};
+
+export type GithubCopilotMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithAgentError = GithubCopilotMessagesWithAgentErrors[keyof GithubCopilotMessagesWithAgentErrors];
+
+export type GithubCopilotMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithAgentResponse = GithubCopilotMessagesWithAgentResponses[keyof GithubCopilotMessagesWithAgentResponses];
+
+export type GithubCopilotCountTokensWithDefaultAgentData = {
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+                [key: string]: unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                    [key: string]: unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                            [key: string]: unknown;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id?: string | null;
+            [key: string]: unknown;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            [key: string]: unknown;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
+        } | {
+            type: 'adaptive';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+            [key: string]: unknown;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+            [key: string]: unknown;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/github-copilot/v1/messages/count_tokens';
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentError = GithubCopilotCountTokensWithDefaultAgentErrors[keyof GithubCopilotCountTokensWithDefaultAgentErrors];
+
+export type GithubCopilotCountTokensWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        input_tokens: number;
+    };
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentResponse = GithubCopilotCountTokensWithDefaultAgentResponses[keyof GithubCopilotCountTokensWithDefaultAgentResponses];
+
+export type GithubCopilotCountTokensWithAgentData = {
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+                [key: string]: unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                    [key: string]: unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                            [key: string]: unknown;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id?: string | null;
+            [key: string]: unknown;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            [key: string]: unknown;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
+        } | {
+            type: 'adaptive';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+            [key: string]: unknown;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+            [key: string]: unknown;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/github-copilot/{agentId}/v1/messages/count_tokens';
+};
+
+export type GithubCopilotCountTokensWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotCountTokensWithAgentError = GithubCopilotCountTokensWithAgentErrors[keyof GithubCopilotCountTokensWithAgentErrors];
+
+export type GithubCopilotCountTokensWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        input_tokens: number;
+    };
+};
+
+export type GithubCopilotCountTokensWithAgentResponse = GithubCopilotCountTokensWithAgentResponses[keyof GithubCopilotCountTokensWithAgentResponses];
 
 export type GithubCopilotResponsesWithDefaultAgentData = {
     body: {
@@ -60954,6 +67300,12 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -60968,6 +67320,8 @@ export type UpdateGuardrailsDeploymentData = {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
+        humanApprovalMode?: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode?: 'refuse' | 'allow';
         annotatorModelId?: string | null;
         annotatorLlmApiKeyId?: string | null;
     };
@@ -61052,6 +67406,12 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -62386,7 +68746,7 @@ export type DeleteIncomingEmailSubscriptionResponses = {
 
 export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
 
-export type GetInteractionsData = {
+export type GetLlmProxyLogsData = {
     body?: never;
     path?: never;
     query?: {
@@ -62403,7 +68763,7 @@ export type GetInteractionsData = {
          */
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -62419,10 +68779,10 @@ export type GetInteractionsData = {
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions';
+    url: '/api/llm-proxy-logs';
 };
 
-export type GetInteractionsErrors = {
+export type GetLlmProxyLogsErrors = {
     /**
      * Default Response
      */
@@ -62488,9 +68848,9 @@ export type GetInteractionsErrors = {
     };
 };
 
-export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
+export type GetLlmProxyLogsError = GetLlmProxyLogsErrors[keyof GetLlmProxyLogsErrors];
 
-export type GetInteractionsResponses = {
+export type GetLlmProxyLogsResponses = {
     /**
      * Default Response
      */
@@ -62512,9 +68872,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -62544,11 +68905,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62571,6 +68950,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -62585,6 +68968,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -62609,9 +68993,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -62789,11 +69174,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62816,6 +69219,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -62830,6 +69237,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -62854,9 +69262,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -62909,11 +69318,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62936,6 +69363,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -62950,6 +69381,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -62972,9 +69404,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63027,11 +69460,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63054,6 +69505,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -63068,6 +69523,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -63090,9 +69546,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63145,11 +69602,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63172,6 +69647,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -63186,6 +69665,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -63208,9 +69688,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63263,11 +69744,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63290,6 +69789,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -63304,6 +69807,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -63326,9 +69830,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63362,11 +69867,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63389,6 +69912,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -63403,6 +69930,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -63427,9 +69955,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63455,15 +69984,33 @@ export type GetInteractionsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'anthropic:messages';
+            type: 'anthropic:messages' | 'github-copilot:messages';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63486,6 +70033,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -63500,6 +70051,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -63524,9 +70076,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -63706,6 +70259,18 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -63899,6 +70464,18 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -64011,11 +70588,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64038,6 +70633,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -64052,6 +70651,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -64076,9 +70676,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -64648,11 +71249,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64675,6 +71294,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -64689,6 +71312,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -64713,9 +71337,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -64745,11 +71370,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64772,6 +71415,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -64786,6 +71433,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -64810,9 +71458,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -64842,11 +71491,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64869,6 +71536,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -64883,6 +71554,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -64907,9 +71579,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -64939,11 +71612,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64966,6 +71657,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -64980,6 +71675,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65004,9 +71700,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65036,11 +71733,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65063,6 +71778,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65077,6 +71796,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65101,9 +71821,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65133,11 +71854,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65160,6 +71899,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65174,6 +71917,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65198,9 +71942,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65230,11 +71975,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65257,6 +72020,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65271,6 +72038,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65295,9 +72063,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65327,11 +72096,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65354,6 +72141,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65368,6 +72159,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65392,9 +72184,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65424,11 +72217,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65451,6 +72262,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65465,6 +72280,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65489,9 +72305,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65521,11 +72338,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65548,6 +72383,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65562,6 +72401,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65586,9 +72426,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65618,11 +72459,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65645,6 +72504,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65659,6 +72522,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65683,9 +72547,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65715,11 +72580,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65742,6 +72625,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65756,6 +72643,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65780,9 +72668,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -65812,11 +72701,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65839,6 +72746,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -65853,6 +72764,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65877,9 +72789,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -66314,6 +73227,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -66767,6 +73695,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -66877,11 +73820,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66904,6 +73865,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -66918,6 +73883,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66942,9 +73908,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -67379,6 +74346,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -67832,6 +74814,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -67942,11 +74939,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -67969,6 +74984,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -67983,6 +75002,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68007,9 +75027,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -68444,6 +75465,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -68897,6 +75933,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -69007,11 +76058,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -69034,6 +76103,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -69048,6 +76121,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -69072,9 +76146,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -69509,6 +76584,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -69962,6 +77052,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -70072,11 +77177,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70099,6 +77222,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70113,6 +77240,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -70137,9 +77265,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -70169,11 +77298,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70196,6 +77343,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70210,6 +77361,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -70234,9 +77386,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -70334,11 +77487,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70361,6 +77532,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70375,6 +77550,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -70399,9 +77575,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -70836,6 +78013,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -71289,6 +78481,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -71399,11 +78606,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71426,6 +78651,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71440,6 +78669,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -71464,9 +78694,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -71543,11 +78774,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71570,6 +78819,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71584,6 +78837,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -71608,9 +78862,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -71687,11 +78942,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71714,6 +78987,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71728,6 +79005,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -71752,9 +79030,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -71829,11 +79108,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71856,6 +79153,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71870,6 +79171,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -71894,9 +79196,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72033,11 +79336,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72060,6 +79381,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72074,6 +79399,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72098,9 +79424,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72237,11 +79564,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72264,6 +79609,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72278,6 +79627,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72302,9 +79652,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72441,11 +79792,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72468,6 +79837,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72482,6 +79855,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72506,9 +79880,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72538,11 +79913,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72565,6 +79958,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72579,6 +79976,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72602,9 +80000,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72666,11 +80065,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72693,6 +80110,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72707,6 +80128,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72731,9 +80153,10 @@ export type GetInteractionsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -72786,11 +80209,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72813,6 +80254,10 @@ export type GetInteractionsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -72827,6 +80272,7 @@ export type GetInteractionsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72846,9 +80292,9 @@ export type GetInteractionsResponses = {
     };
 };
 
-export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+export type GetLlmProxyLogsResponse = GetLlmProxyLogsResponses[keyof GetLlmProxyLogsResponses];
 
-export type GetInteractionSummariesData = {
+export type GetLlmProxyLogSummariesData = {
     body?: never;
     path?: never;
     query?: {
@@ -72856,20 +80302,24 @@ export type GetInteractionSummariesData = {
         externalAgentId?: string;
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         startDate?: string;
         endDate?: string;
+        /**
+         * Only rows created before this log entry, ordered by creation time then ID at the stored precision. Its total is the entry's zero-based position.
+         */
+        beforeId?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions/summaries';
+    url: '/api/llm-proxy-logs/summaries';
 };
 
-export type GetInteractionSummariesErrors = {
+export type GetLlmProxyLogSummariesErrors = {
     /**
      * Default Response
      */
@@ -72935,9 +80385,9 @@ export type GetInteractionSummariesErrors = {
     };
 };
 
-export type GetInteractionSummariesError = GetInteractionSummariesErrors[keyof GetInteractionSummariesErrors];
+export type GetLlmProxyLogSummariesError = GetLlmProxyLogSummariesErrors[keyof GetLlmProxyLogSummariesErrors];
 
-export type GetInteractionSummariesResponses = {
+export type GetLlmProxyLogSummariesResponses = {
     /**
      * Default Response
      */
@@ -72950,10 +80400,25 @@ export type GetInteractionSummariesResponses = {
             model: string | null;
             baselineModel: string | null;
             billingMode: 'metered' | 'subscription';
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
@@ -72967,13 +80432,19 @@ export type GetInteractionSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            failed: boolean;
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'github-copilot:messages' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
             userMessagePreview?: string | null;
             responseToolNames?: Array<string> | null;
+            responseToolCalls?: Array<{
+                id: string;
+                name: string;
+            }> | null;
             responseTextPreview?: string | null;
+            autoRouted: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -72986,9 +80457,9 @@ export type GetInteractionSummariesResponses = {
     };
 };
 
-export type GetInteractionSummariesResponse = GetInteractionSummariesResponses[keyof GetInteractionSummariesResponses];
+export type GetLlmProxyLogSummariesResponse = GetLlmProxyLogSummariesResponses[keyof GetLlmProxyLogSummariesResponses];
 
-export type GetInteractionSessionsData = {
+export type GetLlmProxyLogSessionsData = {
     body?: never;
     path?: never;
     query?: {
@@ -73003,13 +80474,13 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'chatgpt' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -73023,10 +80494,10 @@ export type GetInteractionSessionsData = {
         limit?: number;
         cursor?: string;
     };
-    url: '/api/interactions/sessions';
+    url: '/api/llm-proxy-logs/sessions';
 };
 
-export type GetInteractionSessionsErrors = {
+export type GetLlmProxyLogSessionsErrors = {
     /**
      * Default Response
      */
@@ -73092,9 +80563,9 @@ export type GetInteractionSessionsErrors = {
     };
 };
 
-export type GetInteractionSessionsError = GetInteractionSessionsErrors[keyof GetInteractionSessionsErrors];
+export type GetLlmProxyLogSessionsError = GetLlmProxyLogSessionsErrors[keyof GetLlmProxyLogSessionsErrors];
 
-export type GetInteractionSessionsResponses = {
+export type GetLlmProxyLogSessionsResponses = {
     /**
      * Default Response
      */
@@ -73108,14 +80579,22 @@ export type GetInteractionSessionsResponses = {
             } | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
-            sources: Array<'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement'>;
+            source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
+            sources: Array<'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation'>;
             interactionId: string | null;
             requestCount: number;
             /**
              * Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.
              */
             failedOverCount: number;
+            /**
+             * Requests that failed, including streams that failed after usage came back. Failed-over pool attempts are counted in failedOverCount instead. Rows logged before failures were tracked count as succeeded.
+             */
+            failedRequestCount: number;
+            /**
+             * Errors the chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors.
+             */
+            chatErrorCount: number;
             totalInputTokens: number;
             totalOutputTokens: number;
             totalCacheReadTokens: number;
@@ -73142,6 +80621,7 @@ export type GetInteractionSessionsResponses = {
             copilotCredentialSources?: Array<{
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             }>;
@@ -73170,18 +80650,18 @@ export type GetInteractionSessionsResponses = {
     };
 };
 
-export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
+export type GetLlmProxyLogSessionsResponse = GetLlmProxyLogSessionsResponses[keyof GetLlmProxyLogSessionsResponses];
 
-export type GetInteractionSessionLineageData = {
+export type GetLlmProxyLogSessionLineageData = {
     body?: never;
     path: {
         sessionId: string;
     };
     query?: never;
-    url: '/api/interactions/sessions/{sessionId}/lineage';
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/lineage';
 };
 
-export type GetInteractionSessionLineageErrors = {
+export type GetLlmProxyLogSessionLineageErrors = {
     /**
      * Default Response
      */
@@ -73247,9 +80727,9 @@ export type GetInteractionSessionLineageErrors = {
     };
 };
 
-export type GetInteractionSessionLineageError = GetInteractionSessionLineageErrors[keyof GetInteractionSessionLineageErrors];
+export type GetLlmProxyLogSessionLineageError = GetLlmProxyLogSessionLineageErrors[keyof GetLlmProxyLogSessionLineageErrors];
 
-export type GetInteractionSessionLineageResponses = {
+export type GetLlmProxyLogSessionLineageResponses = {
     /**
      * Default Response
      */
@@ -73263,16 +80743,18 @@ export type GetInteractionSessionLineageResponses = {
     };
 };
 
-export type GetInteractionSessionLineageResponse = GetInteractionSessionLineageResponses[keyof GetInteractionSessionLineageResponses];
+export type GetLlmProxyLogSessionLineageResponse = GetLlmProxyLogSessionLineageResponses[keyof GetLlmProxyLogSessionLineageResponses];
 
-export type GetUniqueExternalAgentIdsData = {
+export type GetLlmProxyLogSessionChatErrorsData = {
     body?: never;
-    path?: never;
+    path: {
+        sessionId: string;
+    };
     query?: never;
-    url: '/api/interactions/external-agent-ids';
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/chat-errors';
 };
 
-export type GetUniqueExternalAgentIdsErrors = {
+export type GetLlmProxyLogSessionChatErrorsErrors = {
     /**
      * Default Response
      */
@@ -73338,9 +80820,267 @@ export type GetUniqueExternalAgentIdsErrors = {
     };
 };
 
-export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+export type GetLlmProxyLogSessionChatErrorsError = GetLlmProxyLogSessionChatErrorsErrors[keyof GetLlmProxyLogSessionChatErrorsErrors];
 
-export type GetUniqueExternalAgentIdsResponses = {
+export type GetLlmProxyLogSessionChatErrorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetLlmProxyLogSessionChatErrorsResponse = GetLlmProxyLogSessionChatErrorsResponses[keyof GetLlmProxyLogSessionChatErrorsResponses];
+
+export type GetLlmProxyLogSessionHandoffsData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/handoffs';
+};
+
+export type GetLlmProxyLogSessionHandoffsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogSessionHandoffsError = GetLlmProxyLogSessionHandoffsErrors[keyof GetLlmProxyLogSessionHandoffsErrors];
+
+export type GetLlmProxyLogSessionHandoffsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Runs this session started, oldest first.
+         */
+        handedTo: Array<{
+            /**
+             * The run's stable id: its first turn's task id.
+             */
+            runId: string;
+            /**
+             * The run's own LLM session: its workload name.
+             */
+            llmSessionId: string;
+            /**
+             * The LLM session that started the run.
+             */
+            originLlmSessionId: string;
+            agentName: string;
+            title: string;
+            startedAt: string;
+        }>;
+        /**
+         * This session started more runs than `handedTo` lists.
+         */
+        handedToTruncated: boolean;
+        /**
+         * When this is a run's own session: that run, with the session that started it.
+         */
+        handedFrom: {
+            /**
+             * The run's stable id: its first turn's task id.
+             */
+            runId: string;
+            /**
+             * The run's own LLM session: its workload name.
+             */
+            llmSessionId: string;
+            /**
+             * The LLM session that started the run.
+             */
+            originLlmSessionId: string;
+            agentName: string;
+            title: string;
+            startedAt: string;
+        } | null;
+        /**
+         * Moves between the origin session and its runs, oldest first. A move to the side that already holds the work is left out.
+         */
+        moves: Array<{
+            kind: 'push' | 'pull' | 'steer';
+            runId: string;
+            mcpToolCallId: string;
+            /**
+             * When the gateway call that made the move ended.
+             */
+            at: string;
+        }>;
+    };
+};
+
+export type GetLlmProxyLogSessionHandoffsResponse = GetLlmProxyLogSessionHandoffsResponses[keyof GetLlmProxyLogSessionHandoffsResponses];
+
+export type GetLlmProxyLogExternalAgentIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-proxy-logs/external-agent-ids';
+};
+
+export type GetLlmProxyLogExternalAgentIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogExternalAgentIdsError = GetLlmProxyLogExternalAgentIdsErrors[keyof GetLlmProxyLogExternalAgentIdsErrors];
+
+export type GetLlmProxyLogExternalAgentIdsResponses = {
     /**
      * Default Response
      */
@@ -73350,9 +81090,9 @@ export type GetUniqueExternalAgentIdsResponses = {
     }>;
 };
 
-export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
+export type GetLlmProxyLogExternalAgentIdsResponse = GetLlmProxyLogExternalAgentIdsResponses[keyof GetLlmProxyLogExternalAgentIdsResponses];
 
-export type GetUniqueUserIdsData = {
+export type GetLlmProxyLogUserIdsData = {
     body?: never;
     path?: never;
     query?: {
@@ -73360,10 +81100,10 @@ export type GetUniqueUserIdsData = {
         ids?: Array<string>;
         limit?: number;
     };
-    url: '/api/interactions/user-ids';
+    url: '/api/llm-proxy-logs/user-ids';
 };
 
-export type GetUniqueUserIdsErrors = {
+export type GetLlmProxyLogUserIdsErrors = {
     /**
      * Default Response
      */
@@ -73429,9 +81169,9 @@ export type GetUniqueUserIdsErrors = {
     };
 };
 
-export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+export type GetLlmProxyLogUserIdsError = GetLlmProxyLogUserIdsErrors[keyof GetLlmProxyLogUserIdsErrors];
 
-export type GetUniqueUserIdsResponses = {
+export type GetLlmProxyLogUserIdsResponses = {
     /**
      * Default Response
      */
@@ -73441,18 +81181,18 @@ export type GetUniqueUserIdsResponses = {
     }>;
 };
 
-export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+export type GetLlmProxyLogUserIdsResponse = GetLlmProxyLogUserIdsResponses[keyof GetLlmProxyLogUserIdsResponses];
 
-export type GetInteractionData = {
+export type GetLlmProxyLogAutoRoutingData = {
     body?: never;
     path: {
-        interactionId: string;
+        logId: string;
     };
     query?: never;
-    url: '/api/interactions/{interactionId}';
+    url: '/api/llm-proxy-logs/{logId}/auto-routing';
 };
 
-export type GetInteractionErrors = {
+export type GetLlmProxyLogAutoRoutingErrors = {
     /**
      * Default Response
      */
@@ -73518,9 +81258,149 @@ export type GetInteractionErrors = {
     };
 };
 
-export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
+export type GetLlmProxyLogAutoRoutingError = GetLlmProxyLogAutoRoutingErrors[keyof GetLlmProxyLogAutoRoutingErrors];
 
-export type GetInteractionResponses = {
+export type GetLlmProxyLogAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: {
+            id: string;
+            routerId: string;
+            segment: number;
+            tierIndex: number;
+            modelId: string;
+            propensity: number;
+            u: number;
+            planId: string | null;
+            reason: 'planned' | 'cold_start' | 'scorer_error' | 'plan_stale';
+            scorerVersionId: string | null;
+            features: {
+                signals: {
+                    'jev-session': {
+                        version: string;
+                        tier_needed: [
+                            number,
+                            number,
+                            number
+                        ];
+                        p_long: number;
+                    };
+                };
+                client: string;
+                scorerUsage?: {
+                    inputTokens: number | null;
+                    outputTokens: number | null;
+                };
+            } | null;
+            scorerCost: string | null;
+            featuresSchemaVersion: number;
+            coreVersion: string;
+            planFormatVersion: number | null;
+            lambda: number | null;
+            expectedCostUsd: string | null;
+            createdAt: string;
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+            router: {
+                id: string;
+                name: string;
+            };
+            scorerVersion: {
+                id: string;
+                name: string;
+                model: string;
+                specHash: string;
+            } | null;
+        } | null;
+    };
+};
+
+export type GetLlmProxyLogAutoRoutingResponse = GetLlmProxyLogAutoRoutingResponses[keyof GetLlmProxyLogAutoRoutingResponses];
+
+export type GetLlmProxyLogData = {
+    body?: never;
+    path: {
+        logId: string;
+    };
+    query?: never;
+    url: '/api/llm-proxy-logs/{logId}';
+};
+
+export type GetLlmProxyLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogError = GetLlmProxyLogErrors[keyof GetLlmProxyLogErrors];
+
+export type GetLlmProxyLogResponses = {
     /**
      * Default Response
      */
@@ -73541,9 +81421,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -73573,11 +81454,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73600,6 +81499,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -73614,6 +81517,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -73638,9 +81542,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -73818,11 +81723,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73845,6 +81768,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -73859,6 +81786,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -73883,9 +81811,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -73938,11 +81867,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73965,6 +81912,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -73979,6 +81930,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74001,9 +81953,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74056,11 +82009,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74083,6 +82054,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -74097,6 +82072,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74119,9 +82095,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74174,11 +82151,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74201,6 +82196,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -74215,6 +82214,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74237,9 +82237,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74292,11 +82293,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74319,6 +82338,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -74333,6 +82356,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74355,9 +82379,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74391,11 +82416,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74418,6 +82461,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -74432,6 +82479,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74456,9 +82504,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74484,15 +82533,33 @@ export type GetInteractionResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'anthropic:messages';
+        type: 'anthropic:messages' | 'github-copilot:messages';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74515,6 +82582,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -74529,6 +82600,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -74553,9 +82625,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -74735,6 +82808,18 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;
@@ -74928,6 +83013,18 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;
@@ -75040,11 +83137,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75067,6 +83182,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -75081,6 +83200,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -75105,9 +83225,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -75677,11 +83798,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75704,6 +83843,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -75718,6 +83861,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -75742,9 +83886,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -75774,11 +83919,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75801,6 +83964,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -75815,6 +83982,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -75839,9 +84007,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -75871,11 +84040,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75898,6 +84085,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -75912,6 +84103,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -75936,9 +84128,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -75968,11 +84161,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75995,6 +84206,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76009,6 +84224,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76033,9 +84249,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76065,11 +84282,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76092,6 +84327,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76106,6 +84345,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76130,9 +84370,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76162,11 +84403,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76189,6 +84448,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76203,6 +84466,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76227,9 +84491,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76259,11 +84524,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76286,6 +84569,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76300,6 +84587,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76324,9 +84612,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76356,11 +84645,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76383,6 +84690,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76397,6 +84708,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76421,9 +84733,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76453,11 +84766,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76480,6 +84811,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76494,6 +84829,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76518,9 +84854,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76550,11 +84887,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76577,6 +84932,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76591,6 +84950,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76615,9 +84975,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76647,11 +85008,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76674,6 +85053,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76688,6 +85071,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76712,9 +85096,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76744,11 +85129,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76771,6 +85174,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76785,6 +85192,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76809,9 +85217,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -76841,11 +85250,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76868,6 +85295,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -76882,6 +85313,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -76906,9 +85338,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -77343,6 +85776,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -77796,6 +86244,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -77906,11 +86369,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77933,6 +86414,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -77947,6 +86432,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -77971,9 +86457,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -78408,6 +86895,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -78861,6 +87363,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -78971,11 +87488,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -78998,6 +87533,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -79012,6 +87551,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -79036,9 +87576,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -79473,6 +88014,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -79926,6 +88482,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -80036,11 +88607,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -80063,6 +88652,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80077,6 +88670,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80101,9 +88695,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -80538,6 +89133,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -80991,6 +89601,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -81101,11 +89726,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81128,6 +89771,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -81142,6 +89789,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81166,9 +89814,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -81198,11 +89847,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81225,6 +89892,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -81239,6 +89910,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81263,9 +89935,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -81363,11 +90036,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81390,6 +90081,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -81404,6 +90099,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81428,9 +90124,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -81865,6 +90562,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -82318,6 +91030,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -82428,11 +91155,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82455,6 +91200,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82469,6 +91218,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -82493,9 +91243,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -82572,11 +91323,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82599,6 +91368,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82613,6 +91386,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -82637,9 +91411,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -82716,11 +91491,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82743,6 +91536,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82757,6 +91554,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -82781,9 +91579,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -82858,11 +91657,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82885,6 +91702,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82899,6 +91720,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -82923,9 +91745,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83062,11 +91885,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83089,6 +91930,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83103,6 +91948,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83127,9 +91973,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83266,11 +92113,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83293,6 +92158,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83307,6 +92176,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83331,9 +92201,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83470,11 +92341,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83497,6 +92386,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83511,6 +92404,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83535,9 +92429,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83567,11 +92462,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83594,6 +92507,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83608,6 +92525,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83631,9 +92549,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83695,11 +92614,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83722,6 +92659,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83736,6 +92677,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83760,9 +92702,10 @@ export type GetInteractionResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -83815,11 +92758,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83842,6 +92803,10 @@ export type GetInteractionResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83856,6 +92821,7 @@ export type GetInteractionResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83866,7 +92832,7 @@ export type GetInteractionResponses = {
     };
 };
 
-export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+export type GetLlmProxyLogResponse = GetLlmProxyLogResponses[keyof GetLlmProxyLogResponses];
 
 export type TransferMcpCatalogOwnershipData = {
     body: {
@@ -83972,7 +92938,7 @@ export type GetInternalMcpCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -84058,6 +93024,7 @@ export type GetInternalMcpCatalogResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -84072,7 +93039,7 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -84117,6 +93084,11 @@ export type GetInternalMcpCatalogResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -84159,7 +93131,7 @@ export type GetInternalMcpCatalogResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -84167,6 +93139,12 @@ export type GetInternalMcpCatalogResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -84214,7 +93192,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
     }>;
 };
 
@@ -84238,7 +93216,7 @@ export type CreateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant?: boolean;
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
@@ -84282,6 +93260,11 @@ export type CreateInternalMcpCatalogItemData = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig?: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -84325,6 +93308,8 @@ export type CreateInternalMcpCatalogItemData = {
             audience?: string;
             clientIdOverride?: string;
             clientSecretOverride?: string;
+            privateKeyPemOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -84332,6 +93317,12 @@ export type CreateInternalMcpCatalogItemData = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon?: string | null;
         clonedFrom?: string | null;
@@ -84354,13 +93345,16 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -84443,6 +93437,7 @@ export type CreateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -84457,7 +93452,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -84502,6 +93497,11 @@ export type CreateInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -84544,7 +93544,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -84552,6 +93552,12 @@ export type CreateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -84608,7 +93614,7 @@ export type SearchMcpRegistryData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -84730,7 +93736,7 @@ export type SearchMcpRegistryResponses = {
         data: Array<{
             id: string;
             name: string;
-            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
             multitenant: boolean;
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
@@ -84755,6 +93761,10 @@ export type SearchMcpRegistryResponses = {
             appId?: string | null;
             appEnabled?: boolean | null;
             docsUrl: string | null;
+            desktopConfig: {
+                command?: string | null;
+                url?: string | null;
+            } | null;
             icon: string | null;
             iconUrl: string | null;
             alertMutes: Array<{
@@ -84765,7 +93775,7 @@ export type SearchMcpRegistryResponses = {
                 reason: string;
                 mutedAt: string;
             }>;
-            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             imageApprovalRequired: boolean;
             bindsCredential: boolean;
             enterpriseManaged: boolean;
@@ -84793,11 +93803,12 @@ export type SearchMcpRegistryResponses = {
             name: string;
             deploymentName: string | null;
             catalogId: string;
-            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
             secretId: string | null;
             environmentValues: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown>;
+            desktopArguments: Array<string> | null;
             createdByServiceAccountId: string | null;
             ownerId: string | null;
             teamId: string | null;
@@ -84876,7 +93887,7 @@ export type SearchMcpRegistryIdsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -85089,8 +94100,9 @@ export type GetMcpRegistryIssueIndexResponses = {
         catalogItems: Array<{
             id: string;
             name: string;
-            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
             multitenant: boolean;
+            toolPrefix?: string;
             dynamicConnectionMcpServerId?: string;
             environmentId?: string;
             authorId?: string;
@@ -85522,6 +94534,7 @@ export type GetInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -85536,7 +94549,7 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -85581,6 +94594,11 @@ export type GetInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -85623,7 +94641,7 @@ export type GetInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -85631,6 +94649,12 @@ export type GetInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -85667,7 +94691,7 @@ export type GetInternalMcpCatalogItemResponses = {
         skillCount?: number;
         providesUi?: boolean;
         providesSkills?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         imageApprovalRequired?: boolean;
     };
 };
@@ -85691,7 +94715,7 @@ export type UpdateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote' | 'builtin' | 'app';
+        serverType?: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
@@ -85734,6 +94758,11 @@ export type UpdateInternalMcpCatalogItemData = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig?: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -85777,6 +94806,8 @@ export type UpdateInternalMcpCatalogItemData = {
             audience?: string;
             clientIdOverride?: string;
             clientSecretOverride?: string;
+            privateKeyPemOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -85784,6 +94815,12 @@ export type UpdateInternalMcpCatalogItemData = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon?: string | null;
         environmentId?: string | null;
@@ -85879,6 +94916,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -85893,7 +94931,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -85938,6 +94976,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -85980,7 +95023,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -85988,6 +95031,12 @@ export type UpdateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -86577,6 +95626,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -86591,7 +95641,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -86636,6 +95686,11 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -86678,7 +95733,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -86686,6 +95741,12 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -86807,6 +95868,7 @@ export type ApproveCatalogItemImageResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -86821,7 +95883,7 @@ export type ApproveCatalogItemImageResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         multitenant: boolean;
         deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
@@ -86866,6 +95928,11 @@ export type ApproveCatalogItemImageResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
+        } | null;
+        desktopConfig: {
+            command?: string | null;
+            url?: string | null;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -86908,7 +95975,7 @@ export type ApproveCatalogItemImageResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -86916,6 +95983,12 @@ export type ApproveCatalogItemImageResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -88474,6 +97547,21 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -89084,6 +98172,21 @@ export type KimiCodeChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -89700,6 +98803,21 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -90312,6 +99430,21 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -90856,7 +99989,7 @@ export type GetKnowledgeBasesData = {
         excludeOtherPersonal?: boolean;
         search?: string;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.
+         * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires [`knowledgeSource:delete`](/docs/reference/permissions#knowledgeSource:delete).
          */
         status?: 'active' | 'deleted';
         /**
@@ -90868,7 +100001,7 @@ export type GetKnowledgeBasesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -90984,6 +100117,7 @@ export type GetKnowledgeBasesResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            uploadedFilesEnvironmentId?: string | null;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -91031,13 +100165,16 @@ export type CreateKnowledgeBaseData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -91141,6 +100278,7 @@ export type CreateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -91339,6 +100477,7 @@ export type GetKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -91348,6 +100487,10 @@ export type UpdateKnowledgeBaseData = {
     body: {
         name?: string;
         description?: string | null;
+        /**
+         * Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.
+         */
+        uploadedFilesEnvironmentId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -91460,6 +100603,7 @@ export type UpdateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -91840,7 +100984,7 @@ export type GetConnectorsData = {
         search?: string;
         connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.
+         * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires [`knowledgeSource:delete`](/docs/reference/permissions#knowledgeSource:delete).
          */
         status?: 'active' | 'deleted';
         /**
@@ -91848,7 +100992,7 @@ export type GetConnectorsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -92421,13 +101565,16 @@ export type CreateConnectorData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -96154,7 +105301,7 @@ export type GetKnowledgeFilesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -96303,13 +105450,16 @@ export type UploadKnowledgeFileData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -96556,13 +105706,16 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         filename?: string;
         directoryId?: string | null;
@@ -98957,7 +108110,7 @@ export type GetModelsWithApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -99073,6 +108226,13 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -99431,6 +108591,94 @@ export type BulkUpdateModelsResponses = {
 
 export type BulkUpdateModelsResponse = BulkUpdateModelsResponses[keyof BulkUpdateModelsResponses];
 
+export type DeleteModelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-models/{id}';
+};
+
+export type DeleteModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteModelError = DeleteModelErrors[keyof DeleteModelErrors];
+
+export type DeleteModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteModelResponse = DeleteModelResponses[keyof DeleteModelResponses];
+
 export type UpdateModelData = {
     body: {
         customPricePerMillionInput?: string | null;
@@ -99571,6 +108819,13 @@ export type UpdateModelResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -99919,985 +109174,6 @@ export type StartModelCostBackfillResponses = {
 
 export type StartModelCostBackfillResponse = StartModelCostBackfillResponses[keyof StartModelCostBackfillResponses];
 
-export type LlmOauthClientLabelKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/llm-oauth-clients/labels/keys';
-};
-
-export type LlmOauthClientLabelKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type LlmOauthClientLabelKeysError = LlmOauthClientLabelKeysErrors[keyof LlmOauthClientLabelKeysErrors];
-
-export type LlmOauthClientLabelKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<string>;
-};
-
-export type LlmOauthClientLabelKeysResponse = LlmOauthClientLabelKeysResponses[keyof LlmOauthClientLabelKeysResponses];
-
-export type LlmOauthClientLabelValuesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Filter values by label key
-         */
-        key?: string;
-    };
-    url: '/api/llm-oauth-clients/labels/values';
-};
-
-export type LlmOauthClientLabelValuesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type LlmOauthClientLabelValuesError = LlmOauthClientLabelValuesErrors[keyof LlmOauthClientLabelValuesErrors];
-
-export type LlmOauthClientLabelValuesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<string>;
-};
-
-export type LlmOauthClientLabelValuesResponse = LlmOauthClientLabelValuesResponses[keyof LlmOauthClientLabelValuesResponses];
-
-export type GetLlmOauthClientsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        limit?: number;
-        offset?: number;
-        search?: string;
-        providerApiKeyId?: string;
-        grantType?: 'client_credentials' | 'authorization_code';
-        /**
-         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
-         */
-        labels?: string;
-        /**
-         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
-         */
-        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
-        /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
-         */
-        sharedWith?: Array<string>;
-        /**
-         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
-         */
-        owner?: Array<string>;
-    };
-    url: '/api/llm-oauth-clients';
-};
-
-export type GetLlmOauthClientsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetLlmOauthClientsError = GetLlmOauthClientsErrors[keyof GetLlmOauthClientsErrors];
-
-export type GetLlmOauthClientsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        data: Array<{
-            id: string;
-            clientId: string;
-            serviceAccountId: string | null;
-            name: string;
-            organizationId: string;
-            grantType: 'client_credentials' | 'authorization_code';
-            providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                providerApiKeyId: string;
-                providerApiKeyName: string;
-            }>;
-            redirectUris: Array<string>;
-            disabled: boolean;
-            authorId: string | null;
-            authorName: string | null;
-            createdBy: {
-                id: string;
-                type?: 'user' | 'service_account';
-                name: string | null;
-                email: string | null;
-            } | null;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
-            }>;
-            createdAt: string;
-            updatedAt: string;
-            billingTeam: {
-                id: string;
-                name: string;
-            } | null;
-            spendCap: {
-                limitValue: number;
-                cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-                limitId: string;
-                currentUsage: number;
-                estimatedUsage: boolean;
-            } | null;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
-        };
-    };
-};
-
-export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLlmOauthClientsResponses];
-
-export type CreateLlmOauthClientData = {
-    body: {
-        name: string;
-        serviceAccountId?: string | null;
-        grantType?: 'client_credentials' | 'authorization_code';
-        providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-            providerApiKeyId: string;
-        }>;
-        redirectUris?: Array<string>;
-        /**
-         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
-         */
-        labels?: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        /**
-         * Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.
-         */
-        billingTeamId?: string | null;
-        /**
-         * Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.
-         */
-        spendCap?: {
-            limitValue: number;
-            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        } | null;
-        /**
-         * Who else starts with access, beside the creator who always gets full access.
-         */
-        initialGrants?: Array<{
-            subject: {
-                type: 'user';
-                id: string;
-            } | {
-                type: 'team';
-                id: string;
-            } | {
-                type: 'serviceAccount';
-                id: string;
-            } | {
-                type: 'role';
-                id: string;
-            } | {
-                type: 'organization';
-                id: '*';
-            };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
-        }>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/llm-oauth-clients';
-};
-
-export type CreateLlmOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateLlmOauthClientError = CreateLlmOauthClientErrors[keyof CreateLlmOauthClientErrors];
-
-export type CreateLlmOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-            providerApiKeyId: string;
-            providerApiKeyName: string;
-        }>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-        billingTeam: {
-            id: string;
-            name: string;
-        } | null;
-        spendCap: {
-            limitValue: number;
-            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-            limitId: string;
-            currentUsage: number;
-            estimatedUsage: boolean;
-        } | null;
-        clientSecret: string;
-    };
-};
-
-export type CreateLlmOauthClientResponse = CreateLlmOauthClientResponses[keyof CreateLlmOauthClientResponses];
-
-export type DeleteLlmOauthClientData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-oauth-clients/{id}';
-};
-
-export type DeleteLlmOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteLlmOauthClientError = DeleteLlmOauthClientErrors[keyof DeleteLlmOauthClientErrors];
-
-export type DeleteLlmOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof DeleteLlmOauthClientResponses];
-
-export type UpdateLlmOauthClientData = {
-    body: {
-        name: string;
-        serviceAccountId?: string | null;
-        grantType?: 'client_credentials' | 'authorization_code';
-        providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-            providerApiKeyId: string;
-        }>;
-        redirectUris?: Array<string>;
-        /**
-         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
-         */
-        labels?: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        /**
-         * Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.
-         */
-        billingTeamId?: string | null;
-        /**
-         * Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.
-         */
-        spendCap?: {
-            limitValue: number;
-            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        } | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-oauth-clients/{id}';
-};
-
-export type UpdateLlmOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateLlmOauthClientError = UpdateLlmOauthClientErrors[keyof UpdateLlmOauthClientErrors];
-
-export type UpdateLlmOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-            providerApiKeyId: string;
-            providerApiKeyName: string;
-        }>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-        billingTeam: {
-            id: string;
-            name: string;
-        } | null;
-        spendCap: {
-            limitValue: number;
-            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-            limitId: string;
-            currentUsage: number;
-            estimatedUsage: boolean;
-        } | null;
-    };
-};
-
-export type UpdateLlmOauthClientResponse = UpdateLlmOauthClientResponses[keyof UpdateLlmOauthClientResponses];
-
-export type RotateLlmOauthClientSecretData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-oauth-clients/{id}/rotate-secret';
-};
-
-export type RotateLlmOauthClientSecretErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RotateLlmOauthClientSecretError = RotateLlmOauthClientSecretErrors[keyof RotateLlmOauthClientSecretErrors];
-
-export type RotateLlmOauthClientSecretResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-            providerApiKeyId: string;
-            providerApiKeyName: string;
-        }>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-        billingTeam: {
-            id: string;
-            name: string;
-        } | null;
-        spendCap: {
-            limitValue: number;
-            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-            limitId: string;
-            currentUsage: number;
-            estimatedUsage: boolean;
-        } | null;
-        clientSecret: string;
-    };
-};
-
-export type RotateLlmOauthClientSecretResponse = RotateLlmOauthClientSecretResponses[keyof RotateLlmOauthClientSecretResponses];
-
-export type BulkDeleteLlmOauthClientsData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/llm-oauth-clients/bulk';
-};
-
-export type BulkDeleteLlmOauthClientsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkDeleteLlmOauthClientsError = BulkDeleteLlmOauthClientsErrors[keyof BulkDeleteLlmOauthClientsErrors];
-
-export type BulkDeleteLlmOauthClientsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkDeleteLlmOauthClientsResponse = BulkDeleteLlmOauthClientsResponses[keyof BulkDeleteLlmOauthClientsResponses];
-
 export type LlmProviderApiKeyLabelKeysData = {
     body?: never;
     path?: never;
@@ -101086,7 +109362,7 @@ export type GetLlmProviderApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -101203,6 +109479,7 @@ export type GetLlmProviderApiKeysResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -101252,13 +109529,16 @@ export type CreateLlmProviderApiKeyData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -101372,6 +109652,7 @@ export type CreateLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -101499,6 +109780,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -101713,6 +109995,7 @@ export type GetLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -101860,6 +110143,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -101988,6 +110272,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -102310,6 +110595,13 @@ export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     405: {
         jsonrpc: '2.0';
         error: {
@@ -102317,6 +110609,26 @@ export type McpGatewayGetErrors = {
             message: string;
         };
         id: null;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -102333,11 +110645,36 @@ export type McpGatewayPostData = {
     url: '/v1/mcp/{profileId}';
 };
 
+export type McpGatewayPostErrors = {
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type McpGatewayPostError = McpGatewayPostErrors[keyof McpGatewayPostErrors];
+
 export type McpGatewayPostResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    default: unknown;
 };
 
 export type McpGatewaySseMessageData = {
@@ -102364,9 +110701,36 @@ export type McpGatewaySseMessageErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string;
         message: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -102452,10 +110816,30 @@ export type ReportAgentRuntimeStatusErrors = {
     /**
      * Default Response
      */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
             internal_code?: string;
         };
     };
@@ -102473,789 +110857,6 @@ export type ReportAgentRuntimeStatusResponses = {
 };
 
 export type ReportAgentRuntimeStatusResponse = ReportAgentRuntimeStatusResponses[keyof ReportAgentRuntimeStatusResponses];
-
-export type McpOauthClientLabelKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/mcp-oauth-clients/labels/keys';
-};
-
-export type McpOauthClientLabelKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type McpOauthClientLabelKeysError = McpOauthClientLabelKeysErrors[keyof McpOauthClientLabelKeysErrors];
-
-export type McpOauthClientLabelKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<string>;
-};
-
-export type McpOauthClientLabelKeysResponse = McpOauthClientLabelKeysResponses[keyof McpOauthClientLabelKeysResponses];
-
-export type McpOauthClientLabelValuesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Filter values by label key
-         */
-        key?: string;
-    };
-    url: '/api/mcp-oauth-clients/labels/values';
-};
-
-export type McpOauthClientLabelValuesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type McpOauthClientLabelValuesError = McpOauthClientLabelValuesErrors[keyof McpOauthClientLabelValuesErrors];
-
-export type McpOauthClientLabelValuesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<string>;
-};
-
-export type McpOauthClientLabelValuesResponse = McpOauthClientLabelValuesResponses[keyof McpOauthClientLabelValuesResponses];
-
-export type GetMcpOauthClientsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        search?: string;
-        /**
-         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
-         */
-        labels?: string;
-        /**
-         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
-         */
-        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
-        /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
-         */
-        sharedWith?: Array<string>;
-        /**
-         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
-         */
-        owner?: Array<string>;
-    };
-    url: '/api/mcp-oauth-clients';
-};
-
-export type GetMcpOauthClientsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetMcpOauthClientsError = GetMcpOauthClientsErrors[keyof GetMcpOauthClientsErrors];
-
-export type GetMcpOauthClientsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds: Array<string>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetMcpOauthClientsResponse = GetMcpOauthClientsResponses[keyof GetMcpOauthClientsResponses];
-
-export type CreateMcpOauthClientData = {
-    body: {
-        name: string;
-        /**
-         * Service account this client_credentials client acts as. Changing it revokes issued access tokens.
-         */
-        serviceAccountId?: string | null;
-        grantType?: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds?: Array<string>;
-        redirectUris?: Array<string>;
-        /**
-         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
-         */
-        labels?: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        /**
-         * Who else starts with access, beside the creator who always gets full access.
-         */
-        initialGrants?: Array<{
-            subject: {
-                type: 'user';
-                id: string;
-            } | {
-                type: 'team';
-                id: string;
-            } | {
-                type: 'serviceAccount';
-                id: string;
-            } | {
-                type: 'role';
-                id: string;
-            } | {
-                type: 'organization';
-                id: '*';
-            };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
-        }>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/mcp-oauth-clients';
-};
-
-export type CreateMcpOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateMcpOauthClientError = CreateMcpOauthClientErrors[keyof CreateMcpOauthClientErrors];
-
-export type CreateMcpOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds: Array<string>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-        clientSecret: string;
-    };
-};
-
-export type CreateMcpOauthClientResponse = CreateMcpOauthClientResponses[keyof CreateMcpOauthClientResponses];
-
-export type DeleteMcpOauthClientData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp-oauth-clients/{id}';
-};
-
-export type DeleteMcpOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteMcpOauthClientError = DeleteMcpOauthClientErrors[keyof DeleteMcpOauthClientErrors];
-
-export type DeleteMcpOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteMcpOauthClientResponse = DeleteMcpOauthClientResponses[keyof DeleteMcpOauthClientResponses];
-
-export type UpdateMcpOauthClientData = {
-    body: {
-        name: string;
-        /**
-         * Service account this client_credentials client acts as. Changing it revokes issued access tokens.
-         */
-        serviceAccountId?: string | null;
-        grantType?: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds?: Array<string>;
-        redirectUris?: Array<string>;
-        /**
-         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
-         */
-        labels?: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp-oauth-clients/{id}';
-};
-
-export type UpdateMcpOauthClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateMcpOauthClientError = UpdateMcpOauthClientErrors[keyof UpdateMcpOauthClientErrors];
-
-export type UpdateMcpOauthClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds: Array<string>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateMcpOauthClientResponse = UpdateMcpOauthClientResponses[keyof UpdateMcpOauthClientResponses];
-
-export type RotateMcpOauthClientSecretData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp-oauth-clients/{id}/rotate-secret';
-};
-
-export type RotateMcpOauthClientSecretErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RotateMcpOauthClientSecretError = RotateMcpOauthClientSecretErrors[keyof RotateMcpOauthClientSecretErrors];
-
-export type RotateMcpOauthClientSecretResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        serviceAccountId: string | null;
-        name: string;
-        organizationId: string;
-        grantType: 'client_credentials' | 'authorization_code';
-        allowedGatewayIds: Array<string>;
-        redirectUris: Array<string>;
-        disabled: boolean;
-        authorId: string | null;
-        authorName: string | null;
-        createdBy: {
-            id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        createdAt: string;
-        updatedAt: string;
-        clientSecret: string;
-    };
-};
-
-export type RotateMcpOauthClientSecretResponse = RotateMcpOauthClientSecretResponses[keyof RotateMcpOauthClientSecretResponses];
 
 export type McpProxyPostData = {
     body: {
@@ -103596,11 +111197,12 @@ export type GetMcpServersResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -103668,6 +111270,7 @@ export type InstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        desktopArguments?: Array<string> | null;
         createdByServiceAccountId?: string | null;
         ownerId?: string | null;
         teamId?: string | null;
@@ -103764,11 +111367,12 @@ export type InstallMcpServerResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -103990,11 +111594,12 @@ export type GetMcpServerResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -104137,11 +111742,12 @@ export type ReauthenticateMcpServerResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -104375,11 +111981,12 @@ export type RestoreMcpServerResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -104426,6 +112033,147 @@ export type RestoreMcpServerResponses = {
 };
 
 export type RestoreMcpServerResponse = RestoreMcpServerResponses[keyof RestoreMcpServerResponses];
+
+export type UpdateMcpServerDesktopArgumentsData = {
+    body: {
+        desktopArguments: Array<string> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/desktop-arguments';
+};
+
+export type UpdateMcpServerDesktopArgumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpServerDesktopArgumentsError = UpdateMcpServerDesktopArgumentsErrors[keyof UpdateMcpServerDesktopArgumentsErrors];
+
+export type UpdateMcpServerDesktopArgumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        deploymentName: string | null;
+        catalogId: string;
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
+        secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        desktopArguments: Array<string> | null;
+        createdByServiceAccountId: string | null;
+        ownerId: string | null;
+        teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
+        oauthRefreshErrorDescription: string | null;
+        oauthRefreshFailedAt: string | null;
+        lastUsedAt: string | null;
+        hibernationMode: 'inherit' | 'enabled' | 'disabled';
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        ownerEmail?: string | null;
+        catalogName?: string | null;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: {
+            teamId: string;
+            name: string;
+            createdAt: string;
+        } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+            pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
+        }>;
+        secretStorageType?: 'vault' | 'database' | 'none';
+    };
+};
+
+export type UpdateMcpServerDesktopArgumentsResponse = UpdateMcpServerDesktopArgumentsResponses[keyof UpdateMcpServerDesktopArgumentsResponses];
 
 export type UnmuteMcpServerAlertData = {
     body?: never;
@@ -104992,11 +112740,12 @@ export type ReinstallMcpServerResponses = {
         name: string;
         deploymentName: string | null;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin' | 'app';
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -105283,7 +113032,7 @@ export type GetMcpToolCallsData = {
          */
         mcpServerName?: string;
         /**
-         * Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.
+         * Filter by the user the call is attributed to. Ignored without [`log:admin`](/docs/reference/permissions#log:admin), which already scopes the listing to the caller.
          */
         userId?: string;
         /**
@@ -105391,12 +113140,16 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
+            serviceAccountId: string | null;
             runId: string | null;
             sessionId: string | null;
             llmToolCallId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
+            credentialClientId: string | null;
+            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+            credentialActorClientId: string | null;
             durationMs: number | null;
             createdAt: string;
             userName: string | null;
@@ -105515,12 +113268,16 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
+        serviceAccountId: string | null;
         runId: string | null;
         sessionId: string | null;
         llmToolCallId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
+        credentialClientId: string | null;
+        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+        credentialActorClientId: string | null;
         durationMs: number | null;
         createdAt: string;
         userName: string | null;
@@ -106482,6 +114239,21 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -107092,6 +114864,21 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -108144,9 +115931,21 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -108157,6 +115956,17 @@ export type GetModelPoolsResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -108171,6 +115981,7 @@ export type GetModelPoolsResponse = GetModelPoolsResponses[keyof GetModelPoolsRe
 
 export type CreateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -108178,9 +115989,31 @@ export type CreateModelPoolData = {
             priority?: number;
             weight?: number;
             enabled?: boolean;
+            retrySettings?: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
         }>;
         streamTimeoutSeconds?: number | null;
         timeoutSeconds?: number | null;
+        retrySettings?: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         cooldownSeconds?: number | null;
     };
     path?: never;
@@ -108264,9 +116097,21 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -108277,6 +116122,17 @@ export type CreateModelPoolResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -108465,6 +116321,7 @@ export type DeleteModelPoolResponse = DeleteModelPoolResponses[keyof DeleteModel
 
 export type UpdateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -108472,9 +116329,31 @@ export type UpdateModelPoolData = {
             priority?: number;
             weight?: number;
             enabled?: boolean;
+            retrySettings?: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
         }>;
         streamTimeoutSeconds?: number | null;
         timeoutSeconds?: number | null;
+        retrySettings?: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         cooldownSeconds?: number | null;
     };
     path: {
@@ -108560,9 +116439,21 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -108573,6 +116464,17 @@ export type UpdateModelPoolResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -108619,7 +116521,7 @@ export type ModelRouterImageEditsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/images/edits';
+    url: '/v1/unified-model/images/edits';
 };
 
 export type ModelRouterImageEditsWithDefaultAgentErrors = {
@@ -108752,7 +116654,7 @@ export type ModelRouterImageEditsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/images/edits';
+    url: '/v1/unified-model/{agentId}/images/edits';
 };
 
 export type ModelRouterImageEditsWithAgentErrors = {
@@ -108872,7 +116774,7 @@ export type ModelRouterAudioSpeechWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/speech';
+    url: '/v1/unified-model/audio/speech';
 };
 
 export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
@@ -108909,7 +116811,7 @@ export type ModelRouterAudioSpeechWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/speech';
+    url: '/v1/unified-model/{agentId}/audio/speech';
 };
 
 export type ModelRouterAudioSpeechWithAgentResponses = {
@@ -108955,7 +116857,7 @@ export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/transcriptions';
+    url: '/v1/unified-model/audio/transcriptions';
 };
 
 export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
@@ -109003,7 +116905,7 @@ export type ModelRouterAudioTranscriptionsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/transcriptions';
+    url: '/v1/unified-model/{agentId}/audio/transcriptions';
 };
 
 export type ModelRouterAudioTranscriptionsWithAgentResponses = {
@@ -109049,7 +116951,7 @@ export type ModelRouterAudioTranslationsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/translations';
+    url: '/v1/unified-model/audio/translations';
 };
 
 export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
@@ -109097,7 +116999,7 @@ export type ModelRouterAudioTranslationsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/translations';
+    url: '/v1/unified-model/{agentId}/audio/translations';
 };
 
 export type ModelRouterAudioTranslationsWithAgentResponses = {
@@ -109136,7 +117038,7 @@ export type ModelRouterImagesWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/images/generations';
+    url: '/v1/unified-model/images/generations';
 };
 
 export type ModelRouterImagesWithDefaultAgentErrors = {
@@ -109262,7 +117164,7 @@ export type ModelRouterImagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/images/generations';
+    url: '/v1/unified-model/{agentId}/images/generations';
 };
 
 export type ModelRouterImagesWithAgentErrors = {
@@ -109361,7 +117263,7 @@ export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/v1/model-router/models';
+    url: '/v1/unified-model/models';
 };
 
 export type ModelRouterListModelsWithDefaultAgentErrors = {
@@ -109455,7 +117357,7 @@ export type ModelRouterListModelsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/models';
+    url: '/v1/unified-model/{agentId}/models';
 };
 
 export type ModelRouterListModelsWithAgentErrors = {
@@ -109592,7 +117494,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/responses';
+    url: '/v1/unified-model/responses';
 };
 
 export type ModelRouterResponsesWithDefaultAgentErrors = {
@@ -109766,7 +117668,7 @@ export type ModelRouterResponsesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/responses';
+    url: '/v1/unified-model/{agentId}/responses';
 };
 
 export type ModelRouterResponsesWithAgentErrors = {
@@ -109908,7 +117810,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/embeddings';
+    url: '/v1/unified-model/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithDefaultAgentErrors = {
@@ -110021,7 +117923,7 @@ export type ModelRouterEmbeddingsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/embeddings';
+    url: '/v1/unified-model/{agentId}/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithAgentErrors = {
@@ -110542,6 +118444,21 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -110581,7 +118498,7 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/chat/completions';
+    url: '/v1/unified-model/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithDefaultAgentErrors = {
@@ -111158,6 +119075,21 @@ export type ModelRouterChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -111199,7 +119131,7 @@ export type ModelRouterChatCompletionsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/chat/completions';
+    url: '/v1/unified-model/{agentId}/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithAgentErrors = {
@@ -111546,7 +119478,7 @@ export type GetOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -111658,6 +119590,8 @@ export type GetOauthClientsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            modelPoolIds: Array<string>;
+            autoRouterIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -111674,7 +119608,6 @@ export type GetOauthClientsResponses = {
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
-            modelPoolIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -111704,6 +119637,10 @@ export type CreateOauthClientData = {
          * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
          */
         modelPoolIds?: Array<string>;
+        /**
+         * Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        autoRouterIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -111743,13 +119680,16 @@ export type CreateOauthClientData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -111857,6 +119797,8 @@ export type CreateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -111873,7 +119815,6 @@ export type CreateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -111983,6 +119924,10 @@ export type UpdateOauthClientData = {
          * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
          */
         modelPoolIds?: Array<string>;
+        /**
+         * Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        autoRouterIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -112116,6 +120061,8 @@ export type UpdateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -112132,7 +120079,6 @@ export type UpdateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
     };
 };
 
@@ -112247,6 +120193,8 @@ export type RotateOauthClientSecretResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -112263,7 +120211,6 @@ export type RotateOauthClientSecretResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -115714,6 +123661,7 @@ export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollRespons
 
 export type AnnotateOpenappaToolWithArchestraData = {
     body: {
+        kind?: 'annotation' | 'sanitizer' | 'authority';
         system: string;
         input: string;
         schema: {
@@ -116030,6 +123978,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        repositoryFiles: Array<{
+            path: string;
+        }>;
         rootRevision: number;
         lastError: string | null;
         composition: {
@@ -116149,6 +124100,7 @@ export type GetOpenappaBatteryPolicySourceResponses = {
     200: {
         entry: string;
         name: string;
+        kind: 'battery' | 'repository';
         content: string;
     };
 };
@@ -117174,6 +125126,9 @@ export type SetOpenappaCredentialBindingResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        repositoryFiles: Array<{
+            path: string;
+        }>;
         rootRevision: number;
         lastError: string | null;
         composition: {
@@ -117778,6 +125733,189 @@ export type GetOpenappaCoverageSummaryResponses = {
 
 export type GetOpenappaCoverageSummaryResponse = GetOpenappaCoverageSummaryResponses[keyof GetOpenappaCoverageSummaryResponses];
 
+export type GetOpenappaGuardrailEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Which records: consults, yells, or both in one timeline
+         */
+        type?: 'all' | 'consult' | 'yell';
+        /**
+         * Case-insensitive substring of a consult's external name or session ID, or of a yell's report
+         */
+        search?: string;
+        /**
+         * Recorded on or after this time (ISO 8601)
+         */
+        from?: string;
+        /**
+         * Recorded on or before this time (ISO 8601)
+         */
+        to?: string;
+        /**
+         * Only consults with this outcome; leaves yells out
+         */
+        outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+        /**
+         * Only yells in this state; leaves consults out unless `all`
+         */
+        yellStatus?: 'all' | 'unresolved' | 'resolved';
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/openappa/guardrail-events';
+};
+
+export type GetOpenappaGuardrailEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaGuardrailEventsError = GetOpenappaGuardrailEventsErrors[keyof GetOpenappaGuardrailEventsErrors];
+
+export type GetOpenappaGuardrailEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'consult';
+            consult: {
+                id: string;
+                organizationId: string;
+                sessionId: string | null;
+                callerId: string | null;
+                createdAt: string;
+                startedAt: string;
+                durationMs: number;
+                role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
+                externalName: string;
+                backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra' | 'stock';
+                request: unknown;
+                outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                answer: unknown;
+                rawResponse: string | null;
+                httpStatus: number | null;
+                diagnostics: string | null;
+                diagnosticsTruncated: boolean;
+                root: string;
+                trajectory: string;
+                callId: string | null;
+                offerId: string | null;
+                callDigest: string | null;
+            };
+        } | {
+            type: 'yell';
+            yell: {
+                id: string;
+                organizationId: string;
+                callerId: string;
+                sessionId: string;
+                toolCallId: string;
+                message: string;
+                withTrajectory: boolean;
+                superyell: boolean;
+                kind: 'agent' | 'approval_waived' | 'block_waived';
+                count: number;
+                createdAt: string;
+                reportedAt: string | null;
+                reportFailed: boolean;
+                resolvedAt: string | null;
+                resolvedBy: string | null;
+                hasArchive: boolean;
+                caller: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                callerApp: {
+                    id: string;
+                    name: string;
+                } | null;
+                conversation: {
+                    id: string;
+                    title: string | null;
+                    createdAt: string;
+                } | null;
+                trace: {
+                    llmSessionId: string;
+                    mcpToolCallId: string | null;
+                } | null;
+            };
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetOpenappaGuardrailEventsResponse = GetOpenappaGuardrailEventsResponses[keyof GetOpenappaGuardrailEventsResponses];
+
 export type GetOpenappaExternalConsultsData = {
     body?: never;
     path?: never;
@@ -117896,7 +126034,7 @@ export type GetOpenappaExternalConsultsResponses = {
             durationMs: number;
             role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra' | 'stock';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;
@@ -118012,7 +126150,7 @@ export type GetOpenappaExternalConsultResponses = {
             durationMs: number;
             role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra' | 'stock';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;
@@ -118119,20 +126257,61 @@ export type GetAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -118145,7 +126324,16 @@ export type UpdateAppaGithubSyncData = {
         action: 'disconnect';
     } | {
         action: 'schedule';
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
+    } | {
+        action: 'self_service';
+        enabled: boolean;
+        directory?: string;
+    } | {
+        action: 'self_service_auto_merge';
+        enabled: boolean;
+    } | {
+        action: 'include_servers';
     };
     path?: never;
     query?: never;
@@ -118231,20 +126419,61 @@ export type UpdateAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -118255,11 +126484,14 @@ export type ConfigureAppaGithubSyncData = {
         repo: string;
         ref?: string | null;
         path: string;
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
         validationDirectory?: '' | string;
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
         gitlabTokenId?: string | null;
+        selfService?: boolean;
+        selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -118345,24 +126577,561 @@ export type ConfigureAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
 export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[keyof ConfigureAppaGithubSyncResponses];
+
+export type GetAppaRepositoryProtectionData = {
+    body?: never;
+    path?: never;
+    query?: {
+        fresh?: 'true' | 'false';
+    };
+    url: '/api/openappa/github-sync/protection';
+};
+
+export type GetAppaRepositoryProtectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaRepositoryProtectionError = GetAppaRepositoryProtectionErrors[keyof GetAppaRepositoryProtectionErrors];
+
+export type GetAppaRepositoryProtectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        checkName: string;
+        app?: {
+            name: string;
+            url: string | null;
+            settingsUrl: string;
+            installationUrl: string | null;
+            permissions: Array<{
+                name: 'contents' | 'pull_requests' | 'checks' | 'workflows';
+                granted: boolean;
+            }>;
+        };
+        branchRules: {
+            state: 'active' | 'incomplete' | 'missing' | 'needs_permission' | 'unavailable' | 'error';
+            url?: string;
+            detail?: string;
+            checkRule?: 'unposted';
+            settingsUrl?: string;
+            ruleset?: {
+                name: string;
+                target: 'branch';
+                source_type?: 'Repository';
+                source?: string;
+                enforcement: 'active';
+                conditions: {
+                    ref_name: {
+                        include: Array<string>;
+                        exclude: Array<string>;
+                    };
+                };
+                bypass_actors: Array<unknown>;
+                rules: Array<{
+                    type: string;
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                }>;
+            };
+        };
+        include: {
+            folder: string;
+            state: 'included' | 'pull_open' | 'missing' | 'unknown';
+            pull?: {
+                number: number;
+                url: string;
+            };
+        };
+    } | null;
+};
+
+export type GetAppaRepositoryProtectionResponse = GetAppaRepositoryProtectionResponses[keyof GetAppaRepositoryProtectionResponses];
+
+export type GetAppaGithubAppGrantsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/app-grants';
+};
+
+export type GetAppaGithubAppGrantsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppGrantsError = GetAppaGithubAppGrantsErrors[keyof GetAppaGithubAppGrantsErrors];
+
+export type GetAppaGithubAppGrantsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        url: string | null;
+        settingsUrl: string;
+        installationUrl: string | null;
+        permissions: Array<{
+            name: 'contents' | 'pull_requests' | 'checks' | 'workflows';
+            granted: boolean;
+        }>;
+    } | null;
+};
+
+export type GetAppaGithubAppGrantsResponse = GetAppaGithubAppGrantsResponses[keyof GetAppaGithubAppGrantsResponses];
+
+export type GetAppaSelfServiceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/self-service';
+};
+
+export type GetAppaSelfServiceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaSelfServiceError = GetAppaSelfServiceErrors[keyof GetAppaSelfServiceErrors];
+
+export type GetAppaSelfServiceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+    };
+};
+
+export type GetAppaSelfServiceResponse = GetAppaSelfServiceResponses[keyof GetAppaSelfServiceResponses];
+
+export type GetOpenappaServerRulesFilesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/server-rules/files';
+};
+
+export type GetOpenappaServerRulesFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaServerRulesFilesError = GetOpenappaServerRulesFilesErrors[keyof GetOpenappaServerRulesFilesErrors];
+
+export type GetOpenappaServerRulesFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        files: Array<{
+            path: string;
+            servers: Array<{
+                id: string;
+                name: string;
+            }>;
+            canEdit: boolean;
+        }>;
+    };
+};
+
+export type GetOpenappaServerRulesFilesResponse = GetOpenappaServerRulesFilesResponses[keyof GetOpenappaServerRulesFilesResponses];
+
+export type GetOpenappaServerRulesSourceData = {
+    body?: never;
+    path?: never;
+    query: {
+        entry: string;
+    };
+    url: '/api/openappa/server-rules/source';
+};
+
+export type GetOpenappaServerRulesSourceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaServerRulesSourceError = GetOpenappaServerRulesSourceErrors[keyof GetOpenappaServerRulesSourceErrors];
+
+export type GetOpenappaServerRulesSourceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        entry: string;
+        name: string;
+        kind: 'battery' | 'repository';
+        content: string;
+    };
+};
+
+export type GetOpenappaServerRulesSourceResponse = GetOpenappaServerRulesSourceResponses[keyof GetOpenappaServerRulesSourceResponses];
 
 export type CreateAppaGithubRepositoryData = {
     body: {
@@ -118370,12 +127139,15 @@ export type CreateAppaGithubRepositoryData = {
         name: string;
         githubAppConfigId?: string;
         gitlabTokenId?: string;
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
         existing?: boolean;
         ref?: string | null;
         path?: string;
         validationDirectory?: string;
         replace?: boolean;
+        selfService?: boolean;
+        selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -118461,20 +127233,61 @@ export type CreateAppaGithubRepositoryResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -119111,6 +127924,7 @@ export type GetAppaGithubAppAccountsResponses = {
     200: Array<{
         id: string;
         account: string | null;
+        url: string | null;
     }>;
 };
 
@@ -120540,6 +129354,8 @@ export type GetOpenAppaYellsResponses = {
             message: string;
             withTrajectory: boolean;
             superyell: boolean;
+            kind: 'agent' | 'approval_waived' | 'block_waived';
+            count: number;
             createdAt: string;
             reportedAt: string | null;
             reportFailed: boolean;
@@ -120753,6 +129569,8 @@ export type GetOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -120875,6 +129693,8 @@ export type UpdateOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -121118,6 +129938,10 @@ export type GetRolesData = {
         limit?: number;
         offset?: number;
         name?: string;
+        /**
+         * Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited.
+         */
+        kind?: 'custom';
     };
     url: '/api/roles';
 };
@@ -121202,7 +130026,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -121226,7 +130050,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path?: never;
@@ -121313,7 +130137,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -121505,7 +130329,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -121520,7 +130344,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path: {
@@ -121612,7 +130436,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -121737,6 +130561,8 @@ export type GetOrganizationResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -121768,6 +130594,7 @@ export type GetOrganizationResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -121798,6 +130625,15 @@ export type GetOrganizationResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -121824,6 +130660,15 @@ export type GetOrganizationResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -121924,10 +130769,10 @@ export type GetOrganizationDefaultModelResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             displayName: string;
         } | null;
-        autoRouting: {
-            active: false;
-        } | {
-            active: true;
+        defaultAutoRouterId: string | null;
+        autoRouters: Array<{
+            id: string;
+            name: string;
             tiers: {
                 fast: {
                     id: string;
@@ -121945,7 +130790,7 @@ export type GetOrganizationDefaultModelResponses = {
                     displayName: string;
                 };
             };
-        };
+        }>;
     };
 };
 
@@ -122194,6 +131039,8 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -122225,6 +131072,7 @@ export type UpdateAppearanceSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -122255,6 +131103,15 @@ export type UpdateAppearanceSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -122281,6 +131138,15 @@ export type UpdateAppearanceSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -122419,6 +131285,8 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -122450,6 +131318,7 @@ export type UpdateSecuritySettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -122480,6 +131349,15 @@ export type UpdateSecuritySettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -122506,6 +131384,15 @@ export type UpdateSecuritySettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -122640,6 +131527,8 @@ export type UpdateMcpSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -122671,6 +131560,7 @@ export type UpdateMcpSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -122701,6 +131591,15 @@ export type UpdateMcpSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -122727,6 +131626,15 @@ export type UpdateMcpSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -122860,6 +131768,8 @@ export type UpdateSkillsSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -122891,6 +131801,7 @@ export type UpdateSkillsSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -122921,6 +131832,15 @@ export type UpdateSkillsSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -122948,6 +131868,15 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -122961,6 +131890,203 @@ export type UpdateSkillsSettingsResponses = {
 };
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
+
+export type GetMcpRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type GetMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpRuntimeTiersError = GetMcpRuntimeTiersErrors[keyof GetMcpRuntimeTiersErrors];
+
+export type GetMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type GetMcpRuntimeTiersResponse = GetMcpRuntimeTiersResponses[keyof GetMcpRuntimeTiersResponses];
+
+export type UpdateMcpRuntimeTiersData = {
+    body: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB?: number | null;
+            memoryLimitMiB?: number | null;
+            previousName?: string;
+        }>;
+    } | null;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type UpdateMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpRuntimeTiersError = UpdateMcpRuntimeTiersErrors[keyof UpdateMcpRuntimeTiersErrors];
+
+export type UpdateMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type UpdateMcpRuntimeTiersResponse = UpdateMcpRuntimeTiersResponses[keyof UpdateMcpRuntimeTiersResponses];
 
 export type GetAgentRuntimeTiersData = {
     body?: never;
@@ -123054,6 +132180,14 @@ export type GetAgentRuntimeTiersResponses = {
             memoryRequestMiB: number;
             memoryLimitMiB: number;
             /**
+             * Explicit memory request in MiB; absent when the request follows CPU
+             */
+            memoryRequestMiBOverride?: number;
+            /**
+             * Explicit memory limit in MiB; absent when the limit follows CPU
+             */
+            memoryLimitMiBOverride?: number;
+            /**
              * Size of a run's workspace volume in GiB; null means the deployment's default
              */
             workspaceGiB: number | null;
@@ -123068,6 +132202,102 @@ export type GetAgentRuntimeTiersResponses = {
 
 export type GetAgentRuntimeTiersResponse = GetAgentRuntimeTiersResponses[keyof GetAgentRuntimeTiersResponses];
 
+export type GetDefaultModelRuntimeDependentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        modelId?: string;
+    };
+    url: '/api/organization/agent-settings/default-model-dependents';
+};
+
+export type GetDefaultModelRuntimeDependentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDefaultModelRuntimeDependentsError = GetDefaultModelRuntimeDependentsErrors[keyof GetDefaultModelRuntimeDependentsErrors];
+
+export type GetDefaultModelRuntimeDependentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agents: Array<{
+            runtimeCommand: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            claudeCodeAuthentication?: 'provider' | 'subscription';
+            id: string;
+            name: string;
+            canUpdate: boolean;
+        }>;
+        hiddenBlockingCount: number;
+    };
+};
+
+export type GetDefaultModelRuntimeDependentsResponse = GetDefaultModelRuntimeDependentsResponses[keyof GetDefaultModelRuntimeDependentsResponses];
+
 export type UpdateAgentSettingsData = {
     body: {
         agentRuntimeTiers?: {
@@ -123075,6 +132305,8 @@ export type UpdateAgentSettingsData = {
                 name: string;
                 cpuRequest: number;
                 cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
                 pooled: boolean;
                 workspaceGiB?: number | null;
                 previousName?: string;
@@ -123086,6 +132318,7 @@ export type UpdateAgentSettingsData = {
         defaultAgentId?: string | null;
         defaultFastModelId?: string | null;
         defaultSmartModelId?: string | null;
+        defaultAutoRouterId?: string | null;
     };
     path?: never;
     query?: never;
@@ -123200,6 +132433,8 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -123231,6 +132466,7 @@ export type UpdateAgentSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -123261,6 +132497,15 @@ export type UpdateAgentSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -123288,6 +132533,15 @@ export type UpdateAgentSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -123304,6 +132558,7 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 
 export type UpdateConnectionSettingsData = {
     body: {
+        connectionPageHidden?: boolean;
         connectionDefaultMcpGatewayId?: string | null;
         connectionClientFutureProviders?: {
             [key: string]: boolean;
@@ -123443,6 +132698,8 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -123474,6 +132731,7 @@ export type UpdateConnectionSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -123504,6 +132762,15 @@ export type UpdateConnectionSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -123530,6 +132797,15 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -123580,11 +132856,23 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 position?: number;
             };
+            'custom-image'?: {
+                hidden?: boolean;
+            };
         } | null;
         modelProviderOverrides?: {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides?: {
@@ -123711,6 +132999,8 @@ export type UpdateIntegrationSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -123742,6 +133032,7 @@ export type UpdateIntegrationSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -123772,6 +133063,15 @@ export type UpdateIntegrationSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -123798,6 +133098,15 @@ export type UpdateIntegrationSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -123941,6 +133250,8 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -123972,6 +133283,7 @@ export type UpdateDefaultEnvironmentResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -124002,6 +133314,15 @@ export type UpdateDefaultEnvironmentResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -124028,6 +133349,15 @@ export type UpdateDefaultEnvironmentResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -124166,6 +133496,8 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -124197,6 +133529,7 @@ export type UpdateAuthSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -124227,6 +133560,15 @@ export type UpdateAuthSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -124253,6 +133595,15 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -124393,6 +133744,8 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -124424,6 +133777,7 @@ export type UpdateKnowledgeSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -124454,6 +133808,15 @@ export type UpdateKnowledgeSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -124480,6 +133843,15 @@ export type UpdateKnowledgeSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -124610,6 +133982,8 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -124641,6 +134015,7 @@ export type DropEmbeddingConfigResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -124671,6 +134046,15 @@ export type DropEmbeddingConfigResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -124697,6 +134081,15 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -125189,6 +134582,8 @@ export type CompleteOnboardingResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoRouterId: string | null;
+        autoRoutingEnabled: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -125220,6 +134615,7 @@ export type CompleteOnboardingResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -125250,6 +134646,15 @@ export type CompleteOnboardingResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -125276,6 +134681,15 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -126573,7 +135987,7 @@ export type GetPluginsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -126754,13 +136168,16 @@ export type CreatePluginData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -127074,13 +136491,16 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
@@ -127384,13 +136804,16 @@ export type ImportGithubPluginData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
@@ -129128,7 +138551,7 @@ export type GetProjectsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -129279,13 +138702,16 @@ export type CreateProjectData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -131393,7 +140819,7 @@ export type ListRuntimeCredentialsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -131525,13 +140951,16 @@ export type CreateRuntimeCredentialData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -133501,6 +142930,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouterId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -133549,6 +142979,10 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -134020,6 +143454,7 @@ export type GetServiceAccountsResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -134036,6 +143471,7 @@ export type GetServiceAccountsResponses = {
         activeTokenCount: number;
         lastUsedAt: string | null;
         soonestExpiryAt: string | null;
+        federatedCredentialCount: number;
     }>;
 };
 
@@ -134044,6 +143480,7 @@ export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetSe
 export type CreateServiceAccountData = {
     body: {
         name: string;
+        description?: string | null;
         icon?: string | null;
         role: string;
         teamId?: string | null;
@@ -134064,13 +143501,16 @@ export type CreateServiceAccountData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -134160,6 +143600,7 @@ export type CreateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -134176,6 +143617,7 @@ export type CreateServiceAccountResponses = {
         activeTokenCount: number;
         lastUsedAt: string | null;
         soonestExpiryAt: string | null;
+        federatedCredentialCount: number;
         tokens: Array<{
             id: string;
             name: string;
@@ -134369,6 +143811,7 @@ export type GetServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -134385,6 +143828,7 @@ export type GetServiceAccountResponses = {
         activeTokenCount: number;
         lastUsedAt: string | null;
         soonestExpiryAt: string | null;
+        federatedCredentialCount: number;
         tokens: Array<{
             id: string;
             name: string;
@@ -134402,6 +143846,7 @@ export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServ
 export type UpdateServiceAccountData = {
     body: {
         name?: string;
+        description?: string | null;
         icon?: string | null;
         role?: string;
         teamId?: string | null;
@@ -134502,6 +143947,7 @@ export type UpdateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -134518,6 +143964,7 @@ export type UpdateServiceAccountResponses = {
         activeTokenCount: number;
         lastUsedAt: string | null;
         soonestExpiryAt: string | null;
+        federatedCredentialCount: number;
         tokens: Array<{
             id: string;
             name: string;
@@ -135204,6 +144651,7 @@ export type GetSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -135214,6 +144662,7 @@ export type CreateSiteNotificationData = {
         content: string;
         expiresAt?: string;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path?: never;
     query?: never;
@@ -135298,6 +144747,7 @@ export type CreateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 
@@ -135388,6 +144838,7 @@ export type GetSiteNotificationSettingsResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -135486,6 +144937,7 @@ export type UpdateSiteNotificationData = {
         content?: string;
         expiresAt?: string | null;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path: {
         id: string;
@@ -135572,6 +145024,7 @@ export type UpdateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 
@@ -135938,6 +145391,10 @@ export type GetSkillsData = {
          * Include manifest bodies (default true). False returns empty content for lightweight lists.
          */
         includeContent?: boolean;
+        /**
+         * Admin-only: list skills visible to this user in the current organization, using the target user's permissions.
+         */
+        visibleTo?: string;
         search?: string;
         sourceRepo?: string;
         /**
@@ -135989,7 +145446,7 @@ export type GetSkillsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -136204,13 +145661,16 @@ export type CreateSkillData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -138428,13 +147888,16 @@ export type ImportGithubSkillsData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
@@ -139361,6 +148824,10 @@ export type GetProxyCostStatisticsData = {
          * Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.
          */
         labelUnassigned?: string;
+        /**
+         * Also return a time series on every returned group: each method, credential, provider key, model pool and label value on the current page.
+         */
+        includeGroupTimeSeries?: string;
         limit?: number;
         offset?: number;
     };
@@ -139482,6 +148949,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         }>;
         credentials: Array<{
@@ -139497,6 +148979,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             credentialId: string | null;
             credentialName: string | null;
@@ -139519,6 +149016,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             providerApiKeyId: string | null;
             providerApiKeyName: string | null;
             provider: string | null;
@@ -139536,6 +149048,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             modelPoolId: string | null;
             modelPoolName: string | null;
         }>;
@@ -139555,6 +149082,21 @@ export type GetProxyCostStatisticsResponses = {
                  * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
                  */
                 failedOverAttempts: number;
+                timeSeries?: Array<{
+                    requests: number;
+                    inputTokens: number;
+                    outputTokens: number;
+                    cacheReadTokens: number;
+                    cacheWriteTokens: number;
+                    totalTokens: number;
+                    billedCost: number;
+                    subscriptionCost: number;
+                    /**
+                     * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                     */
+                    failedOverAttempts: number;
+                    timestamp: string;
+                }>;
                 value: string | null;
             }>;
             pagination: {
@@ -139573,6 +149115,10 @@ export type GetTeamStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/teams';
 };
@@ -140650,6 +150196,10 @@ export type GetCostStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/costs';
 };
@@ -141016,6 +150566,197 @@ export type GetMcpToolCallUsageResponses = {
 };
 
 export type GetMcpToolCallUsageResponse = GetMcpToolCallUsageResponses[keyof GetMcpToolCallUsageResponses];
+
+export type GetLlmUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, teamId, agentId, userId, credentialId, provider, model. Defaults to teamId,provider,model.
+         */
+        groupBy?: Array<'day' | 'teamId' | 'agentId' | 'userId' | 'credentialId' | 'provider' | 'model'>;
+        /**
+         * Only this team's usage.
+         */
+        teamId?: string;
+        /**
+         * Only this virtual key, passthrough key or OAuth client.
+         */
+        credentialId?: string;
+        /**
+         * Only this provider, e.g. anthropic.
+         */
+        provider?: string;
+        /**
+         * Only this billed model.
+         */
+        model?: string;
+    };
+    url: '/api/statistics/llm-usage';
+};
+
+export type GetLlmUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmUsageError = GetLlmUsageErrors[keyof GetLlmUsageErrors];
+
+export type GetLlmUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            /**
+             * Team the usage is attributed to: the credential's billing team, otherwise each team the agent is shared with (the same attribution as GET /api/statistics/teams). Present when grouped by teamId.
+             */
+            teamId?: string;
+            teamName?: string;
+            /**
+             * Agent, MCP gateway or LLM proxy that made the requests, as in GET /api/statistics/agents: legacy proxy rows count under the organization's LLM proxy. Present when grouped by agentId.
+             */
+            agentId?: string;
+            agentName?: string;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
+            /**
+             * How the request authenticated, e.g. virtual_key. Present when grouped by credentialId.
+             */
+            authMethod?: string;
+            /**
+             * Virtual key, passthrough key or OAuth client that made the requests. Null when the access method has no individual credential. Present when grouped by credentialId.
+             */
+            credentialId?: string | null;
+            credentialName?: string | null;
+            /**
+             * LLM provider, e.g. anthropic. Present when grouped by provider.
+             */
+            provider?: string;
+            /**
+             * Billed model. A request that billed several models counts its tokens and spend under each one, and its request under the model it asked for. Present when grouped by model.
+             */
+            model?: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        };
+    };
+};
+
+export type GetLlmUsageResponse = GetLlmUsageResponses[keyof GetLlmUsageResponses];
 
 export type GetAppUsageData = {
     body?: never;
@@ -143373,7 +153114,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'chatgpt' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
          * Hide built-in Archestra tools
          */
@@ -143604,7 +153345,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     }>;
 };
@@ -143691,7 +153432,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
     };
 };
 
@@ -144259,7 +154000,7 @@ export type GetAllVirtualApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -144427,6 +154168,7 @@ export type CreateVirtualApiKeyData = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         } | null;
         modelPoolIds?: Array<string>;
+        autoRouterIds?: Array<string>;
         ownerId?: string;
         initialGrants?: Array<{
             subject: {
@@ -144439,13 +154181,16 @@ export type CreateVirtualApiKeyData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -144540,7 +154285,7 @@ export type CreateVirtualApiKeyResponses = {
         billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
-        value: string;
+        value?: string;
         teams: Array<{
             id: string;
             name: string;
@@ -144823,6 +154568,7 @@ export type UpdateVirtualApiKeyData = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         } | null;
         modelPoolIds?: Array<string>;
+        autoRouterIds?: Array<string>;
     };
     path: {
         id: string;
@@ -145558,6 +155304,601 @@ export type VllmChatCompletionsWithAgentResponses = {
 
 export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
 
+export type XaiNativeMetadataWithDefaultAgentData = {
+    body?: never;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
+    };
+    path: {
+        kind: 'models' | 'settings' | 'login-config';
+    };
+    query?: never;
+    url: '/v1/xai/native/{kind}';
+};
+
+export type XaiNativeMetadataWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiNativeMetadataWithDefaultAgentError = XaiNativeMetadataWithDefaultAgentErrors[keyof XaiNativeMetadataWithDefaultAgentErrors];
+
+export type XaiNativeMetadataWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type XaiNativeMetadataWithDefaultAgentResponse = XaiNativeMetadataWithDefaultAgentResponses[keyof XaiNativeMetadataWithDefaultAgentResponses];
+
+export type XaiNativePrivacyWithDefaultAgentData = {
+    body: {
+        codingDataRetentionOptOut: boolean;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/xai/native/privacy/coding-data-retention';
+};
+
+export type XaiNativePrivacyWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiNativePrivacyWithDefaultAgentError = XaiNativePrivacyWithDefaultAgentErrors[keyof XaiNativePrivacyWithDefaultAgentErrors];
+
+export type XaiNativePrivacyWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        codingDataRetentionOptOut: boolean;
+    };
+};
+
+export type XaiNativePrivacyWithDefaultAgentResponse = XaiNativePrivacyWithDefaultAgentResponses[keyof XaiNativePrivacyWithDefaultAgentResponses];
+
+export type XaiNativeMetadataWithAgentData = {
+    body?: never;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
+    };
+    path: {
+        agentId: string;
+        kind: 'models' | 'settings' | 'login-config';
+    };
+    query?: never;
+    url: '/v1/xai/{agentId}/native/{kind}';
+};
+
+export type XaiNativeMetadataWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiNativeMetadataWithAgentError = XaiNativeMetadataWithAgentErrors[keyof XaiNativeMetadataWithAgentErrors];
+
+export type XaiNativeMetadataWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type XaiNativeMetadataWithAgentResponse = XaiNativeMetadataWithAgentResponses[keyof XaiNativeMetadataWithAgentResponses];
+
+export type XaiNativePrivacyWithAgentData = {
+    body: {
+        codingDataRetentionOptOut: boolean;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/xai/{agentId}/native/privacy/coding-data-retention';
+};
+
+export type XaiNativePrivacyWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiNativePrivacyWithAgentError = XaiNativePrivacyWithAgentErrors[keyof XaiNativePrivacyWithAgentErrors];
+
+export type XaiNativePrivacyWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        codingDataRetentionOptOut: boolean;
+    };
+};
+
+export type XaiNativePrivacyWithAgentResponse = XaiNativePrivacyWithAgentResponses[keyof XaiNativePrivacyWithAgentResponses];
+
+export type XaiListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/xai/models';
+};
+
+export type XaiListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiListModelsWithDefaultAgentError = XaiListModelsWithDefaultAgentErrors[keyof XaiListModelsWithDefaultAgentErrors];
+
+export type XaiListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type XaiListModelsWithDefaultAgentResponse = XaiListModelsWithDefaultAgentResponses[keyof XaiListModelsWithDefaultAgentResponses];
+
+export type XaiListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/xai/{agentId}/models';
+};
+
+export type XaiListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiListModelsWithAgentError = XaiListModelsWithAgentErrors[keyof XaiListModelsWithAgentErrors];
+
+export type XaiListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type XaiListModelsWithAgentResponse = XaiListModelsWithAgentResponses[keyof XaiListModelsWithAgentResponses];
+
 export type XaiChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -145569,6 +155910,8 @@ export type XaiChatCompletionsWithDefaultAgentData = {
          * Bearer token for OpenAI
          */
         authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
     };
     path?: never;
     query?: never;
@@ -145663,6 +156006,8 @@ export type XaiChatCompletionsWithAgentData = {
          * Bearer token for OpenAI
          */
         authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
     };
     path: {
         agentId: string;
@@ -145794,6 +156139,8 @@ export type XaiResponsesWithDefaultAgentData = {
          * Bearer token for OpenAI
          */
         authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
     };
     path?: never;
     query?: never;
@@ -145966,6 +156313,8 @@ export type XaiResponsesWithAgentData = {
          * Bearer token for OpenAI
          */
         authorization: string;
+        'x-archestra-grok-credential-mode'?: 'native-session';
+        'x-xai-token-auth'?: string;
     };
     path: {
         agentId: string;
@@ -146991,6 +157340,22 @@ export type GetIdentityProvidersResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -147090,7 +157455,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -147128,6 +157493,22 @@ export type CreateIdentityProviderData = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -147336,6 +157717,22 @@ export type CreateIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -147435,7 +157832,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -148001,6 +158398,22 @@ export type GetIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -148100,7 +158513,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -148138,6 +158551,22 @@ export type UpdateIdentityProviderData = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -148347,6 +158776,22 @@ export type UpdateIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -148446,7 +158891,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -148455,7 +158900,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
     };
     query?: {
         query?: string;
@@ -148548,6 +158993,9 @@ export type SearchInitialPermissionSubjectsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -148644,9 +159092,9 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
-        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source';
     }>;
 };
 
@@ -148655,7 +159103,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: {
@@ -148751,6 +159199,9 @@ export type SearchResourcePermissionSubjectsResponses = {
             type: 'serviceAccount';
             id: string;
         } | {
+            type: 'oauthClient';
+            id: string;
+        } | {
             type: 'role';
             id: string;
         } | {
@@ -148767,7 +159218,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -148847,7 +159298,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -148863,13 +159314,16 @@ export type GetResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -148883,17 +159337,20 @@ export type GetResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
@@ -148903,6 +159360,9 @@ export type GetResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -148930,17 +159390,20 @@ export type UpdateResourcePermissionsData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -149020,7 +159483,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -149036,13 +159499,16 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -149056,17 +159522,20 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
@@ -149076,6 +159545,9 @@ export type UpdateResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -149184,3 +159656,726 @@ export type IngestRumEventsResponses = {
 };
 
 export type IngestRumEventsResponse = IngestRumEventsResponses[keyof IngestRumEventsResponses];
+
+export type GetServiceAccountFederatedCredentialsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/federated-credentials';
+};
+
+export type GetServiceAccountFederatedCredentialsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetServiceAccountFederatedCredentialsError = GetServiceAccountFederatedCredentialsErrors[keyof GetServiceAccountFederatedCredentialsErrors];
+
+export type GetServiceAccountFederatedCredentialsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        serviceAccountId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetServiceAccountFederatedCredentialsResponse = GetServiceAccountFederatedCredentialsResponses[keyof GetServiceAccountFederatedCredentialsResponses];
+
+export type CreateServiceAccountFederatedCredentialData = {
+    body: {
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions?: {
+            [key: string]: string;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/federated-credentials';
+};
+
+export type CreateServiceAccountFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateServiceAccountFederatedCredentialError = CreateServiceAccountFederatedCredentialErrors[keyof CreateServiceAccountFederatedCredentialErrors];
+
+export type CreateServiceAccountFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        serviceAccountId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateServiceAccountFederatedCredentialResponse = CreateServiceAccountFederatedCredentialResponses[keyof CreateServiceAccountFederatedCredentialResponses];
+
+export type DeleteServiceAccountFederatedCredentialData = {
+    body?: never;
+    path: {
+        id: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/federated-credentials/{credentialId}';
+};
+
+export type DeleteServiceAccountFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteServiceAccountFederatedCredentialError = DeleteServiceAccountFederatedCredentialErrors[keyof DeleteServiceAccountFederatedCredentialErrors];
+
+export type DeleteServiceAccountFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteServiceAccountFederatedCredentialResponse = DeleteServiceAccountFederatedCredentialResponses[keyof DeleteServiceAccountFederatedCredentialResponses];
+
+export type UpdateServiceAccountFederatedCredentialData = {
+    body: {
+        name?: string;
+        issuer?: string;
+        audience?: string;
+        subject?: string;
+        claimConditions?: {
+            [key: string]: string;
+        };
+    };
+    path: {
+        id: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/federated-credentials/{credentialId}';
+};
+
+export type UpdateServiceAccountFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateServiceAccountFederatedCredentialError = UpdateServiceAccountFederatedCredentialErrors[keyof UpdateServiceAccountFederatedCredentialErrors];
+
+export type UpdateServiceAccountFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        serviceAccountId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateServiceAccountFederatedCredentialResponse = UpdateServiceAccountFederatedCredentialResponses[keyof UpdateServiceAccountFederatedCredentialResponses];
+
+export type GetSpiffeDiscoveryDocumentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/.well-known/openid-configuration';
+};
+
+export type GetSpiffeDiscoveryDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentError = GetSpiffeDiscoveryDocumentErrors[keyof GetSpiffeDiscoveryDocumentErrors];
+
+export type GetSpiffeDiscoveryDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        issuer: string;
+        jwks_uri: string;
+        id_token_signing_alg_values_supported: Array<string>;
+        response_types_supported: Array<string>;
+        subject_types_supported: Array<string>;
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentResponse = GetSpiffeDiscoveryDocumentResponses[keyof GetSpiffeDiscoveryDocumentResponses];
+
+export type GetSpiffeJwksData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/keys';
+};
+
+export type GetSpiffeJwksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeJwksError = GetSpiffeJwksErrors[keyof GetSpiffeJwksErrors];
+
+export type GetSpiffeJwksResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+    };
+};
+
+export type GetSpiffeJwksResponse = GetSpiffeJwksResponses[keyof GetSpiffeJwksResponses];
+
+export type GetSpiffeTrustBundleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/bundle';
+};
+
+export type GetSpiffeTrustBundleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeTrustBundleError = GetSpiffeTrustBundleErrors[keyof GetSpiffeTrustBundleErrors];
+
+export type GetSpiffeTrustBundleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+        spiffe_refresh_hint: number;
+    };
+};
+
+export type GetSpiffeTrustBundleResponse = GetSpiffeTrustBundleResponses[keyof GetSpiffeTrustBundleResponses];
+
+export type ExchangeWorkloadIdentityTokenData = {
+    body: {
+        grant_type?: string;
+        subject_token?: string;
+        subject_token_type?: string;
+        requested_token_type?: string;
+        service_account_id?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/workload-identity/token';
+};
+
+export type ExchangeWorkloadIdentityTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: 'invalid_request' | 'invalid_grant' | 'unsupported_grant_type' | 'rate_limited' | 'server_error';
+        error_description: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: 'invalid_request' | 'invalid_grant' | 'unsupported_grant_type' | 'rate_limited' | 'server_error';
+        error_description: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: 'invalid_request' | 'invalid_grant' | 'unsupported_grant_type' | 'rate_limited' | 'server_error';
+        error_description: string;
+    };
+};
+
+export type ExchangeWorkloadIdentityTokenError = ExchangeWorkloadIdentityTokenErrors[keyof ExchangeWorkloadIdentityTokenErrors];
+
+export type ExchangeWorkloadIdentityTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        access_token: string;
+        issued_token_type: 'urn:ietf:params:oauth:token-type:access_token';
+        token_type: 'Bearer';
+        expires_in: number;
+    };
+};
+
+export type ExchangeWorkloadIdentityTokenResponse = ExchangeWorkloadIdentityTokenResponses[keyof ExchangeWorkloadIdentityTokenResponses];

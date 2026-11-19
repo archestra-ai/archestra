@@ -324,6 +324,11 @@ describe("shortGithubAppError", () => {
     );
     expect(
       shortGithubAppError(
+        "my-org already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.",
+      ),
+    ).toBe("my-org already has a plan. Manage that one instead.");
+    expect(
+      shortGithubAppError(
         "GitHub doesn't recognize App 42 with this private key. Check the App ID and download a current private key from the App settings.",
       ),
     ).toBe("GitHub doesn't know App 42 with this key.");

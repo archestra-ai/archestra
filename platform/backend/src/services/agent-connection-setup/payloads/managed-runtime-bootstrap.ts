@@ -10,6 +10,7 @@ const { createHash, randomUUID } = require("node:crypto");
 const hash = value => createHash("sha256").update(value).digest("hex");
 const names = ["launcher.cjs", "repair.cjs", "routing-v1.mjs", "routing-v2.mjs"];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const verifiedAcl = new Map();
 function owned(file, directory = false, privateFile = true) {
   const stat = fs.lstatSync(file);
   if (stat.isSymbolicLink() || (directory ? !stat.isDirectory() : !stat.isFile()) ||
@@ -17,11 +18,16 @@ function owned(file, directory = false, privateFile = true) {
     throw new Error("Unsafe managed runtime ownership: " + file);
   }
   if (process.platform === "win32") {
+    const cacheKey = file + "\\0" + (privateFile ? "1" : "0");
+    const stamp = stat.ino + ":" + stat.size + ":" + stat.mtimeMs + ":" + stat.ctimeMs;
+    if (verifiedAcl.get(cacheKey) === stamp) return;
     try {
       require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-        '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); try { $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -ne $sid.Value){[Console]::Error.WriteLine("Owner mismatch: actual="+$owner+"; expected="+$sid.Value); exit 2}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){[Console]::Error.WriteLine("Foreign allow ACE: SID="+$rule.IdentityReference.Value+"; rights="+$rule.FileSystemRights+"; inherited="+$rule.IsInherited); exit 2}} } catch { [Console]::Error.WriteLine("PowerShell ACL inspection failed: "+$_.Exception.Message); exit 1 }'
+        '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); try { $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -notin $trusted){[Console]::Error.WriteLine("Owner mismatch: actual="+$owner+"; expected="+$sid.Value); exit 2}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){[Console]::Error.WriteLine("Foreign allow ACE: SID="+$rule.IdentityReference.Value+"; rights="+$rule.FileSystemRights+"; inherited="+$rule.IsInherited); exit 2}} } catch { [Console]::Error.WriteLine("PowerShell ACL inspection failed: "+$_.Exception.Message); exit 1 }'
       ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: file, ARCHESTRA_RUNTIME_ACL_PRIVATE: privateFile ? "1" : "0" }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      verifiedAcl.set(cacheKey, stamp);
     } catch (error) {
+      verifiedAcl.delete(cacheKey);
       const detail = error.code === "ETIMEDOUT" ? "PowerShell timed out after 15000 ms" :
         (error.stderr && String(error.stderr).trim()) || error.code || "PowerShell exited with status " + error.status;
       throw new Error("Managed runtime ACL check failed for " + file + " (" + (privateFile ? "private" : "no foreign writers") + "): " + detail);
@@ -33,6 +39,8 @@ function atomic(file, bytes) {
   try {
     fs.writeFileSync(temporary, bytes, { flag: "wx", mode: 0o600 });
     fs.renameSync(temporary, file);
+    verifiedAcl.delete(file + "\\0" + "1");
+    verifiedAcl.delete(file + "\\0" + "0");
   } finally { fs.rmSync(temporary, { force: true }); }
 }
 function validate(manifest, params) {
@@ -110,6 +118,12 @@ function verify(root) {
   const runtime = cached(root, installedParams(root));
   const checkedPath = path.join(root, "last-check.json");
   if (fs.existsSync(checkedPath)) owned(checkedPath);
+  const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(require("node:os").homedir(), ".config"), runtime.params.clientId);
+  if (fs.existsSync(configDir)) owned(configDir, true, false);
+  for (const suffix of [".json", ".jsonc"]) {
+    const file = path.join(configDir, runtime.params.clientId + suffix);
+    if (fs.existsSync(file)) owned(file, false, false);
+  }
   return runtime;
 }
 async function refresh(root) {

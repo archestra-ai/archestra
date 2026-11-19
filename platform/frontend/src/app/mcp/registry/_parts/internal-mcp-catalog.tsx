@@ -107,6 +107,11 @@ import { useCanReauthenticateInputsReady } from "@/lib/mcp/use-can-reauthenticat
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import {
+  type BulkRemoveKind,
+  bulkRemoveCopy,
+  bulkRemoveKindOf,
+} from "./desktop-mcp-install";
+import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
@@ -120,6 +125,7 @@ import {
   type RegistryListItem,
 } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
+import { mcpServerVariant, runsInEnvironment } from "./mcp-server-type";
 import {
   emptyRegistryFilters,
   FILTER_GROUPS,
@@ -1020,12 +1026,12 @@ export function InternalMCPCatalog() {
     for (const it of pageItems) {
       map.set(
         it.id,
-        it.serverType === "builtin"
-          ? null
-          : (resolveCatalogEnvironmentLabel({
+        runsInEnvironment(it.serverType)
+          ? (resolveCatalogEnvironmentLabel({
               environmentId: it.environmentId,
               environments: environments ?? [],
-            }) ?? null),
+            }) ?? null)
+          : null,
       );
     }
     return map;
@@ -1102,6 +1108,8 @@ export function InternalMCPCatalog() {
   const handleTableInstall = withFullItem((item: CatalogItem) => {
     if (item.serverType === "remote") return install.installRemote(item);
     if (isPlaywrightCatalogItem(item.id)) return;
+    // Runs on the user's computer: its own dialog, never the self-hosted one.
+    if (item.serverType === "desktop_mcp") return install.installDesktop(item);
     return install.installLocal(item);
   });
 
@@ -1693,6 +1701,18 @@ function McpServerCatalogSection({
   const selectedCount = allMatchingSelected
     ? (allMatching?.data.length ?? selectableTotal)
     : selectedRows.size;
+  // What the selection is, for the words of the bulk action: desktop MCP
+  // servers are removed from a computer, not uninstalled.
+  const { data: selectionIndex } = useMcpRegistryIssueIndex();
+  const { data: selectionSession } = useSession();
+  const selectedRemoveKinds = selectedToUninstall.map((server) =>
+    bulkRemoveKindOf({
+      serverId: server.id,
+      servers: selectionIndex?.servers,
+      catalogItems: selectionIndex?.catalogItems,
+      viewerId: selectionSession?.user?.id,
+    }),
+  );
   const pageSelectableIds = items.filter(canSelect).map((item) => item.id);
   const selectAllMatching: SelectAllMatching = {
     total: selectableTotal,
@@ -1717,13 +1737,7 @@ function McpServerCatalogSection({
     const serverInfo = getServerInfo(item);
     return (
       <McpServerCard
-        variant={
-          item.serverType === "builtin"
-            ? "builtin"
-            : item.serverType === "remote"
-              ? "remote"
-              : "local"
-        }
+        variant={mcpServerVariant(item.serverType)}
         key={item.id}
         item={item}
         installedServer={serverInfo.installedServer}
@@ -1756,6 +1770,7 @@ function McpServerCatalogSection({
       <McpServerBulkActions
         count={selectedCount}
         selectedToUninstall={selectedToUninstall}
+        removeKinds={selectedRemoveKinds}
         clearSelection={clearSelection}
         busy={
           allMatchingSelected && (isAllMatchingFetching || isAllMatchingError)
@@ -1811,18 +1826,22 @@ function McpServerCatalogSection({
 function McpServerBulkActions({
   count,
   selectedToUninstall,
+  removeKinds,
   clearSelection,
   busy,
   selectAllMatching,
 }: {
   count: number;
   selectedToUninstall: Array<{ id: string; name: string }>;
+  /** What removing each of them means, in the order of the list. */
+  removeKinds: BulkRemoveKind[];
   clearSelection: () => void;
   busy: boolean;
   selectAllMatching: SelectAllMatching;
 }) {
   const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
   const bulkUninstall = useBulkUninstallMcpServers();
+  const copy = bulkRemoveCopy(removeKinds);
 
   return (
     <>
@@ -1839,15 +1858,13 @@ function McpServerBulkActions({
           size="sm"
           disabled={selectedToUninstall.length === 0}
           tooltip={
-            selectedToUninstall.length === 0
-              ? "None of the selected servers are installed."
-              : undefined
+            selectedToUninstall.length === 0 ? copy.noneReason : undefined
           }
           onClick={() => setBulkUninstallOpen(true)}
         >
           <Trash2 className="h-4 w-4" />
           <span>
-            Uninstall
+            {copy.action}
             {countSuffix(selectedToUninstall.length, count)}
           </span>
         </PermissionButton>
@@ -1857,18 +1874,16 @@ function McpServerBulkActions({
         <DeleteConfirmDialog
           open={bulkUninstallOpen}
           onOpenChange={setBulkUninstallOpen}
-          title="Uninstall MCP servers"
-          description={`Uninstall ${selectedToUninstall.length} ${
-            selectedToUninstall.length === 1 ? "server" : "servers"
-          }? Agents using their tools lose access.`}
+          title={copy.title}
+          description={copy.description}
           isPending={bulkUninstall.isPending}
           onConfirm={() => {
             bulkUninstall.mutate(selectedToUninstall, {
               onSuccess: (outcome) => {
                 reportBulkOutcome({
                   outcome,
-                  verb: "Uninstalled",
-                  failureVerb: "uninstall",
+                  verb: copy.verb,
+                  failureVerb: copy.failureVerb,
                   noun: "server",
                 });
                 setBulkUninstallOpen(false);
@@ -1876,8 +1891,8 @@ function McpServerBulkActions({
               },
             });
           }}
-          confirmLabel="Uninstall servers"
-          pendingLabel="Uninstalling..."
+          confirmLabel={copy.confirm}
+          pendingLabel={copy.confirming}
         />
       )}
     </>

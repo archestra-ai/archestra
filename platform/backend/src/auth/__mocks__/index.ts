@@ -20,8 +20,6 @@ export const {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
   requireAgentTypePermission,
-  betterAuth,
-  fastifyAuthPlugin,
   hasPermission,
   isGlobalAdmin,
   userHasPermission,

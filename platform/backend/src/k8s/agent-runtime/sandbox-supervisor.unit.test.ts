@@ -20,6 +20,47 @@ const NAMESPACE =
   process.env.ARCHESTRA_TEST_SANDBOX_NAMESPACE === "1" &&
   namespaceAvailable();
 describe.skipIf(!SANDBOX_IMAGE && !NAMESPACE)("sandbox supervisor", () => {
+  it.each([
+    false,
+    true,
+  ])("retains terminal and transcript content without logging it (closed stdout: %s)", (closeSupervisorStdout) => {
+    const terminal = "private-terminal-marker";
+    const transcript = JSON.stringify({ text: "private-transcript-marker" });
+    const result = runInContainer(
+      `
+set +x
+cat > /var/run/archestra/turns/1.request <<'REQUEST'
+printf '${terminal}\\n'
+printf '%s' '${transcript}' > /var/run/archestra/readable-transcript.json
+REQUEST
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 0
+python3 - <<'PYTHON'
+import base64
+from pathlib import Path
+recording = Path('/var/run/archestra/turns/1.log').read_bytes()
+assert b'${terminal}\\r\\n' in recording
+prefix = b'\\x1b]777;archestra-readable-transcript=base64\\x07'
+suffix = b'\\x1b]777;archestra-readable-transcript=end\\x07'
+encoded = recording.split(prefix, 1)[1].split(suffix, 1)[0]
+assert base64.b64decode(encoded).decode() == '${transcript}'
+assert recording.endswith(suffix)
+PYTHON
+echo VERIFIED
+`,
+      { closeSupervisorStdout },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+    for (const output of [result.stdout, result.stderr]) {
+      expect(output).not.toContain(terminal);
+      expect(output).not.toContain(transcript);
+      expect(output).not.toContain(Buffer.from(transcript).toString("base64"));
+      expect(output).not.toContain("archestra-terminal-size=");
+      expect(output).not.toContain("archestra-readable-transcript=");
+    }
+  }, 30_000);
+
   it("stops the Pod with the full-volume status when the agent fills the volume and exits", () => {
     // The turn's own result no longer fits: no empty result may appear, and
     // the supervisor's next write ends PID 1 through the startup's trap.
@@ -212,6 +253,49 @@ printf 'echo follow-up\\n' > /var/run/archestra/turns/2.request
 wait_for /var/run/archestra/turns/2.exit
 test "$(cat /var/run/archestra/turns/2.exit)" = 0
 grep -q follow-up /var/run/archestra/turns/2.log
+echo VERIFIED
+`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
+
+  it("reports a failed full-screen client's own failure and keeps the workspace", () => {
+    // A stopped TUI leaves focus reporting on in its dead pane; detaching the
+    // recorder must neither stop tmux nor replace the client's failure.
+    const result = runInContainer(`
+cat > /var/run/archestra/turns/1.request <<'TURN'
+printf '\\033[?1004hfull-screen-client\\n'
+printf '{"version":1,"code":"client_failed","message":"The client failed."}' > "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.failure"
+exit 1
+TURN
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 1
+grep -q full-screen-client /var/run/archestra/turns/1.log
+grep -q client_failed /var/run/archestra/turns/1.failure
+tmux has-session -t agent
+printf 'echo follow-up\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+test "$(cat /var/run/archestra/turns/2.exit)" = 0
+grep -q follow-up /var/run/archestra/turns/2.log
+echo VERIFIED
+`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
+
+  it("keeps the agent's failure when the recording stops after it", () => {
+    const result = runInContainer(`
+cat > /var/run/archestra/turns/1.request <<'TURN'
+printf '{"version":1,"code":"client_failed","message":"The client failed."}' > "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.failure"
+touch /tmp/started
+sleep 60
+TURN
+wait_for /tmp/started
+client="$(tmux list-clients -F '#{client_name}')"
+tmux detach-client -t "$client"
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+grep -q client_failed /var/run/archestra/turns/1.failure
 echo VERIFIED
 `);
     expect(result.status, result.stderr).toBe(0);
@@ -497,7 +581,12 @@ function namespaceAvailable(): boolean {
  */
 function runInContainer(
   assertions: string,
-  options: { volumeKiB?: number; inodes?: number; subPaths?: boolean } = {},
+  options: {
+    volumeKiB?: number;
+    inodes?: number;
+    subPaths?: boolean;
+    closeSupervisorStdout?: boolean;
+  } = {},
 ) {
   if (options.subPaths && !NAMESPACE)
     throw new Error("subPaths needs the namespace harness");
@@ -515,9 +604,8 @@ mount --bind /run/claim/home ${HOME_SUBPATH}`
   const [command, args, prelude] = NAMESPACE
     ? [
         "bash",
-        // The recorder appends to /proc/1/fd/1, which must be a pipe or a
-        // file: the stdout spawnSync gives a child is a socket, which cannot
-        // be opened that way. A pipe outside the namespace outlives its PID 1.
+        // Keep a pipe outside the namespace so captured output can drain
+        // after its PID 1 exits.
         [
           "-c",
           `set -o pipefail; unshare ${NAMESPACE_FLAGS.join(" ")} /bin/sh -s | cat`,
@@ -536,8 +624,13 @@ export PATH="$ARCHESTRA_TEST_IMAGE_BIN:$PATH"`,
           "--network=none",
           "-v",
           `${IMAGE_BIN}:/usr/local/bin:ro`,
+          // Maintained images run nonroot; a fresh tmpfs otherwise belongs
+          // to root and fails before the volume-exhaustion scenario starts.
           ...(volume
-            ? ["--tmpfs", `/var/run/archestra:size=${volume}k${inodes}`]
+            ? [
+                "--tmpfs",
+                `/var/run/archestra:mode=1777,size=${volume}k${inodes}`,
+              ]
             : []),
           "--entrypoint=/bin/sh",
           SANDBOX_IMAGE ?? "",
@@ -556,7 +649,7 @@ set -eu
 ${buildWorkspaceExitTrapScript()}
 ${buildSandboxSupervisorScript()}
 SUPERVISOR
-/bin/sh /tmp/supervisor.sh &
+/bin/sh /tmp/supervisor.sh ${options.closeSupervisorStdout ? "1>&-" : ""} &
 supervisor=$!
 trap 'kill "$supervisor" 2>/dev/null || true' EXIT
 wait_for() {

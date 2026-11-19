@@ -16,10 +16,13 @@ export {
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   "claude-desktop": "Claude Desktop",
+  "grok-build": "Grok Build",
   codex: "Codex",
+  chatgpt: "ChatGPT",
   "copilot-cli": "Copilot CLI",
   pi: "Pi",
   "kimi-code": "Kimi Code",
+  cursor: "Cursor",
   opencode: OPENCODE_FAMILY.opencode.label,
   kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
@@ -53,7 +56,8 @@ export function copilotCliUsesResponsesWire(
  * Copilot CLI reaches OpenAI, Azure, GitHub Copilot and xAI through the
  * Responses API, so a model its provider serves only on other endpoints
  * (Claude on GitHub Copilot serves only Chat Completions) cannot answer it. A
- * model with no endpoint list is taken to serve both.
+ * model with no endpoint list is taken to serve both. Other clients, including
+ * Grok Build, are not filtered here.
  */
 export function connectionModelServesClient(params: {
   clientId: string;
@@ -75,14 +79,17 @@ export function connectionModelServesClient(params: {
  * provider's usual model when it is, else the newest general GPT line on the
  * providers that carry one (OpenAI first of all; GitHub Copilot when its usual
  * Claude model is not in the list, as for a client that reaches it through the
- * Responses API only), else the first model listed.
+ * Responses API only), else the first model listed. A native API model is used
+ * only when the caller opts in and the catalog is empty.
  */
 export function defaultConnectionModel({
   provider,
   modelIds,
+  allowProviderDefault = false,
 }: {
   provider: SupportedProvider;
   modelIds: readonly string[];
+  allowProviderDefault?: boolean;
 }): string | null {
   const usual = modelIds.find(
     (id) => id === PROVIDER_MODEL_TIERS[provider].normal,
@@ -97,7 +104,11 @@ export function defaultConnectionModel({
     if (provider === "openai" && preferred) return preferred;
     if (provider === "github-copilot" && !usual && preferred) return preferred;
   }
-  return usual ?? modelIds[0] ?? null;
+  return (
+    usual ??
+    modelIds[0] ??
+    (allowProviderDefault ? PROVIDER_MODEL_TIERS[provider].normal : null)
+  );
 }
 
 export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
@@ -144,21 +155,25 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-code",
   "cursor",
   "codex",
+  "chatgpt",
   "claude-desktop",
   "copilot-cli",
   "opencode",
   "kilo",
   "pi",
   "kimi-code",
+  "grok-build",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
 
 export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
+  "grok-build": "Grok Build",
   "claude-code": "Claude Code",
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
   codex: "Codex",
+  chatgpt: "ChatGPT",
   pi: "Pi",
   "kimi-code": "Kimi Code",
   "copilot-cli": "Copilot CLI",
@@ -175,10 +190,12 @@ export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
   InstallerClientId,
   readonly SupportedProvider[]
 > = {
+  "grok-build": ["xai", "openai", "anthropic"],
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   "kimi-code": ["kimi-code", "kimi"],
   "copilot-cli": [
@@ -215,12 +232,52 @@ export function isPlainMcpClientServerName(name: string): boolean {
  * Claude Desktop).
  */
 export function startupGuardStem(id: string): string | undefined {
-  // Pi invokes the guard from its native launcher, not a shell-profile wrapper.
-  if (id === "pi") return undefined;
+  // Native launchers own their guard files and their disconnect lifecycle.
+  if (id === "pi" || id === "grok-build") return undefined;
+  if (id === "chatgpt") return startupGuardStem("codex");
   const guard = STARTUP_GUARD_INSTALL[id as keyof typeof STARTUP_GUARD_INSTALL];
   return guard?.scriptRelpath
     .replace(/^\.archestra\//, "")
     .replace(/-startup-guard\.sh$/, "");
+}
+
+/** Repeated cleanup succeeds after the guard removes itself; real failures still fail. */
+export function startupGuardDisconnectCommand(
+  clientId: string,
+  platform: "bash" | "windows",
+): string | null {
+  const guard = startupGuardStem(clientId);
+  if (!guard) return null;
+  if (platform === "windows") {
+    const script = `$HOME\\.archestra\\${guard}-startup-guard.ps1`;
+    return `if (Test-Path -LiteralPath "${script}" -PathType Leaf) { $env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "${script}"; if ($LASTEXITCODE -ne 0) { throw "Local cleanup failed (exit $LASTEXITCODE)." } } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION -ErrorAction SilentlyContinue } } else { Write-Host 'No local cleanup script remains.'; $global:LASTEXITCODE=0 }`;
+  }
+  const script = `$HOME/.archestra/${guard}-startup-guard.sh`;
+  return `if [ -f "${script}" ]; then ARCHESTRA_GUARD_ACTION=disconnect bash "${script}"; else printf '%s\\n' 'No local cleanup script remains.'; fi`;
+}
+
+/**
+ * Cursor's disconnect command: runs the cleanup helper the Cursor setup
+ * leaves beside its Guardrails hook, which removes everything that setup
+ * added. Like a startup check's, it succeeds when the helper has already
+ * removed itself, and a real failure still fails.
+ *
+ * Cursor's settings change only while Cursor is closed. With `wait`, for a
+ * person in a terminal, the helper waits two minutes for them to quit it.
+ * Without, for a chat inside Cursor, it leaves a copy of itself that makes
+ * the change when Cursor next closes.
+ */
+export function cursorDisconnectCommand(
+  platform: "bash" | "windows",
+  options: { wait: boolean },
+): string {
+  const wait = options.wait ? " --wait" : "";
+  if (platform === "windows") {
+    const script = "$HOME\\.cursor\\archestra\\disconnect.cjs";
+    return `if (Test-Path -LiteralPath "${script}" -PathType Leaf) { node "${script}"${wait}; if ($LASTEXITCODE -ne 0) { throw "Local cleanup failed (exit $LASTEXITCODE)." } } else { Write-Host 'No local cleanup script remains.'; $global:LASTEXITCODE=0 }`;
+  }
+  const script = "$HOME/.cursor/archestra/disconnect.cjs";
+  return `if [ -f "${script}" ]; then node "${script}"${wait}; else printf '%s\\n' 'No local cleanup script remains.'; fi`;
 }
 
 /**
@@ -229,16 +286,34 @@ export function startupGuardStem(id: string): string | undefined {
  * inventories in frontend/src/app/disconnect.md/route.ts.
  */
 export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
+  "grok-build": [
+    "Managed model, MCP and native skills in ~/.archestra/grok/native/ (dedicated GROK_HOME)",
+    "Managed startup screen and grok function in your shell profile",
+    "Private restoration snapshot and disconnect script in ~/.archestra/grok/",
+  ],
   "claude-code": [
     "MCP server entry (claude mcp add, user scope)",
     "Plugin and skills",
     "~/.claude/settings.json (model routing)",
     "Startup check in your shell profile",
   ],
-  cursor: ["~/.cursor/mcp.json", "~/.cursor/skills/"],
+  cursor: [
+    "~/.cursor/mcp.json (gateway, and web search and fetch tools)",
+    "~/.cursor/hooks.json (Guardrails hooks)",
+    "~/.cursor/permissions.json (MCP allowlist entries)",
+    "~/.cursor/archestra/ (Guardrails helper, web tools and cleanup script)",
+    "~/.cursor/skills/",
+    "Cursor settings: Web Search Tool and Web Fetch Tool switched off",
+    "Cursor's command-line agent: its sign-in to the gateway",
+  ],
   codex: [
     "~/.codex/config.toml (gateway, model provider, skills marketplace)",
     "Plugins from the skills marketplace",
+    "Startup check in your shell profile",
+  ],
+  chatgpt: [
+    "~/.codex/config.toml (gateway, model provider, plugins)",
+    "Shared skills installed through the plugin marketplace",
     "Startup check in your shell profile",
   ],
   pi: [
@@ -336,10 +411,16 @@ export const OAUTH_AGENTS = {
       { clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata" },
     ],
   },
-  // DCR with Cursor's own URL scheme as the redirect.
+  // DCR as "Cursor". The app and the command-line agent of Cursor 3.30
+  // register the same pair of redirects, one on cursor.com and one on a
+  // loopback port; older apps registered Cursor's own URL scheme.
   cursor: {
     label: "Cursor",
     identities: [
+      {
+        clientNamePattern: "^Cursor$",
+        redirectUri: "https://www.cursor.com/agents/mcp/oauth/callback",
+      },
       { redirectUri: "cursor://anysphere.cursor-mcp/oauth/callback" },
     ],
   },
@@ -409,7 +490,11 @@ export function oauthClientIdOf(agentId: string): string | null {
 
 /** Whether revoking an agent signs it out of the gateway. */
 export function revokeSignsOut(agentId: string): boolean {
-  return isOAuthRecognisedClient(agentId) || oauthClientIdOf(agentId) !== null;
+  return (
+    agentId === "chatgpt" ||
+    isOAuthRecognisedClient(agentId) ||
+    oauthClientIdOf(agentId) !== null
+  );
 }
 
 /** A known agent's name; null for one known only from its sign-in. */

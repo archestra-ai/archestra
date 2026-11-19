@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import {
@@ -18,9 +18,11 @@ import {
 import type { ClusterLeaseGuard } from "@/models/mcp-deployment-lease";
 import type {
   EffectiveNetworkPolicy,
+  InternalMcpCatalog,
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { getMcpImagePullPolicy } from "./image-pull-policy";
 import K8sDeployment, {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1018,6 +1020,35 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(resources?.requests?.["ephemeral-storage"]).toBe("256Mi");
     expect(resources?.limits?.memory).toBe("512Mi");
     expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
+  });
+
+  test("uses resolved tier CPU/RAM while retaining ephemeral storage governance", () => {
+    const deployment = createMockK8sDeployment({
+      id: "tier-id",
+      name: "tier-server",
+    } as McpServer);
+    const tier = {
+      cpuRequest: 0.25,
+      cpuLimit: 0.5,
+      memoryRequestMiB: 64,
+      memoryLimitMiB: 256,
+    };
+    const generate = (cpuLimit: number | null) =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", runtimeTier: "Small" },
+        false,
+        8080,
+        undefined,
+        undefined,
+        undefined,
+        { ...tier, cpuLimit },
+      ).spec?.template.spec?.containers[0]?.resources;
+    expect(generate(0.5)).toEqual({
+      requests: { cpu: "250m", memory: "64Mi", "ephemeral-storage": "256Mi" },
+      limits: { cpu: "500m", memory: "256Mi", "ephemeral-storage": "1Gi" },
+    });
+    expect(generate(null)?.limits).not.toHaveProperty("cpu");
   });
 
   test("generates deploymentSpec with empty arguments array when not provided", () => {
@@ -7747,6 +7778,54 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     });
   });
 
+  // Other backend processes read the transport from the Deployment, not from
+  // their own copy of the catalog row, so creation has to record it.
+  test.each([
+    { needsHttp: false, transport: "stdio" },
+    { needsHttp: true, transport: "streamable-http" },
+  ])("records the $transport transport on a created deployment", async ({
+    needsHttp,
+    transport,
+  }) => {
+    const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound),
+      readNamespacedDeployment: vi.fn().mockRejectedValue(notFound),
+      createNamespacedDeployment,
+    });
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(needsHttp);
+    vi.spyOn(deployment, "generateDeploymentSpec").mockReturnValue({
+      metadata: { name: "mcp-test-server", annotations: { kept: "yes" } },
+    } as k8s.V1Deployment);
+    vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(undefined);
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+
+    await deployment.startOrCreateDeployment();
+
+    expect(createNamespacedDeployment).toHaveBeenCalledWith({
+      namespace: "default",
+      body: expect.objectContaining({
+        metadata: expect.objectContaining({
+          annotations: {
+            kept: "yes",
+            "archestra.ai/mcp-transport": transport,
+          },
+        }),
+      }),
+    });
+    expect(await deployment.usesStreamableHttp()).toBe(needsHttp);
+  });
+
   // A concurrent reconcile (another orchestrator replica) can create the Deployment
   // between our 404 read and our create call. The resulting 409 must re-enter the
   // reconcile (re-read + validate the now-existing deployment), not blindly assume
@@ -8057,14 +8136,9 @@ describe("K8sDeployment.refreshState failed-state recovery", () => {
 describe("K8sDeployment idle hibernation", () => {
   const notFound = { statusCode: 404, message: "not found" };
 
-  // Adoption behaves differently when the deployment does not offer the
-  // feature, so pin the ordinary case — beta flag on, operator kill switch
-  // off — and let the tests that need it flip either gate.
-  beforeEach(() => {
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-  });
+  // Adoption behaves differently when the operator kill switch is set, so
+  // reset it after the tests that flip it.
   afterEach(() => {
-    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
     config.orchestrator.mcpIdleHibernation.hardDisabled = false;
   });
 
@@ -9297,38 +9371,6 @@ describe("K8sDeployment idle hibernation", () => {
       expect(deployment.statusSummary.state).toBe("waking");
     });
 
-    test("scales a hibernated deployment back up on adoption when the beta flag is off", async () => {
-      // Same stranding logic as the kill switch: with the feature not offered,
-      // no sweeper runs, so a sleeping deployment must not stay asleep.
-      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
-      const readNamespacedDeployment = vi
-        .fn()
-        .mockResolvedValue(annotatedDeploymentRead(0));
-      const patchNamespacedDeployment = vi.fn().mockResolvedValue({
-        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
-        spec: { replicas: 1 },
-      });
-      const deployment = makeDeployment({
-        readNamespacedDeployment,
-        patchNamespacedDeployment,
-      });
-      vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(
-        undefined,
-      );
-      vi.spyOn(
-        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
-        "ensureHttpServerConfigured",
-      ).mockResolvedValue(undefined);
-
-      await deployment.startOrCreateDeployment();
-
-      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
-      expect(patchNamespacedDeployment.mock.calls[0][0].body).toEqual({
-        spec: { replicas: 1 },
-      });
-      expect(deployment.statusSummary.state).toBe("waking");
-    });
-
     test("adopts an annotated deployment already scaled back up as waking, not as a cold pending start", async () => {
       // A restart mid-wake: replicas are back but the annotation is only
       // dropped once the deployment is verifiably up.
@@ -9692,3 +9734,481 @@ describe("K8sDeployment idle hibernation", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("K8sDeployment default base image follow", () => {
+  const notFound = { statusCode: 404, message: "not found" };
+  const baseImage = config.orchestrator.mcpServerBaseImage;
+  const oldBaseImage = "registry.example.com/mcp-server-base:0.0.1-removed";
+  const dockerImagePlaceholder = ["$", "{archestra.docker_image}"].join("");
+
+  // Verbatim containerd wording (as carried into the back-off message).
+  function missingImageMessage(image: string): string {
+    return `Back-off pulling image "${image}": ErrImagePull: rpc error: code = NotFound desc = failed to pull and unpack image "${image}": failed to resolve reference "${image}": ${image}: not found`;
+  }
+
+  const defaultCatalog = {
+    id: "test-catalog-id",
+    localConfig: {},
+    deploymentSpecYaml: null,
+    multitenant: false,
+  } as unknown as InternalMcpCatalog;
+
+  function makeDeployment(params: {
+    catalogItem: InternalMcpCatalog;
+    readNamespacedDeployment: ReturnType<typeof vi.fn>;
+    patchNamespacedDeployment: ReturnType<typeof vi.fn>;
+    listNamespacedPod?: ReturnType<typeof vi.fn>;
+    createNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const deployment = new K8sDeployment({
+      mcpServer: {
+        id: "test-server-id",
+        name: "test-server",
+        catalogId: null,
+      } as unknown as McpServer,
+      k8sApi: {
+        readNamespacedPod: vi.fn().mockRejectedValue(notFound),
+        listNamespacedPod:
+          params.listNamespacedPod ?? vi.fn().mockResolvedValue({ items: [] }),
+        listNamespacedEvent: vi.fn().mockResolvedValue({ items: [] }),
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment,
+        patchNamespacedDeployment: params.patchNamespacedDeployment,
+        createNamespacedDeployment:
+          params.createNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+        deleteNamespacedDeployment: vi.fn().mockResolvedValue({}),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: params.catalogItem,
+    });
+    vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(undefined);
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+    return deployment;
+  }
+
+  function deploymentOn(params: {
+    containers: Array<{ name: string; image: string }>;
+    replicas?: number;
+    annotations?: Record<string, string>;
+  }): k8s.V1Deployment {
+    return {
+      metadata: { annotations: params.annotations },
+      spec: {
+        replicas: params.replicas ?? 1,
+        template: {
+          spec: {
+            containers: params.containers.map((container) => ({
+              ...container,
+              imagePullPolicy: "IfNotPresent",
+            })),
+          },
+        },
+      },
+      status: { availableReplicas: 0 },
+    } as k8s.V1Deployment;
+  }
+
+  function podPulling(image: string, message: string): k8s.V1Pod {
+    return {
+      metadata: { name: "test-server-abc123", creationTimestamp: new Date() },
+      spec: { containers: [{ name: "mcp-server", image }] },
+      status: {
+        phase: "Pending",
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            image,
+            ready: false,
+            restartCount: 0,
+            state: { waiting: { reason: "ImagePullBackOff", message } },
+          },
+        ],
+      },
+    } as k8s.V1Pod;
+  }
+
+  function patchContentType(options: unknown): string | undefined {
+    let contentType: string | undefined;
+    const fakeRequest = {
+      setHeaderParam: (key: string, value: string) => {
+        if (key === "Content-Type") contentType = value;
+      },
+    };
+    const middleware =
+      (options as { middleware?: Array<{ pre: (req: unknown) => unknown }> })
+        ?.middleware ?? [];
+    for (const m of middleware) m.pre(fakeRequest);
+    return contentType;
+  }
+
+  function seedState(deployment: K8sDeployment, state: string): void {
+    // @ts-expect-error - seeding a private property for testing
+    deployment.state = state;
+  }
+
+  describe("startOrCreateDeployment adoption", () => {
+    test("moves a default-base-image server off a deleted image and reports it as starting", async () => {
+      const stale = deploymentOn({
+        containers: [{ name: "mcp-server", image: oldBaseImage }],
+      });
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue(
+        deploymentOn({
+          containers: [{ name: "mcp-server", image: baseImage }],
+        }),
+      );
+      const createNamespacedDeployment = vi.fn();
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(stale),
+        patchNamespacedDeployment,
+        createNamespacedDeployment,
+        // The old ReplicaSet's pod can never pull its image; it is replaced
+        // once the new pod is ready.
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [podPulling(oldBaseImage, missingImageMessage(oldBaseImage))],
+        }),
+      });
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      const [request, options] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body).toEqual([
+        {
+          op: "test",
+          path: "/spec/template/spec/containers/0/name",
+          value: "mcp-server",
+        },
+        {
+          op: "test",
+          path: "/spec/template/spec/containers/0/image",
+          value: oldBaseImage,
+        },
+        {
+          op: "replace",
+          path: "/spec/template/spec/containers/0/image",
+          value: baseImage,
+        },
+        {
+          op: "add",
+          path: "/spec/template/spec/containers/0/imagePullPolicy",
+          value: getMcpImagePullPolicy(baseImage),
+        },
+      ]);
+      expect(patchContentType(options)).toBe("application/json-patch+json");
+      expect(createNamespacedDeployment).not.toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("pending");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("follows the placeholder container of a custom deployment YAML", async () => {
+      const catalogItem = {
+        ...defaultCatalog,
+        deploymentSpecYaml: [
+          "apiVersion: apps/v1",
+          "kind: Deployment",
+          "spec:",
+          "  template:",
+          "    spec:",
+          "      containers:",
+          "        - name: sidecar",
+          "          image: busybox:1.36",
+          "        - name: server",
+          `          image: "${dockerImagePlaceholder}"`,
+        ].join("\n"),
+      } as InternalMcpCatalog;
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        catalogItem,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [
+              { name: "sidecar", image: "busybox:1.36" },
+              { name: "server", image: oldBaseImage },
+            ],
+          }),
+        ),
+        patchNamespacedDeployment,
+      });
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      // The YAML's own pull policy stays as its author wrote it.
+      expect(patchNamespacedDeployment.mock.calls[0][0].body).toEqual([
+        {
+          op: "test",
+          path: "/spec/template/spec/containers/1/name",
+          value: "server",
+        },
+        {
+          op: "test",
+          path: "/spec/template/spec/containers/1/image",
+          value: oldBaseImage,
+        },
+        {
+          op: "replace",
+          path: "/spec/template/spec/containers/1/image",
+          value: baseImage,
+        },
+      ]);
+    });
+
+    test("leaves a server already on the current base image alone", async () => {
+      const patchNamespacedDeployment = vi.fn();
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: baseImage }],
+          }),
+        ),
+        patchNamespacedDeployment,
+      });
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+    });
+
+    const customImageCatalogs: Array<[string, InternalMcpCatalog]> = [
+      [
+        "a catalog docker image",
+        {
+          ...defaultCatalog,
+          localConfig: { dockerImage: oldBaseImage },
+        } as InternalMcpCatalog,
+      ],
+      [
+        "a deployment YAML with a literal image",
+        {
+          ...defaultCatalog,
+          deploymentSpecYaml: [
+            "spec:",
+            "  template:",
+            "    spec:",
+            "      containers:",
+            "        - name: mcp-server",
+            `          image: ${oldBaseImage}`,
+          ].join("\n"),
+        } as InternalMcpCatalog,
+      ],
+    ];
+
+    test.each(
+      customImageCatalogs,
+    )("never changes the image of a server configured with %s, and reports its missing image as failed", async (_label, catalogItem) => {
+      const patchNamespacedDeployment = vi.fn();
+      const deployment = makeDeployment({
+        catalogItem,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: oldBaseImage }],
+          }),
+        ),
+        patchNamespacedDeployment,
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [podPulling(oldBaseImage, missingImageMessage(oldBaseImage))],
+        }),
+      });
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("failed");
+      expect(deployment.statusSummary.error).toContain(
+        "Image not found in its registry",
+      );
+    });
+  });
+
+  describe("refreshState", () => {
+    test("fails a server whose current image no longer exists instead of waiting on it", async () => {
+      const patchNamespacedDeployment = vi.fn();
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: baseImage }],
+          }),
+        ),
+        patchNamespacedDeployment,
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [
+            podPulling(
+              baseImage,
+              `Failed to pull image "${baseImage}": reading manifest in ${baseImage}: manifest unknown`,
+            ),
+          ],
+        }),
+      });
+      seedState(deployment, "pending");
+
+      await deployment.refreshState();
+
+      // Already on the configured image: there is nothing to move it to.
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("failed");
+      expect(deployment.statusSummary.error).toContain("manifest unknown");
+    });
+
+    test("moves a default-base-image server whose image no longer exists to the current base image", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: oldBaseImage }],
+          }),
+        ),
+        patchNamespacedDeployment,
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [podPulling(oldBaseImage, missingImageMessage(oldBaseImage))],
+        }),
+      });
+      seedState(deployment, "pending");
+
+      await deployment.refreshState();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      expect(patchNamespacedDeployment.mock.calls[0][0].body).toContainEqual({
+        op: "replace",
+        path: "/spec/template/spec/containers/0/image",
+        value: baseImage,
+      });
+      expect(deployment.statusSummary.state).toBe("pending");
+    });
+
+    test("stays starting when another replica moved the image first", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: oldBaseImage }],
+          }),
+        )
+        .mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: baseImage }],
+          }),
+        );
+      // The JSON patch's test operation no longer matches.
+      const patchNamespacedDeployment = vi.fn().mockRejectedValue({
+        statusCode: 422,
+        body: { reason: "Invalid" },
+      });
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [podPulling(oldBaseImage, missingImageMessage(oldBaseImage))],
+        }),
+      });
+      seedState(deployment, "pending");
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+    });
+
+    test("ignores a pull failure on a pod the deployment is already replacing", async () => {
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: baseImage }],
+          }),
+        ),
+        patchNamespacedDeployment: vi.fn(),
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [podPulling(oldBaseImage, missingImageMessage(oldBaseImage))],
+        }),
+      });
+      seedState(deployment, "pending");
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+  });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  describe("idle hibernation", () => {
+    test("moves a hibernated deployment at zero replicas without waking it", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(
+          deploymentOn({
+            containers: [{ name: "mcp-server", image: oldBaseImage }],
+            replicas: 0,
+            annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" },
+          }),
+        ),
+        patchNamespacedDeployment,
+      });
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      expect(patchNamespacedDeployment.mock.calls[0][0].body).toContainEqual({
+        op: "replace",
+        path: "/spec/template/spec/containers/0/image",
+        value: baseImage,
+      });
+      expect(deployment.statusSummary.state).toBe("hibernated");
+    });
+
+    test("beginWake moves the deployment to the current base image before scaling it up", async () => {
+      const asleep = deploymentOn({
+        containers: [{ name: "mcp-server", image: oldBaseImage }],
+        replicas: 0,
+        annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" },
+      });
+      const patchNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce(asleep)
+        .mockResolvedValue({
+          ...asleep,
+          spec: { ...asleep.spec, replicas: 1 },
+        });
+      const deployment = makeDeployment({
+        catalogItem: defaultCatalog,
+        readNamespacedDeployment: vi.fn().mockResolvedValue(asleep),
+        patchNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(2);
+      const [imagePatch, imagePatchOptions] =
+        patchNamespacedDeployment.mock.calls[0];
+      expect(patchContentType(imagePatchOptions)).toBe(
+        "application/json-patch+json",
+      );
+      expect(imagePatch.body).toContainEqual({
+        op: "replace",
+        path: "/spec/template/spec/containers/0/image",
+        value: baseImage,
+      });
+      expect(patchNamespacedDeployment.mock.calls[1][0].body).toEqual({
+        spec: { replicas: 1 },
+      });
+      expect(deployment.statusSummary.state).toBe("waking");
+    });
+  });
+  // SPDX-SnippetEnd
+});

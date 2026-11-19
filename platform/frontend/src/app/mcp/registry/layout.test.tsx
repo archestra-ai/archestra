@@ -66,13 +66,13 @@ describe("McpCatalogLayout", () => {
 
     render(
       <McpCatalogLayout>
-        <h1>Add MCP Server to the Private Registry</h1>
+        <h1>Add MCP Server</h1>
       </McpCatalogLayout>,
     );
 
     expect(
       screen.getByRole("heading", {
-        name: "Add MCP Server to the Private Registry",
+        name: "Add MCP Server",
       }),
     ).toBeInTheDocument();
     expect(

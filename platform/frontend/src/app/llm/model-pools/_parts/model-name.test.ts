@@ -9,6 +9,9 @@ describe("poolModelName", () => {
     expect(
       poolModelName("bedrock", "anthropic.claude-sonnet-4-5-20250929-v1:0"),
     ).toBe("claude-sonnet-4-5-20250929");
+    expect(poolModelName("bedrock", "openai.gpt-oss-120b-1:0")).toBe(
+      "gpt-oss-120b",
+    );
   });
 
   test("drops OpenRouter's vendor path", () => {

@@ -72,6 +72,40 @@ describe("AgentRuntimeCredentialPrompt", () => {
     expect(screen.queryByText(/Other secret/)).toBeNull();
     expect(screen.queryByText(/not supported/)).toBeNull();
   });
+
+  it("offers non-blocking Reconnect copy when only optional credentials have stale connections", () => {
+    render(
+      <AgentRuntimeCredentialPrompt
+        agentId="agent-1"
+        missing={[
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub",
+            reconnect: true,
+            canConnect: true,
+          },
+        ]}
+        declarations={[
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub",
+            scope: "per_user",
+            required: false,
+          },
+        ]}
+        onConnected={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("GitHub needs to be reconnected")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Optional — you can start a run without it, or reconnect to include it.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    expect(screen.queryByText(/is required/)).toBeNull();
+  });
 });
 
 describe("AgentRuntimePreflightError", () => {

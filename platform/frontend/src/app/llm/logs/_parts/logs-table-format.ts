@@ -12,7 +12,7 @@ import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 
 /** One row of the LLM logs table: a session, or a lone interaction. */
 export type LogSession =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];
 
 // ============================================================================
 // Session titles

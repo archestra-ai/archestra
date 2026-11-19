@@ -111,6 +111,11 @@ export const CONSULT_BACKEND_TERMS: Record<
     explanation:
       "The platform's built-in labeler, which asks the agent's model (or the organization's default).",
   },
+  stock: {
+    label: "Auto-approve",
+    explanation:
+      "The policy approves these calls without asking anyone and records each approval.",
+  },
 };
 
 /**

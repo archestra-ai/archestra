@@ -62,6 +62,13 @@ class A2ATaskModel {
     return task;
   }
 
+  static async updateAgentId(id: string, agentId: string): Promise<void> {
+    await db
+      .update(schema.a2aTasksTable)
+      .set({ agentId, updatedAt: new Date() })
+      .where(eq(schema.a2aTasksTable.id, id));
+  }
+
   /**
    * T1: durably create the task (SUBMITTED) and attach the triggering user
    * message to it, atomically, BEFORE any execution starts — so the task id

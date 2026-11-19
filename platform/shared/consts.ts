@@ -224,9 +224,16 @@ export const MCP_CATALOG_API_BASE_URL =
  * remove exactly these keys — one list so the two directions can't drift.
  * `ANTHROPIC_CUSTOM_HEADERS` is handled separately: it is merged/stripped
  * line-wise so user-owned header lines survive.
+ * `CLAUDE_CODE_GATEWAY_HINT_HEADERS` makes Claude Code name each request's
+ * class in a header behind a custom base URL, so OpenAPPA can tell its side
+ * requests from its agent loop.
  */
 export const CLAUDE_CODE_PROXY_ENV_KEYS = {
-  anthropic: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"],
+  anthropic: [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS",
+  ],
   bedrock: [
     "CLAUDE_CODE_USE_BEDROCK",
     "AWS_REGION",
@@ -234,6 +241,7 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
     // Virtual-key mode only: the proxy virtual key, sent as a Bedrock bearer
     // token (the Anthropic path's ANTHROPIC_AUTH_TOKEN equivalent).
     "AWS_BEARER_TOKEN_BEDROCK",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS",
   ],
 } as const;
 
@@ -317,6 +325,13 @@ export const COPILOT_ENV_HANDLED_MARKER = "ARCHESTRA_COPILOT_ENV_HANDLED";
  * guard entry — its connect is reversed from the Disconnect panel instead.
  */
 export const STARTUP_GUARD_INSTALL = {
+  "grok-build": {
+    scriptRelpath: ".archestra/grok/startup.sh",
+    psScriptRelpath: ".archestra/grok/startup.ps1",
+    skipRelpath: ".archestra/grok/startup.skip",
+    markerStart: "# BEGIN ARCHESTRA MANAGED GROK",
+    markerEnd: "# END ARCHESTRA MANAGED GROK",
+  },
   pi: {
     scriptRelpath: ".archestra/pi/startup.sh",
     psScriptRelpath: ".archestra/pi/startup.ps1",
@@ -479,6 +494,14 @@ export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
+ * `1` says no person is there to answer for the session: Scheduled task runs
+ * send it, and any client may. Agent Runtime runs count as unattended without
+ * it. Guardrails' Break the glass settings can then let calls waiting for
+ * human approval through, with a yell.
+ */
+export const UNATTENDED_HEADER = "X-Archestra-Unattended";
+
+/**
  * Header name for a run ID.
  * Clients can pass this header to associate interactions with a specific run.
  */
@@ -517,13 +540,12 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
 
 /**
- * Header marking a chat or agent call that runs on its agent's own selection,
- * with no pool or explicit subagent tier. When that agent inherits the
- * organization default and the call names the default model, the proxy routes
- * the session across the organization's model trio. Like
+ * Header naming the auto router a chat or agent call runs on: its chat's or
+ * agent's own selection, with no pool or explicit subagent tier. The proxy
+ * routes the session across that router's model trio. Like
  * MODEL_POOL_ID_HEADER, it is only honored with the in-process proof.
  */
-export const AUTO_ROUTABLE_HEADER = "X-Archestra-Auto-Routable";
+export const AUTO_ROUTER_ID_HEADER = "X-Archestra-Auto-Router-Id";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

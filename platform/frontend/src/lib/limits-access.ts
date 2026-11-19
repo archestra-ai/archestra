@@ -2,33 +2,55 @@ import { useMemo } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 
-/** Team membership opens only the team's limits, never organization cost analytics. */
+/**
+ * Team admins open their teams' limits and their teams' costs, never the
+ * organization's: the backend scopes both to the teams they administer.
+ */
 export function useTeamLimitAccess() {
   const session = useSession();
   const read = useHasPermissions({ llmLimit: ["read"] });
   const create = useHasPermissions({ llmLimit: ["create"] });
   const update = useHasPermissions({ llmLimit: ["update"] });
   const remove = useHasPermissions({ llmLimit: ["delete"] });
-  const membership = useMyTeams({ enabled: !!session?.data?.user });
+  const membership = useMyTeams({
+    enabled: !!session?.data?.user,
+    includeDescendants: true,
+  });
   const globalCreate = !!create?.data;
   const globalUpdate = !!update?.data;
   const globalDelete = !!remove?.data;
   return useMemo(() => {
-    const teams = (membership?.data ?? []).filter(
+    const roots = (membership?.data ?? []).filter(
       (team) => team.myRole === "admin",
     );
-    const isTeamAdmin = teams.length > 0;
+    const descendants = roots.flatMap((team) =>
+      (team.descendantTeams ?? []).map((child) => ({
+        ...child,
+        description: null,
+      })),
+    );
+    const teams = [
+      ...new Map(
+        [...roots, ...descendants].map((team) => [team.id, team]),
+      ).values(),
+    ];
+    const descendantIds = new Set(descendants.map((team) => team.id));
+    const managedTeams = teams.filter((team) => descendantIds.has(team.id));
+    const isTeamAdmin = roots.length > 0;
     const canRead = read?.data || isTeamAdmin;
     const administers = (target: { entityType: string; entityId: string }) =>
       target.entityType === "team" &&
-      teams.some((team) => team.id === target.entityId);
+      managedTeams.some((team) => team.id === target.entityId);
     return {
       teams,
+      managedTeams,
       isTeamAdmin,
       canRead,
       globalCreate,
       globalRead: !!read?.data,
       isPending: read?.isPending || (!read?.data && membership?.isPending),
+      /** Whether {@link isTeamAdmin} is still unknown. */
+      isTeamAdminPending: !!membership?.isPending,
       allows(action: "create" | "update" | "delete", target?: LimitTarget) {
         const global = {
           create: globalCreate,
@@ -36,20 +58,12 @@ export function useTeamLimitAccess() {
           delete: globalDelete,
         }[action];
         if (global) return true;
-        if (!target) return isTeamAdmin;
-        return (
-          administers(target) &&
-          (action === "create" || target.teamManaged !== false)
-        );
+        if (!target) return managedTeams.length > 0;
+        return administers(target);
       },
-      /**
-       * A limit on a team this person administers that the organization set:
-       * they see it but cannot change or delete it.
-       */
+      /** A lead can see their own ceiling, but cannot raise or reset it. */
       isLocked(target: LimitTarget) {
-        return (
-          !globalUpdate && administers(target) && target.teamManaged === false
-        );
+        return !globalUpdate && !administers(target);
       },
     };
   }, [

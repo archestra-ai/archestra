@@ -1,0 +1,72 @@
+import type { User } from "@/types/user";
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
+import type { AuditEventName } from "@/types/audit-log";
+import type {
+  SelectServiceAccount,
+  SelectServiceAccountToken,
+} from "@/types/service-account";
+
+declare module "fastify" {
+  interface FastifyRequest {
+    user: User;
+    organizationId: string;
+    /** Auth method used for this request; set by Authnz.populateUserInfo. */
+    authMethod?: "session" | "api_key" | "service_account";
+    /**
+     * Session bookkeeping for org auth-policy enforcement (session max age);
+     * set by Authnz.populateUserInfo on session-authenticated requests.
+     */
+    /** createdAt may be an ISO string when the session came from the cookie cache. */
+    sessionInfo?: { id: string; createdAt: Date | string };
+    /**
+     * When the session is an impersonated one, the user id of the real human
+     * driving it (request.user is the impersonation target). Set by
+     * Authnz.populateUserInfo; consumed by the audit hook for attribution.
+     */
+    impersonatedBy?: string;
+    serviceAccount?: SelectServiceAccount;
+    serviceAccountAuthResult?: {
+      serviceAccount: SelectServiceAccount;
+      token: SelectServiceAccountToken;
+    };
+    /**
+     * Snapshot of the resource before the mutation. Normally set (and
+     * sanitized) by the audit preHandler hook. A route registered WITHOUT
+     * `fetchById` gets no preHandler snapshot and may set this itself before
+     * its writes — e.g. a bulk route whose affected resources are only known
+     * from the request body. A handler-supplied value is stored verbatim, so
+     * the handler owns keeping secrets out of it.
+     */
+    auditBefore?: Record<string, unknown> | null;
+    /**
+     * Memoized effective audit route config, computed once by whichever audit
+     * hook needs it first. Wrapped so a legitimately-undefined resolved config
+     * is still marked as computed.
+     */
+    auditEffectiveCfg?: { value: AuditableRouteConfig | undefined };
+    /**
+     * Memoized audited resource id, computed once by whichever audit hook
+     * needs it first. Wrapped so a legitimately-null resolved id is still
+     * marked as computed.
+     */
+    auditResourceId?: { value: string | null };
+    /**
+     * Post-state supplied by a route handler for the audit `after` snapshot,
+     * used when the generic `fetchById` snapshot can't represent the result —
+     * e.g. a bulk create that yields multiple ids. When set, the onResponse
+     * hook uses this verbatim instead of calling `fetchById`.
+     */
+    auditAfter?: Record<string, unknown> | null;
+    /** Skip a registered mutation audit when the handler proves it was a no-op. */
+    auditSkip?: boolean;
+    /**
+     * The action a handler found it performed, when the route's registered
+     * one does not fit this request (a POST that updated an existing key).
+     */
+    auditAction?: AuditEventName;
+    /** Timestamp captured at the start of preHandler, before the route handler executes. */
+    auditOccurredAt?: Date;
+    /** ID extracted from the POST response body; set by the audit onSend hook. */
+    auditResponseBodyId?: string | null;
+  }
+}

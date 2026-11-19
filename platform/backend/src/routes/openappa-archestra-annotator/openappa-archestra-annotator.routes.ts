@@ -15,6 +15,9 @@ import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { isLoopbackRequest } from "@/utils/network";
 
 const AnnotationRequestSchema = z.object({
+  // Which component asks. A runtime older than the field asks only for
+  // annotations.
+  kind: z.enum(["annotation", "sanitizer", "authority"]).default("annotation"),
   system: z.string(),
   input: z.string(),
   schema: z.record(z.string(), z.unknown()),

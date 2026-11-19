@@ -1,6 +1,9 @@
 import {
   ADMIN_ROLE_NAME,
+  BUILT_IN_AGENT_IDS,
+  PLATFORM_ADMIN_ROLE_NAME,
   type ResourcePermissionGrant,
+  resourcePermissionPresets,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -43,7 +46,7 @@ import {
 /**
  * The opt-in SRE agent: a read-only Kubernetes MCP server in its own "SRE"
  * environment, whose egress allows only the configured API server CIDRs, plus
- * an org-wide agent that uses its tools.
+ * an Admin and Platform Admin agent that uses its tools.
  *
  * Seeded once. While the feature is on, a catalog item, install, or agent an
  * admin deleted stays deleted (the soft-deleted row is the marker). Turning
@@ -69,6 +72,7 @@ class SreAgentService {
         return;
       }
       await this.seedResources(serviceAccount);
+      await SreRuntimeModel.markAgentBuiltIn(SRE_AGENT_ID);
       await this.upgradeSourceClone();
     } catch (error) {
       logger.error({ err: error }, "Failed to seed the SRE agent");
@@ -188,10 +192,12 @@ class SreAgentService {
             sandbox,
           }),
           environmentId: SRE_ENVIRONMENT_ID,
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
         },
         params.authorId ?? undefined,
         {
           initialPermissionGrants: SRE_ADMIN_GRANTS,
+          grantAuthor: false,
           skipCreationDefaultTools: true,
           deferInitialVersionFork: true,
         },
@@ -364,6 +370,7 @@ class SreAgentService {
         organizationId: organization.id,
         authorId: adminUserId,
         initialPermissionGrants: SRE_ADMIN_GRANTS,
+        grantAuthor: false,
       },
     );
     await this.createInstall(adminUserId);
@@ -399,13 +406,18 @@ class SreAgentService {
 export const sreAgentService = new SreAgentService();
 
 /**
- * The SRE tools can read other installs' pod specs, whose arguments may carry
- * resolved credentials, so the agent, its catalog item, and its environment
- * are shared with Admins only. Seeing the agent and calling the tools also
- * take `sre:read`.
+ * SRE resources start visible only to Admin and Platform Admin roles.
+ * Their own policies can be edited later.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
-  { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },
+  {
+    subject: { type: "role", id: ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
+  },
+  {
+    subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
+  },
 ];
 
 /**

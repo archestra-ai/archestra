@@ -19,7 +19,6 @@ export const actions = [
   "impersonate",
   "full-view",
   "admin",
-  "configure-runtime",
 ] as const;
 
 export const resources = [
@@ -28,7 +27,7 @@ export const resources = [
   "plugin",
   "app",
   "guardrailsPolicy",
-  "sre",
+  "guardrailsYell",
   "mcpGateway",
   "llmProxy",
   "log",
@@ -41,6 +40,7 @@ export const resources = [
   "chat",
   "project",
   "llmCost",
+  "costExport",
   "llmLimit",
   "llmProviderApiKey",
   "llmVirtualKey",
@@ -78,10 +78,10 @@ export const resourceLabels: Record<Resource, string> = {
   plugin: "Plugins",
   app: "Apps",
   guardrailsPolicy: "Guardrails Policy",
+  guardrailsYell: "Guardrails Yells",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
-  sre: "SRE agent",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -96,6 +96,7 @@ export const resourceLabels: Record<Resource, string> = {
   chat: "Chats",
   project: "Projects",
   llmCost: "LLM Cost Analytics",
+  costExport: "Cost Exports",
   llmLimit: "LLM Limits",
   llmProviderApiKey: "LLM Provider API Keys",
   llmVirtualKey: "LLM Virtual Keys",
@@ -109,46 +110,57 @@ export const resourceLabels: Record<Resource, string> = {
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
-  agent: "Agents with prompts and tool assignments",
-  skill: "Agent skills — reusable SKILL.md instruction plugins",
-  plugin: "Opaque plugins that execute hooks on connected developer machines",
-  app: "User-authored MCP Apps — interactive apps with their own data store and tools",
-  sre: "The SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
-  mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
-  llmProxy: "The LLM Proxy endpoint with security policies and observability",
-  guardrailsPolicy: "Guardrails (OpenAPPA) policy, batteries, and coverage",
-  log: "LLM proxy, MCP tool-call, and Guardrails consult logs, with separate own and organization-wide visibility, plus Guardrails yells",
-  chat: "Chat conversations",
+  agent: "AI agents configured with prompts, models, and tools",
+  skill: "Reusable instructions and workflows that can be attached to agents",
+  plugin: "Extensions that run hooks on connected developer machines",
+  app: "Interactive MCP apps with their own data store and tools",
+  mcpGateway:
+    "Unified endpoints that expose tools from multiple MCP servers to clients",
+  llmProxy:
+    "Proxy endpoint that routes LLM requests with security policies and logging",
+  guardrailsPolicy:
+    "Guardrails (OpenAPPA) policies that inspect and filter prompts and tool calls",
+  guardrailsYell:
+    "Reports agents raise when Guardrails blocks them or a block is waived",
+  log: "Request logs from the LLM Proxy, MCP tool calls, and Guardrails consults",
+  chat: "Conversations with agents and models in the chat interface",
   project:
-    "Projects — shared collections of chats, schedules, Agent Runtime runs, and files",
-  llmProviderApiKey: "LLM provider API keys and their visibility",
-  llmVirtualKey: "LLM virtual keys and their visibility",
-  llmModel: "LLM model catalog entries and chat capabilities",
-  llmLimit: "LLM usage limits",
-  llmCost: "Organization-wide LLM usage and cost analytics",
+    "Shared workspaces containing chats, files, schedules, and agent runs",
+  llmProviderApiKey: "Upstream API keys used to connect external LLM providers",
+  llmVirtualKey:
+    "Keys issued by the platform for accessing models through the LLM Proxy",
+  llmModel: "Models listed in the model catalog for chat and agent use",
+  llmLimit: "Rate, token, and spend limits for LLM usage",
+  llmCost: "Organization-wide LLM token usage and cost reports",
+  costExport:
+    "Scheduled FOCUS exports of LLM cost and usage to a blob provider",
   mcpRegistry:
-    "MCP server registry management. Deployment settings are granted per entry, on the entry's Permissions tab.",
-  mcpServerInstallation: "Installed MCP servers and their runtime",
-  environment: "Deployment environments (namespace) for catalog items",
+    "Catalog of approved MCP servers available to install and deploy",
+  mcpServerInstallation:
+    "Installed MCP server instances and their runtime state",
+  environment:
+    "Target environments where installed MCP servers and workloads run",
   credential:
-    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform. Who can view, connect, edit and delete each one is granted per credential, on its Permissions tab.",
+    "Stored secrets, GitHub tokens, and GitHub Apps used across the platform",
   member:
-    "People in the organization: inviting them, changing their roles, and removing them",
-  ac: "Custom RBAC roles",
-  team: "Teams for organizing users and access control",
+    "User accounts, invitations, and role assignments in the organization",
+  ac: "Custom roles and their organization-wide permission sets",
+  team: "User groups for assigning roles and sharing access to resources",
   invitation: "User invitations",
-  identityProvider: "Identity providers for authentication",
-  apiKey: "User API keys for programmatic access",
+  identityProvider:
+    "Single sign-on (SSO) and external identity provider connections",
+  apiKey: "Personal API keys for authenticating to the platform API",
   oauthClient:
-    "Applications authorized to access MCP gateways, A2A agents, and the LLM Proxy",
-  serviceAccount: "Service accounts and tokens for programmatic access",
-  auditLog: "Audit events, with separate own and organization-wide visibility",
+    "External apps authorized to access MCP Gateways, Agents, and the LLM Proxy",
+  serviceAccount:
+    "Non-human accounts and tokens for automated API and CI/CD access",
+  auditLog: "Record of administrative changes, sign-ins, and security events",
   accessPolicies:
-    "View and edit organization-wide access policies for every resource type",
+    "Organization-wide policies that govern access across all resource types",
   organizationSettings:
-    "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, site notifications, and the secrets backend",
+    "Global settings for authentication, security, notifications, and secrets",
   knowledgeSource:
-    "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
+    "Knowledge bases and connectors that supply documents and data to agents",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -163,7 +175,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy", "sre"],
+  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",
@@ -172,8 +184,12 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmModel",
     "llmLimit",
     "llmCost",
+    "costExport",
   ],
-  Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
+  Other: ["chat", "project", "knowledgeSource"],
+  // Who can see what happened: each is `read` for your own records and
+  // `admin` for everyone's.
+  Logs: ["log", "guardrailsYell", "auditLog"],
   Administration: [
     "accessPolicies",
     "member",

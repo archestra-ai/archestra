@@ -66,6 +66,10 @@ export const LlmOauthClientSchema = z
     /** The author, in the shape shared by every major object. */
     createdBy: CreatedByNullableSchema,
     labels: z.array(LabelWithDetailsSchema),
+    /** Model pools added to a client that calls as the app; see `mayUseModelPool`. */
+    modelPoolIds: z.array(z.string()).default([]),
+    /** Auto routers added to a client that calls as the app. */
+    autoRouterIds: z.array(z.string()).default([]),
     createdAt: z.date(),
     updatedAt: z.date(),
   })

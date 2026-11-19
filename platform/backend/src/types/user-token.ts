@@ -4,7 +4,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 // User Token schemas
 export const SelectUserTokenSchema = createSelectSchema(schema.userTokensTable);

@@ -1,5 +1,5 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
@@ -11,6 +11,19 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
  * seeded again.
  */
 class SreRuntimeModel {
+  /** Upgrade a live legacy SRE row in place, keeping its ID and grants. */
+  static async markAgentBuiltIn(id: string): Promise<void> {
+    await db
+      .update(schema.agentsTable)
+      .set({ builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE } })
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          isNull(schema.agentsTable.builtInAgentConfig),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
   static async findCatalog(id: string): Promise<{
     id: string;
     organizationId: string | null;

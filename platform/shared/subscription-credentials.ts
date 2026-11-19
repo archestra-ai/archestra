@@ -161,6 +161,18 @@ export const SUBSCRIPTION_CREDENTIAL_KINDS = Object.keys(
   SUBSCRIPTION_CREDENTIALS,
 ) as SubscriptionCredentialKind[];
 
+/**
+ * Providers that are a personal subscription and nothing else: each key is a
+ * person's own sign-in (a GitHub Copilot enterprise plan aside). Derived from
+ * the registry, so a new provider-level subscription joins this list without a
+ * second edit. Credential-level subscriptions (ChatGPT, SuperGrok) are not
+ * listed: their providers also take ordinary API keys.
+ */
+export const PERSONAL_SUBSCRIPTION_PROVIDERS: readonly SupportedProvider[] =
+  SUBSCRIPTION_CREDENTIAL_KINDS.filter(
+    (kind) => SUBSCRIPTION_CREDENTIALS[kind].marker === null,
+  ).map((kind) => SUBSCRIPTION_CREDENTIALS[kind].provider);
+
 /** Wire schema for the kind, derived from the registry so the two can't drift. */
 export const SubscriptionCredentialKindSchema = z.enum(
   SUBSCRIPTION_CREDENTIAL_KINDS as [

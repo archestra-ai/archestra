@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import {
+  AutoRoutingBudgetPresetSchema,
   RouterDocumentSchema,
   RoutingBackfillBreakdownSchema,
   RoutingBackfillPhaseSchema,
@@ -13,10 +14,17 @@ import {
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
   RoutingPlanTriggerSchema,
+  SelectRoutingDecisionSchema,
 } from "@/types/auto-routing";
 
 /** `routing_plans.budget_usd_per_day` is numeric(12, 2). */
 const BudgetUsdPerDaySchema = z.number().min(0.01).max(9_999_999_999.99);
+
+/** A union, not `.nullable()`, so the generated client keeps the null. */
+const NullableBudgetPresetSchema = z.union([
+  AutoRoutingBudgetPresetSchema,
+  z.null(),
+]);
 
 export const AutoRoutingTierNameSchema = z.enum(["fast", "normal", "smart"]);
 
@@ -32,16 +40,56 @@ export type AutoRoutingScorerState = z.infer<
   typeof AutoRoutingScorerStateSchema
 >;
 
-export const AutoRoutingSettingsResponseSchema = z.object({
+const AutoRoutingApiKeyRefSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+});
+
+/** A tier's model and the organization-wide key it runs on. */
+const AutoRoutingTierSettingResponseSchema = AutoRoutingTierModelSchema.extend({
+  apiKey: AutoRoutingApiKeyRefSchema,
+});
+
+/** `auto`, or `auto:<name>`: lowercase letters, digits, dots, dashes and underscores. */
+export const AUTO_ROUTER_NAME_PATTERN = /^auto(:[a-z0-9][a-z0-9._-]{0,62})?$/;
+
+const AutoRouterNameSchema = z
+  .string()
+  .trim()
+  .regex(
+    AUTO_ROUTER_NAME_PATTERN,
+    'An auto router is named "auto" or "auto:<name>", with lowercase letters, digits, dots, dashes or underscores after the colon.',
+  );
+
+export const AutoRouterResponseSchema = z.object({
+  id: z.string().uuid(),
+  /** The model name clients request. */
+  name: z.string(),
+  /** The organization's switch: no router routes while it is off. */
   enabled: z.boolean(),
+  /** The custom budget; fits use it only while `budgetPreset` is null. */
   budgetUsdPerDay: z.number().nullable(),
+  /** Set when every fit derives the budget from this preset and the current usage. */
+  budgetPreset: NullableBudgetPresetSchema,
   tiers: z.object({
-    fast: AutoRoutingTierModelSchema.nullable(),
-    normal: AutoRoutingTierModelSchema.nullable(),
-    smart: AutoRoutingTierModelSchema.nullable(),
+    fast: AutoRoutingTierSettingResponseSchema.nullable(),
+    normal: AutoRoutingTierSettingResponseSchema.nullable(),
+    smart: AutoRoutingTierSettingResponseSchema.nullable(),
   }),
-  /** Agents on the organization default, which routing applies to. */
-  routedAgentCount: z.number().int().nonnegative(),
+  /** The model that scores the router's sessions, and the key it is asked with; a null key is the organization's primary key of the provider. */
+  decisionModel: z.object({
+    apiKeyId: z.string().uuid().nullable(),
+    model: z.string(),
+  }),
+  /** Also learns from the organization's scored past sessions; only its first router does. */
+  usesPastSessions: z.boolean(),
+  /** Virtual keys that may call the router by name; set from each key. */
+  virtualApiKeyIds: z.array(z.string().uuid()),
+  /** Where the router is picked: agents set to it, and whether the organization default is. */
+  usage: z.object({
+    agentCount: z.number().int().nonnegative(),
+    organizationDefault: z.boolean(),
+  }),
   generation: z.number().int(),
   plannedGeneration: z.number().int(),
   status: z.object({
@@ -57,11 +105,33 @@ export const AutoRoutingSettingsResponseSchema = z.object({
     /** Error of the newest fit outcome, when it failed. */
     lastFitError: z.string().nullable(),
     scorer: AutoRoutingScorerStateSchema,
+    /** The key that scores sessions: the router's, else the organization's primary one; null without either. */
+    scorerApiKey: AutoRoutingApiKeyRefSchema.nullable(),
   }),
 });
-export type AutoRoutingSettingsResponse = z.infer<
-  typeof AutoRoutingSettingsResponseSchema
+export type AutoRouterResponse = z.infer<typeof AutoRouterResponseSchema>;
+
+/** The organization's switch, and what a router may be built from. */
+export const AutoRoutingStateResponseSchema = z.object({
+  enabled: z.boolean(),
+  /** The keys a tier may run on: those shared with the whole organization. */
+  eligibleApiKeyIds: z.array(z.string().uuid()),
+  /** Providers whose models score sessions, with the organization-wide keys to ask them with. */
+  decisionProviders: z.array(
+    z.object({
+      provider: SupportedProvidersSchema,
+      models: z.array(z.object({ id: z.string(), displayName: z.string() })),
+      apiKeys: z.array(AutoRoutingApiKeyRefSchema),
+    }),
+  ),
+});
+export type AutoRoutingStateResponse = z.infer<
+  typeof AutoRoutingStateResponseSchema
 >;
+
+export const UpdateAutoRoutingStateBodySchema = z.strictObject({
+  enabled: z.boolean(),
+});
 
 /**
  * Outcome of the fit a settings change or re-plan ran; a fit that lost to a
@@ -83,22 +153,53 @@ export const AutoRoutingFitResultSchema = z.discriminatedUnion("status", [
 ]);
 export type AutoRoutingFitResult = z.infer<typeof AutoRoutingFitResultSchema>;
 
-/** `fit` is null when no fit ran: auto routing is disabled or not fully configured. */
-export const AutoRoutingSettingsChangeResponseSchema =
-  AutoRoutingSettingsResponseSchema.extend({
-    fit: AutoRoutingFitResultSchema.nullable(),
-  });
-export type AutoRoutingSettingsChangeResponse = z.infer<
-  typeof AutoRoutingSettingsChangeResponseSchema
+/** `fit` is null when no fit ran: auto routing is off for the organization. */
+export const AutoRouterChangeResponseSchema = AutoRouterResponseSchema.extend({
+  fit: AutoRoutingFitResultSchema.nullable(),
+});
+export type AutoRouterChangeResponse = z.infer<
+  typeof AutoRouterChangeResponseSchema
 >;
 
-export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
-  enabled: z.boolean().optional(),
-  budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
+const AutoRoutingTierBodySchema = z.strictObject({
+  modelId: z.string().uuid(),
+  /** An organization-wide key serving the model. */
+  providerApiKeyId: z.string().uuid(),
 });
-export type UpdateAutoRoutingSettingsBody = z.infer<
-  typeof UpdateAutoRoutingSettingsBodySchema
->;
+
+const AutoRouterTiersBodySchema = z.strictObject({
+  fast: AutoRoutingTierBodySchema,
+  normal: AutoRoutingTierBodySchema,
+  smart: AutoRoutingTierBodySchema,
+});
+
+const AutoRouterDecisionModelBodySchema = z.strictObject({
+  /** An organization-wide key of a decisions provider; null asks with the organization's primary one. */
+  apiKeyId: z.string().uuid().nullable(),
+  model: z.string().trim().min(1).max(200),
+});
+
+/** A router is created complete: its tiers, and a budget or a preset. */
+export const CreateAutoRouterBodySchema = z.strictObject({
+  name: AutoRouterNameSchema,
+  budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
+  budgetPreset: AutoRoutingBudgetPresetSchema.optional(),
+  tiers: AutoRouterTiersBodySchema,
+  /** Defaults to the default decision model on the organization's primary key. */
+  decisionModel: AutoRouterDecisionModelBodySchema.optional(),
+});
+export type CreateAutoRouterBody = z.infer<typeof CreateAutoRouterBodySchema>;
+
+export const UpdateAutoRouterBodySchema = z.strictObject({
+  name: AutoRouterNameSchema.optional(),
+  /** Without `budgetPreset`, also switches to this custom budget. */
+  budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
+  /** Null switches to the custom budget. */
+  budgetPreset: NullableBudgetPresetSchema.optional(),
+  tiers: AutoRouterTiersBodySchema.optional(),
+  decisionModel: AutoRouterDecisionModelBodySchema.optional(),
+});
+export type UpdateAutoRouterBody = z.infer<typeof UpdateAutoRouterBodySchema>;
 
 export const AutoRoutingPlanSummarySchema = z.object({
   id: z.string().uuid(),
@@ -107,7 +208,8 @@ export const AutoRoutingPlanSummarySchema = z.object({
   status: RoutingPlanStatusSchema,
   generation: z.number().int(),
   inputWatermark: z.date(),
-  budgetUsdPerDay: z.number(),
+  /** Null when the fit was for a budget preset and resolved no budget (cold start, failure). */
+  budgetUsdPerDay: z.number().nullable(),
   scorerVersion: RoutingPlanRecordSchema.shape.scorerVersion,
   coreVersion: z.string(),
   planFormatVersion: z.number().int(),
@@ -129,6 +231,36 @@ export const AutoRoutingPlanDetailSchema = AutoRoutingPlanSummarySchema.extend({
 });
 export type AutoRoutingPlanDetail = z.infer<typeof AutoRoutingPlanDetailSchema>;
 
+/** Usage windows the router page offers. */
+export const AutoRoutingUsageQuerySchema = z.object({
+  days: z.coerce
+    .number()
+    .int()
+    .refine((days) => days === 7 || days === 14, "days must be 7 or 14")
+    .default(7),
+});
+
+/** What an auto router routed over a recent window, per tier, with the all-smart counterfactual. */
+export const AutoRoutingUsageResponseSchema = z.object({
+  windowDays: z.number().int().positive(),
+  /** Sessions with at least one request in the window. */
+  sessions: z.number().int().nonnegative(),
+  requests: z.number().int().nonnegative(),
+  /** What the routed requests were billed: metered requests only, subscription-covered ones cost nothing. */
+  costUsd: z.number(),
+  /** The billed requests' tokens priced at the current smart model's list price; null without a smart model. */
+  allSmartCostUsd: z.number().nullable(),
+  tiers: z.array(
+    z.object({
+      tier: AutoRoutingTierNameSchema,
+      sessions: z.number().int().nonnegative(),
+      requests: z.number().int().nonnegative(),
+      costUsd: z.number(),
+    }),
+  ),
+});
+export type AutoRoutingUsage = z.infer<typeof AutoRoutingUsageResponseSchema>;
+
 export const AutoRoutingPlansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -140,15 +272,59 @@ export const AutoRoutingPlansQuerySchema = z.object({
  */
 export const AUTO_ROUTING_PREVIEW_MAX_CHARS = 20_000;
 
-export const AutoRoutingPreviewBodySchema = z.strictObject({
-  text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+export const AutoRoutingPreviewBodySchema = z.union([
+  z.strictObject({
+    text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+  }),
+  z.strictObject({
+    request: z
+      .record(z.string(), z.unknown())
+      .describe(
+        "An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.",
+      ),
+    client: z.string().trim().min(1).max(256).optional(),
+  }),
+]);
+export type AutoRoutingPreviewBody = z.infer<
+  typeof AutoRoutingPreviewBodySchema
+>;
+
+/** Persisted provenance, not a fresh scorer invocation or a synthesized explanation. */
+export const InteractionAutoRoutingResponseSchema = z.object({
+  decision: SelectRoutingDecisionSchema.omit({
+    organizationId: true,
+    sessionKey: true,
+  })
+    .extend({
+      tier: AutoRoutingTierNameSchema,
+      model: AutoRoutingTierModelSchema,
+      router: z.object({ id: z.string().uuid(), name: z.string() }),
+      scorerVersion: z
+        .object({
+          id: z.string().uuid(),
+          name: z.string(),
+          model: z.string(),
+          specHash: z.string(),
+        })
+        .nullable(),
+    })
+    .nullable(),
 });
 
-export const AutoRoutingSimulateBodySchema = z.strictObject({
-  budgetUsdPerDay: BudgetUsdPerDaySchema,
-  /** Scales the fitted window's sessions/day and tokens/day alike. */
-  volumeMultiplier: z.number().positive().max(100),
-});
+/** Scales the fitted window's sessions/day and tokens/day alike. */
+const VolumeMultiplierSchema = z.number().positive().max(100);
+
+/** At a budget, or at the budget a preset resolves to on the current usage. */
+export const AutoRoutingSimulateBodySchema = z.union([
+  z.strictObject({
+    budgetUsdPerDay: BudgetUsdPerDaySchema,
+    volumeMultiplier: VolumeMultiplierSchema,
+  }),
+  z.strictObject({
+    budgetPreset: AutoRoutingBudgetPresetSchema,
+    volumeMultiplier: VolumeMultiplierSchema,
+  }),
+]);
 
 /** The fitted usage window's arrival rate, before the simulated multiplier. */
 const SimulatedTrafficSchema = z.object({
@@ -168,6 +344,8 @@ export const AutoRoutingSimulateResponseSchema = z.discriminatedUnion(
   [
     z.object({
       status: z.literal("feasible"),
+      /** The budget planned for: the requested one, or what the preset resolved to. */
+      budgetUsdPerDay: z.number(),
       summary: RouterDocumentSchema,
       tiersFingerprint: RouterDocumentSchema,
       baseline: SimulatedTrafficSchema,
@@ -352,6 +530,25 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       rescore: z.boolean(),
     })
     .nullable(),
+  /** The organization's newest backfills, newest first: what scanning and scoring did. */
+  history: z.array(
+    z.object({
+      id: z.string().uuid(),
+      status: RoutingBackfillStatusSchema,
+      phase: RoutingBackfillPhaseSchema,
+      createdAt: z.date(),
+      completedAt: z.date().nullable(),
+      /** Who started it; null when it started on its own or the user is gone. */
+      startedByName: z.string().nullable(),
+      /** Past sessions the scan found in its window. */
+      foundSessions: z.number().int().nonnegative(),
+      /** Sessions this job scored; null for a scan that was never scored. */
+      scoredSessions: z.number().int().nonnegative().nullable(),
+      spentCostUsd: z.number(),
+      maxCostUsd: z.number().nullable(),
+      error: z.string().nullable(),
+    }),
+  ),
 });
 export type AutoRoutingBackfillResponse = z.infer<
   typeof AutoRoutingBackfillResponseSchema

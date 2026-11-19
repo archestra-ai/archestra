@@ -39,6 +39,7 @@ import {
   jiraReplyDocument,
   parseJiraApprovalCommand,
 } from "./jira-message";
+import { formatApprovalAlsoAccepts } from "./utils";
 
 export default class JiraProvider implements ChatOpsProvider {
   readonly providerId = "jira" as const;
@@ -431,8 +432,10 @@ export default class JiraProvider implements ChatOpsProvider {
     options: AddApprovalRequestFormOptions,
   ): Promise<void> {
     const issueId = numericId(options.threadId);
+    const alsoAccepts = formatApprovalAlsoAccepts(options.alsoAccepts);
     const text = [
       options.reviewText || `Approval required for ${options.toolName}.`,
+      ...(alsoAccepts ? [alsoAccepts] : []),
       `Review the model session: ${config.frontendBaseUrl}/llm/logs/${encodeURIComponent(`chatops:jira:${issueId}`)}`,
       `Reply “approve ${options.approvalId}” or “decline ${options.approvalId}”. Only the designated reviewer may decide.`,
     ].join("\n\n");

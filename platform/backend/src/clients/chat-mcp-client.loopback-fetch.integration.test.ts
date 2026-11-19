@@ -26,6 +26,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { expect, test } from "vitest";
 import { createLoopbackGatewayTransport } from "@/clients/chat-mcp-client";
+import {
+  drainScopeHeaders,
+  takeDrainScope,
+  withDrainScope,
+} from "@/utils/drain-scope";
 
 /** A real stateless streamable-HTTP MCP server that reproduces the old gateway: POST
  * carries JSON-RPC, and GET is answered with a `200` JSON body (the exact shape
@@ -34,10 +39,12 @@ async function startGatewayLikeServer(): Promise<{
   url: string;
   getRequestCount: () => number;
   lastPostAuthorization: () => string | undefined;
+  lastPostDrainScope: () => string | undefined;
   close: () => Promise<void>;
 }> {
   let getRequests = 0;
   let lastPostAuth: string | undefined;
+  let lastScope: string | undefined;
   const httpServer = http.createServer(async (req, res) => {
     try {
       if (req.method === "GET") {
@@ -48,6 +55,7 @@ async function startGatewayLikeServer(): Promise<{
         return;
       }
       lastPostAuth = req.headers.authorization;
+      lastScope = takeDrainScope(req);
       const server = new McpSdkServer(
         { name: "gateway-like", version: "1.0.0" },
         { capabilities: { tools: {} } },
@@ -84,6 +92,7 @@ async function startGatewayLikeServer(): Promise<{
     url: `http://127.0.0.1:${port}/mcp`,
     getRequestCount: () => getRequests,
     lastPostAuthorization: () => lastPostAuth,
+    lastPostDrainScope: () => lastScope,
     close: () => new Promise<void>((r) => httpServer.close(() => r())),
   };
 }
@@ -108,6 +117,32 @@ test("REAL: the loopback transport stops the SDK GET SSE poll while the POST pat
     // arrived; with the fix it is answered 405 in-process and never reaches us.
     await new Promise((r) => setTimeout(r, 300));
     expect(server.getRequestCount()).toBe(0);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+test("a cached loopback transport sends the current turn's scope and drops expired scopes", async () => {
+  const server = await startGatewayLikeServer();
+  const client = new Client({ name: "scope-test", version: "1.0.0" });
+  try {
+    let firstScope: string | undefined;
+    await withDrainScope(async () => {
+      firstScope = Object.values(drainScopeHeaders())[0];
+      await client.connect(
+        createLoopbackGatewayTransport(server.url, "test-token"),
+      );
+      expect(server.lastPostDrainScope()).toBe(firstScope);
+    });
+    await withDrainScope(async () => {
+      const current = Object.values(drainScopeHeaders())[0];
+      expect(current).not.toBe(firstScope);
+      expect((await client.listTools()).tools).toHaveLength(1);
+      expect(server.lastPostDrainScope()).toBe(current);
+    });
+    await client.listTools();
+    expect(server.lastPostDrainScope()).toBeUndefined();
   } finally {
     await client.close();
     await server.close();

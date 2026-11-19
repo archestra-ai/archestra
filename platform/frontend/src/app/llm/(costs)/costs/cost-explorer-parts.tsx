@@ -49,6 +49,7 @@ import {
   formatCell,
   formatValue,
   type MetricId,
+  TIMEFRAME_LABEL,
 } from "./cost-explorer-data";
 
 // ===== palette =====
@@ -1015,8 +1016,12 @@ export function PivotTable({
   const cols = pivotColumns(cube, bySplit);
   const matrix = cube.rows.map((r) => pivotValues(r, cube, bySplit));
   const max = Math.max(1e-9, ...matrix.flat().map(Math.abs));
+  // Overlapping rows (a team admin's teams) carry their own bucket totals.
+  const bucketTotals = bySplit ? undefined : cube.bucketTotals;
   const colTotals = cols.map((_, j) =>
-    matrix.reduce((a, row) => a + row[j], 0),
+    bucketTotals
+      ? (bucketTotals[j] ?? 0)
+      : matrix.reduce((a, row) => a + row[j], 0),
   );
   return (
     <div className="overflow-x-auto">
@@ -1139,7 +1144,109 @@ export function ApiLine({ call }: { call: string }) {
   );
 }
 
-export function copyCsv({
+type ExportParams = {
+  cube: Cube;
+  metric: MetricId;
+  dimLabel: string;
+  view: "summary" | "pivot";
+  bySplit: boolean;
+  filename: string;
+};
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Download the table on screen as a CSV file named after what it shows. */
+export function exportCsv(params: ExportParams) {
+  downloadBlob(
+    new Blob([csvText(params)], { type: "text/csv;charset=utf-8" }),
+    params.filename,
+  );
+}
+
+export function exportJson(params: ExportParams) {
+  const { header, rows } = exportRows(params);
+  const names = uniqueColumnNames(header);
+  const objects = rows.map((row) =>
+    Object.fromEntries(names.map((name, index) => [name, row[index]])),
+  );
+  downloadBlob(
+    new Blob([JSON.stringify(objects, null, 2)], { type: "application/json" }),
+    params.filename.replace(/\.csv$/, ".json"),
+  );
+}
+
+export async function exportParquet(params: ExportParams) {
+  try {
+    const { parquetWriteBuffer } = await import("hyparquet-writer");
+    const buffer = parquetWriteBuffer({ columnData: parquetColumns(params) });
+    downloadBlob(
+      new Blob([buffer], { type: "application/vnd.apache.parquet" }),
+      params.filename.replace(/\.csv$/, ".parquet"),
+    );
+  } catch {
+    toast.error("Could not export Parquet file");
+  }
+}
+
+export function parquetColumns(params: Omit<ExportParams, "filename">) {
+  const { header, rows } = exportRows(params);
+  const names = uniqueColumnNames(header);
+  return names.map((name, index) => {
+    const values = rows.map((row) => row[index]);
+    if (values.every((value) => typeof value === "number")) {
+      return { name, data: values as number[], type: "DOUBLE" as const };
+    }
+    return {
+      name,
+      data: values.map(String),
+      type: "STRING" as const,
+    };
+  });
+}
+
+function uniqueColumnNames(names: string[]) {
+  const seen = new Set<string>();
+  return names.map((name) => {
+    let unique = name;
+    let count = 2;
+    while (seen.has(unique) || (unique !== name && names.includes(unique))) {
+      unique = `${name} (${count++})`;
+    }
+    seen.add(unique);
+    return unique;
+  });
+}
+
+/**
+ * The table as CSV. A summary with every metric available (`exportTable`)
+ * exports all of them, one line per group and split; otherwise the metric on
+ * screen.
+ */
+function csvText(params: Omit<ExportParams, "filename">) {
+  const { header, rows } = exportRows(params);
+  const esc = (s: string | number) => {
+    let t = String(s);
+    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
+    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
+  return [header, ...rows]
+    .map((row) =>
+      row
+        .map((cell) => esc(typeof cell === "number" ? num(cell) : cell))
+        .join(","),
+    )
+    .join("\n");
+}
+
+function exportRows({
   cube,
   metric,
   dimLabel,
@@ -1152,21 +1259,17 @@ export function copyCsv({
   view: "summary" | "pivot";
   bySplit: boolean;
 }) {
-  const esc = (s: string | number) => {
-    let t = String(s);
-    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
-    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-  };
-  const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
   let lines: (string | number)[][];
-  if (view === "summary") {
+  if (view === "summary" && cube.exportTable) {
+    lines = [cube.exportTable.header, ...cube.exportTable.rows];
+  } else if (view === "summary") {
     lines = [
       [dimLabel, ...cube.extraCols.map((c) => c.label), metric, "share"],
       ...cube.rows.map((r) => [
         r.label,
-        ...cube.extraCols.map((c) => num(r.extras[c.id] ?? 0)),
-        num(r.total),
-        num(cube.total ? r.total / cube.total : 0),
+        ...cube.extraCols.map((c) => r.extras[c.id] ?? 0),
+        r.total,
+        cube.total ? r.total / cube.total : 0,
       ]),
     ];
   } else {
@@ -1175,19 +1278,49 @@ export function copyCsv({
       [dimLabel, ...cols.map((c) => c.csv), "total"],
       ...cube.rows.map((r) => [
         r.label,
-        ...pivotValues(r, cube, bySplit).map(num),
-        num(r.total),
+        ...pivotValues(r, cube, bySplit),
+        r.total,
       ]),
     ];
   }
-  const text = lines.map((l) => l.map(esc).join(",")).join("\n");
-  void navigator.clipboard
-    ?.writeText(text)
-    .then(() => toast.success(`Copied ${cube.rows.length} rows as CSV`))
-    .catch(() => toast.error("Clipboard is not available"));
+  return { header: lines[0] as string[], rows: lines.slice(1) };
+}
+
+/**
+ * e.g. `costs-billed-spend-by-team-and-model-last-7-days-2026-11-04.csv`.
+ * `today` is the export date; a custom range names its own dates instead.
+ */
+export function csvFilename({
+  scope,
+  parts,
+  timeframe,
+  today = new Date(),
+}: {
+  scope: string;
+  parts: (string | null | undefined)[];
+  timeframe: string;
+  today?: Date;
+}) {
+  const custom = /^custom:(\d{4}-\d{2}-\d{2})[^_]*_(\d{4}-\d{2}-\d{2})/.exec(
+    timeframe,
+  );
+  const range = custom
+    ? `${custom[1]}-to-${custom[2]}`
+    : `${TIMEFRAME_LABEL[timeframe] ?? timeframe}-${localDate(today)}`;
+  const slug = [scope, ...parts.filter(Boolean), range]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug}.csv`;
 }
 
 // ===== helpers =====
+function localDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function pivotColumns(cube: Cube, bySplit: boolean) {
   if (bySplit) {
     const top = cube.splitKeys.slice(0, 12);

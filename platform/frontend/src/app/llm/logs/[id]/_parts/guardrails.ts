@@ -70,9 +70,17 @@ export type LabelSegment = LabelState & {
   /** What changed the label at `start` (absent on the first segment). */
   cause: {
     kind: "admitted" | "narrowed" | "reset" | "released";
+    /** The recorded event, which names the cause more finely than `kind`. */
+    event: LabelChangeRecord["event"];
     /** Tool whose result or call moved the label. */
     toolName: string | null;
+    /**
+     * The row to point at: the logged tool call, else the request whose
+     * response asked for it (a client-run tool has no logged call).
+     */
     toolCallKey: string | null;
+    /** That request, when it is on another page. */
+    askedOnRequestId: string | null;
     consultKey: string | null;
     summary: string;
     /** Why, in words. */
@@ -130,11 +138,14 @@ export function buildGuardrails({
   consults,
   labelChanges,
   yells = [],
+  askedElsewhere = new Map(),
 }: {
   timeline: Timeline | null;
   consults: ExternalConsult[];
   labelChanges: LabelChangeRecord[];
   yells?: OpenAppaYell[];
+  /** Requests on other pages that asked for a tool call, by its id. */
+  askedElsewhere?: Map<string, AskedFor>;
 }): GuardrailsData | null {
   if (!timeline || timeline.spans.length === 0) return null;
   if (consults.length === 0 && labelChanges.length === 0 && yells.length === 0)
@@ -153,6 +164,7 @@ export function buildGuardrails({
     changes: labelChanges,
     timeline,
     toolByCallId,
+    askedElsewhere,
     consults: traceConsults,
     timeToX,
   });
@@ -192,6 +204,50 @@ export function buildGuardrails({
       return { trust: hit.trust, audience: hit.audience };
     },
   };
+}
+
+/** A request that asked for a tool call: its id and the tool's name. */
+export type AskedFor = { requestId: string; name: string };
+
+/**
+ * Tool calls behind this page's label changes that nothing on the page
+ * explains: no logged tool call, and no request here asked for them. A client
+ * runs the tool, so the request that asked for it can sit on an earlier page.
+ */
+export function unexplainedCallIds({
+  timeline,
+  labelChanges,
+  until,
+}: {
+  timeline: Timeline | null;
+  labelChanges: LabelChangeRecord[];
+  /**
+   * The end of this page's ownership, epoch ms: a change after its last row
+   * but before the next page's first request still shows here. Null on the
+   * last page.
+   */
+  until: number | null;
+}): string[] {
+  if (!timeline || timeline.spans.length === 0) return [];
+  const known = new Set<string>();
+  for (const span of timeline.spans) {
+    if (span.type === "tool" && span.call.llmToolCallId) {
+      known.add(modelCallId(span.call.llmToolCallId));
+    }
+    if (span.type === "request") {
+      for (const call of span.row.responseToolCalls ?? []) known.add(call.id);
+    }
+  }
+  const first = Math.min(...timeline.spans.map((span) => span.start));
+  const ids = new Set<string>();
+  for (const change of labelChanges) {
+    if (!change.callId) continue;
+    const at = new Date(change.createdAt).getTime();
+    if (at < first || (until !== null && at > until)) continue;
+    const id = modelCallId(change.callId.replace(/^call:/, ""));
+    if (!known.has(id)) ids.add(id);
+  }
+  return [...ids].sort();
 }
 
 /** A trust level's colours and words; unknown levels read as neutral. */
@@ -327,16 +383,27 @@ function toSegments({
   changes,
   timeline,
   toolByCallId,
+  askedElsewhere,
   consults,
   timeToX,
 }: {
   changes: LabelChangeRecord[];
   timeline: Timeline;
   toolByCallId: Map<string, ToolCallSpan>;
+  askedElsewhere: Map<string, AskedFor>;
   consults: TraceConsult[];
   timeToX: (ms: number) => number;
 }): LabelSegment[] {
   if (changes.length === 0) return [];
+  // Tools the client ran (a coding agent's shell, say) log no tool call; the
+  // request whose response asked for one is the row to blame instead.
+  const requestByCallId = new Map<string, { key: string; name: string }>();
+  for (const span of timeline.spans) {
+    if (span.type !== "request") continue;
+    for (const call of span.row.responseToolCalls ?? []) {
+      requestByCallId.set(call.id, { key: span.key, name: call.name });
+    }
+  }
   const first = Math.min(...timeline.spans.map((span) => span.start));
   const last = Math.max(...timeline.spans.map((span) => span.end));
   const segments: LabelSegment[] = [];
@@ -361,11 +428,17 @@ function toSegments({
       change.audienceBefore === change.audienceAfter
     )
       continue;
-    const tool = change.callId
-      ? toolByCallId.get(change.callId.replace(/^call:/, ""))
-      : undefined;
+    const callId = change.callId
+      ? modelCallId(change.callId.replace(/^call:/, ""))
+      : null;
+    const tool = callId ? toolByCallId.get(callId) : undefined;
+    const asked = callId && !tool ? requestByCallId.get(callId) : undefined;
+    const elsewhere =
+      callId && !tool && !asked ? askedElsewhere.get(callId) : undefined;
     const toolName =
       (tool ? readMcpToolCall(tool.call).toolName : null) ??
+      asked?.name ??
+      elsewhere?.name ??
       change.tool ??
       null;
     // The check that labeled the result, when one ran on this call.
@@ -380,8 +453,10 @@ function toSegments({
       Math.max(first, new Date(change.createdAt).getTime()),
       {
         kind: CHANGE_KIND[change.event],
+        event: change.event,
         toolName,
-        toolCallKey: tool?.key ?? null,
+        toolCallKey: tool?.key ?? asked?.key ?? null,
+        askedOnRequestId: elsewhere?.requestId ?? null,
         consultKey: consult?.key ?? null,
         summary: changeSummary({ change, toolName }),
         explanation: changeExplanation({ change, toolName }),

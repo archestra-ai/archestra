@@ -15,19 +15,13 @@ const {
   getCatalogItemMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      searchMcpRegistry: searchMcpRegistryMock,
-      getMcpServers: getMcpServersMock,
-      getMcpRegistryIssueIndex: getIssueIndexMock,
-      getInternalMcpCatalogItem: getCatalogItemMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  searchMcpRegistry: searchMcpRegistryMock,
+  getMcpServers: getMcpServersMock,
+  getMcpRegistryIssueIndex: getIssueIndexMock,
+  getInternalMcpCatalogItem: getCatalogItemMock,
+}));
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),

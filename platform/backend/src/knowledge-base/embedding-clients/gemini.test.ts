@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
+}));
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
-import {
-  createGoogleGenAIClient,
-  isVertexAiEnabled,
-} from "@/clients/gemini-client";
+import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { stringify as stringifyToml } from "smol-toml";
 import { afterEach, vi } from "vitest";
 import config from "@/config";
 import logger from "@/logging";
@@ -9,11 +10,15 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import { openappaBatteriesService } from "./batteries";
 import { openappaCoverageService } from "./coverage";
 import { openappaHelperBridge } from "./helper-bridge";
+import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 
-vi.mock("@/logging");
+spyOnLogger();
+
+const PEER_READ_TOOL = "mcp/archestra/read_peer_message";
 
 describe("what a refused composition keeps serving", () => {
   let organizationId: string;
@@ -214,6 +219,48 @@ describe("what a refused composition keeps serving", () => {
     );
   });
 
+  test("a refusal gives a composition stored without the peer read rule that rule", async () => {
+    const served = await uploadAcme({ note: "served" });
+    const newer = await uploadAcme({ note: "refused" });
+    await declare(root(served.entry));
+    const clean = await OpenAppaEffectivePolicyModel.find(organizationId);
+    if (!clean?.served) throw new Error("the composition was stored");
+    // As an earlier build stored it: the same composition without the rule.
+    const document = parsePolicyToml(clean.content);
+    const policy = asRecord(document?.policy);
+    if (!document || !policy || !Array.isArray(policy.tool))
+      throw new Error("the composition declares tools");
+    policy.tool = policy.tool.filter(
+      (tool) => asRecord(tool)?.name !== PEER_READ_TOOL,
+    );
+    const earlier = stringifyToml(document);
+    const earlierHash = createHash("sha256").update(earlier).digest("hex");
+    await OpenAppaEffectivePolicyModel.save({
+      organizationId,
+      values: {
+        content: earlier,
+        contentHash: earlierHash,
+        rootRevision: clean.rootRevision,
+        installFingerprint: clean.installFingerprint,
+        error: null,
+        served: { ...clean.served, contentHash: earlierHash },
+      },
+      expected: clean,
+      now: clean.compiledAt,
+    });
+
+    await declare(refusing(newer.entry), { checked: false });
+    const refused = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(refused?.lastError).toBeTruthy();
+    expect(toolEntries(refused?.content ?? "")).toContainEqual(
+      expect.objectContaining({ name: PEER_READ_TOOL, delta: {} }),
+    );
+    expect(refused?.served).toMatchObject({
+      kind: "composition",
+      contentHash: refused?.contentHash,
+    });
+  });
+
   test("a refusal with no earlier composition serves the root text alone", async () => {
     const { entry } = await uploadAcme({ broken: true });
     const content = root(entry);
@@ -265,14 +312,20 @@ describe("what a refused composition keeps serving", () => {
   }
 });
 
-/** The acme battery's files; `broken` leaves its helper's annotator undeclared. */
+/**
+ * The acme battery's files; `broken` routes its rule through the helper's
+ * annotator and leaves that annotator undeclared, which the runtime refuses.
+ */
 function acmeFiles(params: { broken?: boolean; note?: string }) {
-  const declaration = params.broken
-    ? ""
-    : `[[policy.annotator]]
+  const [declaration, ruling] = params.broken
+    ? ["", `annotator = "acme.check"`]
+    : [
+        `[[policy.annotator]]
 name = "acme.check"
 
-`;
+`,
+        "delta = {}",
+      ];
   return [
     { path: "appa-package.toml", text: MANIFEST },
     {
@@ -282,7 +335,7 @@ version = 2
 
 ${declaration}[[policy.tool]]
 name = "mcp/acme/list"
-delta = {}
+${ruling}
 
 [externals.annotators."acme.check"]
 command = ["python3", "check.py"]

@@ -95,6 +95,32 @@ describe("generateTaggedText retry policy", () => {
     expect(mockGen.mock.calls[1][0].maxOutputTokens).toBe(maxOutputTokens);
   });
 
+  it.each([
+    ["clamps the headroom retry to the model's cap", 150, 150],
+    ["skips the retry when the first attempt already used the cap", 100, null],
+  ] as const)("%s", async (_case, maxOutputCeiling, retried) => {
+    // Queue only the replies the case consumes: clearAllMocks keeps unused
+    // once-values, and tests run shuffled.
+    mockGen.mockResolvedValueOnce(res("<x>the ans", "length"));
+    if (retried !== null) {
+      mockGen.mockResolvedValueOnce(res("<x>the answer</x>", "stop"));
+    }
+
+    const result = await generateTaggedText({
+      model: MODEL,
+      tag: "x",
+      system: "sys",
+      prompt: "the ask",
+      maxOutputTokens: 100,
+      maxOutputCeiling,
+    });
+
+    expect(mockGen.mock.calls.map(([call]) => call.maxOutputTokens)).toEqual(
+      retried === null ? [100] : [100, retried],
+    );
+    expect(result).toBe(retried === null ? null : "the answer");
+  });
+
   it("returns null when even the headroom retry truncates again", async () => {
     mockGen
       .mockResolvedValueOnce(res("<x>trunc", "length"))

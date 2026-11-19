@@ -28,7 +28,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { AgentIdentityFields } from "./agent-identity-fields.ee";
 import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
+import { EntraAgentIdFields } from "./entra-agent-id-fields.ee";
 import {
   type EnterpriseSubjectTokenType,
   getDefaultSubjectTokenType,
@@ -119,7 +121,7 @@ export function OidcConfigForm({
           </FormItem>
         )}
       />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.mapping.id"
@@ -211,7 +213,7 @@ export function OidcConfigForm({
   return (
     <div className="space-y-6">
       {(!activeSection || activeSection === "general") && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid items-start gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <IdentityProviderSectionHeader title="Provider Details">
               Identify this provider and choose who can sign in.
@@ -295,9 +297,6 @@ export function OidcConfigForm({
                 <FormDescription>
                   The client secret provided by your OIDC provider.
                 </FormDescription>
-                <StoredSecretNote
-                  stored={isSecretStored("oidcConfig.clientSecret")}
-                />
                 <FormControl>
                   <SecretInput
                     placeholder={
@@ -308,6 +307,9 @@ export function OidcConfigForm({
                     {...field}
                   />
                 </FormControl>
+                <StoredSecretNote
+                  stored={isSecretStored("oidcConfig.clientSecret")}
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -544,6 +546,7 @@ export function OidcConfigForm({
           subjectTokenTypeDefault={subjectTokenTypeDefault}
           embedded={!!activeSection}
           isSecretStored={isSecretStored}
+          exchangeType={inferredEnterpriseExchangeType}
         />
       )}
 
@@ -576,6 +579,8 @@ function EnterpriseManagedCredentialsForm(props: {
   embedded?: boolean;
   /** See `OidcConfigForm`'s `configuredSecretPaths`. */
   isSecretStored: (path: IdentityProviderSecretPath) => boolean;
+  /** Decides which per-agent identity settings the provider offers. */
+  exchangeType: "okta_managed" | "rfc8693" | "entra_obo";
 }) {
   const {
     authenticationDefault,
@@ -583,12 +588,13 @@ function EnterpriseManagedCredentialsForm(props: {
     subjectTokenTypeDefault,
     embedded = false,
     isSecretStored,
+    exchangeType,
   } = props;
   const appName = useAppName();
 
   const content = (
     <>
-      <IdentityProviderSectionHeader title="Tool Authentication">
+      <IdentityProviderSectionHeader title="Token Exchange">
         Let MCP tools act as the signed-in user through{" "}
         <ExternalDocsLink
           href="https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization"
@@ -601,7 +607,7 @@ function EnterpriseManagedCredentialsForm(props: {
         provider are selected below.
       </IdentityProviderSectionHeader>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.clientId"
@@ -631,11 +637,6 @@ function EnterpriseManagedCredentialsForm(props: {
               <FormDescription>
                 Required when using client secret authentication.
               </FormDescription>
-              <StoredSecretNote
-                stored={isSecretStored(
-                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
-                )}
-              />
               <FormControl>
                 <SecretInput
                   placeholder={
@@ -648,6 +649,11 @@ function EnterpriseManagedCredentialsForm(props: {
                   {...field}
                 />
               </FormControl>
+              <StoredSecretNote
+                stored={isSecretStored(
+                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                )}
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -675,7 +681,7 @@ function EnterpriseManagedCredentialsForm(props: {
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.tokenEndpointAuthentication"
@@ -744,7 +750,7 @@ function EnterpriseManagedCredentialsForm(props: {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.privateKeyId"
@@ -791,11 +797,6 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormDescription>
               Only used for <code>private_key_jwt</code> authentication.
             </FormDescription>
-            <StoredSecretNote
-              stored={isSecretStored(
-                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
-              )}
-            />
             <FormControl>
               <SecretTextarea
                 placeholder={
@@ -809,10 +810,27 @@ function EnterpriseManagedCredentialsForm(props: {
                 {...field}
               />
             </FormControl>
+            <StoredSecretNote
+              stored={isSecretStored(
+                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+              )}
+            />
             <FormMessage />
           </FormItem>
         )}
       />
+
+      <Separator />
+
+      {exchangeType === "entra_obo" ? (
+        <EntraAgentIdFields form={form} isSecretStored={isSecretStored} />
+      ) : (
+        <AgentIdentityFields
+          form={form}
+          isSecretStored={isSecretStored}
+          exchangeType={exchangeType}
+        />
+      )}
     </>
   );
 
@@ -829,10 +847,5 @@ const STORED_SECRET_PLACEHOLDER = "••••••••";
 function StoredSecretNote({ stored }: { stored: boolean }) {
   if (!stored) return null;
 
-  return (
-    <FormDescription>
-      A value is already stored. Leave blank to keep it, or enter a new value to
-      replace.
-    </FormDescription>
-  );
+  return <FormDescription>Stored. Leave blank to keep it.</FormDescription>;
 }

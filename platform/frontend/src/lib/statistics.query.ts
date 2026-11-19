@@ -3,6 +3,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  getStatisticsBucketIntervalMinutes,
   type StatisticsTimeFrame,
 } from "@archestra/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -20,6 +21,20 @@ const {
   getOverviewStatistics,
   getCostSavingsStatistics,
 } = archestraApiSdk;
+
+/**
+ * How often a statistics query refreshes: about as often as its chart can
+ * change. A 5-minute-bucket window refreshes every 30 seconds; a week of
+ * 6-hour buckets every 5 minutes, since re-aggregating days of usage every
+ * 30 seconds costs the database seconds of work per open tab and changes
+ * nothing visible.
+ */
+export function statisticsRefresh(timeframe: StatisticsTimeFrame) {
+  const bucketMinutes = getStatisticsBucketIntervalMinutes(timeframe);
+  const interval =
+    bucketMinutes <= 5 ? 30_000 : bucketMinutes <= 60 ? 60_000 : 300_000;
+  return { refetchInterval: interval, staleTime: interval };
+}
 
 export function useProxyCostStatistics({
   enabled = true,
@@ -62,7 +77,7 @@ export function useMyStatistics({
     },
     enabled,
     placeholderData: keepPreviousData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -146,7 +161,7 @@ export function useUserStatistics({
       return data;
     },
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -184,7 +199,7 @@ export function useAppStatistics({
       return data;
     },
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -215,31 +230,33 @@ export function useSkillStatistics({
       return data;
     },
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
 export function useTeamStatistics({
   timeframe = "24h",
+  teamId,
   initialData,
   enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
+  teamId?: string;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
   enabled?: boolean;
 } = {}) {
   return useQuery({
-    queryKey: ["statistics", "teams", timeframe],
+    queryKey: ["statistics", "teams", timeframe, teamId],
     queryFn: async () => {
       const { data, error } = await getTeamStatistics({
-        query: { timeframe },
+        query: { timeframe, teamId },
       });
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
     initialData,
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -263,7 +280,7 @@ export function useProfileStatistics({
     },
     initialData,
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -287,7 +304,7 @@ export function useModelStatistics({
     },
     initialData,
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -308,7 +325,7 @@ export function useOverviewStatistics({
       return data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }
 
@@ -332,6 +349,6 @@ export function useCostSavingsStatistics({
     },
     initialData,
     enabled,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    ...statisticsRefresh(timeframe),
   });
 }

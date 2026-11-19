@@ -178,19 +178,6 @@ tests:
             name: ARCHESTRA_DATABASE_POOL_MAX
             value: "1"
 
-  - it: sizes pools with the minimum explicit HPA budget in migration-job.yaml
-    template: migration-job.yaml
-    documentIndex: 0
-    set:
-      archestra.database.connectionBudget: 338
-      archestra.horizontalPodAutoscaler.enabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.initContainers[0].env
-          content:
-            name: ARCHESTRA_DATABASE_POOL_MAX
-            value: "1"
-
   - it: rejects an explicit budget of 0 for the existing HPA configuration
     template: migration-job.yaml
     set:

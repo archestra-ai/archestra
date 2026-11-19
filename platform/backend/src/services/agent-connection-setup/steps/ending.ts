@@ -85,6 +85,14 @@ export function buildEnding(
     appName: ctx.appName,
     parts,
     signIn,
+    ...(agent.providerSignIn
+      ? {
+          providerSignIn: {
+            ...agent.providerSignIn,
+            text: quote(agent.providerSignIn.command),
+          },
+        }
+      : {}),
     launch: agent.launch
       ? { command: agent.launch, text: quote(agent.launch) }
       : null,
@@ -125,7 +133,11 @@ function quoteCommand(ctx: SetupScriptContext, command: string[]): string {
  * prints the same sections, and asks before running the sign-in.
  */
 export function renderEndingSummary(ending: SetupEnding): string {
-  const lines = [`${ending.label} is connected to ${ending.appName}.`];
+  const lines = [
+    ending.label === "Grok"
+      ? "Grok connection settings are saved. Model access and guardrails admission have not been verified."
+      : `${ending.label} is connected to ${ending.appName}.`,
+  ];
   if (ending.parts.length > 0) {
     const width = Math.max(...ending.parts.map((part) => part.name.length));
     lines.push(
@@ -152,6 +164,14 @@ export function renderEndingNextSteps(ending: SetupEnding): string {
       "",
       `Authorize ${ending.label} for the "${ending.signIn.gatewayName}" MCP gateway:`,
       `  ${ending.signIn.text}`,
+    );
+  }
+  if (ending.providerSignIn) {
+    lines.push(
+      "",
+      `Sign in to ${ending.providerSignIn.label}:`,
+      `  ${ending.providerSignIn.text}`,
+      `  ${ending.providerSignIn.howTo}`,
     );
   }
   lines.push(

@@ -77,11 +77,28 @@ usage of the old schema.
 
 ```sql
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=old column unused since platform-v1.2.60
-ALTER TABLE "agents" DROP COLUMN "legacy_name";
+-- drizzle-migration-linter: reason=old index unused since platform-v1.2.60
+DROP INDEX "agents_legacy_name_idx";
 ```
 
 The override suppresses error-level contract rules. Warnings still appear.
+
+`DROP COLUMN` has no override, because it deletes data for good.
+
+## Deprecating a Column
+
+Retire a column without dropping it:
+
+1. Keep it in the Drizzle schema with a `@deprecated` JSDoc that names its
+   replacement.
+2. Stop reading and writing it.
+3. If it is `NOT NULL` without a default, make it nullable so inserts that omit
+   it still succeed.
+
+```ts
+/** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
+legacyModel: text("legacy_model"),
+```
 
 ## Expand/Contract Pattern
 
@@ -94,7 +111,7 @@ Use multiple releases:
 2. Deploy app code that writes both columns and reads `new_column ?? old_column`.
 3. Backfill existing rows.
 4. Deploy app code that reads the new column.
-5. Drop the old column in a later contract migration with an explicit override.
+5. Mark the old column `@deprecated` and stop writing it. Do not drop it.
 
 ## Interface With Drizzle
 

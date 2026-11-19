@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  catalogToolPrefix,
   isAgentTool,
   parseFullToolName,
-  slugifyMcpServerName,
 } from "@archestra/shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -29,14 +29,13 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
 
   const mcpServerName = parseFullToolName(toolName).serverName;
 
-  // The tool's server prefix is its catalog item's name: resolve the item from
-  // the registry's directory, then load that item's installs only.
+  // The tool's server prefix is its catalog item's tool prefix: resolve the
+  // item from the registry's directory, then load that item's installs only.
   const { data: catalogDirectory } = useMcpCatalogDirectory({
     enabled: !!mcpServerName,
   });
-  // Tool names carry the server name slugified, so compare it the same way.
   const catalogId = catalogDirectory?.find(
-    (item) => slugifyMcpServerName(item.name) === mcpServerName,
+    (item) => catalogToolPrefix(item) === mcpServerName,
   )?.id;
   const { data: catalogServers } = useMcpServers({
     includeAssignedAgents: false,

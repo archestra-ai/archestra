@@ -17,7 +17,10 @@ describe("preview agent catalog", () => {
     expect(
       result.data.map((row: { value: { name: string } }) => row.value.name),
     ).toContain("APPA Keeper");
-    expect(result.data).toHaveLength(4);
+    expect(
+      result.data.map((row: { value: { name: string } }) => row.value.name),
+    ).toContain("SRE");
+    expect(result.data).toHaveLength(5);
   });
 
   it("keeps built-ins out of the default and pinned lists", async () => {

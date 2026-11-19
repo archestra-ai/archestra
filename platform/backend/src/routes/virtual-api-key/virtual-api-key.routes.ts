@@ -16,7 +16,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
-import config from "@/config";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
@@ -26,8 +25,10 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { assertCanGrantAutoRouters } from "@/services/auto-router-grants";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { credentialBilling } from "@/services/credential-billing";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
@@ -87,12 +88,17 @@ const VirtualApiKeyBodyObjectSchema = z.object({
    * members. Omit to keep the key's current pools. Needs model pools on.
    */
   modelPoolIds: ModelPoolIdsInputSchema,
+  /**
+   * Auto routers the key may call by name; it then runs on their tiers' keys.
+   * Omit to keep the key's current routers. Needs auto routing on.
+   */
+  autoRouterIds: z.array(z.string().uuid()).max(500).optional(),
 });
 
 /**
  * Contextual validation: which fields are accepted depends on the key type.
- * Standard keys map provider API keys; passthrough keys never carry provider
- * credentials.
+ * Standard keys map provider API keys or model pools; passthrough keys never
+ * carry provider credentials.
  */
 function refineVirtualApiKeyBody(
   value: z.infer<typeof VirtualApiKeyBodyObjectSchema>,
@@ -113,20 +119,38 @@ function refineVirtualApiKeyBody(
         message: "Passthrough virtual keys cannot use model pools",
       });
     }
+    if (value.autoRouterIds?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["autoRouterIds"],
+        message: "Passthrough virtual keys cannot use auto routers",
+      });
+    }
     return;
   }
 
-  if (value.providerApiKeys.length === 0 && !value.includeFutureProviders) {
+  if (
+    value.providerApiKeys.length === 0 &&
+    !value.includeFutureProviders &&
+    !value.modelPoolIds?.length
+  ) {
     ctx.addIssue({
       code: "custom",
       path: ["providerApiKeys"],
-      message: "At least one provider API key is required",
+      message: "At least one provider API key or model pool is required",
     });
   }
 }
 
-const CreateOrUpdateVirtualApiKeyBodySchema =
-  VirtualApiKeyBodyObjectSchema.superRefine(refineVirtualApiKeyBody);
+const UpdateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.superRefine(
+  (value, ctx) => {
+    // An omitted pool list retains existing grants, checked after loading the
+    // key. Passthrough restrictions always apply.
+    if (value.keyType === "passthrough" || value.modelPoolIds !== undefined) {
+      refineVirtualApiKeyBody(value, ctx);
+    }
+  },
+);
 
 const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
   /**
@@ -307,7 +331,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateVirtualApiKey,
         description:
-          "Create a new virtual API key. Returns the full token value once.",
+          "Create a new virtual API key. Team admins creating a key for another member receive metadata only; the owner can retrieve its value.",
         tags: ["Virtual API Keys"],
         body: CreateVirtualApiKeyBodySchema,
         response: constructResponseSchema(VirtualApiKeyWithValueSchema),
@@ -333,7 +357,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        body: CreateOrUpdateVirtualApiKeyBodySchema,
+        body: UpdateVirtualApiKeyBodySchema,
         response: constructResponseSchema(UpdateVirtualApiKeyResponseSchema),
       },
     },
@@ -492,7 +516,15 @@ async function createVirtualApiKey(params: {
     creatorId: user.id,
     organizationId,
     isAdmin: isVirtualKeyAdmin,
+    billingTeamId: body.billingTeamId,
   });
+  const mayRevealValue = isVirtualKeyAdmin || ownerId === user.id;
+  if (!isVirtualKeyAdmin && ownerId !== user.id && body.initialGrants?.length) {
+    throw new ApiError(
+      403,
+      "Team admins cannot share a key created for another member.",
+    );
+  }
   await credentialBilling.assertCanSetBillingTeam({
     organizationId,
     userId: user.id,
@@ -531,7 +563,7 @@ async function createVirtualApiKey(params: {
     return {
       ...created.virtualKey,
       ...(await readBilling(created.virtualKey)),
-      value: created.value,
+      ...(mayRevealValue && { value: created.value }),
       teams: created.teams,
       authorName: created.authorName,
       createdBy: await CreatedByModel.resolveOne(created.virtualKey.authorId),
@@ -555,6 +587,11 @@ async function createVirtualApiKey(params: {
   });
   await assertCanGrantModelPools({
     modelPoolIds: body.modelPoolIds,
+    organizationId,
+    userId: user.id,
+  });
+  await assertCanGrantAutoRouters({
+    autoRouterIds: body.autoRouterIds,
     organizationId,
     userId: user.id,
   });
@@ -587,11 +624,12 @@ async function createVirtualApiKey(params: {
     organizationId,
     virtualApiKeyId: virtualKey.id,
   });
+  await setAutoRouters(virtualKey.id, body.autoRouterIds);
 
   return {
     ...virtualKey,
     ...(await readBilling(virtualKey)),
-    value,
+    ...(mayRevealValue && { value }),
     teams,
     authorName,
     createdBy: await CreatedByModel.resolveOne(
@@ -637,7 +675,7 @@ async function validateVirtualKeyInitialGrants(params: {
 
 async function updateVirtualApiKey(params: {
   id: string;
-  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  body: z.infer<typeof UpdateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof UpdateVirtualApiKeyResponseSchema>> {
@@ -691,6 +729,12 @@ async function updateVirtualApiKey(params: {
     organizationId,
     userId: user.id,
     cap: body.spendCap,
+    canManageTeamKey: (
+      await VirtualApiKeyModel.getTeamManagedIds({
+        organizationId,
+        userId: user.id,
+      })
+    ).includes(id),
     current: await credentialBilling.getSpendCap({
       entityType: "virtual_key",
       entityId: id,
@@ -711,6 +755,20 @@ async function updateVirtualApiKey(params: {
       billingTeamId: body.billingTeamId,
     });
   } else {
+    if (
+      body.providerApiKeys.length === 0 &&
+      !body.includeFutureProviders &&
+      !(
+        body.modelPoolIds?.length ||
+        (body.modelPoolIds === undefined &&
+          (await ModelPoolModel.hasVirtualApiKeyGrant(id)))
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "At least one provider API key or model pool is required",
+      );
+    }
     // An edit changes the key itself, never who can reach it. Access lives in
     // the key's permission policy, which the permissions editor writes on its
     // own. The stored sharing columns are carried through untouched.
@@ -718,6 +776,12 @@ async function updateVirtualApiKey(params: {
       retainedProviderApiKeyIds: (
         await VirtualApiKeyModel.getProviderApiKeys(id)
       ).map((key) => key.providerApiKeyId),
+      canManageTeamKey: (
+        await VirtualApiKeyModel.getTeamManagedIds({
+          organizationId,
+          userId: user.id,
+        })
+      ).includes(id),
       mappings: body.providerApiKeys,
       organizationId,
       userId: user.id,
@@ -725,6 +789,11 @@ async function updateVirtualApiKey(params: {
     });
     await assertCanGrantModelPools({
       modelPoolIds: body.modelPoolIds,
+      organizationId,
+      userId: user.id,
+    });
+    await assertCanGrantAutoRouters({
+      autoRouterIds: body.autoRouterIds,
       organizationId,
       userId: user.id,
     });
@@ -769,6 +838,7 @@ async function updateVirtualApiKey(params: {
       organizationId,
       virtualApiKeyId: id,
     });
+    await setAutoRouters(id, body.autoRouterIds);
   }
 
   const visibilityMetadata =
@@ -794,13 +864,24 @@ async function setModelPools(params: {
   organizationId: string;
   virtualApiKeyId: string;
 }): Promise<void> {
-  if (params.modelPoolIds === undefined || !config.llmProxy.modelPoolsEnabled)
-    return;
+  if (params.modelPoolIds === undefined) return;
   await ModelPoolModel.setPoolsForVirtualApiKey({
     organizationId: params.organizationId,
     virtualApiKeyId: params.virtualApiKeyId,
     poolIds: params.modelPoolIds,
   });
+}
+
+/** Saves the auto routers a create/update body names; undefined keeps the current ones. */
+async function setAutoRouters(
+  virtualApiKeyId: string,
+  autoRouterIds: string[] | undefined,
+): Promise<void> {
+  if (autoRouterIds === undefined) return;
+  await AutoRouterModel.setRoutersForVirtualApiKey(
+    virtualApiKeyId,
+    autoRouterIds,
+  );
 }
 
 async function readBilling(virtualKey: {
@@ -857,6 +938,7 @@ async function resolveKeyOwner(params: {
   creatorId: string;
   organizationId: string;
   isAdmin: boolean;
+  billingTeamId?: string | null;
 }): Promise<string> {
   const { requestedOwnerId, creatorId, organizationId, isAdmin } = params;
 
@@ -864,7 +946,15 @@ async function resolveKeyOwner(params: {
     return creatorId;
   }
 
-  if (!isAdmin) {
+  const canManageTeamOwner =
+    params.billingTeamId &&
+    (
+      await TeamModel.getAdministeredTeamIds(creatorId, organizationId)
+    ).includes(params.billingTeamId) &&
+    (await TeamModel.getUserTeamIds(requestedOwnerId)).includes(
+      params.billingTeamId,
+    );
+  if (!isAdmin && !canManageTeamOwner) {
     throw new ApiError(
       403,
       "You need llmVirtualKey:admin permission to create a virtual key for another user",
@@ -884,6 +974,7 @@ async function resolveKeyOwner(params: {
 
 async function validateProviderApiKeys(params: {
   retainedProviderApiKeyIds?: string[];
+  canManageTeamKey?: boolean;
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
   userId: string;
@@ -966,7 +1057,15 @@ async function validateProviderApiKeys(params: {
         provider: mapping.provider,
         apiKey: secret,
       });
-      if (apiKey.userId !== userId && !delegatedCopilotMapping) {
+      const retainedOwnerCredential =
+        params.canManageTeamKey &&
+        params.ownerId === apiKey.userId &&
+        params.retainedProviderApiKeyIds?.includes(apiKey.id);
+      if (
+        apiKey.userId !== userId &&
+        !delegatedCopilotMapping &&
+        !retainedOwnerCredential
+      ) {
         throw new ApiError(
           403,
           `You can only map your own personal ${label} key.`,
@@ -1003,6 +1102,12 @@ async function requireVirtualKeyModifyPermission(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
+  if (
+    (await VirtualApiKeyModel.getTeamManagedIds(params)).includes(
+      params.virtualKey.id,
+    )
+  )
+    return;
   await ResourcePermissions.require({
     organizationId: params.organizationId,
     userId: params.userId,

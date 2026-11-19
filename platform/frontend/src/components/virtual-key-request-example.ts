@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 
 /**
- * Model Router providers the router translates into from another wire format.
+ * Unified Model API providers the router translates into from another wire format.
  * Every other router provider speaks OpenAI chat completions natively.
  */
 const TRANSLATED_ROUTER_PROVIDERS: readonly SupportedProvider[] = [
@@ -40,7 +40,7 @@ export function getProxyBaseUrl(
   target: RequestTarget,
 ): string {
   return target.kind === "model-router"
-    ? `${connectionBaseUrl}/model-router`
+    ? `${connectionBaseUrl}/unified-model`
     : `${connectionBaseUrl}/${target.provider}`;
 }
 
@@ -81,6 +81,16 @@ export function buildCurlExample(params: {
   model: string;
   supportedEndpoints?: readonly string[] | null;
   imageOperation?: ImageExampleOperation;
+  /**
+   * The model is a pool's name, served on Chat Completions whatever it looks
+   * like (a pool may be named `openai:gpt-5.6`).
+   */
+  isPool?: boolean;
+  /**
+   * The Unified Model API endpoint to call whatever the model looks like, such
+   * as the one every auto routing tier model serves.
+   */
+  routerEndpoint?: "chat/completions" | "responses";
 }): string | null {
   const {
     connectionBaseUrl,
@@ -90,6 +100,8 @@ export function buildCurlExample(params: {
     model,
     supportedEndpoints,
     imageOperation,
+    isPool,
+    routerEndpoint,
   } = params;
   const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
   const passthrough = keyType === "passthrough";
@@ -105,10 +117,13 @@ export function buildCurlExample(params: {
     if (passthrough) return null;
     const [provider, ...modelIdParts] = model.split(":");
     const modelId = modelIdParts.join(":");
-    const useResponses =
-      (provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
-      (provider === "github-copilot" &&
-        requiresResponsesApi(supportedEndpoints));
+    // The router refuses chat completions for any model its provider
+    // publishes as Responses only, whichever provider that is.
+    const useResponses = routerEndpoint
+      ? routerEndpoint === "responses"
+      : !isPool &&
+        (requiresResponsesApi(supportedEndpoints) ||
+          (provider === "openai" && requiresOpenAiResponsesApi(modelId)));
     return curl(
       `${baseUrl}/${useResponses ? "responses" : "chat/completions"}`,
       [`Authorization: Bearer ${keyValue}`, "Content-Type: application/json"],

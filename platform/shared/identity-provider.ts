@@ -82,6 +82,77 @@ export function getEmailDomain(email: string) {
   return email.split("@")[1]?.trim().toLowerCase() ?? null;
 }
 
+/**
+ * Microsoft Entra Agent ID: the agent identity blueprint that Archestra
+ * authenticates as when an agent with a bound Entra agent identity calls a
+ * tool through Entra On-Behalf-Of. One blueprint per identity provider; each
+ * agent binds its own agent identity created from it.
+ */
+export const EntraAgentIdConfigSchema = z.object({
+  /** Application (client) ID of the agent identity blueprint. Blank = off. */
+  blueprintClientId: z.string().trim(),
+  /** Blueprint client secret. Microsoft recommends a certificate in production. */
+  clientSecret: z.string().optional(),
+  /** PKCS#8 private key of a certificate uploaded to the blueprint. */
+  privateKeyPem: z.string().optional(),
+  /** SHA-1 thumbprint of that certificate, as Entra shows it (40 hex characters). */
+  certificateThumbprint: z.string().optional(),
+  /**
+   * Scope that gives the signed-in user's token the blueprint as its
+   * audience. Defaults to `api://<blueprintClientId>/.default`.
+   */
+  blueprintScope: z.string().optional(),
+  /**
+   * Fail closed for agents without a bound agent identity, instead of falling
+   * back to the identity provider's shared client.
+   */
+  requireAgentIdentity: z.boolean().optional(),
+});
+
+export type EntraAgentIdConfig = z.infer<typeof EntraAgentIdConfigSchema>;
+
+/**
+ * Where agents' identities at an RFC 8693 provider come from: each agent's own
+ * OAuth client there (`client`), or a SPIFFE ID Archestra issues every agent
+ * (`spiffe`), sent as a JWT-SVID the provider trusts through Archestra's
+ * issuer, so no agent needs a client of its own.
+ */
+export const AgentIdentitySourceSchema = z.enum(["client", "spiffe"]);
+
+export type AgentIdentitySource = z.infer<typeof AgentIdentitySourceSchema>;
+
+/**
+ * Agent identities at an Okta or RFC 8693 identity provider. With the default
+ * `client` source each agent is its own OAuth client there (an Okta AI agent,
+ * or a client with a service account for RFC 8693 actor tokens), and
+ * Archestra authenticates as it with `private_key_jwt`: one key signs for
+ * every agent, and the admin registers its public key on each agent's client.
+ * Off while no private key is stored. The `spiffe` source (RFC 8693 only)
+ * needs no key here: Archestra signs each agent's JWT-SVID itself.
+ */
+export const AgentIdentityConfigSchema = z.object({
+  /** Defaults to `client`. */
+  source: AgentIdentitySourceSchema.optional(),
+  /**
+   * `spiffe` only: the audience of each JWT-SVID. Defaults to the identity
+   * provider's issuer.
+   */
+  spiffeAudience: z.string().trim().optional(),
+  /** PKCS#8 private key Archestra signs each agent client's assertions with. */
+  privateKeyPem: z.string().optional(),
+  /** Key ID (`kid`) the identity provider knows the public key by. */
+  privateKeyId: z.string().trim().optional(),
+  /**
+   * Fail closed for agents without a bound identity, instead of falling back
+   * to the identity provider's shared client.
+   */
+  requireAgentIdentity: z.boolean().optional(),
+  /** RFC 8693 only: scope Archestra asks for in the agent's actor token. */
+  actorTokenScope: z.string().trim().optional(),
+});
+
+export type AgentIdentityConfig = z.infer<typeof AgentIdentityConfigSchema>;
+
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
@@ -127,6 +198,8 @@ export const IdentityProviderOidcConfigSchema = z
         privateKeyId: z.string().optional(),
         clientAssertionAudience: z.string().optional(),
         subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
+        entraAgentId: EntraAgentIdConfigSchema.optional(),
+        agentIdentity: AgentIdentityConfigSchema.optional(),
       })
       .optional(),
     mapping: z
@@ -232,6 +305,9 @@ export const IDENTITY_PROVIDER_SECRET_PATHS = [
   "oidcConfig.clientSecret",
   "oidcConfig.enterpriseManagedCredentials.clientSecret",
   "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+  "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+  "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
   "samlConfig.privateKey",
   "samlConfig.decryptionPvk",
   "samlConfig.spMetadata.privateKey",

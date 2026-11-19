@@ -91,7 +91,7 @@ export function isForeignKeyConstraintError(error: unknown): boolean {
 const BULK_STATEMENT_MAX_ROWS = 1000;
 
 /** How the ORM begins the message of a failed query. */
-const FAILED_QUERY_PREFIX = "Failed query:";
+export const FAILED_QUERY_PREFIX = "Failed query:";
 
 /** What a client sees in place of a failed query's text. */
 export const FAILED_QUERY_CLIENT_MESSAGE =

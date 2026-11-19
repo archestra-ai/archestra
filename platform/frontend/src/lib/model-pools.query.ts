@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { runBulkAction } from "@/lib/bulk-action";
-import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
@@ -45,13 +44,12 @@ export function useModelPools(options?: {
 
 /**
  * The pools the viewer can pick in chat: those with a member on a key they may
- * use. Empty while model pools are off.
+ * use.
  */
 export function useAvailableModelPools(options?: { enabled?: boolean }) {
-  const enabled = useFeature("llmModelPoolsEnabled") === true;
   return useQuery({
     queryKey: [...MODEL_POOLS_QUERY_KEY, "available"],
-    enabled: enabled && options?.enabled !== false,
+    enabled: options?.enabled,
     queryFn: async () => {
       const { data, error } = await getAvailableModelPools();
       throwOnApiError(error, { toastOnError: false });
@@ -62,14 +60,13 @@ export function useAvailableModelPools(options?: { enabled?: boolean }) {
 
 /**
  * Whether a provider's model is served by a pool: a request for a pool's name
- * on a provider with a member goes to the pool. Always false while model
- * pools are off or the viewer can't read them.
+ * on a provider with a member goes to the pool. Always false while the viewer
+ * can't read them.
  */
 export function useIsPooledModel(active = true) {
-  const enabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canRead } = useHasPermissions({ llmModel: ["read"] });
   const { data: pools } = useModelPools({
-    enabled: active && enabled && canRead === true,
+    enabled: active && canRead === true,
     toastOnError: false,
   });
   return useMemo(() => {
@@ -133,6 +130,8 @@ export function useDeleteModelPool() {
     onSuccess: () => {
       toast.success("Model pool deleted");
       queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
+      // The server also removes the pool from the OAuth clients it was added to.
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }
@@ -155,6 +154,8 @@ export function useBulkDeleteModelPools() {
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
+      // The server also removes the pool from the OAuth clients it was added to.
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }

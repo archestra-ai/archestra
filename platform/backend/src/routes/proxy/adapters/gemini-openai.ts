@@ -33,6 +33,19 @@ type GeminiStreamChunk = Parameters<
   ReturnType<typeof geminiAdapterFactory.createStreamAdapter>["processChunk"]
 >[0];
 
+// The OpenAI translator exposes one choice. Policy, wire output and audit
+// must all use that same candidate, for streamed and complete responses.
+function selectCandidateZero<T extends { candidates?: { index?: number }[] }>(
+  response: T,
+): T {
+  return {
+    ...response,
+    candidates: response.candidates?.filter(
+      (candidate, position) => (candidate.index ?? position) === 0,
+    ),
+  };
+}
+
 class GeminiOpenaiResponseAdapter
   implements LLMResponseAdapter<GeminiResponse>
 {
@@ -44,7 +57,9 @@ class GeminiOpenaiResponseAdapter
   private ctx: GeminiOpenaiContext;
 
   constructor(response: GeminiResponse, ctx: GeminiOpenaiContext) {
-    this.inner = geminiAdapterFactory.createResponseAdapter(response);
+    this.inner = geminiAdapterFactory.createResponseAdapter(
+      selectCandidateZero(response),
+    );
     this.ctx = ctx;
   }
 
@@ -152,9 +167,9 @@ class GeminiOpenaiStreamAdapter
   private ctx: GeminiOpenaiContext;
   private toolNameCodec: GeminiToolNameCodec;
   private pendingToolCallEvents: string[] = [];
-  // Gemini 3 thought signatures per tool-call index, mirrored from the chunks
+  // Gemini 3 thought signatures per stable call id, mirrored from the chunks
   // so both SSE emission paths can encode them into the wire tool-call ids.
-  private toolCallSignatures: Map<number, string> = new Map();
+  private toolCallSignatures: Map<string, string> = new Map();
   private seenToolCalls = 0;
 
   constructor(ctx: GeminiOpenaiContext, request?: GeminiRequest) {
@@ -168,27 +183,37 @@ class GeminiOpenaiStreamAdapter
   }
 
   processChunk(chunk: GeminiStreamChunk) {
-    const decodedChunk = this.toolNameCodec.decodeResponse(chunk);
+    const decodedChunk = this.toolNameCodec.decodeResponse(
+      selectCandidateZero(chunk),
+    );
+    // Prompt refusals have no candidate, but are complete responses, just as
+    // the non-streaming translator's promptFeedback branch treats them.
+    const blockReason = decodedChunk.promptFeedback?.blockReason;
+    const promptBlocked =
+      !decodedChunk.candidates?.[0] &&
+      blockReason !== undefined &&
+      blockReason !== "BLOCKED_REASON_UNSPECIFIED";
+    const innerResult = this.inner.processChunk(decodedChunk);
     for (const part of decodedChunk.candidates?.[0]?.content?.parts ?? []) {
       if ("functionCall" in part && part.functionCall) {
         if (part.thoughtSignature) {
           this.toolCallSignatures.set(
-            this.seenToolCalls,
+            this.state.toolCalls[this.seenToolCalls].id,
             part.thoughtSignature,
           );
         }
         this.seenToolCalls += 1;
       }
     }
-    const innerResult = this.inner.processChunk(decodedChunk);
-    const sseData = this.toOpenaiSse(decodedChunk);
+    if (promptBlocked) {
+      this.state.stopReason = "SAFETY";
+      innerResult.isFinal = true;
+    }
+    const sseData = this.toOpenaiSse(decodedChunk, "text");
 
-    if (innerResult.isToolCallChunk && sseData) {
-      this.pendingToolCallEvents.push(sseData);
-      return {
-        ...innerResult,
-        sseData: null,
-      };
+    if (innerResult.isToolCallChunk) {
+      const tools = this.toOpenaiSse(decodedChunk, "tools");
+      if (tools) this.pendingToolCallEvents.push(tools);
     }
 
     return {
@@ -220,7 +245,7 @@ class GeminiOpenaiStreamAdapter
     return encodeSignedToolCallId({
       id: params.toolCall.id,
       name: params.toolCall.name,
-      thoughtSignature: this.toolCallSignatures.get(params.index),
+      thoughtSignature: this.toolCallSignatures.get(params.toolCall.id),
     });
   }
 
@@ -260,7 +285,7 @@ class GeminiOpenaiStreamAdapter
     ];
   }
 
-  formatEndSSE(): string {
+  getOpenAiFinishReason(): string {
     // Gemini ends a function-calling turn with STOP, but OpenAI clients read a
     // "stop" finish as a finished turn and never run the calls. The inner
     // response names only the calls that were handed over (a refusal replaces
@@ -269,55 +294,104 @@ class GeminiOpenaiStreamAdapter
     const hasToolCalls = candidate?.content?.parts?.some(
       (part) => "functionCall" in part && part.functionCall,
     );
+    return hasToolCalls
+      ? "tool_calls"
+      : mapGeminiFinishReason(candidate?.finishReason);
+  }
+
+  formatEndSSE(): string {
     return `${this.formatChunk({
       delta: {},
-      finishReason: hasToolCalls
-        ? "tool_calls"
-        : mapGeminiFinishReason(candidate?.finishReason),
+      finishReason: this.getOpenAiFinishReason(),
       usage: geminiUsageViewToOpenai(this.state.usage),
     })}data: [DONE]\n\n`;
   }
 
   toProviderResponse(): GeminiResponse {
-    return this.inner.toProviderResponse();
+    const response = this.inner.toProviderResponse();
+    const candidate = response.candidates?.[0];
+    const parts = candidate?.content?.parts;
+    if (!candidate?.content || !parts || this.state.toolCalls.length === 0)
+      return response;
+    // This wrapper emits the approved batch order; native Gemini emits provider
+    // order. Keep its Gemini-shaped audit record aligned with the OpenAI frames.
+    const byId = new Map(
+      parts.flatMap((part) =>
+        "functionCall" in part && part.functionCall
+          ? [[part.functionCall.id, part] as const]
+          : [],
+      ),
+    );
+    const calls = this.state.toolCalls.flatMap((call) => {
+      const part = byId.get(call.id);
+      return part ? [part] : [];
+    });
+    let index = 0;
+    return {
+      ...response,
+      candidates: [
+        {
+          ...candidate,
+          content: {
+            ...candidate.content,
+            parts: parts.map((part) =>
+              "functionCall" in part && part.functionCall
+                ? (calls[index++] ?? part)
+                : part,
+            ),
+          },
+        },
+      ],
+    };
   }
 
-  private toOpenaiSse(chunk: GeminiStreamChunk): string | null {
-    const candidate = chunk.candidates?.[0];
-    if (!candidate?.content?.parts) return null;
-
-    for (const part of candidate.content.parts) {
-      if ("text" in part && part.text) {
-        return this.formatChunk({
-          delta: { content: part.text },
-          finishReason: null,
-        });
+  private toOpenaiSse(
+    chunk: GeminiStreamChunk,
+    kind: "text" | "tools",
+  ): string | null {
+    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    // The inner processChunk appends one call per functionCall part. Subtract
+    // this chunk's count to recover its first index in the accumulated calls.
+    let toolIndex =
+      this.state.toolCalls.length -
+      parts.filter((part) => part.functionCall).length;
+    const events: string[] = [];
+    for (const part of parts) {
+      if (kind === "text" && part.text && !part.thought) {
+        events.push(
+          this.formatChunk({
+            delta: { content: part.text },
+            finishReason: null,
+          }),
+        );
       }
-      if ("functionCall" in part && part.functionCall) {
-        return this.formatChunk({
-          delta: {
-            tool_calls: [
-              {
-                index: Math.max(this.state.toolCalls.length - 1, 0),
-                id: encodeSignedToolCallId({
-                  id: part.functionCall.id,
-                  name: part.functionCall.name,
-                  thoughtSignature: part.thoughtSignature,
-                }),
-                type: "function",
-                function: {
-                  name: part.functionCall.name,
-                  arguments: JSON.stringify(part.functionCall.args ?? {}),
-                },
+      if (part.functionCall) {
+        if (kind === "tools") {
+          const call = this.state.toolCalls[toolIndex];
+          events.push(
+            this.formatChunk({
+              delta: {
+                tool_calls: [
+                  {
+                    index: toolIndex,
+                    id: encodeSignedToolCallId({
+                      id: call.id,
+                      name: call.name,
+                      thoughtSignature: part.thoughtSignature,
+                    }),
+                    type: "function",
+                    function: { name: call.name, arguments: call.arguments },
+                  },
+                ],
               },
-            ],
-          },
-          finishReason: null,
-        });
+              finishReason: null,
+            }),
+          );
+        }
+        toolIndex++;
       }
     }
-
-    return null;
+    return events.join("") || null;
   }
 
   private formatChunk(params: {

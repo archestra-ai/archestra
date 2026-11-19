@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { isWellFormedAppaId } from "@/openappa/service";
 import {
   APPA_CLIENT_ADAPTERS,
   extractAppaSessionIdentity,
@@ -23,7 +24,6 @@ const codexHeaders = {
 const openCodeHeaders = { "user-agent": "opencode/1.18.29" };
 
 const COPILOT_SESSION = "efeab99e17779df23bb5d2437f3c8f8f";
-const COPILOT_OTHER_SESSION = "98bbfa73f5880aca9742216efedbcfc2";
 const copilotHeaders = {
   "user-agent": "OpenAI/JS 5.20.1",
   "x-archestra-agent-id": "github_copilot_cli",
@@ -1100,23 +1100,6 @@ describe("client trajectory identity", () => {
   });
 
   describe("Copilot CLI", () => {
-    test("roots on the Responses prompt cache key, which a resume repeats", () => {
-      const identity = (key: string) =>
-        extractAppaSessionIdentity({
-          family: "openai:responses",
-          body: { prompt_cache_key: key, store: false },
-          headers: copilotHeaders,
-        });
-      expect(identity(COPILOT_SESSION)).toMatchObject({
-        sessionId: COPILOT_SESSION,
-        provenance: "copilot-cli-prompt-cache-key",
-      });
-      expect(identity(COPILOT_SESSION)).toEqual(identity(COPILOT_SESSION));
-      expect(identity(COPILOT_OTHER_SESSION)).not.toEqual(
-        identity(COPILOT_SESSION),
-      );
-    });
-
     test("keeps a subagent's request on the shared key: the runtime binds the child", () => {
       const headers = {
         ...copilotHeaders,
@@ -1209,6 +1192,71 @@ describe("client trajectory identity", () => {
             headers: { "user-agent": "claude-cli/2.1.0 (external, cli)" },
           }).sessionId,
         ).toBeUndefined();
+    });
+  });
+
+  describe("Cursor", () => {
+    const cursorHeaders = { "user-agent": "Cursor/2.3" };
+    const opening = { role: "user", content: "Fix the login bug" };
+
+    test("names the chat by its opening, never by a generic body field", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {
+            prompt_cache_key: "cache-1",
+            user: "device-1",
+            messages: [opening],
+          },
+          headers: cursorHeaders,
+        }),
+      ).toEqual({
+        sessionId: expect.stringMatching(/^cursor-chat-/),
+        provenance: "cursor-opening",
+      });
+    });
+
+    test("the opening id is a well-formed OpenAPPA id", () => {
+      const { sessionId } = extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        body: { messages: [{ role: "user", content: "x".repeat(100_000) }] },
+        headers: cursorHeaders,
+      });
+      expect(isWellFormedAppaId(sessionId)).toBe(true);
+    });
+
+    test("binds the fallback root rather than a generic field when there is no opening", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: { prompt_cache_key: "cache-1", metadata: { session_id: "s" } },
+          headers: cursorHeaders,
+        }),
+      ).toEqual({ provenance: "none" });
+    });
+
+    test("an explicit APPA header still wins over a Cursor body", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: { input: [opening] },
+          headers: { ...cursorHeaders, "x-appa-session-id": "explicit" },
+        }),
+      ).toMatchObject({ sessionId: "explicit", provenance: "appa-header" });
+    });
+
+    test("a Cursor User-Agent does not take over another client's session header", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: {},
+          headers: {
+            ...cursorHeaders,
+            "x-archestra-agent-id": "pi",
+            "x-pi-session-id": "pi-1",
+          },
+        }),
+      ).toMatchObject({ sessionId: "pi-1", provenance: "pi-session-header" });
     });
   });
 

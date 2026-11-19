@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { RouteId } from "@archestra/shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import JSZip from "jszip";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -29,11 +26,9 @@ import {
  * no one-time links.
  *
  * The bootstrap and the form's download link install the same package,
- * decided server-side by `resolveVafAddOnDistribution`: the development
- * source-ref override first (branch CI build proxied by the package route,
- * or a source build), then the package compiled into this platform image,
- * then the newest release that actually carries the package — never a URL
- * that is known to 404.
+ * decided server-side by `resolveVafAddOnDistribution`: the package compiled
+ * into this platform image, else the newest release that actually carries
+ * the package — never a URL that is known to 404.
  */
 const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -76,19 +71,19 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMfilesVafAddOnDistribution,
         description:
           "Resolve how the M-Files connector's VAF Add On is distributed to this " +
-          "installation: a verified direct package download URL (the dev " +
-          "source-ref CI build or the package compiled into this platform " +
-          "image — both served by the backend's package route — or a release " +
-          "asset), or null when the install script compiles from source " +
-          "instead. The connector form probes this for its download link.",
+          "installation: a verified direct package download URL (the package " +
+          "compiled into this platform image, served by the backend's package " +
+          "route, or a release asset), or null when the install script " +
+          "compiles from source instead. The connector form probes this for " +
+          "its download link.",
         tags: ["Knowledge Bases"],
         response: constructResponseSchema(
           z.object({
             /**
              * Verified package URL — absolute for release assets, relative
-             * (this backend's package route) for dev CI builds and the
-             * package compiled into the platform image. Null when no
-             * pre-built package exists for this installation.
+             * (this backend's package route) for the package compiled into
+             * the platform image. Null when no pre-built package exists for
+             * this installation.
              */
             packageDownloadUrl: z.string().nullable(),
           }),
@@ -108,11 +103,8 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMfilesVafAddOnPackage,
         description:
-          "Serve the M-Files connector's VAF Add On package: the CI build of the " +
-          "development source-ref override " +
-          "(ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF) when one " +
-          "resolves, else the package compiled into this platform image. 404 " +
-          "when neither exists.",
+          "Serve the M-Files connector's VAF Add On package compiled into this " +
+          "platform image. 404 when the image carries none.",
         tags: ["Knowledge Bases"],
         // no `response` schema: streams the binary `.mfappx`.
       },
@@ -125,11 +117,6 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (limited) throw new ApiError(429, "Too many requests");
 
-      const ciBytes = await fetchCiPackageBytes();
-      if (ciBytes) {
-        return sendPackage(reply, VAF_ADD_ON_ASSET_NAME, ciBytes);
-      }
-
       const packed = await resolvePackedPackage();
       if (packed) {
         // Read per request rather than pinning the bytes in memory: the file
@@ -138,10 +125,7 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return sendPackage(reply, packed.filename, await readFile(packed.path));
       }
 
-      throw new ApiError(
-        404,
-        "No add-on package: neither a CI build for the configured source ref nor a package compiled into this image.",
-      );
+      throw new ApiError(404, "No add-on package compiled into this image.");
     },
   );
 };
@@ -164,7 +148,7 @@ function assertMfilesConnectorEnabled(): void {
   }
 }
 
-/** The package response shape shared by the CI-proxy and packed sources. */
+/** The package download response. */
 function sendPackage(
   reply: FastifyReply,
   filename: string,
@@ -186,7 +170,8 @@ function psQuote(value: string): string {
  * The bootstrap the copyable command pipes into `iex`: fetch the static
  * installer from the public frontend origin and run it with the resolved
  * package source. With no source resolved the installer runs on its own
- * defaults (its vault picker asks for everything else interactively).
+ * defaults — it compiles from source (its vault picker asks for everything
+ * else interactively).
  */
 function renderVafAddOnBootstrap(source: VafAddOnInstallSource | null): string {
   const origin = config.frontendBaseUrl.replace(/\/+$/, "");
@@ -197,74 +182,51 @@ function renderVafAddOnBootstrap(source: VafAddOnInstallSource | null): string {
     "$vafAddOnParams = @{",
   ];
   if (source) {
-    if ("buildFromSource" in source) {
-      lines.push("    BuildFromSource = $true");
-    } else {
-      const packageUrl = source.packageUrl.startsWith("/")
-        ? `${origin}${source.packageUrl}`
-        : source.packageUrl;
-      lines.push(`    PackageUrl = ${psQuote(packageUrl)}`);
-    }
+    const packageUrl = source.packageUrl.startsWith("/")
+      ? `${origin}${source.packageUrl}`
+      : source.packageUrl;
+    lines.push(`    PackageUrl = ${psQuote(packageUrl)}`);
     lines.push(`    Ref = ${psQuote(source.ref)}`);
   }
   lines.push("}", "& ([scriptblock]::Create($installer)) @vafAddOnParams", "");
   return lines.join("\n");
 }
 
-const execFileAsync = promisify(execFile);
-
 const GITHUB_REPO = "archestra-ai/archestra";
 const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_REPO}`;
 const VAF_ADD_ON_ASSET_NAME = "archestra-m-files-vaf-add-on.mfappx";
-const VAF_ADD_ON_WORKFLOW_FILE = "build-m-files-vaf-add-on.yml";
-const VAF_ADD_ON_CI_ARTIFACT_NAME = "m-files-vaf-add-on";
 const RELEASE_PIN_TTL_MS = 60 * 60 * 1000;
-/** Short — "last known CI build" should pick up a fresh push quickly. */
-const CI_ARTIFACT_TTL_MS = 5 * 60 * 1000;
 const GITHUB_FETCH_TIMEOUT_MS = 3_000;
 
-/** What the install command distributes, beyond the installer's defaults. */
-type VafAddOnInstallSource =
-  /**
-   * Pre-built package; ref doubles as the build-from-source fallback. A
-   * packageUrl starting with `/` is this backend's package proxy route and
-   * is made absolute against the public frontend origin at render time.
-   */
-  | { packageUrl: string; ref: string }
-  /** Dev override without a CI build: compile from this git ref. */
-  | { buildFromSource: true; ref: string };
+/**
+ * What the install command distributes, beyond the installer's defaults: a
+ * pre-built package, with its release tag as the build-from-source fallback
+ * ref. A packageUrl starting with `/` is this backend's package route and is
+ * made absolute against the public frontend origin at render time.
+ */
+interface VafAddOnInstallSource {
+  packageUrl: string;
+  ref: string;
+}
 
 interface VafAddOnDistribution {
   /** Installer parameters; null = the installer's own defaults. */
   install: VafAddOnInstallSource | null;
   /**
    * Verified direct package download; absolute for release assets, relative
-   * for the backend package proxy; null = no pre-built package exists.
+   * for the backend package route; null = no pre-built package exists.
    */
   downloadUrl: string | null;
-}
-
-function githubHeaders(): Record<string, string> {
-  const token = config.kb.mfilesVafAddOnGithubToken;
-  return {
-    Accept: "application/vnd.github.v3+json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 /**
  * Decides what the install command and the form's download link distribute,
  * in precedence order:
  *
- * 1. `ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF` development
- *    override — a git ref of this repo, or `local` for this checkout's HEAD.
- *    With a CI build of that ref available (and the GitHub token needed to
- *    fetch it), both the command and the link go through the backend package
- *    proxy; otherwise the command compiles from the ref's source.
- * 2. The package compiled into this platform image (the Dockerfile's
+ * 1. The package compiled into this platform image (the Dockerfile's
  *    vaf-add-on-builder stage): built from the exact source this platform
  *    ships with and served by the package route — no GitHub involved.
- * 3. The newest release that carries the package — for deployments running
+ * 2. The newest release that carries the package — for deployments running
  *    outside the image (dev stacks), where the packed directory does not
  *    exist. The add-on publishes on its own `m-files-vaf-add-on-v*` release
  *    track: this repository's releases are immutable, so the package can
@@ -274,22 +236,9 @@ function githubHeaders(): Record<string, string> {
  *    install command fetches the stable-named asset (a temp file — the name
  *    never surfaces), while the download link prefers the versioned twin so
  *    a file a person keeps says which version it is.
- * 4. Installer defaults, no download link.
+ * 3. Installer defaults (compile from source), no download link.
  */
 async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
-  const override = config.kb.mfilesVafAddOnSourceRef;
-  if (override) {
-    const ref = override === "local" ? await localCheckoutCommit() : override;
-    if (ref) {
-      const artifact = await resolveCiArtifact(ref);
-      if (artifact && config.kb.mfilesVafAddOnGithubToken) {
-        const packageUrl = MFILES_VAF_ADD_ON_PACKAGE_PATH;
-        return { install: { packageUrl, ref }, downloadUrl: packageUrl };
-      }
-      return { install: { buildFromSource: true, ref }, downloadUrl: null };
-    }
-  }
-
   const packed = await resolvePackedPackage();
   if (packed) {
     const packageUrl = MFILES_VAF_ADD_ON_PACKAGE_PATH;
@@ -307,25 +256,6 @@ async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
     };
   }
   return { install: null, downloadUrl: null };
-}
-
-/**
- * HEAD commit of the git checkout this backend runs from (dev stacks); null
- * where there is no checkout (production images). Resolved once — a running
- * backend's code doesn't change commits under it.
- */
-let cachedLocalCheckoutCommit: Promise<string | null> | undefined;
-function localCheckoutCommit(): Promise<string | null> {
-  cachedLocalCheckoutCommit ??= execFileAsync("git", ["rev-parse", "HEAD"], {
-    timeout: 3_000,
-  }).then(
-    ({ stdout }) => {
-      const sha = stdout.trim();
-      return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
-    },
-    () => null,
-  );
-  return cachedLocalCheckoutCommit;
 }
 
 interface PackedVafAddOnPackage {
@@ -387,107 +317,6 @@ async function readPackedPackage(
   }
 }
 
-interface CiArtifactRef {
-  id: number;
-  archiveDownloadUrl: string;
-}
-
-/**
- * Latest successful CI build of the add-on for the given ref (branch name or
- * full commit SHA): the newest matching run of the build workflow that still
- * has the artifact. Listing is public; only the artifact download itself
- * needs the token. Cached briefly so "last known build" follows new pushes.
- */
-async function resolveCiArtifact(ref: string): Promise<CiArtifactRef | null> {
-  const cacheKey = `${CacheKey.MfilesVafAddOnCiArtifact}-${ref}` as const;
-  const cached = await cacheManager.get<CiArtifactRef | "none">(cacheKey);
-  if (cached) return cached === "none" ? null : cached;
-
-  let artifact: CiArtifactRef | null = null;
-  try {
-    const refParam = /^[0-9a-f]{40}$/.test(ref)
-      ? `head_sha=${ref}`
-      : `branch=${encodeURIComponent(ref)}`;
-    const runsResponse = await fetch(
-      `${GITHUB_API_BASE}/actions/workflows/${VAF_ADD_ON_WORKFLOW_FILE}/runs?status=success&per_page=1&${refParam}`,
-      {
-        headers: githubHeaders(),
-        signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
-      },
-    );
-    if (!runsResponse.ok) return null;
-    const runs = (await runsResponse.json()) as {
-      workflow_runs?: Array<{ artifacts_url: string }>;
-    };
-    const artifactsUrl = runs.workflow_runs?.[0]?.artifacts_url;
-    if (artifactsUrl) {
-      const artifactsResponse = await fetch(artifactsUrl, {
-        headers: githubHeaders(),
-        signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
-      });
-      if (!artifactsResponse.ok) return null;
-      const artifacts = (await artifactsResponse.json()) as {
-        artifacts?: Array<{
-          id: number;
-          name: string;
-          expired: boolean;
-          archive_download_url: string;
-        }>;
-      };
-      const match = artifacts.artifacts?.find(
-        (a) => a.name === VAF_ADD_ON_CI_ARTIFACT_NAME && !a.expired,
-      );
-      if (match) {
-        artifact = {
-          id: match.id,
-          archiveDownloadUrl: match.archive_download_url,
-        };
-      }
-    }
-    await cacheManager.set(cacheKey, artifact ?? "none", CI_ARTIFACT_TTL_MS);
-  } catch {
-    return null;
-  }
-  return artifact;
-}
-
-/**
- * The `.mfappx` bytes of the source ref's CI build. GitHub requires
- * authentication for artifact downloads even on public repositories, and
- * wraps every artifact in a zip — so the backend downloads with the
- * configured token, unwraps, and serves the raw package. The unwrapped bytes
- * are kept for the artifact's cache window (a new build has a new artifact
- * id and replaces them).
- */
-let cachedPackage: { artifactId: number; bytes: Buffer } | null = null;
-async function fetchCiPackageBytes(): Promise<Buffer | null> {
-  const override = config.kb.mfilesVafAddOnSourceRef;
-  const token = config.kb.mfilesVafAddOnGithubToken;
-  if (!override || !token) return null;
-  const ref = override === "local" ? await localCheckoutCommit() : override;
-  if (!ref) return null;
-
-  const artifact = await resolveCiArtifact(ref);
-  if (!artifact) return null;
-  if (cachedPackage?.artifactId === artifact.id) return cachedPackage.bytes;
-
-  try {
-    const response = await fetch(artifact.archiveDownloadUrl, {
-      headers: githubHeaders(),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) return null;
-    const zip = await JSZip.loadAsync(await response.arrayBuffer());
-    const entry = zip.file(/\.mfappx$/)[0];
-    if (!entry) return null;
-    const bytes = await entry.async("nodebuffer");
-    cachedPackage = { artifactId: artifact.id, bytes };
-    return bytes;
-  } catch {
-    return null;
-  }
-}
-
 interface VafAddOnReleaseAssets {
   /** Stable-named asset: the install command's package source. */
   packageUrl: string;
@@ -524,7 +353,7 @@ async function resolveNewestReleaseAsset(): Promise<VafAddOnReleaseAssets | null
   let source: VafAddOnReleaseAssets | null = null;
   try {
     const response = await fetch(`${GITHUB_API_BASE}/releases?per_page=30`, {
-      headers: githubHeaders(),
+      headers: { Accept: "application/vnd.github.v3+json" },
       signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
     });
     if (!response.ok) return null;

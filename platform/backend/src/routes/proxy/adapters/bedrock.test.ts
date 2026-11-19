@@ -1138,10 +1138,9 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
 });
 
 describe("Bedrock sampling-param fallback", () => {
-  function makeDeprecatedTemperatureError(): Error {
+  function makeRejectedTemperatureError(messageText: string): Error {
     const message = JSON.stringify({
-      message:
-        "The model returned the following errors: `temperature` is deprecated for this model.",
+      message: messageText,
     });
     const error = new Error(message) as Error & {
       statusCode: number;
@@ -1159,7 +1158,10 @@ describe("Bedrock sampling-param fallback", () => {
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 
-  test("retries without temperature when the model rejects it, keeping other params", async () => {
+  test.each([
+    "The model returned the following errors: `temperature` is deprecated for this model.",
+    "This model doesn't support the temperature field. Remove temperature and try again.",
+  ])("retries without temperature while keeping other params: %s", async (message) => {
     const request = createConverseRequest({
       inferenceConfig: { temperature: 0.7, topP: 0.9, maxTokens: 100 },
     });
@@ -1168,7 +1170,7 @@ describe("Bedrock sampling-param fallback", () => {
       converse: async (_modelId: string, input: Record<string, unknown>) => {
         seenInferenceConfigs.push(input.inferenceConfig);
         if (seenInferenceConfigs.length === 1) {
-          throw makeDeprecatedTemperatureError();
+          throw makeRejectedTemperatureError(message);
         }
         return okResponse;
       },
@@ -1186,6 +1188,36 @@ describe("Bedrock sampling-param fallback", () => {
     });
     expect(seenInferenceConfigs[1]).toEqual({ topP: 0.9, maxTokens: 100 });
     expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+  });
+
+  test("streaming retries Bedrock's rejected temperature before yielding events", async () => {
+    const request = createConverseRequest({
+      inferenceConfig: { temperature: 0, maxTokens: 100 },
+    });
+    const events = (async function* () {
+      yield { messageStop: { stopReason: "end_turn" } };
+    })();
+    const converseStream = vi
+      .fn()
+      .mockRejectedValueOnce(
+        makeRejectedTemperatureError(
+          "This model doesn't support the temperature field. Remove temperature and try again.",
+        ),
+      )
+      .mockResolvedValue(events);
+    const stream = await bedrockAdapterFactory.executeStream(
+      { converseStream },
+      request,
+    );
+    expect(stream).toBe(events);
+    expect(converseStream).toHaveBeenCalledTimes(2);
+    expect(converseStream.mock.calls[0][1].inferenceConfig).toEqual({
+      temperature: 0,
+      maxTokens: 100,
+    });
+    expect(converseStream.mock.calls[1][1].inferenceConfig).toEqual({
+      maxTokens: 100,
+    });
   });
 
   test("does not retry on unrelated validation errors", async () => {
@@ -1208,6 +1240,120 @@ describe("Bedrock sampling-param fallback", () => {
       bedrockAdapterFactory.execute(client, request),
     ).rejects.toThrow("Input is too long for requested model.");
     expect(calls).toBe(1);
+  });
+});
+
+describe("Bedrock structured-output fallback", () => {
+  function makeBedrockError(messageText: string): Error {
+    const body = JSON.stringify({ message: messageText });
+    const error = new Error(
+      `Bedrock API error (400): ${messageText}`,
+    ) as Error & {
+      statusCode: number;
+      responseBody: string;
+    };
+    error.statusCode = 400;
+    error.responseBody = body;
+    return error;
+  }
+
+  const unsupported =
+    "This model doesn't support the outputConfig field. Remove outputConfig and try again.";
+  const outputConfig = {
+    textFormat: {
+      type: "json_schema",
+      structure: {
+        jsonSchema: { schema: '{"type":"object"}', name: "status_result" },
+      },
+    },
+  };
+
+  test("sends outputConfig, then retries once without it when the model has no support", async () => {
+    const request = createConverseRequest({
+      outputConfig,
+      inferenceConfig: { maxTokens: 100 },
+    });
+    const seen: Array<Record<string, unknown>> = [];
+    const client = {
+      converse: async (_modelId: string, input: Record<string, unknown>) => {
+        seen.push(input);
+        if (seen.length === 1) throw makeBedrockError(unsupported);
+        return {
+          $metadata: { requestId: "req_1" },
+          output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+          stopReason: "end_turn",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0].outputConfig).toEqual(outputConfig);
+    expect(seen[1].outputConfig).toBeUndefined();
+    // Only the constraint is dropped.
+    expect(seen[1].inferenceConfig).toEqual({ maxTokens: 100 });
+    expect(seen[1].messages).toEqual(seen[0].messages);
+    expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+    // The caller stores this object as the request sent to the model.
+    expect(request).not.toHaveProperty("outputConfig");
+  });
+
+  test("streaming retries without outputConfig before yielding events", async () => {
+    const events = (async function* () {
+      yield { messageStop: { stopReason: "end_turn" } };
+    })();
+    const converseStream = vi
+      .fn()
+      .mockRejectedValueOnce(makeBedrockError(unsupported))
+      .mockResolvedValue(events);
+
+    const stream = await bedrockAdapterFactory.executeStream(
+      { converseStream },
+      createConverseRequest({ outputConfig }),
+    );
+
+    expect(stream).toBe(events);
+    expect(converseStream).toHaveBeenCalledTimes(2);
+    expect(converseStream.mock.calls[0][1].outputConfig).toEqual(outputConfig);
+    expect(converseStream.mock.calls[1][1].outputConfig).toBeUndefined();
+  });
+
+  // Each of these comes from a model that enforces schemas. Dropping the
+  // constraint would answer with unconstrained text instead of the error.
+  const schemaErrors = [
+    "The json schema definition at outputConfig.textFormat.structure.jsonSchema is invalid. Fix the schema definition and try again.",
+    "Unsupported JSON Schema keyword at outputConfig.textFormat.structure.jsonSchema: pattern",
+    "The outputConfig field is not supported together with citations.",
+  ];
+
+  test.each(
+    schemaErrors,
+  )("returns a refused schema to the caller without a retry: %s", async (message) => {
+    const converse = vi.fn().mockRejectedValue(makeBedrockError(message));
+
+    await expect(
+      bedrockAdapterFactory.execute(
+        { converse },
+        createConverseRequest({ outputConfig }),
+      ),
+    ).rejects.toThrow(message);
+    expect(converse).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(
+    schemaErrors,
+  )("streaming returns a refused schema to the caller without a retry: %s", async (message) => {
+    const converseStream = vi.fn().mockRejectedValue(makeBedrockError(message));
+
+    await expect(
+      bedrockAdapterFactory.executeStream(
+        { converseStream },
+        createConverseRequest({ outputConfig }),
+      ),
+    ).rejects.toThrow(message);
+    expect(converseStream).toHaveBeenCalledTimes(1);
   });
 });
 

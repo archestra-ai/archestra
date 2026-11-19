@@ -1,4 +1,6 @@
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,9 +13,9 @@ mod tracing_ctx;
 mod validation;
 
 use crate::validation::{
-    skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
-    validate_host_file_path, validate_secret_env, validate_snapshot_file_path, validate_stdin,
-    validate_upload_path,
+    skill_root_path, validate_artifact_path, validate_command_id, validate_cwd,
+    validate_file_encoding, validate_host_file_path, validate_secret_env,
+    validate_snapshot_file_path, validate_stdin, validate_upload_path,
 };
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -135,6 +137,9 @@ pub struct SnapshotFile {
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
 pub struct ReplayCommand {
+    /// the command's persisted id. it keys the replayed exec in the engine
+    /// cache, so it must be the id the live run used (`RunSandboxInput.commandId`).
+    pub id: String,
     pub command: String,
     pub cwd: Option<String>,
     #[cfg_attr(feature = "napi", napi(js_name = "timeoutSeconds"))]
@@ -213,11 +218,15 @@ fn replay_entries_to_steps(
 
 fn replay_entry_to_step(entry: ReplayEntry, spool_root: Option<&str>) -> Result<ReplayStep> {
     match entry.kind.as_str() {
-        "command" => entry.command.map(ReplayStep::Command).ok_or_else(|| {
-            SandboxError::InvalidInput(
-                "replay entry with kind=command is missing its command".to_string(),
-            )
-        }),
+        "command" => {
+            let command = entry.command.ok_or_else(|| {
+                SandboxError::InvalidInput(
+                    "replay entry with kind=command is missing its command".to_string(),
+                )
+            })?;
+            validate_command_id(&command.id)?;
+            Ok(ReplayStep::Command(command))
+        }
         "file" => {
             let file = entry.file.ok_or_else(|| {
                 SandboxError::InvalidInput(
@@ -420,6 +429,12 @@ pub struct RunSandboxInput {
     /// definition (not a filesystem layer), so it never persists in the sandbox.
     #[serde(default)]
     pub stdin: Option<String>,
+    /// The id the live command will be persisted under. Replaying it later as a
+    /// `ReplayCommand` with the same id reuses this run's cached layer. Omit for
+    /// a one-off run: a fresh id is minted, so the command always executes.
+    #[cfg_attr(feature = "napi", napi(js_name = "commandId"))]
+    #[serde(default)]
+    pub command_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -501,9 +516,17 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     validate_secret_env(&secret_env)?;
     validate_stdin(input.stdin.as_deref())?;
     let target = runtime_target_from(input.environment)?;
+    let command_id = match input.command_id {
+        Some(id) => {
+            validate_command_id(&id)?;
+            id
+        }
+        None => fresh_command_id(),
+    };
     let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::RunRequest {
         replay_steps,
+        command_id,
         limits: input.limits,
         command: input.command,
         cwd: input.cwd,
@@ -540,6 +563,21 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         reply,
     })
     .await
+}
+
+/// a command id for a run the caller will not replay. it only has to be
+/// unique, so the live exec never matches an earlier cached one.
+fn fresh_command_id() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    format!(
+        "run-{nanos:x}-{:x}-{:x}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 #[cfg(test)]
@@ -613,6 +651,7 @@ mod tests {
                 value: "hunter2-plaintext".into(),
             }]),
             stdin: None,
+            command_id: None,
         };
         let debug = format!("{input:?}");
         let json = serde_json::to_string(&input).unwrap();

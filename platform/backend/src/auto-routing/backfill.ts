@@ -5,11 +5,10 @@ import {
   isLogContentNotStored,
 } from "@archestra/shared";
 import { Semaphore } from "@/agents/chatops/utils";
-import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
+import AutoRouterModel from "@/models/auto-router";
 import AutoRoutingDispatchModel from "@/models/auto-routing-dispatch";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import { isSessionMainTurn } from "@/models/interaction";
 import RoutingBackfillModel, {
   type BackfillLease,
@@ -21,7 +20,7 @@ import RoutingHistoryModel, {
 import { HISTORY_MS } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import type {
-  AutoRoutingSettings,
+  AutoRouter,
   RoutingBackfill,
   RoutingHistorySession,
 } from "@/types/auto-routing";
@@ -46,12 +45,14 @@ const DEFAULT_BACKFILL_SESSIONS = 3000;
 
 /**
  * Starts a free scan of the organization's past interactions, retiring a
- * scan that still waits to be scored. Refused while a backfill runs.
+ * scan that still waits to be scored. Refused while a backfill runs, and
+ * when no router learns from past sessions.
  */
 export async function startBackfillScan(
   organizationId: string,
   startedBy: string | null,
 ): Promise<RoutingBackfill> {
+  await requirePastSessionsRouter(organizationId);
   const cutoff = new Date();
   const backfill = await withDbTransaction(async (tx) => {
     await RoutingBackfillModel.supersedeWaiting(organizationId, tx);
@@ -90,10 +91,15 @@ export async function startBackfillScoring(
   startedBy: string | null,
   body: AutoRoutingScoreBackfillBody,
 ): Promise<RoutingBackfill> {
-  if ((await activeSourceVersion()).id !== body.scorerVersionId) {
+  const router = await requirePastSessionsRouter(organizationId);
+  if (
+    (await activeSourceVersion(router.scorerModel)).id !== body.scorerVersionId
+  ) {
     throw new ApiError(409, STALE_OFFER_MESSAGE);
   }
-  if ((await scorerState(organizationId)) === "no_jev_key") {
+  if (
+    (await scorerState(organizationId, router.scorerApiKeyId)) === "no_jev_key"
+  ) {
     throw new ApiError(400, NO_JEV_KEY_MESSAGE);
   }
   const params = {
@@ -134,12 +140,13 @@ export async function cancelBackfill(organizationId: string): Promise<void> {
 export async function describeBackfill(
   organizationId: string,
 ): Promise<AutoRoutingBackfillResponse> {
-  const [latest, scan, scorer, settings] = await Promise.all([
+  const [latest, scan, settings, history] = await Promise.all([
     RoutingBackfillModel.findLatest(organizationId),
     RoutingBackfillModel.findLatestScanned(organizationId),
-    activeSourceVersion(),
-    AutoRoutingSettingsModel.find(organizationId),
+    AutoRouterModel.findPastSessionsRouter(organizationId),
+    describeHistory(organizationId),
   ]);
+  const scorer = await activeSourceVersion(settings?.scorerModel);
   const offerable = latest?.status === "running" ? null : scan;
   const scanned = offerable && (await scanSample(offerable, scorer.id));
   const progress =
@@ -178,7 +185,48 @@ export async function describeBackfill(
             latest,
           })
         : null,
+    history,
   };
+}
+
+/** Rows of the past-sessions history the router page lists. */
+const HISTORY_ROWS = 20;
+
+async function describeHistory(
+  organizationId: string,
+): Promise<AutoRoutingBackfillResponse["history"]> {
+  const rows = await RoutingBackfillModel.findHistory(
+    organizationId,
+    HISTORY_ROWS,
+  );
+  const scored = await RoutingHistoryModel.scoredByJob(
+    organizationId,
+    rows.flatMap((row) =>
+      row.phase === "score" && row.scorerVersionId
+        ? [
+            {
+              id: row.id,
+              scorerVersionId: row.scorerVersionId,
+              startedAt: row.createdAt,
+              endedAt: row.completedAt,
+            },
+          ]
+        : [],
+    ),
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    phase: row.phase,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
+    startedByName: row.startedByName,
+    foundSessions: row.populationSessions,
+    scoredSessions: row.phase === "score" ? (scored.get(row.id) ?? 0) : null,
+    spentCostUsd: Number(row.spentCostUsd),
+    maxCostUsd: row.maxCostUsd === null ? null : Number(row.maxCostUsd),
+    error: row.error,
+  }));
 }
 
 /**
@@ -188,7 +236,6 @@ export async function describeBackfill(
 export async function runBackfill(params?: {
   timeBudgetMs?: number;
 }): Promise<void> {
-  if (!config.autoRouting.enabled) return;
   const backfill = await RoutingBackfillModel.claimNext({
     owner: WORKER_ID,
     leaseTtlSeconds: LEASE_TTL_SECONDS,
@@ -221,6 +268,18 @@ export async function runBackfill(params?: {
 }
 
 // === Internal ===
+
+const NO_ROUTER_MESSAGE =
+  "Past sessions are read only by the organization's first auto router, which no longer exists. Other auto routers learn from their own sessions.";
+
+/** The router that learns from the organization's past sessions; the only one a backfill serves. */
+async function requirePastSessionsRouter(
+  organizationId: string,
+): Promise<AutoRouter> {
+  const router = await AutoRouterModel.findPastSessionsRouter(organizationId);
+  if (!router) throw new ApiError(409, NO_ROUTER_MESSAGE);
+  return router;
+}
 
 const BUSY_MESSAGE =
   "A backfill is already running for this organization; wait for it or cancel it.";
@@ -314,7 +373,7 @@ function scoreOffer(params: {
 /** Whether the fit the backfill's completion requested is still to come, or why it will not run. */
 async function fitState(
   backfill: RoutingBackfill,
-  settings: AutoRoutingSettings | null,
+  settings: AutoRouter | null,
 ): Promise<{ awaitingFit: boolean; fitBlockedReason: string | null }> {
   if (
     backfill.fitGeneration === null ||
@@ -435,7 +494,14 @@ async function score(
   const maxAttempts = Math.ceil(maxSessions * ATTEMPTS_PER_SESSION);
   // At least one round per claim, so every run makes progress.
   do {
-    if ((await activeSourceVersion()).id !== scorerVersionId) {
+    const router = await AutoRouterModel.findPastSessionsRouter(
+      backfill.organizationId,
+    );
+    // The router is gone, or its decision model changed: these scores have no reader.
+    if (
+      !router ||
+      (await activeSourceVersion(router.scorerModel)).id !== scorerVersionId
+    ) {
       await RoutingBackfillModel.finish(lease, { status: "superseded" });
       return true;
     }
@@ -454,6 +520,7 @@ async function score(
       batch.map((session) =>
         scoreSession({
           backfill,
+          router,
           lease,
           scorerVersionId,
           maxAttempts,
@@ -513,23 +580,28 @@ async function complete(
         tx,
       );
     }
-    const fitGeneration = await AutoRoutingSettingsModel.bumpGeneration(
+    const router = await AutoRouterModel.findPastSessionsRouter(
       backfill.organizationId,
       tx,
     );
-    return RoutingBackfillModel.finish(
+    const fitGeneration = router
+      ? await AutoRouterModel.bumpGeneration(router.id, tx)
+      : null;
+    const done = await RoutingBackfillModel.finish(
       lease,
       { status: "done", error, fitGeneration },
       tx,
     );
+    return done && { routerId: router?.id ?? null };
   });
   if (!finished) return;
-  await AutoRoutingDispatchModel.enqueueFits([backfill.organizationId]).catch(
-    (enqueueError: unknown) =>
-      logger.warn(
-        { err: enqueueError, backfillId: backfill.id },
-        "[AutoRouting] Could not enqueue the fit after a backfill; the dispatcher runs it",
-      ),
+  await AutoRoutingDispatchModel.enqueueFits(
+    finished.routerId ? [finished.routerId] : [],
+  ).catch((enqueueError: unknown) =>
+    logger.warn(
+      { err: enqueueError, backfillId: backfill.id },
+      "[AutoRouting] Could not enqueue the fit after a backfill; the dispatcher runs it",
+    ),
   );
   logger.info(
     { backfillId: backfill.id, organizationId: backfill.organizationId },
@@ -539,6 +611,7 @@ async function complete(
 
 async function scoreSession(params: {
   backfill: RoutingBackfill;
+  router: Pick<AutoRouter, "scorerModel" | "scorerApiKeyId">;
   lease: BackfillLease;
   scorerVersionId: string;
   maxAttempts: number;
@@ -548,6 +621,10 @@ async function scoreSession(params: {
   const opening = await findOpening(session);
   const text = openingText(opening);
   if (text === null) {
+    logger.info(
+      { backfillId: backfill.id, reason: openingSkipReason(opening) },
+      "[AutoRouting] Backfill session skipped",
+    );
     await withDbTransaction(async (tx) => {
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return;
       await RoutingHistoryModel.recordScore(
@@ -600,9 +677,10 @@ async function scoreSession(params: {
     });
     if (reservation.kind !== "reserved") return reservation.kind;
     let reserved = reservation.amount;
-    reading = await preRunSource
+    reading = await preRunSource(params.router.scorerModel)
       .read(input, {
         organizationId: backfill.organizationId,
+        apiKeyId: params.router.scorerApiKeyId,
         timeoutMs: SCORER_TIMEOUT_MS,
       })
       .then(
@@ -617,8 +695,11 @@ async function scoreSession(params: {
         case "read":
           return reading.value.costUsd ?? reserved;
         case "error":
-          // No key: nothing was sent.
-          return reading.error.reason === "no_credentials" ? 0 : reserved;
+          // Missing credentials and oversized local input never reach the scorer.
+          return reading.error.reason === "no_credentials" ||
+            reading.error.reason === "input_too_large"
+            ? 0
+            : reserved;
         case "unexpected":
           return reserved;
       }
@@ -689,28 +770,49 @@ function readingStatus(reading: Reading): "scored" | "failed" | null {
     case "read":
       return "scored";
     case "error":
-      return reading.error.reason === "invalid_response" ? "failed" : null;
+      return reading.error.reason === "invalid_response" ||
+        reading.error.reason === "input_too_large"
+        ? "failed"
+        : null;
     case "unexpected":
       return null;
   }
 }
 
 /**
- * The session's opening: its first main turn, as the sessions list picks
- * one, read page by page until found or the session ends. A slow page fails
- * the run, which retries the session.
+ * Search every page for the first main turn. If there is none, use the first
+ * readable user request; retain the first unreadable row only to classify a
+ * skip. A slow page fails the run, which retries the session.
  */
 async function findOpening(
   session: RoutingHistorySession,
 ): Promise<OpeningRow | null> {
   let after: OpeningRow | null = null;
+  let fallback: OpeningRow | null = null;
+  let first: OpeningRow | null = null;
   for (;;) {
     const page = await RoutingHistoryModel.openingRows(session, after);
+    first ??= page.rows[0] ?? null;
+    fallback ??= page.rows.find((row) => openingText(row) !== null) ?? null;
     const opening = page.rows.find((row) => isSessionMainTurn(row));
     if (opening) return opening;
-    if (page.last) return null;
+    if (page.last) return fallback ?? first;
     after = page.rows[page.rows.length - 1];
   }
+}
+
+function openingSkipReason(
+  opening: OpeningRow | null,
+): "no_main_turn" | "content_unavailable" | "empty_user_text" {
+  if (!opening) return "no_main_turn";
+  if (
+    opening.encrypted ||
+    opening.parentId !== null ||
+    isLogContentNotStored(opening.request)
+  ) {
+    return "content_unavailable";
+  }
+  return "empty_user_text";
 }
 
 type Reading =

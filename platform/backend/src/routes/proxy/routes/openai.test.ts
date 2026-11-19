@@ -1616,6 +1616,63 @@ describe("OpenAI Responses proxy", () => {
     expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
+  test.for([
+    ["a Work thread", "codex_work_desktop"],
+    ["the Codex tab", "Codex Desktop"],
+  ])("records %s of the ChatGPT desktop app as a ChatGPT session", async ([
+    ,
+    originator,
+  ], { makeAgent, makeMember, makeUser }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "ChatGPT desktop subscription" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "chatgpt-desktop-subscription",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      () => createOpenAiResponsesTestClient() as never,
+    );
+    const thread = "01a19738-8f2a-7293-9a2b-77dfb6fff11a";
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization:
+          "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
+        "x-archestra-virtual-key": passthroughToken,
+        // The desktop app reads Codex's config.toml and sends its agent id.
+        "x-archestra-agent-id": "openai_codex",
+        "chatgpt-account-id": "account_123",
+        originator,
+        "user-agent": "Codex Desktop/0.163.0 (Windows 10.0.26200; x86_64)",
+        "session-id": thread,
+      },
+      payload: {
+        model: "gpt-5.6-sol",
+        input: "Hello!",
+        client_metadata: { session_id: thread, thread_id: thread },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      externalAgentId: "chatgpt",
+      sessionId: thread,
+      sessionSource: "chatgpt_session",
+      billingMode: "subscription",
+    });
+  });
+
   test("routes the native verifier ChatGPT bearer to the subscription client and keeps API keys metered", async ({
     makeAgent,
     makeMember,

@@ -1,8 +1,9 @@
-import type {
-  ArchestraToolShortName,
-  Permission,
-  ResourcePermissionAction,
-  ScopedResource,
+import {
+  type ArchestraToolShortName,
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  type Permission,
+  type ResourcePermissionAction,
+  type ScopedResource,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -39,12 +40,9 @@ export const TOOL_PERMISSIONS: Record<
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,
-  get_openappa_yell: { resource: "log", action: "read" },
-  resolve_openappa_yell: {
-    resource: "log",
-    action: "read",
-  },
-  list_openappa_yells: { resource: "log", action: "read" },
+  get_openappa_yell: { resource: "guardrailsYell", action: "read" },
+  resolve_openappa_yell: { resource: "guardrailsYell", action: "read" },
+  list_openappa_yells: { resource: "guardrailsYell", action: "read" },
   list_openappa_consults: { resource: "log", action: "read" },
   get_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "guardrailsPolicy", action: "read" },
@@ -90,6 +88,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  // A server's own rules take no Guardrails permission: the handlers allow
+  // whoever may open the server in the MCP registry to read them, and whoever
+  // may edit it there to propose a change.
+  get_guardrails_server_rules: null,
+  preview_guardrails_server_rules_change: null,
+  propose_guardrails_server_rules_change: null,
+  get_guardrails_server_rules_change_status: null,
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },
@@ -107,6 +112,8 @@ export const TOOL_PERMISSIONS: Record<
   list_agents: { resource: "agent", action: "read" },
   list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
+  get_agent_skill_policy: { resource: "agent", action: "read" },
+  patch_agent_skill_policy: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions
   list_hooks: { resource: "agent", action: "read" },
@@ -165,6 +172,10 @@ export const TOOL_PERMISSIONS: Record<
   delete_limit: { resource: "llmLimit", action: "delete" },
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
+  list_llm_interactions: { resource: "log", action: "read" },
+  get_llm_interaction: { resource: "log", action: "read" },
+  list_llm_sessions: { resource: "log", action: "read" },
+  get_llm_session_logs: { resource: "log", action: "read" },
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
@@ -256,9 +267,10 @@ export const TOOL_PERMISSIONS: Record<
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
   // Plugins — executable opaque bytes, so only the metadata catalog is
-  // readable without managing every plugin; byte reads and every mutation
-  // also require `update` on every plugin (a grant at `*`), which each handler
-  // checks, matching the REST routes (plugin.routes.ts).
+  // readable without managing every plugin; byte reads and every change to an
+  // existing plugin also require `update` on every plugin (a grant at `*`),
+  // which each handler checks, matching the REST routes (plugin.routes.ts).
+  // Creating a plugin takes `plugin:create` alone.
   list_plugins: { resource: "plugin", action: "read" },
   get_plugin: { resource: "plugin", action: "read" },
   create_plugin: { resource: "plugin", action: "create" },
@@ -381,24 +393,21 @@ export async function checkToolPermission(
     // previous wording ("User context not available") read as an internal
     // fault rather than a fixable choice of credential.
     return errorResult(
-      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. An OAuth client-credentials token without a service-account binding acts for an application, not a user. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
     );
   }
 
-  const allowed =
-    perm.action === "manage-permissions" ||
-    perm.action === "use" ||
-    perm.action === "configure-deployment-spec"
-      ? false
-      : await userHasPermission(
-          context.userId,
-          context.organizationId,
-          // A scoped resource whose name is not a role action maps onto the
-          // one that used to gate it, so knowledge tools keep asking for
-          // `knowledgeSource`.
-          roleActionResourceFor(perm.resource),
-          perm.action,
-        );
+  const allowed = isGrantOnlyAction(perm.action)
+    ? false
+    : await userHasPermission(
+        context.userId,
+        context.organizationId,
+        // A scoped resource whose name is not a role action maps onto the
+        // one that used to gate it, so knowledge tools keep asking for
+        // `knowledgeSource`.
+        roleActionResourceFor(perm.resource),
+        perm.action,
+      );
 
   const scopedAction = SCOPED_CATALOG_TOOLS[typedShortName];
   // People can edit what they create, so a role that can create the resource
@@ -535,9 +544,7 @@ export async function filterToolNamesByPermission(
       if (!permResults.has(key)) {
         permResults.set(
           key,
-          perm.action === "manage-permissions" ||
-            perm.action === "use" ||
-            perm.action === "configure-deployment-spec"
+          isGrantOnlyAction(perm.action)
             ? false
             : (permissions[roleActionResourceFor(perm.resource)]?.includes(
                 perm.action,
@@ -666,8 +673,30 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
+  get_agent_skill_policy: { resource: "agent", action: "read" },
+  patch_agent_skill_policy: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
   update_runtime_credential: { resource: "credential", action: "update" },
   delete_runtime_credential: { resource: "credential", action: "delete" },
 };
+
+/** Actions only a stored grant confers: no role holds them. */
+type GrantOnlyAction = Exclude<
+  ResourcePermissionAction,
+  "read" | "update" | "delete"
+>;
+
+function isGrantOnlyAction<A extends string>(
+  action: A,
+): action is A & GrantOnlyAction {
+  return GRANT_ONLY_ACTIONS.has(action);
+}
+
+const GRANT_ONLY_ACTIONS: ReadonlySet<string> = new Set<GrantOnlyAction>([
+  "use",
+  "manage-permissions",
+  "configure-deployment-spec",
+  "configure",
+  ...Object.values(ENVIRONMENT_DEPLOY_ACTIONS),
+]);

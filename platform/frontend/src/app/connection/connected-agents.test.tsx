@@ -12,6 +12,7 @@ import {
 
 const mockUseConnectedClients = vi.fn();
 const mockDisconnect = vi.fn();
+const mockUseDisconnectReference = vi.fn();
 
 vi.mock("@/lib/connected-client.query", () => ({
   useConnectedClients: () => mockUseConnectedClients(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/connected-client.query", () => ({
     mutate: mockDisconnect,
     isPending: false,
   }),
+  useDisconnectReference: () => mockUseDisconnectReference(),
 }));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -119,7 +121,10 @@ describe("useConnectedAgents", () => {
 });
 
 describe("ManageAgents", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseDisconnectReference.mockReturnValue({ data: null });
+  });
 
   it("lists each agent's activity and disconnects one", () => {
     mockUseConnectedClients.mockReturnValue({
@@ -162,22 +167,35 @@ describe("ManageAgents", () => {
 });
 
 describe("DisconnectLine", () => {
+  beforeEach(() => {
+    mockUseDisconnectReference.mockReturnValue({ data: null });
+  });
+
   const client = (id: string) => {
     const found = CONNECT_CLIENTS.find((c) => c.id === id);
     if (!found) throw new Error(`${id} client missing`);
     return found;
   };
 
-  it("disconnects ChatGPT through plugin removal without a local cleanup prompt", () => {
+  it("shows the symmetric local cleanup command for ChatGPT", () => {
     render(
       <DisconnectLine data={data} picked={client("chatgpt")} agents={[]} />,
     );
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(screen.getByText("Clean up this computer")).toBeVisible();
     expect(
-      screen.getByText("Remove the plugin connection in ChatGPT"),
+      screen.getByText(
+        /if \[ -f "\$HOME\/\.archestra\/codex-startup-guard\.sh" \]/,
+      ),
     ).toBeVisible();
-    expect(screen.queryByText("Clean up this computer")).toBeNull();
-    expect(screen.queryByText(/disconnect\.md/)).toBeNull();
+    expect(screen.getByText(/disconnect\.md\?client=chatgpt/)).toBeVisible();
+    expect(
+      screen.getByText(/ChatGPT desktop and Codex share local settings/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Other MCP connections are left in place/),
+    ).toBeVisible();
+    expect(screen.queryByText(/added no local provider/)).toBeNull();
   });
 
   it("explains disconnecting before anything is connected", () => {
@@ -239,6 +257,44 @@ describe("DisconnectLine", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/MCP Client Tool node/)).toBeNull();
+  });
+
+  it("puts the disconnect reference into the cleanup prompt", () => {
+    mockUseDisconnectReference.mockReturnValue({ data: "cdr1_abc_REFERENCE" });
+    render(<DisconnectLine data={data} picked={client("kilo")} agents={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(
+      screen.getByText(
+        "Read http://localhost:3000/disconnect.md?client=kilo&ref=cdr1_abc_REFERENCE and disconnect Kilo Code from Acme.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("gives Cursor a prompt, and one command for when Cursor cannot run it, as the other apps get", () => {
+    render(
+      <DisconnectLine data={data} picked={client("cursor")} agents={[]} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(
+      screen.getByText(/disconnect\.md\?client=cursor and disconnect Cursor/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "If Cursor won't run it, run this in a terminal yourself (macOS or Linux):",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `if [ -f "$HOME/.cursor/archestra/disconnect.cjs" ]; then node "$HOME/.cursor/archestra/disconnect.cjs" --wait; else printf '%s\\n' 'No local cleanup script remains.'; fi`,
+      ),
+    ).toBeInTheDocument();
+    // The prompt is the whole cleanup: nothing tells the person to run a
+    // command after it.
+    expect(screen.queryByText(/Then quit Cursor/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen.getByText("~/.cursor/hooks.json (Guardrails hooks)"),
+    ).toBeInTheDocument();
   });
 
   it("lists what gets removed only when asked", () => {

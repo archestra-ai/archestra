@@ -82,7 +82,7 @@ pub(crate) fn read(
         ),
         params,
     )?;
-    let mut budget = crate::ReceiptLookupBudget::default();
+    let mut budget = crate::child_returns::ReceiptLookupBudget::default();
     rows.iter()
         .map(|row| {
             let organization_id: String = row.get(0);

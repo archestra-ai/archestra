@@ -5,7 +5,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { isEqual } from "lodash-es";
+import isEqual from "lodash-es/isEqual";
 import {
   getCompactToolState,
   getHumanRulingDisplay,
@@ -227,6 +227,36 @@ export function getRemedyChainStatus(
     return { state: "denied", label: ruling.label };
   }
   return { state: "denied", label: "Blocked" };
+}
+
+/** Removes the runtime's brand marker from text shown to a person. */
+export function stripAppaPrefix(text: string): string {
+  return text.replace(/^\[appa\]\s*/, "");
+}
+
+/** A remedy tool's output is all runtime text, so every string is in scope. */
+export function stripAppaPrefixFromOutput(output: unknown): unknown {
+  if (typeof output === "string") return stripAppaPrefix(output);
+  if (Array.isArray(output)) return output.map(stripAppaPrefixFromOutput);
+  if (output !== null && typeof output === "object") {
+    return Object.fromEntries(
+      Object.entries(output).map(([key, nested]) => [
+        key,
+        stripAppaPrefixFromOutput(nested),
+      ]),
+    );
+  }
+  return output;
+}
+
+/** Only a notice's ruling is runtime text; its arguments are the caller's. */
+export function stripAppaPrefixFromRuling(input: unknown): unknown {
+  if (typeof input !== "object" || input === null || !("ruling" in input)) {
+    return input;
+  }
+  return typeof input.ruling === "string"
+    ? { ...input, ruling: stripAppaPrefix(input.ruling) }
+    : input;
 }
 
 /** Every part index the chain renders, so its members render nothing alone. */

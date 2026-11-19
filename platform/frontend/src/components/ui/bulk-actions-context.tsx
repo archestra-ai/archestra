@@ -61,9 +61,12 @@ export function ContextualActionsPortal({
 }) {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
+  // Look again on activation: the filter bar holding the target can mount
+  // after this does (it may be hidden until the collection has rows).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `active` re-runs the lookup.
   useEffect(() => {
     setTarget(document.getElementById(targetId));
-  }, [targetId]);
+  }, [targetId, active]);
 
   useLayoutEffect(() => {
     if (!target) return;

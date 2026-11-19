@@ -58,4 +58,61 @@ describe("RuntimeCredentialConnectionDialog", () => {
     expect(onConnected).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });
+  it("connects a GitHub App from a dropped .pem file, never a pasted one", async () => {
+    const user = userEvent.setup();
+    mocks.mutate.mockReset();
+    render(
+      <RuntimeCredentialConnectionDialog
+        definition={{
+          kind: "github_app",
+          githubClientId: "Iv23-test",
+          key: "lobster-app",
+          name: "Lobster GitHub App",
+          description: "",
+          icon: null,
+        }}
+        scope="organization"
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("textbox", { name: /private key/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.getByText("Choose the private key file")).toBeVisible();
+
+    const keyInput = screen.getByLabelText("Private key");
+    await user.upload(
+      keyInput,
+      new File(["not a key"], "notes.pem", { type: "application/x-pem-file" }),
+    );
+    expect(
+      await screen.findByText("That file is not a PEM private key"),
+    ).toBeVisible();
+
+    const pem =
+      "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n";
+    await user.upload(
+      keyInput,
+      new File([pem], "app.private-key.pem", {
+        type: "application/x-pem-file",
+      }),
+    );
+    expect(await screen.findByText("app.private-key.pem")).toBeVisible();
+    expect(screen.queryByText("That file is not a PEM private key")).toBeNull();
+    await user.type(screen.getByLabelText("OAuth client secret"), "s3cret");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        key: "lobster-app",
+        name: "Lobster GitHub App",
+        scope: "organization",
+        value: JSON.stringify({
+          privateKey: pem.trim(),
+          clientSecret: "s3cret",
+        }),
+      },
+      expect.any(Object),
+    );
+  });
 });

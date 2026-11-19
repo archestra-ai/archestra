@@ -15,6 +15,108 @@ import {
 const DEPLOYMENT = { defaultWarmSpares: 1 };
 
 describe("resolveAgentRuntimeTiers", () => {
+  test.each([
+    { cpuRequest: 0.001, cpuLimit: 0.05 },
+    { cpuRequest: 0.05, cpuLimit: 0.075 },
+    { cpuRequest: 0.05, cpuLimit: null },
+  ])("preserves saved CPU sizes below the new write minimum: %j", (cpu) => {
+    const resolved = resolveAgentRuntimeTiers(
+      { tiers: [{ name: "Tiny", ...cpu }], defaultTier: "Tiny" },
+      DEPLOYMENT,
+    );
+    expect(resolved.defaultTier).toBe("Tiny");
+    expect(resolved.tiers).toEqual([
+      expect.objectContaining({
+        name: "Tiny",
+        ...cpu,
+        ...agentRuntimeTierMemory(cpu),
+      }),
+    ]);
+    expect(
+      AgentRuntimeTierSettingsSchema.safeParse({
+        tiers: [{ name: "Tiny", ...cpu, pooled: false }],
+        defaultTier: "Tiny",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("preserves CPU sizes below the new minimum in legacy quantity settings", () => {
+    const resolved = resolveAgentRuntimeTiers(
+      { S: { cpuRequest: "50m", cpuLimit: "75m" } },
+      DEPLOYMENT,
+    );
+    expect(resolved.tiers.find((tier) => tier.name === "S")).toMatchObject({
+      cpuRequest: 0.05,
+      cpuLimit: 0.075,
+      memoryRequestMiB: 102,
+      memoryLimitMiB: 204,
+    });
+  });
+
+  test("resolves independent memory overrides and keeps CPU-derived defaults for omitted fields", () => {
+    const resolved = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            cpuLimit: 0.5,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+          { name: "Limit", cpuRequest: 1, memoryLimitMiB: 8192 },
+          { name: "Request", cpuRequest: 1, memoryRequestMiB: 1536 },
+          {
+            name: "Invalid",
+            cpuRequest: 1,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 1024,
+          },
+          {
+            name: "Malformed",
+            cpuRequest: 1,
+            memoryRequestMiB: -1,
+            memoryLimitMiB: 1.5,
+          },
+          {
+            name: "Unrepresentable",
+            cpuRequest: 1,
+            memoryRequestMiB: 2 ** 52,
+          },
+        ],
+        defaultTier: "Memory",
+      },
+      DEPLOYMENT,
+    );
+    expect(resolved.tiers.find((tier) => tier.name === "Memory")).toMatchObject(
+      {
+        cpuRequest: 0.5,
+        memoryRequestMiB: 8192,
+        memoryLimitMiB: 8192,
+        memoryRequestMiBOverride: 8192,
+        memoryLimitMiBOverride: 8192,
+      },
+    );
+    expect(resolved.tiers.find((tier) => tier.name === "Limit")).toMatchObject({
+      memoryRequestMiB: 2048,
+      memoryLimitMiB: 8192,
+    });
+    expect(
+      resolved.tiers.find((tier) => tier.name === "Request"),
+    ).toMatchObject({
+      memoryRequestMiB: 1536,
+      memoryLimitMiB: 3072,
+    });
+    for (const name of ["Invalid", "Malformed", "Unrepresentable"]) {
+      expect(resolved.tiers.find((tier) => tier.name === name)).toMatchObject({
+        memoryRequestMiB: 2048,
+        memoryLimitMiB: 4096,
+      });
+      expect(
+        resolved.tiers.find((tier) => tier.name === name),
+      ).not.toHaveProperty("memoryRequestMiBOverride");
+    }
+  });
   test("gives the defaults, smallest first, when the organization saved nothing", () => {
     const resolved = resolveAgentRuntimeTiers(null, DEPLOYMENT);
     expect(resolved.defaultTier).toBe("M");
@@ -76,7 +178,7 @@ describe("resolveAgentRuntimeTiers", () => {
     expect(resolved.tiers[1]).toMatchObject({
       cpuLimit: 8,
       memoryRequestMiB: 12288,
-      memoryLimitMiB: 16384,
+      memoryLimitMiB: 24576,
       workspaceGiB: 60,
     });
     // A tier that sets no size follows the deployment's default.
@@ -170,22 +272,113 @@ describe("resolveAgentRuntimeTiers", () => {
 });
 
 describe("sizes and order", () => {
-  test("memory is 2 GiB per CPU, with a limit of twice the request or the CPU limit's share", () => {
-    expect(agentRuntimeTierMemory(2, null)).toEqual({
+  test("orders and upgrades tiers that differ only by their memory limit", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Higher",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "Lower",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+          },
+        ],
+        defaultTier: "Lower",
+      },
+      DEPLOYMENT,
+    ).tiers;
+    expect(tiers.map((tier) => tier.name)).toEqual(["Lower", "Higher"]);
+    expect(nextLargerAgentRuntimeTier(tiers, "Lower")?.name).toBe("Higher");
+    expect(nextLargerAgentRuntimeTier(tiers, "Higher")).toBeUndefined();
+  });
+
+  test("orders memory-only sizes and never upgrades to less memory or CPU", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Small",
+            cpuRequest: 0.5,
+            memoryRequestMiB: 4096,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+          {
+            name: "CPU",
+            cpuRequest: 2,
+            memoryRequestMiB: 4096,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "Both",
+            cpuRequest: 2,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Small",
+      },
+      DEPLOYMENT,
+    ).tiers;
+    expect(tiers.map((tier) => tier.name)).toEqual([
+      "Small",
+      "Memory",
+      "CPU",
+      "Both",
+    ]);
+    expect(nextLargerAgentRuntimeTier(tiers, "Small")?.name).toBe("Memory");
+    expect(nextLargerAgentRuntimeTier(tiers, "Memory")?.name).toBe("Both");
+    expect(nextLargerAgentRuntimeTier(tiers, "Both")).toBeUndefined();
+  });
+  test("defaults the limit to the maximum of twice memory request, CPU request and CPU limit", () => {
+    expect(agentRuntimeTierMemory({ cpuRequest: 2, cpuLimit: null })).toEqual({
       memoryRequestMiB: 4096,
       memoryLimitMiB: 8192,
     });
-    expect(agentRuntimeTierMemory(2, 3)).toEqual({
-      memoryRequestMiB: 4096,
-      memoryLimitMiB: 6144,
-    });
-    expect(agentRuntimeTierMemory(2, 8)).toEqual({
+    expect(agentRuntimeTierMemory({ cpuRequest: 2, cpuLimit: 3 })).toEqual({
       memoryRequestMiB: 4096,
       memoryLimitMiB: 8192,
     });
-    expect(agentRuntimeTierMemory(0.25, null)).toEqual({
+    expect(agentRuntimeTierMemory({ cpuRequest: 2, cpuLimit: 8 })).toEqual({
+      memoryRequestMiB: 4096,
+      memoryLimitMiB: 16384,
+    });
+    expect(
+      agentRuntimeTierMemory({ cpuRequest: 0.25, cpuLimit: null }),
+    ).toEqual({
       memoryRequestMiB: 512,
       memoryLimitMiB: 1024,
+    });
+    expect(
+      agentRuntimeTierMemory({
+        cpuRequest: 4,
+        cpuLimit: 10,
+        memoryRequestMiB: 12288,
+      }),
+    ).toEqual({
+      memoryRequestMiB: 12288,
+      memoryLimitMiB: 24576,
+    });
+    expect(
+      agentRuntimeTierMemory({
+        cpuRequest: 4,
+        cpuLimit: null,
+        memoryRequestMiB: 1024,
+      }),
+    ).toEqual({
+      memoryRequestMiB: 1024,
+      memoryLimitMiB: 8192,
     });
   });
 
@@ -213,10 +406,10 @@ describe("sizes and order", () => {
     // B and D are the same size: neither is larger than the other.
     expect(nextLargerAgentRuntimeTier(tiers, "B")).toBeUndefined();
     expect(describeAgentRuntimeTier(tiers[1])).toBe(
-      "2 CPU (3 limit), 4 GiB (6 GiB limit)",
+      "2 CPU (3 limit), 4 GiB (8 GiB limit)",
     );
     expect(describeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
-      "2 CPU (3 limit), 4 GiB (6 GiB limit), 60 GiB workspace",
+      "2 CPU (3 limit), 4 GiB (8 GiB limit), 60 GiB workspace",
     );
     // The short label names every tier's effective workspace: its own size,
     // else the deployment's default.
@@ -230,7 +423,7 @@ describe("sizes and order", () => {
     expect(summarizeAgentRuntimeTier(tiers[1])).toBe("2 CPU, 4 GiB");
     // With the deployment's default given, every tier names its volume.
     expect(describeAgentRuntimeTier(tiers[1], 20)).toBe(
-      "2 CPU (3 limit), 4 GiB (6 GiB limit), 20 GiB workspace",
+      "2 CPU (3 limit), 4 GiB (8 GiB limit), 20 GiB workspace",
     );
   });
 
@@ -243,6 +436,51 @@ describe("sizes and order", () => {
 });
 
 describe("AgentRuntimeTierSettingsSchema", () => {
+  test("accepts CPU boundaries and decimal values without floating-point rejection", () => {
+    for (const cpuRequest of [0.1, 1.001, 8, 256]) {
+      const settings = {
+        tiers: [
+          {
+            name: "CPU",
+            cpuRequest,
+            cpuLimit: 256,
+            pooled: false,
+            workspaceGiB: null,
+          },
+        ],
+        defaultTier: "CPU",
+      };
+      expect(AgentRuntimeTierSettingsSchema.safeParse(settings).success).toBe(
+        true,
+      );
+      expect(agentRuntimeTierProblems(settings)).toEqual([]);
+    }
+  });
+  test.each([
+    0,
+    -1,
+    1.5,
+    Number.POSITIVE_INFINITY,
+    Number.NaN,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects invalid memory %s", (amount) => {
+    for (const field of ["memoryRequestMiB", "memoryLimitMiB"]) {
+      expect(
+        AgentRuntimeTierSettingsSchema.safeParse({
+          tiers: [
+            {
+              name: "Memory",
+              cpuRequest: 0.5,
+              cpuLimit: null,
+              pooled: false,
+              [field]: amount,
+            },
+          ],
+          defaultTier: "Memory",
+        }).success,
+      ).toBe(false);
+    }
+  });
   test("accepts a list with a default and refuses values out of range", () => {
     expect(
       AgentRuntimeTierSettingsSchema.safeParse({
@@ -268,8 +506,10 @@ describe("AgentRuntimeTierSettingsSchema", () => {
       }).tiers[0],
     ).not.toHaveProperty("workspaceGiB");
     for (const tiers of [
-      [{ name: "S", cpuRequest: 9, cpuLimit: null, pooled: false }],
-      [{ name: "S", cpuRequest: 2, cpuLimit: 17, pooled: false }],
+      [{ name: "S", cpuRequest: 0.099, cpuLimit: null, pooled: false }],
+      [{ name: "S", cpuRequest: 0.1, cpuLimit: 0.099, pooled: false }],
+      [{ name: "S", cpuRequest: 257, cpuLimit: null, pooled: false }],
+      [{ name: "S", cpuRequest: 2, cpuLimit: 257, pooled: false }],
       [{ name: "S", cpuRequest: 2, cpuLimit: null, pooled: "yes" }],
       [{ name: "S", cpuRequest: 2.0001, cpuLimit: null, pooled: false }],
       [{ name: "", cpuRequest: 2, cpuLimit: null, pooled: false }],
@@ -298,7 +538,7 @@ describe("AgentRuntimeTierSettingsSchema", () => {
           cpuRequest: 2,
           cpuLimit: null,
           pooled: false,
-          workspaceGiB: 1025,
+          workspaceGiB: Number.POSITIVE_INFINITY,
         },
       ],
       [],
@@ -311,6 +551,52 @@ describe("AgentRuntimeTierSettingsSchema", () => {
 });
 
 describe("agentRuntimeTierProblems", () => {
+  test("validates memory limits against requests after applying CPU-derived defaults", () => {
+    const base = {
+      name: "Memory",
+      cpuRequest: 0.5,
+      cpuLimit: null,
+      workspaceGiB: null,
+    };
+    expect(
+      agentRuntimeTierProblems({
+        tiers: [{ ...base, memoryRequestMiB: 8192, memoryLimitMiB: 4096 }],
+        defaultTier: "Memory",
+      }),
+    ).toContain("Tier Memory: the memory limit is below the memory request");
+    expect(
+      agentRuntimeTierProblems({
+        tiers: [{ ...base, memoryRequestMiB: 8192, memoryLimitMiB: 8192 }],
+        defaultTier: "Memory",
+      }),
+    ).toEqual([]);
+    expect(
+      agentRuntimeTierProblems({
+        tiers: [{ ...base, memoryLimitMiB: 512 }],
+        defaultTier: "Memory",
+      }),
+    ).toContain("Tier Memory: the memory limit is below the memory request");
+  });
+  test("requires an explicit limit when doubling a large request would exceed the API integer range", () => {
+    const tier = {
+      name: "Memory",
+      cpuRequest: 1,
+      cpuLimit: null,
+      workspaceGiB: null,
+      memoryRequestMiB: 2 ** 52,
+    };
+    expect(
+      agentRuntimeTierProblems({ tiers: [tier], defaultTier: "Memory" }),
+    ).toEqual([
+      "Tier Memory: calculated memory exceeds the supported numeric range; set an explicit memory limit",
+    ]);
+    expect(
+      agentRuntimeTierProblems({
+        tiers: [{ ...tier, memoryLimitMiB: 2 ** 52 }],
+        defaultTier: "Memory",
+      }),
+    ).toEqual([]);
+  });
   test("has none for the defaults", () => {
     expect(agentRuntimeTierProblems(DEFAULT_AGENT_RUNTIME_TIERS)).toEqual([]);
   });
@@ -320,19 +606,19 @@ describe("agentRuntimeTierProblems", () => {
       agentRuntimeTierProblems({
         tiers: [
           { name: "S", cpuRequest: 2, cpuLimit: 1, workspaceGiB: null },
-          { name: "s", cpuRequest: 9, cpuLimit: null, workspaceGiB: null },
-          { name: " ", cpuRequest: 1, cpuLimit: 20, workspaceGiB: null },
-          { name: "W", cpuRequest: 1, cpuLimit: null, workspaceGiB: 2048 },
+          { name: "s", cpuRequest: 257, cpuLimit: null, workspaceGiB: null },
+          { name: " ", cpuRequest: 1, cpuLimit: 257, workspaceGiB: null },
+          { name: "W", cpuRequest: 1, cpuLimit: null, workspaceGiB: 1.5 },
         ],
         defaultTier: "M",
       }),
     ).toEqual([
       "Tier S: the CPU limit is below the CPU request",
       "Two tiers are named s",
-      "Tier s: the CPU request is more than 0 and at most 8",
+      "Tier s: the CPU request is at least 0.1 and at most 256",
       "Name every tier",
-      "A tier without a name: the CPU limit is more than 0 and at most 16",
-      "Tier W: the workspace is a whole number of GiB from 1 to 1024",
+      "A tier without a name: the CPU limit is at least 0.1 and at most 256",
+      "Tier W: the workspace is a positive whole number of GiB",
       "The default tier M is not in the list",
     ]);
   });

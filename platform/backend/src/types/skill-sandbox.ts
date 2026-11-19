@@ -1,6 +1,6 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 /** Discriminator for an ordered sandbox replay event. */
 export const SkillSandboxReplayEventKindSchema = z.enum([

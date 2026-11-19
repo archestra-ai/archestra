@@ -49,6 +49,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type ResourceAccessFilter,
 } from "./resource-permission-subject";
+import TeamModel from "./team";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -895,10 +896,15 @@ class VirtualApiKeyModel {
       return createPaginatedResult([], 0, pagination);
     }
 
+    const managedIds = await VirtualApiKeyModel.getTeamManagedIds({
+      organizationId,
+      userId,
+    });
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
       userId,
       providerApiKeyId,
+      managedIds,
     });
 
     if (accessibleIds.length === 0) {
@@ -946,7 +952,27 @@ class VirtualApiKeyModel {
         scopeColumn: schema.virtualApiKeysTable.id,
         ownerColumn: schema.virtualApiKeysTable.authorId,
       });
-    if (accessCondition) whereConditions.push(accessCondition);
+    if (accessCondition) {
+      // Team-managed keys are shared with the lead for management. Keep owner
+      // and recipient filters in force even when this authority supplies read.
+      const managedShared =
+        access?.relations?.includes("shared") && managedIds.length
+          ? and(
+              inArray(schema.virtualApiKeysTable.id, managedIds),
+              ResourcePermissionPolicyModel.accessRelationCondition({
+                ...access,
+                relations: undefined,
+                organizationId,
+                resource: "llmVirtualKey",
+                scopeColumn: schema.virtualApiKeysTable.id,
+                ownerColumn: schema.virtualApiKeysTable.authorId,
+              }),
+            )
+          : undefined;
+      whereConditions.push(
+        or(accessCondition, managedShared) ?? accessCondition,
+      );
+    }
     // SPDX-SnippetEnd
 
     const whereClause = and(...whereConditions);
@@ -1325,10 +1351,39 @@ class VirtualApiKeyModel {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /** Team management confers metadata/edit access, never credential use or sharing. */
+  static async getTeamManagedIds(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<string[]> {
+    const teamIds = await TeamModel.getAdministeredTeamIds(
+      params.userId,
+      params.organizationId,
+    );
+    if (!teamIds.length) return [];
+    const table = schema.virtualApiKeysTable;
+    const rows = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          inArray(table.billingTeamId, teamIds),
+          TeamModel.effectiveMembershipCondition({
+            userId: table.authorId,
+            teamIdColumn: table.billingTeamId,
+          }),
+          sql`EXISTS (SELECT 1 FROM member owner_member WHERE owner_member.user_id = ${table.authorId} AND owner_member.organization_id = ${params.organizationId})`,
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
   private static async getAccessibleIds(params: {
     organizationId: string;
     userId: string;
     providerApiKeyId?: string;
+    managedIds?: string[];
   }): Promise<string[]> {
     const { organizationId, userId, providerApiKeyId } = params;
 
@@ -1337,18 +1392,23 @@ class VirtualApiKeyModel {
       organizationId,
       userId,
     });
+    const managedIds =
+      params.managedIds ?? (await VirtualApiKeyModel.getTeamManagedIds(params));
     const rows = await db
       .select({ id: table.id })
       .from(table)
       .where(
         and(
           eq(table.organizationId, organizationId),
-          ResourcePermissionPolicyModel.grantCondition({
-            ...principal,
-            resource: "llmVirtualKey",
-            scopeColumn: table.id,
-            action: "read",
-          }),
+          or(
+            managedIds.length ? inArray(table.id, managedIds) : undefined,
+            ResourcePermissionPolicyModel.grantCondition({
+              ...principal,
+              resource: "llmVirtualKey",
+              scopeColumn: table.id,
+              action: "read",
+            }),
+          ),
           providerApiKeyId
             ? sql`EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key mapping
         WHERE mapping.virtual_api_key_id = ${table.id} AND mapping.provider_api_key_id = ${providerApiKeyId})`

@@ -19,13 +19,11 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   useTeamSyncIdentityProviderOptions: useTeamSyncIdentityProviderOptionsMock,
 }));
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: {
-    getTeamExternalGroups: vi.fn(),
-    addTeamExternalGroup: vi.fn(),
-    removeTeamExternalGroup: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getTeamExternalGroups: vi.fn(),
+  addTeamExternalGroup: vi.fn(),
+  removeTeamExternalGroup: vi.fn(),
 }));
 
 const okta = { id: "idp-okta", providerId: "Okta", groupsExpression: null };

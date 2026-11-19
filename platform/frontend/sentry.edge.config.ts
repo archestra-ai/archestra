@@ -6,15 +6,11 @@
 import * as Sentry from "@sentry/nextjs";
 import {
   getFrontendEdgeSentryOptions,
-  shouldEnableFrontendTelemetry,
+  getFrontendServerErrorReporting,
 } from "./sentry.shared";
 
-// Use process.env directly since config module uses next-runtime-env which is not available during build
-const dsn = process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
-const environment =
-  process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() ||
-  process.env.NODE_ENV?.toLowerCase();
+const reporting = getFrontendServerErrorReporting();
 
-if (shouldEnableFrontendTelemetry({ dsn, environment })) {
-  Sentry.init(getFrontendEdgeSentryOptions({ dsn, environment }));
+if (reporting.enabled) {
+  Sentry.init(getFrontendEdgeSentryOptions(reporting));
 }

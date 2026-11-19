@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { NetworkPolicyFields } from "@/components/network-policy-fields";
 import { useFeature } from "@/lib/config/config.query";
 import {
   useBulkDeleteEnvironments,
@@ -15,10 +16,7 @@ import {
   useOrganization,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
-import {
-  EnvironmentsSection,
-  NetworkPolicyFields,
-} from "./environments-section";
+import { EnvironmentsSection } from "./environments-section";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");

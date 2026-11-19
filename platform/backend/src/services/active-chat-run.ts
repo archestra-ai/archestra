@@ -133,6 +133,18 @@ export class ActiveChatRunService {
       this.inFlightRunIds.delete(id);
     }
 
+    // Marking the row failed does not stop the run's agent loop. Left running,
+    // it keeps calling this pod's own API, which is about to close — the user
+    // then sees a raw connection error once the turn's next model call fails.
+    // Aborting now ends it while the response can still say why, so the
+    // client retries on a healthy replica.
+    for (const id of ids) {
+      const abortController = this.abortControllersByRunId.get(id);
+      if (abortController && !abortController.signal.aborted) {
+        abortController.abort(new ActiveChatRunShutdownError());
+      }
+    }
+
     if (failed > 0) {
       logger.info({ failed }, "Failed in-flight active chat runs on shutdown");
     }
@@ -740,6 +752,14 @@ class ActiveChatRunEventBatcher {
  * persisted, so the response can report the failure instead of ending as if
  * the user had pressed Stop.
  */
+/** Abort reason for a run stopped because its server is shutting down. */
+export class ActiveChatRunShutdownError extends Error {
+  constructor() {
+    super("The server restarted before the reply finished. Please try again.");
+    this.name = "ActiveChatRunShutdownError";
+  }
+}
+
 export class ActiveChatRunPersistenceError extends Error {
   constructor(cause: unknown) {
     super("The chat run could not be saved, so it was stopped.", { cause });

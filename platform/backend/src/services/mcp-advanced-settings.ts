@@ -24,8 +24,14 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   catalogId?: string;
   requested: string | null | undefined;
   current?: string | null;
-  requestedLocalConfig?: Pick<LocalConfig, "envFrom" | "serviceAccount"> | null;
-  currentLocalConfig?: Pick<LocalConfig, "envFrom" | "serviceAccount"> | null;
+  requestedLocalConfig?: Pick<
+    LocalConfig,
+    "envFrom" | "serviceAccount" | "runtimeTier"
+  > | null;
+  currentLocalConfig?: Pick<
+    LocalConfig,
+    "envFrom" | "serviceAccount" | "runtimeTier"
+  > | null;
 }): Promise<void> {
   const yamlChanged =
     params.requested !== undefined &&
@@ -41,7 +47,17 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
     localConfig !== undefined &&
     (localConfig?.serviceAccount?.trim() || "default") !==
       (params.currentLocalConfig?.serviceAccount?.trim() || "default");
-  if (!yamlChanged && !envFromChanged && !serviceAccountChanged) return;
+  const runtimeTierChanged =
+    localConfig !== undefined &&
+    (localConfig?.runtimeTier ?? "") !==
+      (params.currentLocalConfig?.runtimeTier ?? "");
+  if (
+    !yamlChanged &&
+    !envFromChanged &&
+    !serviceAccountChanged &&
+    !runtimeTierChanged
+  )
+    return;
 
   await assertCanManageMcpDeployment(params);
 }
@@ -55,11 +71,13 @@ const MCP_RUNTIME_FIELDS = [
   "serverType",
   "serverUrl",
   "localConfig",
+  "desktopConfig",
   "deploymentSpecYaml",
   "installationCommand",
   "userConfig",
   "oauthConfig",
   "enterpriseManagedConfig",
+  "awsIamConfig",
   "requiresAuth",
   "authDescription",
   "authFields",

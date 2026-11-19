@@ -29,9 +29,9 @@ export interface CatalogAccessCaller {
  * service accounts are configured by an administrator and keep the agent's full
  * assigned tool set.
  *
- * A permission-gated catalog is reached by its role permission alone, which
- * only a user or service account can hold: without it the catalog is in
- * `denied`, which overrides `accessible`.
+ * A permission-gated catalog requires its object grant. SRE additionally
+ * requires a use grant on the SRE agent. Without either grant the catalog is
+ * in `denied`, which overrides `accessible`.
  */
 export async function getCallerAccessibleCatalogIds(
   caller: CatalogAccessCaller,

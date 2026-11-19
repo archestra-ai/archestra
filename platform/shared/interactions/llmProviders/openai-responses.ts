@@ -1,6 +1,10 @@
 import type { WithoutEncryptedChatUnavailable } from "../../encrypted-chat-content";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
@@ -64,6 +68,24 @@ class OpenAiResponsesInteraction implements InteractionUtils {
     return this.getInputItems()
       .filter(isFunctionCallOutputItem)
       .flatMap((item) => requestedToolNamesByCallId.get(item.call_id) ?? []);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    // Function calls and custom (freeform) tool calls, such as apply_patch,
+    // both carry the call id the tool's result comes back under.
+    return this.interaction.response.output.flatMap((item) => {
+      const call = item as {
+        type?: unknown;
+        call_id?: unknown;
+        name?: unknown;
+      };
+      return (call.type === "function_call" ||
+        call.type === "custom_tool_call") &&
+        typeof call.call_id === "string" &&
+        typeof call.name === "string"
+        ? [{ id: call.call_id, name: call.name }]
+        : [];
+    });
   }
 
   getToolNamesRequested(): string[] {

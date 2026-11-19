@@ -318,7 +318,7 @@ class CommandOomScoreTest(unittest.TestCase):
                 # own Bash reads it at startup too; only a command shell has 1000.
                 earlier.write_text(f'cat /proc/$$/oom_score_adj >> {root / "earlier-ran"}\n')
                 env["BASH_ENV"] = str(earlier)
-            output, launcher = self.run_turn(root, home, env, report)
+            output, launcher_score = self.run_turn(root, home, env, report)
             readable = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-B]", "", output)
             details = readable[-4000:] + "\nDeclared tools: " + ", ".join(sorted(server.declared))
             self.assertTrue(server.probed, "The client declared no " + SHELL_TOOLS[CLIENT] + " tool\n" + details)
@@ -336,8 +336,9 @@ class CommandOomScoreTest(unittest.TestCase):
             above = [parent for parent in parents if Path(parent[3]).name not in SHELLS]
             self.assertTrue(above, lines)
             self.assertEqual(above[0][2], baseline, "The client took the command's score\n" + "\n".join(lines))
-            # The process tmux started, the launcher, kept the container's score.
-            self.assertEqual([parent[2] for parent in parents if parent[1] == str(launcher)], [baseline], "\n".join(lines))
+            # Hermes 0.22.5 runs commands in a persistent gateway outside the
+            # TUI's ancestor chain. Inspect the launcher itself before teardown.
+            self.assertEqual(launcher_score, baseline, "The launcher took the command's score\n" + "\n".join(lines))
             if earlier_bash_env:
                 ran = (root / "earlier-ran").read_text().split() if (root / "earlier-ran").exists() else []
                 self.assertIn("1000", ran, "The earlier BASH_ENV did not run in the command's shell")
@@ -370,7 +371,8 @@ class CommandOomScoreTest(unittest.TestCase):
                         launcher = int(pane.stdout.strip())
                 if os.waitpid(pid, os.WNOHANG)[0]:
                     break
-            return output.decode(errors="replace"), launcher
+            launcher_score = Path(f"/proc/{launcher}/oom_score_adj").read_text().strip() if launcher is not None else None
+            return output.decode(errors="replace"), launcher_score
         finally:
             # The pane's process leads a session: the client and every process
             # it started end with it.

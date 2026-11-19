@@ -96,6 +96,34 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("attributes a subagent's provider failure to the subagent and its model", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "rate_limit",
+              message: "Rate limit exceeded",
+              isRetryable: true,
+              subagent: { name: "Research Helper", model: "gpt-6.1-sol" },
+              originalError: { provider: "azure" },
+            }),
+          )
+        }
+        agentName="My Assistant"
+        selectedModel="DeepSeek-V4.1-Flash"
+      />,
+    );
+
+    expect(screen.getByText("Failed in subagent")).toBeInTheDocument();
+    expect(screen.getByText("Research Helper")).toBeInTheDocument();
+    expect(screen.getByText("Subagent model")).toBeInTheDocument();
+    expect(screen.getByText("gpt-6.1-sol")).toBeInTheDocument();
+    // The conversation's own agent and model stay visible alongside.
+    expect(screen.getByText("My Assistant")).toBeInTheDocument();
+    expect(screen.getByText("DeepSeek-V4.1-Flash")).toBeInTheDocument();
+  });
+
   it.each([
     false,
     true,

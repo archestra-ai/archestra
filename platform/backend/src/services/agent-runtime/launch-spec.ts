@@ -1,5 +1,8 @@
+import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  isClaudeCodeRuntimeCommand,
+  isCodexRuntimeCommand,
   isDefaultBrandedAppName,
   providerDisplayNames,
   type ResolvedAgentRuntimeTiers,
@@ -18,13 +21,15 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import { resolveAgentRuntimeNodeSelector } from "@/k8s/agent-runtime/node-placement";
 import {
   AgentModel,
   AgentWorkspaceModel,
   LimitModel,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
@@ -33,7 +38,7 @@ import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-a
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import { modelSyncService } from "@/services/model-sync";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
@@ -54,6 +59,7 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { ensureProviderApiKeySupportsSelectedModel } from "./preflight";
 import { agentRunUrl } from "./run-handle";
 import {
   AGENT_RUNTIME_CPU_LIMIT_ENV,
@@ -62,11 +68,13 @@ import {
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
   AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
+  agentRunGatewayTokenId,
   constructStableRunName,
 } from "./runtime-contract";
 import {
@@ -134,6 +142,8 @@ export async function buildAgentRunLaunchSpec(params: {
     OpenAppaSession,
     "session_id" | "caller_id" | "parent_id"
   >;
+  /** Ephemeral per-run credentials redeemed from a one-time `transfer_credential` grant. */
+  ephemeralCredentials?: Record<string, string>;
 }): Promise<{
   spec: AgentRunLaunchSpec;
   virtualApiKeyId: string | null;
@@ -151,6 +161,16 @@ export async function buildAgentRunLaunchSpec(params: {
       "Agent Runtime requires ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the run can reach the LLM proxy and MCP gateway",
     );
   }
+  // Saving an Agent checks this too, but an Agent saved while the operator
+  // allowed privileged runs keeps its setting after the flag is turned off.
+  // Every new run and every follow-up turn passes through here, so this is
+  // where the flag holds. It runs before any credential is minted.
+  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
+    throw new ApiError(
+      403,
+      "This Agent's background deployment is privileged, and the deployment operator has disabled privileged background deployments. An Agent administrator must turn off privileged mode on the Agent before it can run.",
+    );
+  }
 
   if (params.actor.kind === "serviceAccount")
     await resolveOauthServiceAccount({
@@ -166,6 +186,7 @@ export async function buildAgentRunLaunchSpec(params: {
       params.actor.kind === "serviceAccount"
         ? serviceAccountUserId(params.actor.id)
         : actorUserId,
+    ephemeralCredentials: params.ephemeralCredentials,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
@@ -241,9 +262,10 @@ export async function buildAgentRunLaunchSpec(params: {
     provider: llm.selectedProvider,
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
-  const isClaudeCodeRuntime =
-    params.runtime.command?.[0] === "archestra-claude-code";
-  const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
+  const isClaudeCodeRuntime = isClaudeCodeRuntimeCommand(
+    params.runtime.command?.[0],
+  );
+  const isCodexRuntime = isCodexRuntimeCommand(params.runtime.command?.[0]);
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
       409,
@@ -256,17 +278,17 @@ export async function buildAgentRunLaunchSpec(params: {
       "A personal Claude subscription requires a run acting as a signed-in user.",
     );
   }
-  const claudeCodeToken =
-    usesClaudeCodeSubscription && actorUserId
-      ? await claudeCodeAccountManager.requireConnection({
-          runtime: params.runtime,
-          userId: actorUserId,
-          runtimeScope: params.runtimeScope,
-        })
-      : undefined;
-  // Claude Code supplies its own OAuth token. A personal passthrough key
-  // authenticates the actor to the proxy without storing that token as a
-  // provider key, so subscription requests retain usage and run attribution.
+  if (usesClaudeCodeSubscription && actorUserId) {
+    await claudeCodeAccountManager.requireConnection({
+      runtime: params.runtime,
+      userId: actorUserId,
+      runtimeScope: params.runtimeScope,
+    });
+  }
+  // Claude Code subscription runs receive a one-off per-run passthrough virtual
+  // key in CLAUDE_CODE_OAUTH_TOKEN (and X-Archestra-Virtual-Key); the proxy
+  // swaps it for the user's connected Claude subscription token server-side so
+  // the raw OAuth token never enters the runtime pod.
   const virtualKey = usesClaudeCodeSubscription
     ? await VirtualApiKeyModel.create({
         organizationId: params.organizationId,
@@ -300,7 +322,7 @@ export async function buildAgentRunLaunchSpec(params: {
     }
   }
 
-  const modelRouterUrl = `${platformBaseUrl}/v1/model-router/${params.agentId}`;
+  const modelRouterUrl = `${platformBaseUrl}/v1/unified-model/${params.agentId}`;
   const anthropicUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
   const bedrockUrl = `${platformBaseUrl}/v1/bedrock/${params.agentId}`;
   const proxyUrl = isClaudeCodeBedrock
@@ -362,7 +384,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
     // capability detection. Their single-provider virtual key keeps this
-    // unambiguous at the Model Router while the generic Agent Runtime client retains the
+    // unambiguous at the Unified Model API while the generic Agent Runtime client retains the
     // qualified model id above.
     ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: nativeModel,
     ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: llm.selectedProvider,
@@ -450,9 +472,16 @@ export async function buildAgentRunLaunchSpec(params: {
         actor: params.actor,
         agentId: params.agentId,
         organizationId: params.organizationId,
+        runId: params.runId,
+        expiresIn: deadline,
       }));
   } catch (error) {
     if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
+    if (params.actor.kind === "user") {
+      await OAuthAccessTokenModel.deleteById(
+        agentRunGatewayTokenId(params.runId),
+      );
+    }
     throw error;
   }
   // The volume sentence sits between two fixed parts, so a run served from a
@@ -487,7 +516,9 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
-    ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
+    ...(usesClaudeCodeSubscription
+      ? { CLAUDE_CODE_OAUTH_TOKEN: virtualKeyValue }
+      : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
@@ -560,7 +591,10 @@ export async function buildAgentRunLaunchSpec(params: {
         tiers,
       ),
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
-      nodeSelector: config.agentRuntime.nodeSelector,
+      nodeSelector: resolveAgentRuntimeNodeSelector({
+        privileged: params.runtime.privileged,
+      }),
+      runtimeClassName: config.agentRuntime.runtimeClassName,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
       inputFileCount: params.inputFiles?.length ?? 0,
@@ -704,35 +738,18 @@ async function createProviderBackedVirtualKey(params: {
     );
   }
 
-  if (requiredSubscription && params.requiredSubscriptionKind) {
-    // The runtime uses the actor's subscription, which may have been synced
-    // before the selected model was released (or before another user's key).
-    // Refresh that connection rather than bypassing the router's model links.
-    const hasSelectedModel = async () => {
-      const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-        providerApiKey.id,
-      );
-      return models.some(
-        (model) =>
-          model.provider === params.provider &&
-          model.modelId === params.model &&
-          ModelModel.supportsTextChat(model),
-      );
-    };
-    if (!(await hasSelectedModel())) {
-      await modelSyncService.syncModelsForApiKey({
-        apiKeyId: providerApiKey.id,
-        provider: providerApiKey.provider,
-        apiKeyValue: requiredSubscription.apiKeyValue,
-      });
-      if (!(await hasSelectedModel())) {
-        throw new ApiError(
-          409,
-          `The selected model "${params.model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label}. Choose a model supported by that connection.`,
-        );
-      }
-    }
-  }
+  await ensureProviderApiKeySupportsSelectedModel({
+    providerApiKey,
+    provider: params.provider,
+    model: params.model,
+    subscriptionCredential:
+      requiredSubscription && params.requiredSubscriptionKind
+        ? {
+            kind: params.requiredSubscriptionKind,
+            apiKeyValue: requiredSubscription.apiKeyValue,
+          }
+        : null,
+  });
 
   return VirtualApiKeyModel.create({
     organizationId: params.organizationId,
@@ -753,13 +770,34 @@ async function resolveGatewayToken(params: {
   actor: A2AActor;
   agentId: string;
   organizationId: string;
+  runId: string;
+  expiresIn: number;
 }): Promise<string> {
+  if (params.actor.kind === "user") {
+    await OAuthClientModel.ensurePlatformIssuedClient({
+      id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      name: "Agent Runtime",
+    });
+    const value = randomBytes(32).toString("base64url");
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(value);
+    await OAuthAccessTokenModel.create({
+      id: agentRunGatewayTokenId(params.runId),
+      tokenHash,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      userId: params.actor.id,
+      expiresAt: new Date(Date.now() + params.expiresIn * 1000),
+      scopes: ["mcp"],
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${params.agentId}`,
+    });
+    return value;
+  }
   // Team tokens are retired, so a team actor (only left on runs started
   // before then) has nothing to act with.
   if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
-      params.actor.kind === "user" ? params.actor.id : "system",
+      "system",
       params.organizationId,
     );
     if (selected?.tokenValue) return selected.tokenValue;

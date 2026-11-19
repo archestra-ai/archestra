@@ -85,7 +85,7 @@ describe("buildCurlExample", () => {
       expect(edit).toContain(`X-Archestra-Virtual-Key: ${key}`);
   });
 
-  it("does not advertise an Azure image request on the Model Router or another provider", () => {
+  it("does not advertise an Azure image request on the Unified Model API or another provider", () => {
     for (const target of [
       { kind: "model-router" as const },
       { kind: "provider" as const, provider: "openai" as const },
@@ -114,7 +114,7 @@ describe("buildCurlExample", () => {
     });
     expect(edit).toContain("--form-string 'model=studio'\\''s-image'");
   });
-  it("sends a standard key as the bearer token on the Model Router", () => {
+  it("sends a standard key as the bearer token on the Unified Model API", () => {
     expect(
       buildCurlExample({
         connectionBaseUrl: base,
@@ -123,7 +123,7 @@ describe("buildCurlExample", () => {
         keyValue: key,
         model: "openai:gpt-5.4",
       }),
-    ).toBe(`curl "${base}/model-router/chat/completions" \\
+    ).toBe(`curl "${base}/unified-model/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -172,8 +172,52 @@ describe("buildCurlExample", () => {
       model: "github-copilot:gpt-5.4-codex",
       supportedEndpoints: ["/responses"],
     });
-    expect(example).toContain(`curl "${base}/model-router/responses"`);
+    expect(example).toContain(`curl "${base}/unified-model/responses"`);
     expect(example).toContain('"input": "Hello!"');
+  });
+
+  it("uses Responses for any provider's model published as Responses only", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "azure:gpt-5.5-pro",
+      supportedEndpoints: ["/responses"],
+    });
+    expect(example).toContain(`curl "${base}/unified-model/responses"`);
+  });
+
+  it("asks for a pool on chat completions even when its name looks like a Responses model", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "openai:gpt-5.4-codex",
+      isPool: true,
+    });
+    expect(example).toContain(`curl "${base}/unified-model/chat/completions"`);
+    expect(example).toContain('"model": "openai:gpt-5.4-codex"');
+  });
+
+  it("calls the endpoint it is told to for auto routing", () => {
+    const params = {
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "auto",
+    } as const;
+    expect(
+      buildCurlExample({ ...params, routerEndpoint: "chat/completions" }),
+    ).toContain(`curl "${base}/unified-model/chat/completions"`);
+    const responses = buildCurlExample({
+      ...params,
+      routerEndpoint: "responses",
+    });
+    expect(responses).toContain(`curl "${base}/unified-model/responses"`);
+    expect(responses).toContain('"model": "auto"');
   });
 
   it("uses the Perplexity Agent API for vendor-prefixed models", () => {
@@ -227,7 +271,7 @@ describe("buildCurlExample", () => {
     expect(example).toContain(`-H "X-Archestra-Virtual-Key: ${key}"`);
   });
 
-  it("has no Model Router request for a passthrough key", () => {
+  it("has no Unified Model API request for a passthrough key", () => {
     expect(
       buildCurlExample({
         connectionBaseUrl: base,

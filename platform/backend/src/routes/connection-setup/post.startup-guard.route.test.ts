@@ -1,13 +1,14 @@
 import { STARTUP_GUARD_FORMAT_VERSION } from "@archestra/shared";
 import { PLUGIN_DELIVERY_MAX_COUNT } from "@archestra/shared/connection-setup";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { authPlugin } from "@/auth/fastify-plugin";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { setupTestCacheManager } from "@/test/cache-manager";
 
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 describe("POST /api/connection-setups/startup-guard", () => {
   let app: FastifyInstanceWithZod;
@@ -98,6 +99,36 @@ describe("POST /api/connection-setups/startup-guard", () => {
     expect(response.json().source).toContain(
       pluginNames[pluginNames.length - 1],
     );
+  });
+  test.each([
+    "bash",
+    "windows",
+  ])("refresh preserves native connection-plugin cleanup on %s", async (platform) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups/startup-guard",
+      payload: {
+        ...payload,
+        clientId: "codex",
+        platform,
+        context: {
+          ...payload.context,
+          skills: {
+            marketplaceName: "connection-test",
+            cloneUrl: "ARCH_GUARD_PRIVATE_CLONE_URL",
+            connectionPlugin: true,
+            hasSkills: false,
+            pluginNames: ["connection-test"],
+          },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const source = response.json().source;
+    expect(source).toContain(
+      "The connection plugin or marketplace is still configured",
+    );
+    expect(source).toContain("mcp logout");
   });
   test("does not allow a public render request to authenticate other routes", async () => {
     const response = await app.inject({

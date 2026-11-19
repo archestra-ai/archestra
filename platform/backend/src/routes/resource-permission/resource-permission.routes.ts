@@ -73,7 +73,7 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) =>
       reply.send(
         withoutWildcardCoveredGrants(
-          await ResourcePermissions.resolveAll({
+          await ResourcePermissions.resolveUiCapabilities({
             userId: request.user.id,
             organizationId: request.organizationId,
           }),

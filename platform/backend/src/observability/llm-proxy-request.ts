@@ -33,6 +33,11 @@ export function getLlmProxyRequestTelemetry(params: {
   return telemetry;
 }
 
+/** A request rejected before the proxy handler has no logical-request event. */
+export function hasLlmProxyRequestTelemetry(request: object): boolean {
+  return requests.has(request);
+}
+
 /** One logical request; retries and pool attempts never emit another observation. */
 export class LlmProxyRequestTelemetry {
   private readonly startedAt = Date.now();

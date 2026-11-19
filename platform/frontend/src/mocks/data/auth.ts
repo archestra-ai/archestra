@@ -87,7 +87,9 @@ export function makeUserPermissions(
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],
+    costExport: [...ALL],
     guardrailsPolicy: ["read", "update"],
+    guardrailsYell: ["read", "admin"],
     organizationSettings: ["read", "update"],
     knowledgeSource: [...ALL],
     log: ["read", "admin"],
@@ -128,6 +130,7 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "oauthClient",
     "oauthClient",
     "environment",
+    "agentRuntime",
     "serviceAccount",
     "credential",
   ].flatMap((resource) =>

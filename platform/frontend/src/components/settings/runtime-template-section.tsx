@@ -4,7 +4,10 @@ import {
   AGENT_CATALOG_IDS,
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
+  agentRuntimePermissionScope,
   type archestraApiTypes,
+  CUSTOM_IMAGE_RUNTIME_ID,
+  isIntegrationHidden,
 } from "@archestra/shared";
 import {
   closestCenter,
@@ -27,40 +30,27 @@ import {
   Box,
   ChevronDown,
   GripVertical,
-  LockKeyhole,
   MoreHorizontal,
   Pencil,
   Plus,
   X,
 } from "lucide-react";
-import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useId, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
   getAgentCatalogTemplates,
   useAgentCatalogImages,
 } from "@/components/agent-pages/agent-catalog";
-import {
-  AgentRuntimeEnvironmentFields,
-  AgentRuntimeImageFields,
-  AgentRuntimeProtocolField,
-  AgentRuntimeSteeringField,
-  defaultAgentRuntime,
-} from "@/components/agent-runtime-fields";
-import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SettingsSaveBar } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  BuiltInRuntimeDialog,
+  CustomRuntimeDialog,
+  RuntimeKindLabel,
+  type TemplateDraft,
+} from "@/components/settings/runtime-template-dialogs";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,21 +59,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
-  type RuntimeTemplate,
   useRuntimeTemplateCatalog,
   useRuntimeTemplateSettings,
   useSaveRuntimeTemplateSettings,
@@ -122,25 +103,31 @@ export function RuntimeTemplateSection({
   const save = useSaveRuntimeTemplateSettings();
   const images = useAgentCatalogImages();
   const appName = useAppName();
+  const customImagesId = useId();
   const builtIns = getAgentCatalogTemplates(images, appName);
-  const [draft, setDraft] = useState<SaveBody | null>(null);
-  const [editing, setEditing] = useState<RuntimeTemplate | "new" | null>(null);
+  // The change being saved, shown at once and dropped when the save
+  // settles: a success replaces it with the saved settings, a failure puts
+  // the list back as it was.
+  const [pending, setPending] = useState<SaveBody | null>(null);
+  const [editing, setEditing] = useState<TemplateDraft | "new" | null>(null);
+  const [editingBuiltIn, setEditingBuiltIn] = useState<AgentCatalogId | null>(
+    null,
+  );
   const saved: SaveBody = {
     revision: settings.data?.revision ?? 0,
     templates: settings.data?.templates ?? [],
+    builtIns: settings.data?.builtIns ?? {},
     popularAgentOverrides: settings.data
       ? settings.data.popularAgentOverrides
       : (organization?.popularAgentOverrides ?? null),
   };
-  const state = draft ?? saved;
+  const state = pending ?? saved;
   const editable =
     canUpdate === true &&
     !disabled &&
     !!settings.data &&
     !!organization &&
     !save.isPending;
-  const hasChanges =
-    draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   const rows: Row[] = [
     ...AGENT_CATALOG_IDS.map((id) => ({
       id,
@@ -163,6 +150,10 @@ export function RuntimeTemplateSection({
   ].sort((a, b) => position(a.id) - position(b.id));
   const visibleRows = rows.filter((row) => !row.hidden);
   const removedRows = rows.filter((row) => row.hidden);
+  const customImageHidden = isIntegrationHidden(
+    state.popularAgentOverrides,
+    CUSTOM_IMAGE_RUNTIME_ID,
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -170,6 +161,15 @@ export function RuntimeTemplateSection({
     }),
   );
 
+  /** Every change to the list saves at once; there is no draft to keep. */
+  function commit(next: SaveBody, onSaved?: () => void) {
+    if (!editable) return;
+    setPending(next);
+    save.mutate(next, {
+      onSuccess: onSaved,
+      onSettled: () => setPending(null),
+    });
+  }
   function position(id: string) {
     return runtimeTemplatePosition(
       id,
@@ -178,8 +178,7 @@ export function RuntimeTemplateSection({
     );
   }
   function reorder(ids: string[]) {
-    if (!editable) return;
-    setDraft(
+    commit(
       withRuntimeOrder(state, [...ids, ...removedRows.map((row) => row.id)]),
     );
   }
@@ -201,8 +200,16 @@ export function RuntimeTemplateSection({
         visibleRows.findIndex((item) => item.id === over.id),
       );
   }
+  function setCustomImageAvailable(visible: boolean) {
+    commit({
+      ...state,
+      popularAgentOverrides: {
+        ...state.popularAgentOverrides,
+        [CUSTOM_IMAGE_RUNTIME_ID]: { hidden: !visible },
+      },
+    });
+  }
   function setAvailable(row: Row, visible: boolean) {
-    if (!editable) return;
     const next = row.builtIn
       ? {
           ...state,
@@ -220,7 +227,7 @@ export function RuntimeTemplateSection({
             item.id === row.id ? { ...item, hidden: !visible } : item,
           ),
         };
-    setDraft(
+    commit(
       visible
         ? withRuntimeOrder(next, [
             ...visibleRows.map((item) => item.id),
@@ -235,54 +242,57 @@ export function RuntimeTemplateSection({
 
   return (
     <section id="popular-agents" className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h3 className="text-sm font-medium">Agent Runtimes</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-medium">Available runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            These runtimes appear as configuration templates when creating an
-            agent. Drag to change their order, add custom runtimes, or remove
-            built-in and custom choices. Removed runtimes can be added back at
-            any time. Changes here don’t affect existing agents.
+            The runtimes people can pick when creating an agent. Who can use
+            each one, and change its settings on their agents, is set in its
+            permissions.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline" disabled={!editable}>
-              <Plus />
-              <span>Add runtime</span>
-              <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Not in this list</DropdownMenuLabel>
-            {removedRows.length ? (
-              removedRows.map((row) => (
-                <DropdownMenuItem
-                  key={row.id}
-                  onSelect={() => setAvailable(row, true)}
-                >
-                  <RuntimeMark row={row} />
-                  <span className="min-w-0 flex-1 truncate" title={row.name}>
-                    {row.name}
-                  </span>
-                  <Plus className="ml-auto size-3.5" />
-                </DropdownMenuItem>
-              ))
-            ) : (
-              <DropdownMenuItem disabled>
-                All saved runtimes are included
+        <div className="flex shrink-0 items-center gap-2">
+          <ResourceListActions resource="agentRuntime" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" disabled={!editable}>
+                <Plus />
+                <span>Add runtime</span>
+                <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {removedRows.length > 0 && (
+                <>
+                  <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
+                  {removedRows.map((row) => (
+                    <DropdownMenuItem
+                      key={row.id}
+                      onSelect={() => setAvailable(row, true)}
+                    >
+                      <RuntimeMark row={row} />
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        title={row.name}
+                      >
+                        {row.name}
+                      </span>
+                      <Plus className="ml-auto size-3.5" />
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                disabled={state.templates.length >= 100}
+                onSelect={() => setEditing("new")}
+              >
+                <Plus />
+                <span>Create custom runtime…</span>
               </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={state.templates.length >= 100}
-              onSelect={() => setEditing("new")}
-            >
-              <Plus />
-              <span>Create custom runtime…</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       {organizationError || settings.isError ? (
         <QueryLoadError
@@ -305,7 +315,7 @@ export function RuntimeTemplateSection({
               items={visibleRows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <ul className="divide-y" aria-label="Agent Runtimes">
+              <ul className="divide-y" aria-label="Available runtimes">
                 {visibleRows.map((row, index) => (
                   <RuntimeTemplateRow
                     key={row.id}
@@ -314,10 +324,13 @@ export function RuntimeTemplateSection({
                     onMove={(direction) => move(index, index + direction)}
                     onRemove={() => setAvailable(row, false)}
                     onEdit={() =>
-                      setEditing(
-                        state.templates.find((item) => item.id === row.id) ??
-                          null,
-                      )
+                      row.builtIn
+                        ? setEditingBuiltIn(row.id as AgentCatalogId)
+                        : setEditing(
+                            state.templates.find(
+                              (item) => item.id === row.id,
+                            ) ?? null,
+                          )
                     }
                   />
                 ))}
@@ -331,18 +344,56 @@ export function RuntimeTemplateSection({
           )}
         </div>
       )}
-      <SettingsSaveBar
-        hasChanges={hasChanges}
-        isSaving={save.isPending}
-        disabledSave={!editable}
-        permissions={{ organizationSettings: ["update"] }}
-        onSave={() => save.mutate(state, { onSuccess: () => setDraft(null) })}
-        onCancel={() => setDraft(null)}
-      />
+      {/* Not a runtime: the choice to run an image that is none of them. */}
+      <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <Label htmlFor={customImagesId}>Allow custom images</Label>
+          <p className="text-xs text-muted-foreground">
+            Offers a Custom image choice when creating an agent, for people who
+            can configure any runtime to run their own container image and
+            command. Turning it off keeps existing agents as they are.
+          </p>
+        </div>
+        <Switch
+          id={customImagesId}
+          checked={!customImageHidden}
+          disabled={!editable}
+          onCheckedChange={setCustomImageAvailable}
+        />
+      </div>
+      {editingBuiltIn !== null && (
+        <BuiltInRuntimeDialog
+          id={editingBuiltIn}
+          scope={agentRuntimePermissionScope({
+            kind: "built-in",
+            id: editingBuiltIn,
+          })}
+          isSaving={save.isPending}
+          image={images[editingBuiltIn]}
+          value={state.builtIns?.[editingBuiltIn]}
+          onClose={() => setEditingBuiltIn(null)}
+          onSave={(builtIn) =>
+            commit(
+              {
+                ...state,
+                builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
+              },
+              () => setEditingBuiltIn(null),
+            )
+          }
+        />
+      )}
       {editing !== null && (
-        <RuntimeTemplateDialog
+        <CustomRuntimeDialog
           key={editing === "new" ? "new" : editing.id}
           template={editing === "new" ? null : editing}
+          savedScope={
+            editing !== "new" &&
+            settings.data?.templates.some((item) => item.id === editing.id)
+              ? editing.id
+              : null
+          }
+          isSaving={save.isPending}
           names={rows
             .filter((row) => row.id !== (editing === "new" ? null : editing.id))
             .map((row) => row.name)}
@@ -357,7 +408,7 @@ export function RuntimeTemplateSection({
                       item.id === template.id ? template : item,
                     ),
             };
-            setDraft(
+            commit(
               editing === "new"
                 ? withRuntimeOrder(next, [
                     ...visibleRows.map((row) => row.id),
@@ -365,8 +416,8 @@ export function RuntimeTemplateSection({
                     ...removedRows.map((row) => row.id),
                   ])
                 : next,
+              () => setEditing(null),
             );
-            setEditing(null);
           }}
         />
       )}
@@ -396,7 +447,6 @@ function RuntimeTemplateRow({
     transition,
     isDragging,
   } = useSortable({ id: row.id, disabled });
-  const TypeIcon = row.builtIn ? LockKeyhole : Box;
   return (
     <li
       ref={setNodeRef}
@@ -430,20 +480,14 @@ function RuntimeTemplateRow({
           <span className="truncate text-sm font-medium" title={row.name}>
             {row.name}
           </span>
-          <span
-            className="inline-flex shrink-0 text-muted-foreground/70"
-            title={row.builtIn ? "Built-in runtime" : "Custom runtime"}
-          >
-            <TypeIcon className="size-3" />
-            <span className="sr-only">
-              {row.builtIn ? "Built-in runtime" : "Custom runtime"}
-            </span>
-          </span>
+          <RuntimeKindLabel builtIn={row.builtIn} />
         </div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="max-w-full truncate" title={row.description}>
-            {row.description}
-          </span>
+          {row.description && (
+            <span className="max-w-full truncate" title={row.description}>
+              {row.description}
+            </span>
+          )}
           <span
             className="max-w-full truncate font-mono text-[11px] opacity-70"
             title={row.image}
@@ -465,12 +509,10 @@ function RuntimeTemplateRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {!row.builtIn && (
-            <DropdownMenuItem onSelect={onEdit}>
-              <Pencil className="size-3.5" />
-              Edit runtime
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil className="size-3.5" />
+            Edit runtime
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onRemove}>
             <X className="size-3.5" />
             Remove from list
@@ -488,163 +530,6 @@ function RuntimeMark({ row }: { row: Row }) {
     <AgentIcon icon={row.icon} size={19} />
   ) : (
     <Box className="size-4 text-muted-foreground" />
-  );
-}
-
-function RuntimeTemplateDialog({
-  template,
-  names,
-  onClose,
-  onSave,
-}: {
-  template: RuntimeTemplate | null;
-  names: string[];
-  onClose: () => void;
-  onSave: (template: RuntimeTemplate) => void;
-}) {
-  const form = useForm<RuntimeTemplate>({
-    defaultValues: template ?? {
-      id: crypto.randomUUID(),
-      name: "",
-      description: "",
-      icon: null,
-      hidden: false,
-      position: 0,
-      runtime: { ...defaultAgentRuntime(), privileged: false },
-    },
-  });
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="sm:max-w-2xl">
-        <Form {...form}>
-          <form className="contents" onSubmit={form.handleSubmit(onSave)}>
-            <DialogHeader>
-              <DialogTitle>
-                {template ? "Edit custom runtime" : "Add custom runtime"}
-              </DialogTitle>
-              <DialogDescription>
-                A reusable starting configuration for new agents. You can still
-                adjust each agent after selecting it.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-5">
-              <Controller
-                control={form.control}
-                name="icon"
-                render={({ field: iconField }) => (
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    rules={{
-                      required: "Enter a name",
-                      maxLength: {
-                        value: 100,
-                        message: "Use at most 100 characters",
-                      },
-                      validate: (value) =>
-                        !value.trim()
-                          ? "Enter a name"
-                          : names.some(
-                                (name) =>
-                                  name.toLocaleLowerCase() ===
-                                  value.trim().toLocaleLowerCase(),
-                              )
-                            ? "Choose a unique runtime name"
-                            : true,
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <IdentityFields
-                          icon={iconField.value}
-                          onIconChange={iconField.onChange}
-                          label={<FormLabel>Name</FormLabel>}
-                        >
-                          <FormControl>
-                            <Input
-                              {...field}
-                              maxLength={100}
-                              placeholder="Engineering workspace"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </IdentityFields>
-                      </FormItem>
-                    )}
-                  />
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        maxLength={1_000}
-                        placeholder="What should people use this runtime for?"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="runtime"
-                rules={{
-                  validate: (runtime) =>
-                    !runtime.image.trim()
-                      ? "Enter a Docker image"
-                      : /\s/.test(runtime.image.trim())
-                        ? "Docker images cannot contain whitespace"
-                        : true,
-                }}
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="space-y-5">
-                      <AgentRuntimeImageFields
-                        value={field.value}
-                        onChange={(value) =>
-                          field.onChange({ ...value, privileged: false })
-                        }
-                      />
-                      <FormMessage />
-                      <AgentRuntimeProtocolField
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <AgentRuntimeSteeringField
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <AgentRuntimeEnvironmentFields
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                    </div>
-                  </FormItem>
-                )}
-              />
-            </DialogBody>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit">
-                {template ? "Update template" : "Add template"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

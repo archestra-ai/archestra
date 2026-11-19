@@ -7,11 +7,16 @@
  * process, often the agent's type check or test run, and the container lives
  * on. Nothing in the pod's status says so then; the cgroup's `memory.events`
  * does: `oom_kill` counts processes killed by any OOM killer, `oom` the times
- * this cgroup hit its own limit.
+ * this cgroup hit its own limit. The maintained images also run a memory
+ * warden (`archestra-memory-warden`) that stops the agent's largest command
+ * just before the limit, so the kernel does not stop every process; it writes
+ * one line per stop to `/var/run/archestra/memory-warden.log`.
  */
 export interface MemoryEvents {
   /** Processes of the cgroup killed by an OOM killer, the node's included. */
   oomKills: number;
+  /** Agent commands the image's memory warden stopped near the limit. */
+  wardenStops: number;
   /** Times the cgroup hit its own memory limit. */
   limitHits: number;
   /** The highest usage seen, when the kernel exposes it. */
@@ -25,6 +30,8 @@ export interface MemoryKill {
   events: MemoryEvents;
   /** Processes the kernel killed between the two readings. */
   killed: number;
+  /** Agent commands the memory warden stopped between the two readings. */
+  stopped: number;
   /** True when the cgroup hit its limit in between; false for a node that ran out of memory. */
   atLimit: boolean;
 }
@@ -35,7 +42,7 @@ export interface MemoryKill {
  */
 const MEMORY_EVENTS_SCRIPT =
   // memory.events has its own "max" counter, so the limit gets another name.
-  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"';
+  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\nwarden_stop %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)" "$(cat /var/run/archestra/memory-warden.log 2>/dev/null | wc -l)"';
 
 /** Runs in the pod's shell; its output is parsed by {@link parseMemoryEvents}. */
 export const READ_MEMORY_EVENTS_COMMAND = [
@@ -98,6 +105,7 @@ export function parseMemoryEvents(output: string): MemoryEvents | null {
   };
   return {
     oomKills: Number(oomKills),
+    wardenStops: count("warden_stop"),
     limitHits: count("oom"),
     peakBytes: bytes("peak"),
     limitBytes: bytes("limit"),
@@ -114,12 +122,25 @@ export function memoryKillBetween(
   before: MemoryEvents | null,
   after: MemoryEvents | null,
 ): MemoryKill | null {
-  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  if (!before || !after) return null;
+  const killed = Math.max(0, after.oomKills - before.oomKills);
+  const stopped = Math.max(0, after.wardenStops - before.wardenStops);
+  if (killed === 0 && stopped === 0) return null;
   return {
     events: after,
-    killed: after.oomKills - before.oomKills,
+    killed,
+    stopped,
     atLimit: after.limitHits > before.limitHits,
   };
+}
+
+/**
+ * A kill that can explain or end a turn: the kernel's. A stop by the memory
+ * warden takes one of the agent's commands, which the agent sees fail and
+ * survives; it is logged, but a later failure of the turn is not blamed on it.
+ */
+export function turnEndingKill(kill: MemoryKill | null): MemoryKill | null {
+  return kill && kill.killed > 0 ? kill : null;
 }
 
 /**
@@ -145,6 +166,18 @@ export function describeMemoryKill(
   const tier = where.tier ? ` at tier ${where.tier}` : "";
   const processes =
     kill.killed === 1 ? "a process" : `${kill.killed} processes`;
+  if (kill.killed === 0) {
+    // Only the warden: the container came close, and nothing else was lost.
+    const limit =
+      events.limitBytes !== null
+        ? ` of ${formatLimitGibibytes(events.limitBytes)}${tier}`
+        : tier;
+    const commands =
+      kill.stopped === 1
+        ? "one of the agent's commands"
+        : `${kill.stopped} of the agent's commands`;
+    return `The run ran short of memory. The ${where.container} container neared its memory limit${limit}${peak}, and the memory warden stopped ${commands} so the kernel would not stop every process. ${MEMORY_KILL_NEXT_STEP}`;
+  }
   if (kill.atLimit) {
     const limit =
       events.limitBytes !== null

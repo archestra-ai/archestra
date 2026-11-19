@@ -1,34 +1,7 @@
 /**
- * Formats an OpenAPPA review payload for tool card display.
- * Extracts the tool name and parses JSON strings into structured arguments.
+ * Formats an OpenAPPA review payload for tool card display, from the
+ * structured fields the platform sends with it.
  */
-
-export type ReviewPresentation = {
-  intro: string;
-  tool?: string;
-  arguments?: unknown;
-  rest: string;
-};
-
-export function parseReviewPresentation({
-  message,
-  reviewedTool,
-  reviewedArguments,
-}: {
-  message: string;
-  reviewedTool?: string;
-  reviewedArguments?: string;
-}): ReviewPresentation {
-  const extracted = extractFromMessage(message);
-  const tool = reviewedTool?.trim() || extracted.tool;
-  const argumentsJson = reviewedArguments ?? extracted.argumentsJson;
-  return {
-    intro: extracted.intro,
-    ...(tool ? { tool } : {}),
-    ...(argumentsJson ? { arguments: parseJsonArguments(argumentsJson) } : {}),
-    rest: extracted.rest,
-  };
-}
 
 /** Parse JSON text and revive string values that are themselves JSON. */
 export function parseJsonArguments(raw: string): unknown {
@@ -68,120 +41,57 @@ export function reviveJsonStrings(value: unknown): unknown {
   return value;
 }
 
-function extractFromMessage(message: string): {
-  intro: string;
-  tool?: string;
-  argumentsJson?: string;
-  rest: string;
-} {
-  const toolMatch = /^Tool:\s+(\S+)\s*$/m.exec(message);
-  const argumentsHeader = /^Arguments:\s*$/m.exec(message);
-  const coverageHeader = /^What this ruling would cover:\s*$/m.exec(message);
-
-  const toolLineStart = toolMatch?.index;
-  const intro = (
-    toolLineStart !== undefined
-      ? message.slice(0, toolLineStart)
-      : argumentsHeader
-        ? message.slice(0, argumentsHeader.index)
-        : coverageHeader
-          ? message.slice(0, coverageHeader.index)
-          : message
-  ).trim();
-
-  const rest = coverageHeader ? message.slice(coverageHeader.index).trim() : "";
-
-  let argumentsJson: string | undefined;
-  if (argumentsHeader) {
-    const afterHeader = message.slice(
-      argumentsHeader.index + argumentsHeader[0].length,
-    );
-    const jsonEnd = coverageHeader
-      ? coverageHeader.index -
-        (argumentsHeader.index + argumentsHeader[0].length)
-      : afterHeader.length;
-    const jsonSlice = afterHeader.slice(0, jsonEnd).trim();
-    if (jsonSlice.startsWith("{") || jsonSlice.startsWith("[")) {
-      argumentsJson = jsonSlice;
-    }
-  }
-
-  return {
-    intro,
-    ...(toolMatch ? { tool: toolMatch[1] } : {}),
-    ...(argumentsJson ? { argumentsJson } : {}),
-    rest,
-  };
-}
-
 export type ReviewDecision = "approve" | "deny";
-
-export const REVIEW_STATUS_DESCRIPTION =
-  "Review this tool call before it can continue.";
 
 export type ReviewCardView = {
   /** Present when the review names a tool or carries arguments. */
   toolCard?: { title?: string; input?: unknown };
-  /** Visible review text, including any additional approval scope. */
-  description: string;
+  /** Each additional consequence stays visible as a separate list item. */
+  coverage?: string[];
+  /** Original review text for requests without a structured tool or coverage. */
+  details?: string;
 };
 
 /**
- * What the approval card shows. A review with a parseable tool gets the tool
- * card and the standard prompt; accepted coverage is appended when the review
- * states it. One without a tool falls back to its own text.
+ * What the approval card shows. A review with a structured tool gets the tool
+ * card followed by what approving also accepts, or by the review text when
+ * that is unknown. One without a tool falls back to its own message.
  */
 export function getReviewCardView({
   message,
   reviewedTool,
   reviewedArguments,
+  reviewedCoverage,
+  reviewedText,
 }: {
   message: string;
   reviewedTool?: string;
   reviewedArguments?: string;
+  reviewedCoverage?: string[];
+  reviewedText?: string;
 }): ReviewCardView {
-  const presentation = parseReviewPresentation({
-    message,
-    ...(reviewedTool ? { reviewedTool } : {}),
-    ...(reviewedArguments ? { reviewedArguments } : {}),
-  });
-  if (presentation.tool || presentation.arguments !== undefined) {
-    const accepted = acceptedCoverage(presentation.rest);
-    const description = accepted?.length
-      ? [
-          REVIEW_STATUS_DESCRIPTION,
-          [
-            "Approving also accepts:",
-            ...accepted.map((line) => `  - ${line}`),
-          ].join("\n"),
-        ].join("\n\n")
-      : REVIEW_STATUS_DESCRIPTION;
-    return {
-      toolCard: {
-        ...(presentation.tool ? { title: presentation.tool } : {}),
-        ...(presentation.arguments !== undefined
-          ? { input: presentation.arguments }
-          : {}),
-      },
-      description,
-    };
+  const tool = reviewedTool?.trim();
+  const input = reviewedArguments
+    ? parseJsonArguments(reviewedArguments)
+    : undefined;
+  if (!tool && input === undefined) {
+    const details = message.trim();
+    return details ? { details } : {};
   }
-  return { description: message.trim() || REVIEW_STATUS_DESCRIPTION };
-}
-
-const COVERAGE_HEADING = "What this ruling would cover:";
-
-/** Non-attention coverage; undefined for an unrecognized section. */
-function acceptedCoverage(rest: string): string[] | undefined {
-  if (!rest.startsWith(COVERAGE_HEADING)) return undefined;
-  const coverage: string[] = [];
-  for (const line of rest.split("\n").slice(1)) {
-    if (line === "") break;
-    if (line === "  (none)") continue;
-    if (!line.startsWith("  - ")) return undefined;
-    coverage.push(line.slice("  - ".length));
-  }
-  return coverage.filter((line) => !line.startsWith("attention: "));
+  // No coverage and no text: a request from before the platform sent either,
+  // whose message is the review itself.
+  const details =
+    reviewedCoverage === undefined
+      ? (reviewedText ?? message).trim()
+      : undefined;
+  return {
+    toolCard: {
+      ...(tool ? { title: tool } : {}),
+      ...(input !== undefined ? { input } : {}),
+    },
+    ...(reviewedCoverage?.length ? { coverage: reviewedCoverage } : {}),
+    ...(details ? { details } : {}),
+  };
 }
 
 /**

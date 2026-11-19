@@ -8,6 +8,7 @@ import {
   isCredentialLevelSubscriptionProvider,
   isSharedGithubAppCredential,
   isSubscriptionCredential,
+  PERSONAL_SUBSCRIPTION_PROVIDERS,
   perUserCredentialLabel,
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
@@ -241,5 +242,15 @@ describe("GitHub App credentials on github-copilot", () => {
         apiKey: appCredential,
       }),
     ).toBe(false);
+  });
+});
+
+describe("PERSONAL_SUBSCRIPTION_PROVIDERS", () => {
+  it("lists exactly the providers whose keys are personal sign-ins", () => {
+    // Derived from the registry, so it must agree with the hand-kept set the
+    // backend enforces per-user scope with.
+    expect(new Set(PERSONAL_SUBSCRIPTION_PROVIDERS)).toEqual(
+      PROVIDERS_REQUIRING_PER_USER_CREDENTIAL,
+    );
   });
 });

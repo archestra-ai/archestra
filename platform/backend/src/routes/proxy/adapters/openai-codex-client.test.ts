@@ -23,6 +23,53 @@ const usage = {
 };
 
 describe("Codex subscription client terminal lifecycle", () => {
+  it.each([
+    false,
+    true,
+  ])("forwards strict chat constraints to the Codex HTTP request (stream=%s)", async (stream) => {
+    const jsonSchema = {
+      name: "status_result",
+      strict: true,
+      schema: {
+        type: "object",
+        properties: { status: { type: "string", enum: ["ready"] } },
+        required: ["status"],
+        additionalProperties: false,
+      },
+    };
+    let captured: Record<string, unknown> | undefined;
+    const innerFetch: InnerFetch = async (_url, init) => {
+      captured = JSON.parse(String(init?.body));
+      return sseResponse([
+        { type: "response.output_text.delta", delta: '{"status":"ready"}' },
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_structured",
+            status: "completed",
+            output: [],
+            usage,
+          },
+        },
+      ]);
+    };
+    const result = await clientFor(innerFetch).chat.completions.create({
+      ...request,
+      response_format: { type: "json_schema", json_schema: jsonSchema },
+      stream,
+    });
+    let text = "";
+    if (stream) {
+      for await (const chunk of result as unknown as AsyncIterable<Chunk>)
+        text += chunk.choices[0]?.delta.content ?? "";
+    } else text = (result as Completion).choices[0].message.content ?? "";
+    expect(text).toBe('{"status":"ready"}');
+    expect(captured?.text).toEqual({
+      format: { ...jsonSchema, type: "json_schema" },
+    });
+    expect(captured).not.toHaveProperty("response_format");
+  });
+
   beforeEach(() => {
     // Token redemption and inference are separate fake HTTP boundaries. No
     // credential store or real provider is involved in these SDK-wrapper tests.

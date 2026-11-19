@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";

@@ -17,6 +17,8 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct RunRequest {
     pub replay_steps: Vec<ReplayStep>,
+    /// keys the live exec in the engine cache (see `COMMAND_ID_ENV`).
+    pub command_id: String,
     pub limits: Limits,
     pub command: String,
     pub cwd: String,

@@ -26,11 +26,12 @@ import {
 } from "@/test";
 import { authenticatedRouteApp } from "@/test/authenticated-route-app";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { spyOnLogger } from "@/test/logging";
 import { useMswServer } from "@/test/msw";
 import { GitHubUserIdSchema, type User } from "@/types";
 import githubActionsRoutes from "./github-actions.routes";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 const GITHUB_ISSUER = "https://token.actions.githubusercontent.com";
 const REPOSITORY = "acme/widgets";

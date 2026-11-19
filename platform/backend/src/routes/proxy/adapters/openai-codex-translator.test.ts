@@ -37,6 +37,35 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
 }
 
 describe("buildCodexResponsesRequest", () => {
+  it.each([
+    { type: "text" as const },
+    { type: "json_object" as const },
+    {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "status_result",
+        description: "A synthetic status",
+        strict: true,
+        schema: {
+          type: "object",
+          $defs: { status: { type: "string", enum: ["ready"] } },
+          properties: { status: { $ref: "#/$defs/status" } },
+          required: ["status"],
+          additionalProperties: false,
+        },
+      },
+    },
+  ])("maps response_format $type to Responses text.format", (format) => {
+    const translated = buildCodexResponsesRequest(
+      req({ response_format: format }),
+    );
+    expect(translated.text?.format).toEqual(
+      format.type === "json_schema"
+        ? { type: "json_schema", ...format.json_schema }
+        : format,
+    );
+  });
+
   it("applies the mandatory Codex-backend transforms", () => {
     const body = buildCodexResponsesRequest(req()) as unknown as Record<
       string,

@@ -45,6 +45,7 @@ describe("platform Service egress", () => {
       platformNamespace: "platform",
       platformPodLabels: { app: "api" },
       platformPorts: [9000],
+      clusterDnsIps: [],
       platformService,
     });
     expect(policy.spec?.egress?.[0]).toMatchObject({

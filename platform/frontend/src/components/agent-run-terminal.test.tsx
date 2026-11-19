@@ -39,6 +39,30 @@ describe("Agent run terminal transport", () => {
     });
   });
 
+  it("reports a dropped connection and subscribes again when it returns", () => {
+    websocketMock.isConnected.mockReturnValue(true);
+    let connectionHandler: ((connected: boolean) => void) | undefined;
+    websocketMock.onConnectionChange.mockImplementation((handler) => {
+      connectionHandler = handler;
+      return vi.fn();
+    });
+    const sessionHandlers = handlers();
+
+    createAgentRunTransport("task-1").open(sessionHandlers);
+    expect(websocketMock.send).toHaveBeenCalledOnce();
+
+    connectionHandler?.(false);
+    expect(sessionHandlers.onConnectionLost).toHaveBeenCalledOnce();
+    expect(websocketMock.send).toHaveBeenCalledOnce();
+
+    connectionHandler?.(true);
+    expect(websocketMock.send).toHaveBeenCalledTimes(2);
+    expect(websocketMock.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_attach",
+      payload: { runId: "task-1" },
+    });
+  });
+
   it("subscribes immediately on an existing websocket connection", () => {
     websocketMock.isConnected.mockReturnValue(true);
     websocketMock.onConnectionChange.mockReturnValue(vi.fn());
@@ -57,5 +81,6 @@ function handlers() {
     onError: vi.fn(),
     onClosed: vi.fn(),
     onProgress: vi.fn(),
+    onConnectionLost: vi.fn(),
   };
 }

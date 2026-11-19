@@ -3,9 +3,12 @@
 import {
   type archestraApiTypes,
   buildSlackManifest,
+  buildSlackSlashCommands,
+  SLACK_SLASH_COMMAND_SUFFIXES,
   slackHandleFor,
+  urlSlugify,
 } from "@archestra/shared";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -13,6 +16,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -25,6 +29,9 @@ import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
+// The walkthrough videos are served from cdn.archestra.dev (archestra-ai/infra,
+// gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
+import { setupVideoUrl } from "@/lib/setup-videos";
 
 type ConnectionMode = NonNullable<
   NonNullable<
@@ -291,7 +298,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
         </ol>
       </StepCard>
       <video
-        src="/slack/slack-display-settings.mp4"
+        src={setupVideoUrl("slack/slack-display-settings.mp4")}
         controls
         muted
         autoPlay
@@ -361,7 +368,7 @@ function StepInstall({
         </ol>
       </StepCard>
       <video
-        src="/slack/add-slack-app.mp4"
+        src={setupVideoUrl("slack/add-slack-app.mp4")}
         controls
         muted
         autoPlay
@@ -442,7 +449,7 @@ function StepAppLevelToken({
         </ol>
       </StepCard>
       <video
-        src="/slack/slack-app-level-token.mp4"
+        src={setupVideoUrl("slack/slack-app-level-token.mp4")}
         controls
         muted
         autoPlay
@@ -505,6 +512,7 @@ function StepManifestWebhook({
             onChange={(e) => setAppName(e.target.value)}
             placeholder={defaultAppName}
           />
+          <SlackCommandPrefixNotice appName={appName} enabled={slashCommands} />
         </div>
 
         <ol className="space-y-3">
@@ -628,6 +636,7 @@ function StepManifestSocket({
             onChange={(e) => setAppName(e.target.value)}
             placeholder={defaultAppName}
           />
+          <SlackCommandPrefixNotice appName={appName} enabled={slashCommands} />
         </div>
 
         <ol className="space-y-3">
@@ -691,6 +700,28 @@ function StepManifestSocket({
         </pre>
       </div>
     </div>
+  );
+}
+
+function SlackCommandPrefixNotice({
+  appName,
+  enabled,
+}: {
+  appName: string;
+  enabled: boolean;
+}) {
+  const command = buildSlackSlashCommands(appName).SELECT_AGENT;
+  const unshortenedCommand = `/${urlSlugify(appName)}${SLACK_SLASH_COMMAND_SUFFIXES.SELECT_AGENT}`;
+  if (!enabled || command.length >= unshortenedCommand.length) return null;
+
+  return (
+    <InlineNotice variant="info" role="status">
+      <Info />
+      <InlineNoticeText>
+        Slack commands are automatically shortened to fit Slack’s 32-character
+        limit.
+      </InlineNoticeText>
+    </InlineNotice>
   );
 }
 

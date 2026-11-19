@@ -16,6 +16,12 @@ Ordinary PRs and merge groups report an explicit no-scan decision. Source/depend
 
 Release builds independently scan the exact immutable per-architecture digests before assigning version tags. This includes all published Platform, MCP, p4, Sandbox Base, and Agent Catalog images on both release tracks. Digest artifacts must come from the same workflow run and source revision and contain the complete expected architecture set. Release builds do not reuse previously tagged images or prior scan results. A failure prevents that image's version tag and blocks GitHub release publication; successful sibling builds and the prerelease chart may already exist, so use the existing same-run recovery procedure. Stable publication still requires separate artifact qualification and environment approval. Untagged build digests are uploaded before scanning so Scout can inspect them.
 
+### Catch Findings Before A Release
+
+An advisory published between the queue scan and publication holds the release, and only a new version gets past it. **Nightly Release Image Scan** (`.github/workflows/nightly-release-image-scan.yml`) rebuilds every image a release would publish from the heads of `main` and each branch in `.github/backport-targets.json`, using that line's own image inventory, and scans it under the release policy on `linux/amd64`. Main's Platform full and slim images come from **Nightly Platform Image Byte Scan** instead. Failures post to #alerts; to check that path, dispatch the workflow with `test-alert`, which skips the scan and posts a test message. Fix them on `main` and backport before cutting a release on that line. The scan gates nothing and is never publication evidence.
+
+Base images in the release Dockerfiles are written as `FROM image:version@sha256:digest` on the `FROM` line itself, never through an `ARG`, so Dependabot can read them. Dependabot checks them daily on `main` and each supported release line and proposes patch bumps (minor bumps for Node too) once a release is 7 days old, the organization's supply-chain cooldown. For an advisory inside that window, bump the pin by hand. The sandbox base's uv image is the exception: `check:sandbox-base` ties it to `DEFAULT_BASE_IMAGE` in `archestra-rs/sandbox-core/src/backends/dagger.rs`, so Dependabot leaves it alone and it moves by hand with that constant. `.github/scripts/test_base_image_pins.py` keeps the pins and the Dependabot targets in step with `.github/backport-targets.json`; update `.github/dependabot.yml` when a stable cutover changes the backport targets.
+
 ### Roll Out Required Checks
 
 The workflow preserves `Docker Image Scanning (Platform)`, `Docker Image Scanning (MCP Server Base)`, `Docker Image Scanning (p4 Shim)`, and the historical literal `Docker Image Scanning (${{ matrix.name }})` contexts. Each depends on the always-running **Release Image Security** gate. A release scan skipped after a failed prerequisite cannot satisfy these contexts. No repository protection change is required to adopt this compatibility bridge.
@@ -32,7 +38,8 @@ The next release after `1.4.0-beta.13` uses temporary `release-as: 1.4.0-rc.14` 
 Changing only `prerelease-type` does not replace an existing beta suffix in Release Please.
 Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
 After `1.4.0-rc.14` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.15`.
-RCs publish after successful builds and move only `archestra/platform:latest`. Neither release channel uses a GitHub environment or a separate deployment approval.
+RCs publish after successful builds once a second Engineering member (not whoever merged or started it) approves it in archestra-ai/release-publisher's `stable-release` environment, and move only `archestra/platform:latest`. Stable releases wait for the same approval. The release run waits up to 6 hours; when nobody approves in time, re-run its failed jobs to send a new request.
+Until that release is published, the required **Previous Release Published** check fails the next release PR on the same line (`main` for RCs, `release/X.Y` for its patches), and a comment on the PR names the draft it waits for. The check re-runs on its own once the release is published, or once its draft is deleted to abandon the version.
 
 ```mermaid
 gitGraph
@@ -66,7 +73,7 @@ manifest.
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.14`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
-3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the RC release.
+3. [ ] Merge the PR, get a second Engineering member to approve the publisher run (`stable-release`) within 6 hours, and confirm the **Release Please** workflow publishes the RC release.
 
 ## Ship A Stable Fix
 
@@ -91,6 +98,7 @@ manifest.
 `.github/backport-targets.json` is the explicit list of branches that accept automatic backport requests.
 Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
 Remove retired branches from that list when making them read-only.
+Keep the release-line `docker` entries in `.github/dependabot.yml` on the same branches; `test_base_image_pins.py` fails until they agree, and the nightly release image scan follows the list on its own.
 The workflow always runs trusted automation from the default branch, including manual retries.
 Automatic backports only accept merged PRs from branches in this repository targeting the default branch.
 PRs from forks are ineligible, including through scheduled scans and manual retries.
@@ -178,19 +186,26 @@ This is a complete cutover. Once the new stable release publishes, it becomes th
    - Derive settings from the live rulesets. Do not hard-code ruleset IDs, check names, integration IDs, reviewer IDs, or queue parameters.
 6. [ ] Open a PR to `release/1.4` configuring `.github/release-please/release-please-config.json` with the **Stable cut** settings below. Merge it through the new queue.
 7. [ ] Inventory open `release/1.3` PRs. Recreate still-required fixes that already landed on `main` as `cherry-pick -x` backports to `release/1.4`, merge them, and wait for the release PR to update.
-8. [ ] Verify the generated `1.4.0` release PR and its required checks. Complete qualification before merging: publication will run automatically after successful builds.
-9. [ ] Before merging that release PR, retire the previous stable line under the stable-cut approval:
+8. [ ] Write the upgrade guide and merge it to `release/1.4`. See **Write The Upgrade Guide** below. The `Release Freeze Check` on the `1.4.0` release PR fails until it exists.
+9. [ ] Verify the generated `1.4.0` release PR and its required checks. Complete qualification before merging: publication will run automatically after successful builds.
+10. [ ] Before merging that release PR, retire the previous stable line under the stable-cut approval:
    - Confirm no `release/1.3` release workflow is running or waiting for approval, then close its remaining PRs with an EOL explanation.
    - Delete its exact merge-queue ruleset.
    - Add an exact active EOL ruleset that blocks updates to `release/1.3`, has no bypass actors, and sets `update_allows_fetch_and_merge: false`.
    - Keep its branch, tags, releases, images, and charts for reproducibility.
-10. [ ] Verify the old line rejects updates, merge the `1.4.0` release PR through the queue, and complete **Verify Stable Publication**. The stable-cut approval covers this planned merge and its automatic publication.
-11. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
-12. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
-13. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
-14. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
+11. [ ] Verify the old line rejects updates, merge the `1.4.0` release PR through the queue, and complete **Verify Stable Publication**. The stable-cut approval covers this planned merge and its automatic publication.
+12. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
+13. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
+14. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
+15. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
 
 The operator or release agent must create, queue, monitor, and verify these PRs and settings directly. Human actions are limited to the two explicit cut approvals, reviewer selection when it cannot be derived safely, and exceptional recovery decisions.
+
+### Write The Upgrade Guide
+
+Every new stable line ships a page that tells platform admins how to upgrade from the previous line, for example `docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`. Admins read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes; it then appears in the `vX.Y` docs. The `Release Freeze Check` on the `X.Y.0` release PR fails until `docs/pages/admin/upgrade-v*-to-vX-Y.md` exists.
+
+Write it with the `archestra-upgrade-guide` skill. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.
 
 ### Release Please Configuration
 
@@ -212,7 +227,7 @@ Merging a release PR on `release/X.Y` builds and publishes the release automatic
 
 1. [ ] Confirm all build jobs and **Publish release** completed successfully.
 2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts for verification.
-3. [ ] Install the saved chart in a test environment with `ARCHESTRA_BETA=false`. Confirm image digests match the build.
+3. [ ] Install the saved chart in a test environment. Confirm image digests match the build.
 4. [ ] Verify a clean install and an upgrade from the previous stable version:
    - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
    - Confirm existing data remains intact after upgrade.
@@ -225,7 +240,7 @@ Apply the workflow change separately to each supported release branch; changing 
 
 ## Troubleshooting
 
-- **Build failure:** Inspect the failure and re-run failed jobs in the same workflow run.
+- **Build failure:** Inspect the failure, then use **Re-run all jobs** on the same workflow run (or the Release Gate message's *Retry*), not **Re-run failed jobs**. Build digests and candidate selections are artifacts of one run attempt, so a re-run of only the failed jobs cannot find the earlier attempt's and fails with `Incomplete release digest set`. A re-run of all jobs promotes the same merge-queue scanned archives again and rebuilds nothing; it works while that scan is under 24 hours old.
 - **No release PR after the stable-cut configuration PR:** Release Please counts only commits under `platform/`, and the configuration PR changes only `.github/`. If the new branch has no other `platform/` commit since the RC tag, Release Please skips the release PR. Merge a small change under `platform/` to the branch, then confirm the `X.Y.0` release PR opens.
 - **Qualification fails before merging:** Fix the candidate before merging its release PR. If a failed build has already created an unpublished draft, use the recovery process below with explicit authorization.
 - **Abandon an unpublished candidate:**
@@ -233,6 +248,10 @@ Apply the workflow change separately to each supported release branch; changing 
   2. Delete the GitHub draft release. Keep the git tag. (Unpublished draft releases block other releases).
   3. Fix the issue on `main` and backport to the release branch.
   4. Set temporary `release-as` to the next patch (`X.Y.1` after a rejected `X.Y.0`), qualify the fix before merging the new release PR, and verify publication afterward. Never reuse an existing version number.
+- **Draft release is held:** While a draft release exists, each push to its branch recovers it by promoting the exact bytes the merge queue scanned for its release commit again; a recovery never rebuilds a version. A push skips that recovery, with a notice, when it would be redundant or cannot succeed: the publisher already has an open or a successful request for the version (Release Finalize then publishes the GitHub release), the draft is older than the 24-hour queue scan evidence, or a release scan found vulnerabilities in those exact bytes (for example, a CVE published after the queue scanned them; the failing run keeps a `release-held-<version>-<sha>` artifact). The last two hold the draft, and the run's summary lists the ways out:
+  - Usually, abandon the version as below: delete the draft and keep its tag. The next release PR on the branch, carrying the fix, then proceeds under a new version.
+  - When a finding no longer applies (a withdrawn or reclassified advisory) and the queue scan is under 24 hours old, scan the same bytes once more: `gh workflow run release-please.yml --ref <branch> -f retry-held-release=true`.
+  - For a release that already handed off, re-run only the **Publish release images and chart** job of its Release Please run; it rebuilds nothing.
 - **Cutover fails after the old line is locked but before publication:** Stop. With explicit recovery authorization, cancel the new run, delete its blocking draft but keep its tag, restore the old line's merge queue, and remove its EOL rule before accepting old-line changes. Resume the cut with a fixed, newly versioned patch candidate; never recreate the tagged version.
 - **Partial publication:**
   1. Do not publish artifacts or move `latest` manually.

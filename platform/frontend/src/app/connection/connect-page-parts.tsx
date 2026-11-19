@@ -169,6 +169,45 @@ export function TextButton({
   );
 }
 
+/**
+ * Several versions of one spot, stacked in the same place with only one
+ * shown: the largest sets the size, so switching between them moves nothing
+ * around it.
+ */
+export function OneOf({
+  shown,
+  inline,
+  className,
+  children,
+}: {
+  shown: number;
+  /** Inside a button or text: spans instead of divs. */
+  inline?: boolean;
+  className?: string;
+  children: ReactNode[];
+}) {
+  const Tag = inline ? "span" : "div";
+  return (
+    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
+      {children.map((child, index) => (
+        <Tag
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
+          key={index}
+          aria-hidden={index !== shown}
+          inert={index !== shown}
+          className={cn(
+            "min-w-0 [grid-area:1/1]",
+            // Opacity also hides descendants during their visibility transitions.
+            index !== shown && "invisible opacity-0",
+          )}
+        >
+          {child}
+        </Tag>
+      ))}
+    </Tag>
+  );
+}
+
 /** Copies text with a brief "Copied" on the button, or a toast on failure. */
 export function useCopy() {
   const [copied, setCopied] = useState(false);
@@ -313,6 +352,73 @@ export function ScriptBlock({
         <span className="text-muted-foreground select-none">$ </span>
         {command}
       </pre>
+    </div>
+  );
+}
+
+/**
+ * Where a setup card's download box and command box sit. An invisible
+ * command box under them sets the height: as tall as the command, wrapped at
+ * this width, so switching between the two, or a command arriving, moves
+ * nothing.
+ */
+export function SetupActionArea({
+  sizingCommand,
+  children,
+}: {
+  sizingCommand: string;
+  children: React.ReactNode;
+}) {
+  return (
+    // minmax(0, 1fr): the column follows the card's width, not the command's
+    // longest line, which scrolls inside its box on a narrow window.
+    <div className="@container mt-2 grid grid-cols-[minmax(0,1fr)]">
+      <div aria-hidden data-sizer className="invisible min-w-0 [grid-area:1/1]">
+        <ScriptBlock
+          command={sizingCommand}
+          copied={false}
+          disabled
+          onCopy={() => {}}
+          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+        />
+      </div>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] [grid-area:1/1]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The download box: the command box's surface, filling the action area. */
+export function SetupActionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-20 flex-wrap items-center gap-3 rounded-2xl border bg-background py-3 pr-2 pl-5 shadow-sm @sm:flex-nowrap @sm:py-0 [&>button]:w-full @sm:[&>button]:w-auto">
+      {children}
+    </div>
+  );
+}
+
+/** Keep the instructions and platform control aligned across setup modes. */
+export function SetupNextSteps({
+  children,
+  platformControl,
+}: {
+  children: ReactNode;
+  platformControl?: ReactNode;
+}) {
+  return (
+    <div className="@container mt-4 px-1 text-xs text-muted-foreground">
+      <div className="grid gap-x-8 gap-y-2 @xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div>
+          <p className="font-semibold text-foreground">When it finishes</p>
+          {children}
+        </div>
+        {platformControl ?? (
+          <span aria-hidden className="invisible hidden self-start @xl:block">
+            Use the macOS / Linux command
+          </span>
+        )}
+      </div>
     </div>
   );
 }

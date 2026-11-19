@@ -16,7 +16,14 @@ case "$AMD64_ONLY" in
 esac
 shopt -s nullglob
 digest_files=("$digest_dir"/*)
-[ "${#digest_files[@]}" -eq "$expected" ] || { echo 'Incomplete release digest set' >&2; exit 1; }
+[ "${#digest_files[@]}" -eq "$expected" ] || {
+  echo "Incomplete current-attempt release digest set" >&2
+  if [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ]; then
+    echo "A partial 'rerun failed jobs' kept successful producer jobs from an earlier attempt." >&2
+    echo "Start a new Release Please workflow_dispatch run on this branch to recover the draft release with a complete artifact set." >&2
+  fi
+  exit 1
+}
 amd64=
 arm64=
 for file in "${digest_files[@]}"; do

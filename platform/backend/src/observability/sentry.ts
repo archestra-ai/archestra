@@ -1,6 +1,10 @@
+import {
+  ERROR_REPORTING_DATA_COLLECTION,
+  scrubErrorReportBreadcrumb,
+  scrubErrorReportEvent,
+} from "@archestra/shared/error-reporting";
 import type {
   ErrorEvent,
-  Event,
   EventHint,
   Integration,
   TracesSamplerSamplingContext,
@@ -17,6 +21,7 @@ import {
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
   isNoisyTransactionName,
+  isPolledLogListRoute,
 } from "./utils";
 
 const {
@@ -26,12 +31,19 @@ const {
       enabled,
       dsn,
       environment: sentryEnvironment,
+      errorsOnly,
       tracesSampleRate,
       mcpGatewayTracesSampleRate,
       profilesSampleRate,
     },
   },
 } = config;
+
+/**
+ * Share of the normal trace sample rate kept for the polled log list routes
+ * (see {@link isPolledLogListRoute}).
+ */
+const POLLED_LOG_LIST_TRACES_SAMPLE_FACTOR = 0.01;
 
 /**
  * Build the Error object reported for a raw upstream-provider failure.
@@ -95,9 +107,10 @@ export function captureRawProviderErrorInSentry(params: {
 
 /**
  * Sentry `beforeSend` filter. Delegates the drop/keep-and-group decision to the
- * sink-agnostic {@link classifyErrorForTracking} policy (shared with the PostHog
- * capture path), then applies the result in Sentry's shape: return null to drop,
- * or set the event's fingerprint/tags to group an availability incident.
+ * {@link classifyErrorForTracking} policy, then applies the result in Sentry's
+ * shape: return null to drop, or set the event's fingerprint/tags to group an
+ * availability incident. What is kept is scrubbed of request content,
+ * credentials, and personal data before it leaves the deployment.
  *
  * https://docs.sentry.io/platforms/javascript/configuration/filtering/
  * @public — exported for testability
@@ -116,7 +129,7 @@ export function filterErrorEvent(
   if (decision.tags) {
     event.tags = { ...event.tags, ...decision.tags };
   }
-  return stripRequestContent(event);
+  return scrubErrorReportEvent(event);
 }
 
 /**
@@ -141,7 +154,7 @@ export function filterTransactionEvent(
   ) {
     return null;
   }
-  return stripRequestContent(event);
+  return scrubErrorReportEvent(event);
 }
 
 /**
@@ -172,7 +185,27 @@ let sentryClient: Sentry.NodeClient | undefined;
  */
 const initSentry = async (): Promise<void> => {
   if (!enabled) {
-    logger.debug("Sentry DSN not configured, skipping Sentry initialization");
+    logger.debug("Error reporting is off, skipping Sentry initialization");
+    return;
+  }
+
+  if (errorsOnly) {
+    sentryClient = Sentry.init({
+      ...getBaseOptions(),
+      integrations: [
+        // Keep per-request scope isolation, without spans or the
+        // outgoing-request breadcrumbs that name upstream hosts.
+        Sentry.httpIntegration({ spans: false, breadcrumbs: false }),
+        Sentry.nativeNodeFetchIntegration({ spans: false, breadcrumbs: false }),
+      ],
+      // No tracing: nothing but error events leaves the deployment, and no
+      // trace headers go out on outgoing requests.
+      tracePropagationTargets: [],
+    });
+    logger.info(
+      { environment: sentryEnvironment },
+      "Error reporting to Archestra initialized (errors only)",
+    );
     return;
   }
 
@@ -197,11 +230,7 @@ const initSentry = async (): Promise<void> => {
 
   // https://docs.sentry.io/platforms/javascript/guides/fastify/install/commonjs/
   sentryClient = Sentry.init({
-    dsn,
-    environment: sentryEnvironment,
-    release: version,
-
-    sendDefaultPii: false,
+    ...getBaseOptions(),
 
     integrations,
 
@@ -214,15 +243,6 @@ const initSentry = async (): Promise<void> => {
 
     // Enable logs to be sent to Sentry
     enableLogs: true,
-
-    /**
-     * Disable Sentry's automatic Fastify instrumentation to avoid conflicts
-     * We already have our own OpenTelemetry setup in tracing.ts
-     * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/
-     */
-    skipOpenTelemetrySetup: true,
-
-    beforeSend: filterErrorEvent,
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({
@@ -252,6 +272,11 @@ const initSentry = async (): Promise<void> => {
         return mcpGatewayTracesSampleRate;
       }
 
+      // Clients page through the LLM proxy log lists one request at a time.
+      if (method && isPolledLogListRoute({ method, url })) {
+        return tracesSampleRate * POLLED_LOG_LIST_TRACES_SAMPLE_FACTOR;
+      }
+
       return tracesSampleRate;
     },
 
@@ -269,16 +294,19 @@ await initSentry();
 
 export default sentryClient;
 
-// Request content is unnecessary for grouping errors or measuring performance.
-function stripRequestContent<T extends Event>(event: T): T {
-  if (event.request) {
-    delete event.request.headers;
-    delete event.request.cookies;
-    delete event.request.data;
-    delete event.request.query_string;
-    if (event.request.url) {
-      event.request.url = event.request.url.split(/[?#]/)[0];
-    }
-  }
-  return event;
+/** Options every reporting mode shares, including the privacy filters. */
+function getBaseOptions(): Sentry.NodeOptions {
+  return {
+    dsn,
+    environment: sentryEnvironment,
+    release: version,
+    dataCollection: ERROR_REPORTING_DATA_COLLECTION,
+    /**
+     * Disable Sentry's automatic OpenTelemetry setup: tracing/sdk.ts owns it.
+     * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/
+     */
+    skipOpenTelemetrySetup: true,
+    beforeSend: filterErrorEvent,
+    beforeBreadcrumb: (breadcrumb) => scrubErrorReportBreadcrumb(breadcrumb),
+  };
 }

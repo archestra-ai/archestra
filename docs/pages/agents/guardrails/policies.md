@@ -3,7 +3,7 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,17 +45,21 @@ Some batteries call an API to decide, for example to check if a repository is pu
 
 A validation keeps one policy scenario checked over time, such as "refuse an email after the agent reads an untrusted page". The APPA Keeper runs your validations before every policy change, so a change that quietly weakens the policy shows up as a failed validation.
 
-![The Validations tab listing two validations of the Slack rule, both passed](/docs/automated_screenshots/platform-openappa_validations.webp)
+Validations are files on the **Policy** page, listed under **Validations** beside the policy they check. Open one to read its scenario with the result of its last run marked on each step.
+
+![A validation open on the Policy page, with the result of its last run marked on each step](/docs/automated_screenshots/platform-openappa_validations.webp)
 
 ### Write a Validation
 
-Ask the APPA Keeper to write one, for example "check that the agent cannot email outside the company after it reads a web page". Review the scenario it proposes, and approve it.
+Click **New validation** in the Validations header. It opens a chat with the APPA Keeper: tell it the case, for example "check that the agent cannot email outside the company after it reads a web page". Review the scenario it proposes, and approve it.
 
 For more details about validations, check the [OpenAPPA validation guide](https://www.openappa.com/validation).
 
 ### Run Validations
 
-Click **Run all** to check every saved file, or the run button on a row to check one. Every accepted policy change also runs them all.
+Click **Run all** to check every saved file, or **Run file** on an open validation to check that one. Every accepted policy change also runs them all.
+
+A step that decided otherwise explains itself under its line, and the **Problems** panel under the editor lists every failure across files. The dots in a validation's header are its last runs: click one to see that run's result.
 
 What to know:
 
@@ -68,17 +72,19 @@ Required permissions:
 
 ## Yells
 
-When the agent can't achieve its task because of the policy, it reports the problem via a special yell tool call. The **Yells** tab lists the reports.
+When the agent can't achieve its task because of the policy, it reports the problem via a special yell tool call. The reports are listed in **Logs → Guardrails**, in one timeline with the Guardrails consults. Set the type filter to **Yells** to see only the reports.
 
-![The Yells tab listing three agent reports, with who reported each and when](/docs/automated_screenshots/platform-openappa_yells.webp)
+![The Guardrails log filtered to yells, listing three agent reports, with who reported each and when](/docs/automated_screenshots/platform-openappa_yells.webp)
 
 Open a report and click **Investigate in chat**. The agent compares the report with the policy and the [validations](#validating-the-policy), and proposes a fix.
 
 What to know:
 
-- With **Break the glass** on in **Settings → Guardrails** (the default), a yell also turns Guardrails off for that session, so the agent is no longer stuck. The list marks these yells.
+- The Break the glass settings in **Settings → Guardrails** can let a blocked call through and record the yell for you. **Human approval** keeps the review by default. Set to **Waive in unattended sessions** (Agent Runtimes, Scheduled tasks, or any client sending `X-Archestra-Unattended: 1`; a remedy plan a workload runs counts too), a call that waits for a person runs, and a remedy plan that needs a person is approved for the agent. It can also be waived everywhere. **Other blocked calls**, set to **Waive the block**, releases soft refusals across calls, results, subagent returns, runtime exports, peer messages, and session admission. The first waiver turns Guardrails off for the session. Disabled or failed yell reporting does not prevent the waiver. An explicit `blocked` refusal cannot trigger a waiver. Once a soft refusal turns Guardrails off, subsequent operations bypass all policy checks, including explicit `blocked` marks. [`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE) and [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE), while set, override these two settings, and the settings page shows them locked. OpenAPPA does not see a waived call: its result is not checked, and its labels and effects are skipped.
+- **Yell tool**, set to **Record only**, keeps enforcement on after agent reports and human-approval waivers. **Other blocked calls**, set to **Waive the block**, always turns enforcement off for the session, regardless of the yell setting.
 - Reports stay in your deployment unless you [enable external diagnostic forwarding](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED) to the shared OpenAPPA reporting service. To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
 
 Required permissions:
 
-- [`log:read`](/docs/reference/permissions#log:read) to see and resolve yells.
+- [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) to see and resolve the yells from your own sessions.
+- [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) to see and resolve every yell in the organization. It does not open anyone's LLM or MCP logs, which stay under [`log:admin`](/docs/reference/permissions#log:admin).

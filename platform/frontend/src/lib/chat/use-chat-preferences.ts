@@ -338,6 +338,8 @@ export function agentRequiresPerUserConnect(params: {
     | undefined;
   requiresPerUserCredential?: boolean;
   isCredentialConnected?: boolean;
+  /** The server chooses a caller-usable member, not this stored anchor. */
+  modelPoolSelected?: boolean;
 }): boolean {
   const {
     agent,
@@ -346,7 +348,7 @@ export function agentRequiresPerUserConnect(params: {
     requiresPerUserCredential,
     isCredentialConnected,
   } = params;
-  if (!agent) return false;
+  if (!agent || params.modelPoolSelected) return false;
   if (
     !(requiresPerUserCredential ?? agent.llmProviderRequiresPerUserCredential)
   ) {

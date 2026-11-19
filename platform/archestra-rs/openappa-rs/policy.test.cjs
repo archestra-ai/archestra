@@ -9,11 +9,12 @@ const allow = '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}
 const deny = '[policy]\nversion = 2\n[[policy.tool]]\nname = "different"\ndelta = {}\n';
 // A dispatch carries its organization's policy and the credential values it reads.
 const hosted = (content) => ({ content, credentials: {} });
+const authoredErrors = async (root) => (await native.composeOpenappaPolicy({ root, batteries: [] })).errors;
 
 test('validates policy semantics and refuses container access', async () => {
-  assert.deepEqual(await native.validateOpenappaPolicy(allow), []);
+  assert.deepEqual(await authoredErrors(allow), []);
   for (const invalid of ['[policy]\nversion = 999', 'include = ["/secret"]\n' + allow, allow + '[externals.annotators.x]\ncommand = ["sh"]']) {
-    assert.ok((await native.validateOpenappaPolicy(invalid)).length > 0);
+    assert.ok((await authoredErrors(invalid)).length > 0);
   }
 });
 
@@ -44,7 +45,6 @@ command = ["python3", "judge.py"]
   assert.deepEqual(composed.errors, []);
   assert.ok(composed.content.includes('APPA_ARCHESTRA_BRIDGE_TOKEN'));
   assert.deepEqual(await native.validateHostedOpenappaPolicy(composed.content), []);
-  assert.match((await native.validateOpenappaPolicy(composed.content)).join('\n'), /APPA_ARCHESTRA_/);
   const authored = await native.composeOpenappaPolicy({ root: composed.content, batteries: [] });
   assert.equal(authored.content, undefined);
   assert.match(authored.errors.join('\n'), /APPA_ARCHESTRA_/);
@@ -398,7 +398,7 @@ requires = { trust = "trusted" }
 [externals.annotators.noop]
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
-  assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
+  assert.deepEqual(await authoredErrors(policy), []);
   await native.initializeOpenappa(databaseUrl, 2);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
   const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), hosted(policy)));

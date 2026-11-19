@@ -1,4 +1,5 @@
-import { format, isThisYear } from "date-fns";
+import { format } from "date-fns/format";
+import { isThisYear } from "date-fns/isThisYear";
 
 interface VersionDayGroup<T> {
   label: string;

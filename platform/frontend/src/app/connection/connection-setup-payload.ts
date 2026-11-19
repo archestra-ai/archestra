@@ -112,20 +112,38 @@ export function initialConnectProvider(params: {
 
 /**
  * The account a per-user provider's setup binds when the user picked none:
- * null when they have their own sign-in (the server binds it), else the first
- * organization plan (GitHub App key) they can use.
+ * null when they have their own sign-in (the server binds it), else their one
+ * organization plan (GitHub App key). Plans of several GitHub organizations
+ * and no sign-in leave the choice to the user (`perUserAccountChoiceNeeded`):
+ * each organization is billed for its own requests and serves its own models.
  */
 export function defaultPerUserKeyId(
-  keys: readonly {
-    id: string;
-    provider: string;
-    isGithubAppKey?: boolean | null;
-  }[],
+  keys: readonly PerUserAccountKey[],
   provider: SupportedProvider,
 ): string | null {
   const forProvider = keys.filter((key) => key.provider === provider);
   if (forProvider.some((key) => !key.isGithubAppKey)) return null;
-  return forProvider.find((key) => key.isGithubAppKey)?.id ?? null;
+  return forProvider.length === 1 ? forProvider[0].id : null;
+}
+
+/**
+ * Whether the user must pick the account a per-user provider bills: they have
+ * no sign-in of their own and plans of several organizations.
+ */
+export function perUserAccountChoiceNeeded(
+  keys: readonly PerUserAccountKey[],
+  provider: SupportedProvider,
+): boolean {
+  const forProvider = keys.filter((key) => key.provider === provider);
+  return (
+    forProvider.length > 1 && forProvider.every((key) => key.isGithubAppKey)
+  );
+}
+
+interface PerUserAccountKey {
+  id: string;
+  provider: string;
+  isGithubAppKey?: boolean | null;
 }
 
 /**
@@ -289,6 +307,7 @@ export function firstConnectionSetupInputs(params: {
   // Plugins: every deliverable one compatible with the platform.
   const pluginsEnabled = organization.connectionPluginsEnabled === true;
   const pluginsQueryEnabled =
+    client.id !== "grok-build" &&
     pluginsEnabled &&
     canAnywhere("plugin", "read") &&
     canAnywhere("plugin", "update");
@@ -319,11 +338,13 @@ export function firstConnectionSetupInputs(params: {
   );
   const openCodeFamily = isOpenCodeFamilyClient(client.id);
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || openCodeFamily
-      ? "primary-providers"
-      : adminMappedProviders.size > 0 && canAttribute
-        ? "virtual-key"
-        : "provider-key";
+    client.id === "grok-build"
+      ? "native-session"
+      : client.id === "cursor" || openCodeFamily
+        ? "primary-providers"
+        : adminMappedProviders.size > 0 && canAttribute
+          ? "virtual-key"
+          : "provider-key";
   const allPrimaryProviders =
     (openCodeFamily || client.id === "cursor") &&
     proxyAuth === "primary-providers";
@@ -339,13 +360,15 @@ export function firstConnectionSetupInputs(params: {
     ),
   );
   const supported: SupportedProvider[] =
-    client.id === "cursor"
-      ? [...INSTALLER_CLIENT_KEY_PROVIDERS.cursor]
-      : openCodeFamily && proxyAuth !== "provider-key"
-        ? [...OPENCODE_PRIMARY_PROVIDERS]
-        : client.proxy.kind === "custom"
-          ? client.proxy.supportedProviders
-          : [];
+    proxyAuth === "native-session"
+      ? ["xai"]
+      : client.id === "cursor"
+        ? [...INSTALLER_CLIENT_KEY_PROVIDERS.cursor]
+        : openCodeFamily && proxyAuth !== "provider-key"
+          ? [...OPENCODE_PRIMARY_PROVIDERS]
+          : client.proxy.kind === "custom"
+            ? client.proxy.supportedProviders
+            : [];
   const shown = params.shownProviders ? new Set(params.shownProviders) : null;
   const supportedProviders =
     shown && !allPrimaryProviders
@@ -386,28 +409,40 @@ export function firstConnectionSetupInputs(params: {
     !!activeLlmProxyId &&
     providerIsPerUser &&
     !configuredProviders.has(provider);
+  // The page waits for the person to pick the account first.
+  const accountChoiceNeeded =
+    !!activeLlmProxyId &&
+    providerIsPerUser &&
+    !!provider &&
+    perUserAccountChoiceNeeded(availableKeys, provider);
   const supportsModelChoice =
     client.id === "copilot-cli" ||
     client.id === "claude-desktop" ||
-    client.id === "kimi-code";
+    client.id === "kimi-code" ||
+    client.id === "grok-build";
   const effectiveModel =
     supportsModelChoice && provider
-      ? client.id === "claude-desktop"
-        ? "claude-haiku-4-5-20251001"
-        : (defaultConnectionModel({
-            provider,
-            modelIds: (params.models ?? [])
-              .filter(
-                (model) =>
-                  model.provider === provider &&
-                  connectionModelServesClient({
-                    clientId: client.id,
-                    provider,
-                    supportedEndpoints: model.capabilities?.supportedEndpoints,
-                  }),
-              )
-              .map((model) => model.id),
-          }) ?? kimiCodeDefaultModel(client.id, provider))
+      ? client.id === "grok-build" && provider === "xai"
+        ? null
+        : client.id === "claude-desktop"
+          ? "claude-haiku-4-5-20251001"
+          : (defaultConnectionModel({
+              provider,
+              allowProviderDefault:
+                client.id === "grok-build" && proxyAuth === "provider-key",
+              modelIds: (params.models ?? [])
+                .filter(
+                  (model) =>
+                    model.provider === provider &&
+                    connectionModelServesClient({
+                      clientId: client.id,
+                      provider,
+                      supportedEndpoints:
+                        model.capabilities?.supportedEndpoints,
+                    }),
+                )
+                .map((model) => model.id),
+            }) ?? kimiCodeDefaultModel(client.id, provider))
       : null;
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
@@ -433,9 +468,13 @@ export function firstConnectionSetupInputs(params: {
     (pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT) ||
     (includeSkills && skillsTotal > CONNECTION_SETUP_MAX_SKILLS);
   if (
-    (supportsModelChoice && proxyActive && !effectiveModel) ||
+    (supportsModelChoice &&
+      proxyActive &&
+      !effectiveModel &&
+      !(client.id === "grok-build" && provider === "xai")) ||
     !hasRunnableAnything ||
     needsPerUserConnect ||
+    accountChoiceNeeded ||
     selectionProblem
   ) {
     return null;

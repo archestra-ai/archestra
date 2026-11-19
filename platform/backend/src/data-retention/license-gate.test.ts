@@ -1,10 +1,11 @@
 import { vi } from "vitest";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import logger from "@/logging";
+import { spyOnLogger } from "@/test/logging";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { assertRetentionConfigLicensed } from "./license-gate.ee";
 

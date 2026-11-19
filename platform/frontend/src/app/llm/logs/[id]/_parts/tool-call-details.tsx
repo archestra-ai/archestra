@@ -13,6 +13,7 @@ import {
 } from "@/components/log-detail/tool-result-view";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { McpToolCallStatusLabel } from "@/components/mcp-tool-call-status";
+import { credentialClientLabel } from "@/lib/mcp-logs/credential-client";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
 import { formatDate } from "@/lib/utils/date-time";
@@ -141,6 +142,32 @@ export function ToolCallOverview({
                 <CopyButton text={call.id} size={11} />
               </span>
             </OverviewFact>
+            {call.credentialClientId ? (
+              <>
+                <OverviewFact
+                  label="Token issued to"
+                  hint="Whose client the identity provider issued the tool's token to, in exchange for the user's token."
+                >
+                  <span className="truncate">
+                    {credentialClientLabel(call.credentialClientType)}
+                  </span>
+                </OverviewFact>
+                <OverviewFact
+                  label="Client ID"
+                  hint="The client ID the token was issued to, as the identity provider's logs show it."
+                >
+                  <CopyableId value={call.credentialClientId} />
+                </OverviewFact>
+              </>
+            ) : null}
+            {call.credentialActorClientId ? (
+              <OverviewFact
+                label="Acting agent"
+                hint="The agent's own client, named as the actor in the token. Downstream APIs see the user, acting through this agent."
+              >
+                <CopyableId value={call.credentialActorClientId} />
+              </OverviewFact>
+            ) : null}
             {call.llmToolCallId ? (
               <OverviewFact label="Model's call ID">
                 <span
@@ -240,5 +267,17 @@ export function ToolCallPayload({
         )}
       </div>
     </section>
+  );
+}
+
+/** An identifier with its copy button. */
+function CopyableId({ value }: { value: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-0.5">
+      <span className="truncate font-mono text-[11px]" title={value}>
+        {value}
+      </span>
+      <CopyButton text={value} size={11} />
+    </span>
   );
 }

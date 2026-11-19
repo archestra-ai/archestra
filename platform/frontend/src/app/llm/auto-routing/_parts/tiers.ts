@@ -2,6 +2,12 @@
 export const TIER_NAMES = ["fast", "normal", "smart"] as const;
 export type TierName = (typeof TIER_NAMES)[number];
 
+export const TIER_LABELS: Record<TierName, string> = {
+  fast: "Fast",
+  normal: "Normal",
+  smart: "Smart",
+};
+
 /** One palette for every tier mark: the theme's chart slots 1–3, as a CSS colour and Tailwind classes. */
 export const TIER_COLOR: Record<
   TierName,

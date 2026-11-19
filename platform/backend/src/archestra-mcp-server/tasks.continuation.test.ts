@@ -239,6 +239,7 @@ test("an external gateway steers the current turn using the original session han
   const gateway = await makeAgent({
     organizationId: agent.organizationId,
     agentType: "mcp_gateway",
+    accessAllSubagents: true,
   });
   const externalContext = {
     ...context,

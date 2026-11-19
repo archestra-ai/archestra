@@ -30,6 +30,7 @@ import {
 import AgentModel from "@/models/agent";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { assertCanGrantAutoRouters } from "@/services/auto-router-grants";
 import { credentialBilling } from "@/services/credential-billing";
 import { assertCanGrantModelPools } from "@/services/model-pool-grants";
 import { validateOauthServiceAccountBinding } from "@/services/oauth-service-account";
@@ -90,6 +91,14 @@ const OauthClientFields = z
       "Model pools the client may call by name without mapping one of their members. " +
         "Omit on update to keep them. Only applies to client_credentials clients.",
     ),
+    autoRouterIds: z
+      .array(z.string().uuid())
+      .max(500)
+      .optional()
+      .describe(
+        "Auto routers the client may call by name, on the routers' own provider keys. " +
+          "Omit on update to keep them. Only applies to client_credentials clients.",
+      ),
     includeFutureProviders: z
       .boolean()
       .optional()
@@ -344,6 +353,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      await assertCanGrantAutoRouters({
+        autoRouterIds: body.autoRouterIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -360,6 +374,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
         modelPoolIds: body.modelPoolIds,
+        autoRouterIds: body.autoRouterIds,
         redirectUris: body.redirectUris,
         authorId: user.id,
         initialGrants: body.initialGrants,
@@ -480,6 +495,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      await assertCanGrantAutoRouters({
+        autoRouterIds: body.autoRouterIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -495,6 +515,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
         modelPoolIds: body.modelPoolIds,
+        autoRouterIds: body.autoRouterIds,
         redirectUris: body.redirectUris,
         billingTeamId: body.billingTeamId,
       });

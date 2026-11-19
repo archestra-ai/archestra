@@ -119,7 +119,7 @@ export function secretManager(): ISecretManager {
  *   encoded as a marker string so it flows through the existing single-string
  *   apiKey pipeline. Only Bedrock terminal call sites decode it.
  * Legacy formats (pre-v1.0): `{ <provider>ApiKey: "sk-..." }` (e.g. `anthropicApiKey`, `openaiApiKey`).
- * These provider-specific keys were used before the unified API key system.
+ * These provider-specific keys were used before the unified model API key system.
  * They may still exist in databases that were created before the migration.
  */
 export async function getSecretValueForLlmProviderApiKey(

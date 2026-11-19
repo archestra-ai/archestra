@@ -10,17 +10,11 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
-import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
-// SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
   isGoogleDriveOAuthConfigured,
@@ -31,9 +25,14 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { devFeedbackService } from "@/services/dev-feedback";
+import { spiffeIssuer } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
-import { PUBLIC_CONFIG_PATH } from "./route-paths";
+import {
+  PUBLIC_CONFIG_PATH,
+  SPIFFE_BUNDLE_PATH,
+  SPIFFE_JWKS_PATH,
+} from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -91,15 +90,33 @@ export const ConfigResponseSchema = z.strictObject({
     communicate: z.boolean(),
   }),
   features: z.strictObject({
-    betaEnabled: z.boolean(),
     orchestratorK8sRuntime: z.boolean(),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Deployment-level gate for MCP idle hibernation (the beta flag
-    // AND the operator kill switch); the licence and the
-    // organization toggle sit behind it.
-    mcpIdleHibernationBetaEnabled: z.boolean(),
+    /**
+     * Archestra's issuer of agents' SPIFFE JWT-SVIDs: what an admin registers
+     * at an identity provider that takes them. All of it is public.
+     */
+    agentIdentitySpiffe: z.strictObject({
+      trustDomain: z.string(),
+      issuer: z.string(),
+      jwksUri: z.string(),
+      bundleUri: z.string(),
+    }),
+    // SPDX-SnippetEnd
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * @deprecated MCP idle hibernation is generally available. Kept in the
+     * contract only for clients of the beta release.
+     */
+    mcpIdleHibernationBetaEnabled: z.boolean().optional().meta({
+      deprecated: true,
+      description:
+        "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
+    }),
     /** BETA: MCP registry attention and alert dismissal surfaces. */
     // SPDX-SnippetEnd
     sandbox: z.boolean(),
@@ -160,7 +177,6 @@ export const ConfigResponseSchema = z.strictObject({
     /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
     kbMfilesConnectorEnabled: z.boolean(),
     /** BETA: the Model Pools page and pool routing. */
-    llmModelPoolsEnabled: z.boolean(),
     kbMfilesOauthEnabled: z.boolean(),
     /**
      * The BM25 tuning constants an organization inherits until it
@@ -185,15 +201,8 @@ export const ConfigResponseSchema = z.strictObject({
       configured: z.boolean(),
       redirectUri: z.string(),
     }),
-    /**
-     * BETA: publish local Skills over gateways and project Skills
-     * discovered from installed MCP servers.
-     */
-    mcpGatewaySkillsEnabled: z.boolean(),
     /** Internal UI feedback overlay; on only where its Slack channel is set. */
     devFeedbackEnabled: z.boolean(),
-    /** ALPHA: the Model Router's "auto" model and its settings. */
-    autoRoutingEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -216,16 +225,21 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       communicate: tier.communicate,
     },
     features: {
-      betaEnabled: config.beta,
       orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // The whole deployment-level gate, not the beta flag alone: an
-      // operator's hard kill switch must take the settings toggle and the
-      // per-server control with it, or the UI renders an operational
-      // feature nothing behind it will ever run.
-      mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+      agentIdentitySpiffe: {
+        trustDomain: config.agentIdentity.spiffeTrustDomain,
+        issuer: spiffeIssuer.issuer,
+        jwksUri: `${config.frontendBaseUrl}${SPIFFE_JWKS_PATH}`,
+        bundleUri: `${config.frontendBaseUrl}${SPIFFE_BUNDLE_PATH}`,
+      },
+      // SPDX-SnippetEnd
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      mcpIdleHibernationBetaEnabled: true,
       // SPDX-SnippetEnd
       sandbox: skillSandboxRuntimeService.isEnabled,
       agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
@@ -266,7 +280,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       agentHooksEnabled: config.hooks.enabled,
       chatopsTelegramEnabled: config.chatops.telegramEnabled,
       kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
-      llmModelPoolsEnabled: config.llmProxy.modelPoolsEnabled,
       kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
       kbBm25DefaultK1: config.kb.bm25K1,
       kbBm25DefaultB: config.kb.bm25B,
@@ -277,9 +290,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         configured: isGoogleDriveOAuthConfigured(),
         redirectUri: getGoogleDriveOAuthRedirectUri(),
       },
-      mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
       devFeedbackEnabled: devFeedbackService.isAvailable,
-      autoRoutingEnabled: config.autoRouting.enabled,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,

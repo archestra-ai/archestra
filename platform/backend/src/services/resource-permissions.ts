@@ -2,6 +2,9 @@
 import {
   canDelegateScopedPermissions,
   DEFAULT_CREDENTIAL_GRANTS,
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  ENVIRONMENT_DEPLOY_KINDS,
+  type EnvironmentDeployKind,
   hasScopedPermission,
   isBuiltInCatalogId,
   isManagedResource,
@@ -23,10 +26,10 @@ import {
   type ScopedPermission,
   type ScopedResource,
   scopedResourceNouns,
+  supportsOauthClientSubject,
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
-import { canUseAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
@@ -39,8 +42,10 @@ import ResourcePermissionSubjectModel, {
   type PrincipalSource,
 } from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/mcp-server-assignability";
+import { SRE_AGENT_ID, SRE_CATALOG_ID } from "@/services/sre-agent/definition";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
@@ -235,6 +240,28 @@ export class ResourcePermissions {
       : [];
   }
 
+  /** UI discovery includes current team management, without granting use or sharing. */
+  static async resolveUiCapabilities(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<ManagedScopedPermission[]> {
+    const [grants, managedIds] = await Promise.all([
+      ResourcePermissions.resolveAll(params),
+      VirtualApiKeyModel.getTeamManagedIds(params),
+    ]);
+    return [
+      ...grants,
+      ...managedIds.flatMap((scope) =>
+        (["read", "update", "delete"] as const).map((action) => ({
+          organizationId: params.organizationId,
+          resource: "llmVirtualKey" as const,
+          scope,
+          action,
+        })),
+      ),
+    ];
+  }
+
   /** Load scoped capabilities once for a request that touches several targets. */
   static async resolveAll(
     params:
@@ -296,19 +323,46 @@ export class ResourcePermissions {
     };
   }
 
-  /** Check a list of organization-owned environments with one policy read. */
-  static async getUsableEnvironmentIds(params: {
+  /**
+   * The kinds of object the caller may deploy into each of a list of
+   * organization-owned environments, with one policy read. An environment the
+   * caller may deploy nothing into maps to an empty list.
+   */
+  static async getEnvironmentDeployKinds(params: {
     organizationId: string;
     userId: string;
     environmentIds: string[];
-  }): Promise<Set<string>> {
-    return ResourcePermissions.getPermittedIds({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      resource: "environment",
-      scopes: params.environmentIds,
-      action: "use",
+  }): Promise<Map<string, EnvironmentDeployKind[]>> {
+    const none = new Map<string, EnvironmentDeployKind[]>(
+      params.environmentIds.map((id) => [id, []]),
+    );
+    if (params.environmentIds.length === 0) return none;
+    const subjects = await ResourcePermissions.getSubjects(params);
+    if (subjects.length === 0) return none;
+    const grants = expandScopedGrants({
+      policies: await ResourcePermissionPolicyModel.findApplicableBatch({
+        organizationId: params.organizationId,
+        resource: "environment",
+        scopes: params.environmentIds,
+      }),
+      subjectKeys: new Set(subjects.map(subjectKey)),
     });
+    return new Map(
+      params.environmentIds.map((scope) => [
+        scope,
+        ENVIRONMENT_DEPLOY_KINDS.filter((kind) =>
+          hasScopedPermission({
+            grants,
+            required: {
+              organizationId: params.organizationId,
+              resource: "environment",
+              scope,
+              action: ENVIRONMENT_DEPLOY_ACTIONS[kind],
+            },
+          }),
+        ),
+      ]),
+    );
   }
 
   /** The objects among `scopes` the caller holds `action` on, in one policy read. */
@@ -397,7 +451,10 @@ export class ResourcePermissions {
         target.id,
         ResourcePermissionActionSchema.options.filter((action) =>
           hasScopedPermission({
-            grants: explicit,
+            grants:
+              target.id === SRE_CATALOG_ID
+                ? explicit.filter((grant) => grant.scope === target.id)
+                : explicit,
             required: { ...required, action },
           }),
         ),
@@ -561,7 +618,14 @@ export class ResourcePermissions {
             grants: effective.grants,
             required: { ...params, action: "manage-permissions" },
           });
-    if (!canView)
+    const canViewTeamKey =
+      !canView &&
+      params.resource === "llmVirtualKey" &&
+      params.scope !== "*" &&
+      (await VirtualApiKeyModel.getTeamManagedIds(params)).includes(
+        params.scope,
+      );
+    if (!canView && !canViewTeamKey)
       throw new ApiError(
         403,
         "You do not have permission to view this resource's permissions",
@@ -650,7 +714,12 @@ export class ResourcePermissions {
     });
     // Read once: the recipient checks and the response both need them, and
     // the write does not change who the caller is.
-    const actorSubjects = await ResourcePermissions.getSubjects(params);
+    const [actorSubjects, priorPolicy] = await Promise.all([
+      ResourcePermissions.getSubjects(params),
+      params.resource === "knowledgeFile" || params.resource === "knowledgeBase"
+        ? ResourcePermissionPolicyModel.find(params)
+        : Promise.resolve(undefined),
+    ]);
     const policy = await ResourcePermissions.replace({
       ...params,
       authority: effective.grants,
@@ -663,13 +732,35 @@ export class ResourcePermissions {
         organizationId: params.organizationId,
       });
     }
-    // A file's indexed documents carry its audience as ACL tokens, so they
-    // follow the edit, a revocation included.
-    if (params.resource === "knowledgeFile" && params.scope !== "*") {
-      await KbFileModel.refreshDocumentAcl({
-        fileId: params.scope,
-        organizationId: params.organizationId,
-      });
+    // A file's indexed documents carry its audience and its knowledge base's as
+    // ACL tokens, so they follow an edit on either when `use` grants or the
+    // legacy organization audience marker change, a revocation included.
+    const aclInputsChanged =
+      priorPolicy?.legacyOrganizationAudience !==
+        policy.legacyOrganizationAudience ||
+      !haveSameUseGrants(priorPolicy?.grants ?? [], policy.grants);
+    if (aclInputsChanged && params.resource === "knowledgeFile") {
+      if (params.scope === "*") {
+        await KbFileModel.refreshDocumentAclForOrganization({
+          organizationId: params.organizationId,
+        });
+      } else {
+        await KbFileModel.refreshDocumentAcl({
+          fileId: params.scope,
+          organizationId: params.organizationId,
+        });
+      }
+    } else if (aclInputsChanged && params.resource === "knowledgeBase") {
+      if (params.scope === "*") {
+        await KbFileModel.refreshDocumentAclForOrganization({
+          organizationId: params.organizationId,
+        });
+      } else {
+        await KbFileModel.refreshDocumentAclForKnowledgeBase({
+          knowledgeBaseId: params.scope,
+          organizationId: params.organizationId,
+        });
+      }
     }
     const updated = await ResourcePermissions.getEffective(params);
     return {
@@ -721,17 +812,19 @@ export class ResourcePermissions {
     context: PermissionContext & { lookups?: PrincipalSource },
   ): Promise<ScopedPermission[]> {
     if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
-    if (
-      context.resource === "agent" &&
-      !(await canUseAgent(context.scope, context))
-    )
-      return [];
     const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];
     const policies = await ResourcePermissionPolicyModel.findApplicable(params);
+    // The SRE agent and Kubernetes catalog require their own grants. General
+    // wildcard policies must not expose the installation's pod specs or logs.
+    const effectivePolicies =
+      (context.resource === "agent" && context.scope === SRE_AGENT_ID) ||
+      (context.resource === "mcpRegistry" && context.scope === SRE_CATALOG_ID)
+        ? policies.filter((policy) => policy.scope === params.scope)
+        : policies;
     const subjectKeys = new Set(subjects.map(subjectKey));
-    return expandScopedGrants({ policies, subjectKeys })
+    return expandScopedGrants({ policies: effectivePolicies, subjectKeys })
       .filter(
         (grant) =>
           grant.scope === params.scope ||
@@ -764,6 +857,14 @@ export class ResourcePermissions {
         "Each grant must be one of the permission levels this resource offers",
       );
     const subjects = params.grants.map((grant) => grant.subject);
+    if (
+      subjects.some((subject) => subject.type === "oauthClient") &&
+      !supportsOauthClientSubject(params.resource)
+    )
+      throw new ApiError(
+        400,
+        "OAuth clients can only be granted access to knowledge bases, connectors, and files",
+      );
     if (new Set(subjects.map(subjectKey)).size !== subjects.length)
       throw new ApiError(400, "Each recipient can have only one direct grant");
     const existing = await ResourcePermissionSubjectModel.findExisting({
@@ -912,6 +1013,15 @@ export class ResourcePermissions {
         403,
         "Sharing with a service account needs permission to see service accounts.",
       );
+    if (
+      added.some((subject) => subject.type === "oauthClient") &&
+      supportsOauthClientSubject(params.resource) &&
+      !(await ResourcePermissions.maySeeOauthClients(params))
+    )
+      throw new ApiError(
+        403,
+        "Sharing with an OAuth client needs permission to see OAuth clients.",
+      );
   }
 
   private static async maySeeServiceAccounts(params: {
@@ -920,6 +1030,14 @@ export class ResourcePermissions {
   }): Promise<boolean> {
     const permissions = await getPermissionsForUserContext(params);
     return permissions.serviceAccount?.includes("read") ?? false;
+  }
+
+  private static async maySeeOauthClients(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const permissions = await getPermissionsForUserContext(params);
+    return permissions.oauthClient?.includes("read") ?? false;
   }
 
   /**
@@ -1048,12 +1166,19 @@ export class ResourcePermissions {
     // they share it with teams in their organization, and with people a grant here would
     // give something to.
     const subjects = await ResourcePermissions.getSubjects(params);
-    const [organizationWide, seesServiceAccounts, coveredRoles] =
-      await Promise.all([
-        ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
-        ResourcePermissions.maySeeServiceAccounts(params),
-        ResourcePermissions.rolesWithEveryAction(params),
-      ]);
+    const [
+      organizationWide,
+      seesServiceAccounts,
+      seesOauthClients,
+      coveredRoles,
+    ] = await Promise.all([
+      ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
+      ResourcePermissions.maySeeServiceAccounts(params),
+      supportsOauthClientSubject(params.resource)
+        ? ResourcePermissions.maySeeOauthClients(params)
+        : Promise.resolve(false),
+      ResourcePermissions.rolesWithEveryAction(params),
+    ]);
     // Filter before the per-kind limit so already selected or ineligible
     // recipients cannot hide someone on a later page.
     const recipients = await ResourcePermissionSubjectModel.search({
@@ -1080,7 +1205,9 @@ export class ResourcePermissions {
         (recipient) =>
           !excluded.has(subjectKey(recipient.subject)) &&
           (organizationWide || !isOrganizationWideSubject(recipient.subject)) &&
-          (seesServiceAccounts || recipient.subject.type !== "serviceAccount"),
+          (seesServiceAccounts ||
+            recipient.subject.type !== "serviceAccount") &&
+          (seesOauthClients || recipient.subject.type !== "oauthClient"),
       );
   }
 
@@ -1212,6 +1339,20 @@ function subjectKey(subject: PermissionSubject): string {
   return JSON.stringify([subject.type, subject.id]);
 }
 
+function haveSameUseGrants(
+  current: readonly ResourcePermissionGrant[],
+  next: readonly ResourcePermissionGrant[],
+): boolean {
+  const collectUseSubjectKeys = (grants: readonly ResourcePermissionGrant[]) =>
+    grants
+      .filter((grant) => grant.actions.includes("use"))
+      .map((grant) => subjectKey(grant.subject))
+      .sort();
+  const a = collectUseSubjectKeys(current);
+  const b = collectUseSubjectKeys(next);
+  return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
 /** Everyone, or a role: a grant to either makes an object org-wide. */
 function isOrganizationWideSubject(subject: PermissionSubject): boolean {
   return subject.type === "organization" || subject.type === "role";
@@ -1263,7 +1404,7 @@ function expandScopedGrants(params: {
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
-        ? grant.actions.flatMap((action) => {
+        ? heldActions(resource, grant.actions).flatMap((action) => {
             // Historical documents can retain actions removed from the API.
             // Ignore those without widening the remaining grant to a preset.
             const parsed = ResourcePermissionActionSchema.safeParse(action);
@@ -1281,6 +1422,21 @@ function expandScopedGrants(params: {
         : [],
     );
   });
+}
+
+/**
+ * The actions a stored grant confers. `use` on an environment deploys every
+ * kind of object, so it also holds each per-kind deploy action: whoever may
+ * deploy anything may deploy one kind, and may hand that one kind on.
+ */
+function heldActions(
+  resource: ScopedResource,
+  actions: readonly ResourcePermissionAction[],
+): readonly ResourcePermissionAction[] {
+  if (resource !== "environment" || !actions.includes("use")) return actions;
+  return [
+    ...new Set([...actions, ...Object.values(ENVIRONMENT_DEPLOY_ACTIONS)]),
+  ];
 }
 
 function inheritedPolicyGrants(params: {

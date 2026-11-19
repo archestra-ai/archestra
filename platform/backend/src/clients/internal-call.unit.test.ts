@@ -129,3 +129,63 @@ describe("internal call proofs", () => {
     });
   });
 });
+
+describe("in-process service account provenance", () => {
+  const account = "00000000-0000-4000-8000-000000000001";
+  const name = "x-archestra-internal-service-account";
+
+  it("captures the authenticated account once and removes every forwarding view", () => {
+    const headers = internalCallHeader(account);
+    const raw = {
+      headers: { ...headers },
+      rawHeaders: Object.entries(headers).flat(),
+    };
+    expect(internalCallProvenance({ headers, raw })).toEqual({
+      inProcess: true,
+      guardrail: false,
+      serviceAccountId: account,
+    });
+    expect(headers).toEqual({});
+    expect(raw.headers).toEqual({});
+    expect(raw.rawHeaders).toEqual([]);
+    expect(internalCallProvenance({ headers: {}, raw }).serviceAccountId).toBe(
+      account,
+    );
+  });
+
+  it("does not authenticate attribution hints, guardrail callers or forged proofs", () => {
+    for (const headers of [
+      { [name]: account },
+      { [name]: account, ...guardrailCallHeader() },
+      { [name]: account, "x-archestra-internal-call": "forged" },
+      {
+        "x-archestra-user-id": `service-account:${account}`,
+        ...internalCallHeader(),
+      },
+    ]) {
+      expect(takeInternalCall(headers).serviceAccountId).toBeUndefined();
+      expect(headers).not.toHaveProperty(name);
+    }
+  });
+
+  it("cannot replace captured provenance and rejects ambiguous account carriers", () => {
+    const headers = { ...internalCallHeader(), [name]: account };
+    const raw = {
+      headers: { ...headers },
+      rawHeaders: [...Object.entries(headers).flat(), name, account],
+    };
+    expect(
+      internalCallProvenance({ headers, raw }).serviceAccountId,
+    ).toBeUndefined();
+    Object.assign(headers, internalCallHeader(account));
+    expect(
+      internalCallProvenance({ headers, raw }).serviceAccountId,
+    ).toBeUndefined();
+    for (const value of ["not-a-uuid", `${account}, ${account}`, [account]]) {
+      expect(
+        takeInternalCall({ ...internalCallHeader(), [name]: value })
+          .serviceAccountId,
+      ).toBeUndefined();
+    }
+  });
+});

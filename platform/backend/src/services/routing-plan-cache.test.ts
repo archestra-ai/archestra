@@ -1,14 +1,17 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import AgentModel from "@/models/agent";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import { ConfigCache, PROXY_CONFIG_TTL_MS } from "@/services/config-cache";
 import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
 import { RoutingPlanCache } from "@/services/routing-plan-cache";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
-import { activeFit, makeScorerVersion } from "@/test/auto-routing";
+import {
+  activeFit,
+  ensureAutoRouter,
+  makeScorerVersion,
+} from "@/test/auto-routing";
 
 /**
  * A listener session on the test database. Notifications are the database's
@@ -72,34 +75,29 @@ describe("RoutingPlanCache", () => {
   }
 
   /** Subscribe every replica, let delivery verify, pass the LISTEN settle window, then cache the empty plan. */
-  async function becomeLive(
-    replicas: RoutingPlanCache[],
-    organizationId: string,
-  ) {
-    for (const cache of replicas) await cache.findActive(organizationId);
+  async function becomeLive(replicas: RoutingPlanCache[], routerId: string) {
+    for (const cache of replicas) await cache.findActive(routerId);
     await vi.waitFor(() =>
       expect(hubs.every((hub) => hub.deliveryGeneration() !== null)).toBe(true),
     );
     vi.setSystemTime(Date.now() + 2_001);
     for (const cache of replicas)
-      expect(await cache.findActive(organizationId)).toBeNull();
+      expect(await cache.findActive(routerId)).toBeNull();
   }
 
   test("a publication reaches every replica, and a lost notification is bounded by the TTL", async ({
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
-    await AgentModel.getOrgLlmProxy(organization.id);
+    const router = await ensureAutoRouter(organization.id);
     const scorer = await makeScorerVersion();
-    await AutoRoutingSettingsModel.activateScorerVersion(
-      organization.id,
-      scorer.id,
-    );
-    const settings = await AutoRoutingSettingsModel.find(organization.id);
+    await AutoRouterModel.activateScorerVersion(router.id, scorer.id);
+    const settings = await AutoRouterModel.find(router.id);
     if (!settings) throw new Error("settings missing");
     const fit = (label: string, day: number) =>
       activeFit({
         organizationId: organization.id,
+        routerId: router.id,
         scorerVersionId: scorer.id,
         generation: settings.generation,
         inputWatermark: new Date(Date.UTC(2026, 0, day)),
@@ -107,15 +105,15 @@ describe("RoutingPlanCache", () => {
       });
     const a = replica();
     const b = replica();
-    await becomeLive([a, b], organization.id);
+    await becomeLive([a, b], router.id);
     await RoutingPlanModel.publish(fit("first", 1));
     await vi.waitFor(async () =>
-      expect((await a.findActive(organization.id))?.plan).toEqual({
+      expect((await a.findActive(router.id))?.plan).toEqual({
         label: "first",
       }),
     );
     await vi.waitFor(async () =>
-      expect((await b.findActive(organization.id))?.plan).toEqual({
+      expect((await b.findActive(router.id))?.plan).toEqual({
         label: "first",
       }),
     );
@@ -132,18 +130,18 @@ describe("RoutingPlanCache", () => {
     await pglite.exec(
       "ALTER TABLE routing_plans ENABLE TRIGGER archestra_notify_proxy_config",
     );
-    expect((await a.findActive(organization.id))?.plan).toEqual({
+    expect((await a.findActive(router.id))?.plan).toEqual({
       label: "first",
     });
     vi.setSystemTime(Date.now() + PROXY_CONFIG_TTL_MS + 1);
-    expect((await a.findActive(organization.id))?.plan).toEqual({
+    expect((await a.findActive(router.id))?.plan).toEqual({
       label: "unnotified",
     });
 
     await RoutingPlanModel.publish(fit("second", 2));
     for (const cache of [a, b]) {
       await vi.waitFor(async () =>
-        expect((await cache.findActive(organization.id))?.plan).toEqual({
+        expect((await cache.findActive(router.id))?.plan).toEqual({
           label: "second",
         }),
       );

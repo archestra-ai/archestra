@@ -4,7 +4,7 @@ Run commands from `platform/` unless specifically instructed otherwise. Run a si
 
 ## Test projects and database opt-in
 
-Use `*.unit.test.ts` only for tests whose runtime import graph is database-free. These files run without PGlite setup or the migrated database snapshot. Import assertions and lifecycle functions directly from `vitest`; do not import `@/test`, application config, database fixtures, models, or the server entry point. Keep the code under test free of those runtime imports too. `pnpm --dir backend check:test-imports` checks this transitive boundary with dependency-cruiser. Type-only imports from permitted modules are fine because they do not load code at runtime; Biome still rejects direct imports from forbidden paths. If moving an existing test to this project reveals a config import, leave it database-backed until the pure logic is separated from config access.
+Use `*.unit.test.ts` only for tests whose runtime import graph is database-free. These files run without PGlite setup or the migrated database snapshot. Import assertions and lifecycle functions directly from `vitest`; do not import `@/test`, application config, database fixtures, models, or the server entry point. Keep the code under test free of those runtime imports too. `pnpm --dir backend check:test-imports` checks this transitive boundary with dependency-cruiser. The one models module a unit test may load is `models/ports.ts`, which has no runtime imports; the check still follows its imports. The check stops at `server/composition.ts`: its port bindings are `import()`s that load only when a model calls a port, so a script that imports it stays database-free. Type-only imports from permitted modules are fine because they do not load code at runtime; Biome still rejects direct imports from forbidden paths. If moving an existing test to this project reveals a config import, leave it database-backed until the pure logic is separated from config access.
 
 Use ordinary `*.test.ts` for tests that need real database behavior, fixtures, or route integration. They opt into the PGlite setup and migrated snapshot. Never rename a database-backed test to `*.unit.test.ts` merely to make it run faster.
 
@@ -28,16 +28,16 @@ file context to select transaction rollback only for `*.rollback.test.ts`.
 
 For values or types from `@archestra/shared`, import a narrow exported subpath (for example `@archestra/shared/consts`) in database-free tests. Its root barrel re-exports a large graph, including generated clients. Biome rejects the root import in `*.unit.test.ts`; when a subpath is missing, add a focused export to `shared/package.json` rather than importing the root. When converting an ordinary test to a database-free test, inspect imports of the code under test as well: a light test file can still load an expensive graph through the module it exercises.
 
-Within each group, `backend/vitest.config.ts` splits files by module mocking at config-load time:
+Within each group, `backend/vitest.config.ts` splits files by module isolation needs at config-load time:
 
-- **`clean` / `unit`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
-- **`mocked` / `unit-mocked`** — files using module mocking keep full isolation, because Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894).
+- **`clean` / `unit`** — files with NO module mocks or `vi.resetModules` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
+- **`mocked` / `unit-mocked`** — files using module mocking or `vi.resetModules` keep full isolation. Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894), and resetting the app module graph leaves external-package singletons alive, which can cause duplicate Prometheus registrations in later files.
 
 Consequences:
 
-- **Prefer not mocking modules at all.** Every file that drops its last `vi.mock` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
+- **Prefer not mocking modules at all.** A file without module mocks or `vi.resetModules` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
 - **Import test APIs from `vitest` when the file does not use database fixtures.** `@/test` loads the entire fixture graph even when the test only needs `expect`, `test`, or hooks. This matters most in mock-using files, whose module graph is reloaded for each file. `useRouteTestApp` registers fixture-aware hooks, so files using it must still import `test` from `@/test`. `pnpm --dir backend check:test-imports` rejects fixture-free imports from `@/test`.
-- Database selection follows the explicit filename suffix; mock isolation is automatic. Adding `vi.mock` to a file safely moves it to the isolated project on the next run.
+- Database selection follows the explicit filename suffix; module isolation is automatic. Adding `vi.mock` or `vi.resetModules` to a file safely moves it to the isolated project on the next run.
 - Route tests import `createFastifyInstance` and `FastifyInstanceWithZod` from `@/fastify-instance`, and `useRouteTestApp` from `@/test/route-test-app`. Do not import `@/server` in tests or re-export the route helper from the general `@/test` barrel; both load the server startup graph into unrelated tests.
 
 ## HTTP boundary mocking (instead of vi.mock on client libraries)
@@ -77,7 +77,7 @@ Wire-level gotchas learned in past conversions: clients retry — gitbeaker retr
 - **`@/auth/utils`**: bare `vi.mock("@/auth/utils");` (resolves `src/auth/__mocks__/utils.ts`). Needed separately from `@/auth` when the code under test imports from "@/auth/utils" directly — module mocks match specifiers, not re-exports.
 - **`@/observability`**: bare `vi.mock("@/observability");` (resolves `src/observability/__mocks__/index.ts`). `metrics`/`tracing` are memoized proxy trees — any `metrics.<ns>.<fn>` access yields a stable `vi.fn()`, so assert via `vi.mocked(metrics.llm.someFn)` with no factory.
 - **`@/cache-manager`**: prefer `setupTestCacheManager()` from `@/test/cache-manager` over a module mock. It starts the real cache on the file's test database (`keyv_cache`), so the per-test reset clears it, and the file stays in the shared-worker project. Keep bare `vi.mock("@/cache-manager");` (resolves `src/__mocks__/cache-manager.ts`, a Map-backed fake auto-reset before every test) only for files that already need module mocks. Tests needing a cache MISS mid-test call `await cacheManager.delete(key)`.
-- **`@/logging`**: do NOT mock just to silence output — the shared setup already runs the real logger at level `silent`. Only mock when a test asserts on logger calls, with a bare `vi.mock("@/logging");` (resolves `src/logging/__mocks__/index.ts`). `vi.spyOn(logger, ...)` does not work — the export is a Proxy binding methods to a private pino instance.
+- **`@/logging`**: do NOT mock just to silence output — the shared setup already runs the real logger at level `silent`. To assert on logger calls, call `spyOnLogger()` from `@/test/logging` at the top of the file: it spies on the real logger (silenced, `child()` returning the logger itself) and keeps the file in the shared-worker project, and `vi.mocked(logger.warn)` assertions work unchanged. A bare `vi.mock("@/logging");` (resolves `src/logging/__mocks__/index.ts`) remains for files that already need module mocks.
 - **`@/config`**: use the canonical deep-merge factory so unspecified keys keep their real values:
 
   ```ts
@@ -88,7 +88,7 @@ Wire-level gotchas learned in past conversions: clients retry — gitbeaker retr
   );
   ```
 
-  Never hand-roll a partial `{ default: { kb: {...} } }` — it silently drops the rest of the config. And prefer no config mock at all: direct mutation (next bullet) keeps the file in the fast project; the factory is only NEEDED when the code under test reads config at module-import time (module-level `const` captures), which a runtime mutation can't reach.
+  Never hand-roll a partial `{ default: { kb: {...} } }` — it silently drops the rest of the config. And prefer no config mock at all: `overrideConfig({ ... })` from `@/test/config` takes the same overrides and applies them to the real config before every test, which keeps the file in the fast project; the factory is only NEEDED when the code under test reads config at module-import time (module-level `const` captures), which a runtime mutation can't reach.
 - **Mutating the real config** (`config.skillsSandbox.enabled = true` style, common in clean-project files): set it in `beforeEach` or inside the test, NOT in `beforeAll` or at module scope — the shared setup restores the pristine config before AND after every test in the shared-worker project, so a once-per-file mutation evaporates after the first test. No manual restore needed.
 - **Fire-and-forget async DB work in product code** (a promise launched without `await`, like `InteractionModel.create`'s usage-tracking update) must be registered with `trackBackgroundWork` from `@/utils/background-work` — the shared teardown drains the registry before swapping out the file's PGlite. An untracked background promise that outlives its file runs its remaining queries against the NEXT file's database and can wedge it (a batch of consecutive 30s timeouts).
 - **Never write a bespoke partial factory** for a module that has a canonical mock, and **never mix a bare `vi.mock("x")` with a factory `vi.mock("x", ...)` for the same specifier across files** — Vitest can silently skip one depending on execution order (vitest-dev/vitest#10145).
@@ -109,6 +109,8 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
   ```
 
 - **Never raw-assign `globalThis.fetch = ...`** — use `vi.stubGlobal`. (The shared setup restores the real fetch after every test as a safety net, so a raw assignment doesn't survive anyway.)
+- **Between files** in a shared worker, `src/test/worker-globals.ts` puts the worker's original fetch, timers, `Date` and `process` timers back, and forgets the previous file's mocks and `test.extend()` fixtures. Vitest re-runs every `vi.spyOn` restore after a file, so a spy on `setTimeout` made under fake timers (or on `fetch` while MSW listens) would otherwise reinstall the fake for every later file; and it keeps every mock and fixture, with what they reference, for the worker's lifetime. Keep that file first in a shared-worker project's `setupFiles`.
+- **Nothing defined in `setup.ts` may outlive its file**: any closure there keeps that file's whole setup scope, and its PGlite, alive. Wrappers that stay installed for the worker (a `console` filter the SDKs bind once and keep, the `PGlite.prototype` access tracker) live in their own modules and are installed once per worker, as `src/test/quiet-console.ts` and `src/test/database-access.ts` do.
 - Faking browser globals (`window`, `location`) confuses PGlite's environment detection; the shared setup finishes PGlite init before test code runs, but always clean such globals up in `afterAll`.
 
 ## Database

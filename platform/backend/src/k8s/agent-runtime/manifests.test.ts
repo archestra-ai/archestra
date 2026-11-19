@@ -2,9 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { resolveAgentRuntimeTiers } from "@archestra/shared";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
 import { AGENT_RUNTIME_DIR } from "@/services/agent-runtime/runtime-contract";
+import { resolveRunResources } from "@/services/agent-runtime/runtime-tiers";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -43,6 +45,31 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it("renders independent memory requests and limits for a fractional-CPU tier", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            cpuLimit: null,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Memory",
+      },
+      { defaultWarmSpares: 0 },
+    );
+    const sandbox = buildAgentRuntimeSandbox({
+      ...SPEC,
+      resources: resolveRunResources("Memory", tiers),
+    });
+    expect(sandbox.spec.podTemplate.spec?.containers[0].resources).toEqual({
+      requests: { cpu: "500m", memory: "8Gi" },
+      limits: { memory: "8Gi" },
+    });
+  });
   it("pulls a floating image for each new workspace while leaving fixed tags cacheable", () => {
     const floating = buildAgentRuntimeSandbox({
       ...SPEC,
@@ -275,6 +302,25 @@ describe("buildAgentRuntimeSandbox", () => {
     ).toBe(true);
   });
 
+  it("sandboxes only unprivileged runs with the configured RuntimeClass", () => {
+    expect(
+      buildAgentRuntimeSandbox(SPEC).spec.podTemplate.spec?.runtimeClassName,
+    ).toBeUndefined();
+
+    const sandboxed = { ...SPEC, runtimeClassName: "gvisor" };
+    expect(
+      buildAgentRuntimeSandbox(sandboxed).spec.podTemplate.spec
+        ?.runtimeClassName,
+    ).toBe("gvisor");
+    // gVisor cannot run a privileged container; such a pod would never start.
+    const privileged = buildAgentRuntimeSandbox({
+      ...sandboxed,
+      privileged: true,
+    }).spec.podTemplate.spec;
+    expect(privileged?.runtimeClassName).toBeUndefined();
+    expect(privileged?.containers[0]?.securityContext?.privileged).toBe(true);
+  });
+
   it("requests durable storage for the workspace", () => {
     expect(
       buildAgentRuntimeSandbox(SPEC).spec.volumeClaimTemplates[0].spec.resources
@@ -504,6 +550,7 @@ describe("buildAgentRuntimePlatformEgressPolicy", () => {
         config.agentRuntime.platformPodSelector,
       ),
       platformPorts: [9000],
+      clusterDnsIps: [],
     });
     const destination = policy.spec?.egress?.[0]?.to?.[0];
     expect(destination?.namespaceSelector?.matchLabels).toEqual({
@@ -528,6 +575,7 @@ describe("buildAgentRuntimePlatformEgressPolicy", () => {
       platformNamespace: "archestra",
       platformPodLabels: { "app.kubernetes.io/name": "archestra" },
       platformPorts: [9000],
+      clusterDnsIps: [],
     });
 
     expect(policy.spec?.podSelector?.matchLabels).toEqual({
@@ -537,39 +585,45 @@ describe("buildAgentRuntimePlatformEgressPolicy", () => {
     expect(policy.spec?.egress?.[0]?.ports?.[0]?.port).toBe(9000);
   });
 
-  it("permits DNS, without which the pod cannot resolve the platform at all", () => {
-    // Once any egress policy selects a pod, its egress is clamped to the union
-    // of the selecting policies — and no other policy selects Agent Runtime pods, so
-    // omitting DNS here would break every session at its first call.
+  it.each([
+    { ips: ["172.20.0.10"], cidrs: ["172.20.0.10/32"] },
+    { ips: ["169.254.20.10"], cidrs: ["169.254.20.10/32"] },
+    {
+      ips: ["10.96.0.10", "fd00:1234::10"],
+      cidrs: ["10.96.0.10/32", "fd00:1234::10/128"],
+    },
+    { ips: [], cidrs: [] },
+  ])("limits DNS to known resolvers and labelled kube-dns pods ($ips)", ({
+    ips,
+    cidrs,
+  }) => {
     const policy = buildAgentRuntimePlatformEgressPolicy({
       spec: SPEC,
       platformNamespace: "archestra",
       platformPodLabels: { "app.kubernetes.io/name": "archestra" },
       platformPorts: [9000],
+      clusterDnsIps: ips,
     });
 
     const dnsRules = (policy.spec?.egress ?? []).filter((rule) =>
       rule.ports?.some((port) => port.port === 53),
     );
-    expect(dnsRules.length).toBeGreaterThanOrEqual(2);
-    expect(
-      dnsRules.some((rule) =>
-        rule.to?.some(
-          (target) =>
-            target.podSelector?.matchLabels?.["k8s-app"] === "kube-dns",
-        ),
-      ),
-    ).toBe(true);
-    // Clusters whose resolver is not that labelled pod need the CIDR fallback.
-    expect(
-      dnsRules.some((rule) =>
-        rule.to?.some((target) => target.ipBlock?.cidr === "0.0.0.0/0"),
-      ),
-    ).toBe(true);
+    expect(dnsRules.flatMap((rule) => rule.to ?? [])).toEqual([
+      {
+        namespaceSelector: {
+          matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+        },
+        podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+      },
+      ...cidrs.map((cidr) => ({ ipBlock: { cidr } })),
+    ]);
+    // An empty `to` means all destinations in Kubernetes, not fail-closed.
     for (const rule of dnsRules) {
-      const protocols = (rule.ports ?? []).map((port) => port.protocol);
-      expect(protocols).toContain("UDP");
-      expect(protocols).toContain("TCP");
+      expect(rule.to?.length).toBeGreaterThan(0);
+      expect(rule.ports).toEqual([
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ]);
     }
   });
 });

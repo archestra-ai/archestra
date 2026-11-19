@@ -1,5 +1,6 @@
 "use client";
 
+import { AutoRoutingSection } from "@/app/settings/llm/_parts/auto-routing-section";
 import { MediaInLogsSection } from "@/app/settings/llm/_parts/media-in-logs-section";
 import { ModelProvidersSection } from "@/app/settings/llm/_parts/model-providers-section";
 import { UnauthenticatedLlmProxySection } from "@/app/settings/llm/_parts/unauthenticated-llm-proxy-section";
@@ -10,6 +11,7 @@ export default function LlmSettingsPage() {
     <SettingsSectionStack>
       <UnauthenticatedLlmProxySection />
       <MediaInLogsSection />
+      <AutoRoutingSection />
       <ModelProvidersSection />
     </SettingsSectionStack>
   );

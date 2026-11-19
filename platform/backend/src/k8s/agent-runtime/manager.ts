@@ -27,6 +27,7 @@ import {
   AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  OAuthAccessTokenModel,
   OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -35,7 +36,7 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   agentRuntimeFailureReason,
   agentRuntimeTurnFailure,
@@ -50,9 +51,11 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  agentRunGatewayTokenId,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -96,6 +99,7 @@ import {
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
   splitTurnPoll,
+  turnEndingKill,
 } from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
@@ -114,6 +118,7 @@ import {
   classifyAgentRuntimePodFailure,
   describeAgentRuntimePodFailure,
 } from "./pod-failure";
+import { agentRuntimeClassDetector } from "./runtime-class";
 import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
@@ -145,6 +150,7 @@ type K8sClients = ReturnType<typeof createK8sClients>;
  */
 class AgentRuntimeManager {
   private clients: K8sClients | null = null;
+  private readonly terminatingSandboxes = new Set<string>();
 
   /** Whether the cluster serves the Agent Sandbox API; see `agentSandboxApi`. */
   get isEnabled(): boolean {
@@ -173,6 +179,9 @@ class AgentRuntimeManager {
    */
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
     await this.assertSandboxApiInstalled();
+    await agentRuntimeClassDetector.assertUsable({
+      privileged: spec.privileged,
+    });
     const clients = this.requireClients();
     const names = agentRuntimeNames(spec.frozenName);
     const { runtimeScope, ...runtimeSpec } = spec;
@@ -191,20 +200,49 @@ class AgentRuntimeManager {
       }),
     };
 
-    const existingSandbox = await readWorkspaceSandbox({
-      api: clients.customObjectsApi,
-      name: names.sandbox,
-      namespace: withOwner.namespace,
-    }).catch((error) => {
-      if (isK8sNotFoundError(error)) return null;
-      throw error;
-    });
-    if (existingSandbox) {
-      logger.info(
-        { taskId: withOwner.taskId, sandbox: names.sandbox },
-        "Adopting an existing Agent Sandbox with the same frozen name",
-      );
-      return;
+    const sandboxKey = `${withOwner.namespace}/${names.sandbox}`;
+    let awaitingPriorDeletion =
+      Boolean(spec.replacePriorAttempt) ||
+      this.terminatingSandboxes.has(sandboxKey);
+    const startupDeadline =
+      Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
+    let deletionPollDelayMs = 250;
+    while (true) {
+      const existingSandbox = await readWorkspaceSandbox({
+        api: clients.customObjectsApi,
+        name: names.sandbox,
+        namespace: withOwner.namespace,
+        includeDeletingClaim: true,
+        bypassCache: true,
+      }).catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+      if (!existingSandbox) {
+        this.terminatingSandboxes.delete(sandboxKey);
+        break;
+      }
+      if (existingSandbox.metadata.deletionTimestamp) {
+        awaitingPriorDeletion = true;
+      }
+      if (!awaitingPriorDeletion) {
+        logger.info(
+          { taskId: withOwner.taskId, sandbox: names.sandbox },
+          "Adopting an existing Agent Sandbox with the same frozen name",
+        );
+        return;
+      }
+      this.terminatingSandboxes.add(sandboxKey);
+      if (Date.now() >= startupDeadline) {
+        throw tagAgentRunFailure(
+          new Error(
+            `Timed out waiting for previous Agent Sandbox ${names.sandbox} deletion to finish`,
+          ),
+          "launch.capacity_timeout",
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, deletionPollDelayMs));
+      deletionPollDelayMs = Math.min(deletionPollDelayMs * 2, 1000);
     }
 
     await withK8sApiRetry(
@@ -235,6 +273,7 @@ class AgentRuntimeManager {
     await this.applyNetworkPolicy(
       buildAgentRuntimePlatformEgressPolicy({
         spec: withOwner,
+        clusterDnsIps,
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
@@ -265,12 +304,20 @@ class AgentRuntimeManager {
       let pollDelayMs = 250;
       while (true) {
         try {
-          await readWorkspaceSandbox({
+          const sandbox = await readWorkspaceSandbox({
             api: clients.customObjectsApi,
             namespace: withOwner.namespace,
             name: spec.frozenName,
           });
-          break;
+          if (!sandbox.metadata.deletionTimestamp) break;
+          if (Date.now() >= deadline) {
+            throw tagAgentRunFailure(
+              new Error(
+                `Timed out waiting for Agent Sandbox ${spec.frozenName} allocation`,
+              ),
+              "launch.capacity_timeout",
+            );
+          }
         } catch (error) {
           if (!isK8sNotFoundError(error) || Date.now() >= deadline) throw error;
         }
@@ -684,8 +731,14 @@ class AgentRuntimeManager {
     });
   }
 
-  /** CAS against release/continuation: a stale refresher cannot restore revoked values. */
-  async refreshCredentials(session: AgentRunRecord): Promise<void> {
+  /**
+   * CAS against release/continuation: a stale refresher cannot restore revoked values.
+   * Returns the personal credentials that stopped working on this pass and
+   * whose owner has not been told yet, so the caller can ask them to connect again.
+   */
+  async refreshCredentials(
+    session: AgentRunRecord,
+  ): Promise<Array<{ key: string; credentialId: string }>> {
     const clients = this.requireClients();
     const name = agentRuntimeNames(session.workloadName).secret;
     const secret = await clients.coreApi
@@ -695,35 +748,55 @@ class AgentRuntimeManager {
         throw error;
       });
     const encoded = secret?.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
-    if (!encoded) return;
+    if (!encoded) return [];
     const parsed = RenewableCredentialBundleSchema.safeParse(
       JSON.parse(Buffer.from(encoded, "base64").toString("utf8")),
     );
-    if (!parsed.success || parsed.data.taskId !== session.taskId) return;
+    if (!parsed.success || parsed.data.taskId !== session.taskId) return [];
     const bundle = parsed.data;
     let changed = false;
+    // Personal connections that stopped working on this pass and whose owner
+    // has not been told yet.
+    const reconnect: Array<{ key: string; credentialId: string }> = [];
     for (const [key, current] of Object.entries(bundle.credentials)) {
       if (current.expiresAt - Date.now() > 15 * 60_000) continue;
-      const next = await resolveCredential({
-        organizationId: session.organizationId,
-        credentialId: current.credentialId,
-        scope: current.scope ?? "organization",
-        userId: session.actorUserId,
-        minimumValidityMs: 55 * 60_000,
-      });
+      const personal = current.scope === "personal";
+      let next: Awaited<ReturnType<typeof resolveCredential>>;
+      try {
+        next = await resolveCredential({
+          organizationId: session.organizationId,
+          credentialId: current.credentialId,
+          scope: current.scope ?? "organization",
+          userId: session.actorUserId,
+          minimumValidityMs: 55 * 60_000,
+        });
+      } catch (error) {
+        if (!(error instanceof GitHubReconnectRequiredError)) throw error;
+        // Keep the old value until it expires; only the person can fix this.
+        if (!current.reconnectNotified) {
+          bundle.credentials[key] = { ...current, reconnectNotified: true };
+          reconnect.push({ key, credentialId: current.credentialId });
+          changed = true;
+        }
+        continue;
+      }
+      const lost = personal && !next?.value;
+      if (lost && !current.reconnectNotified)
+        reconnect.push({ key, credentialId: current.credentialId });
       bundle.credentials[key] = {
         ...current,
         credentialId: current.credentialId,
         value: next?.value ?? "",
         expiresAt: next?.expiresAt ?? 0,
+        reconnectNotified: lost ? true : undefined,
       };
       changed = true;
     }
     if (!changed) {
       await this.projectWarmCredentials(session);
-      return;
+      return [];
     }
-    await clients.coreApi
+    const patched = await clients.coreApi
       .patchNamespacedSecret(
         {
           namespace: session.runtimeScope,
@@ -737,11 +810,15 @@ class AgentRuntimeManager {
         },
         setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
       )
+      .then(() => true)
       .catch((error) => {
         if (!isK8sConflictError(error) && !isK8sNotFoundError(error))
           throw error;
+        return false;
       });
     await this.projectWarmCredentials(session);
+    // Only once the flag is stored, so a lost write cannot repeat the notice.
+    return patched ? reconnect : [];
   }
 
   async hasRetainedTerminal(
@@ -959,6 +1036,7 @@ class AgentRuntimeManager {
     );
     const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
       organizationId: session.organizationId,
+      agentNetworkPolicy: agent.networkPolicy,
       environmentId: agent.environmentId,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
@@ -1002,6 +1080,55 @@ class AgentRuntimeManager {
    * `tmux_keys` types into the session, the only option for a CLI that owns its
    * own input loop.
    */
+  /**
+   * Re-apply the egress policy of every running workspace of one Agent after
+   * its own policy or environment changed. Suspended workspaces pick the new
+   * policy up when they resume, and every new turn refreshes it too, so this
+   * only closes the window until the next turn. Best-effort per workspace.
+   */
+  async refreshAgentWorkspacesEgress(params: {
+    agentId: string;
+    organizationId: string;
+  }): Promise<void> {
+    if (!this.isEnabled) return;
+    const workspaces = await AgentWorkspaceModel.listRunningForAgent(params);
+    if (workspaces.length === 0) return;
+    const agent = await AgentModel.findById(params.agentId);
+    if (!agent || agent.organizationId !== params.organizationId) return;
+    const organization = await OrganizationModel.getById(params.organizationId);
+    const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
+      organizationId: params.organizationId,
+      agentNetworkPolicy: agent.networkPolicy,
+      environmentId: agent.environmentId,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+    });
+    const clients = this.requireClients();
+    for (const workspace of workspaces) {
+      try {
+        const sandbox = await readWorkspaceSandbox({
+          api: clients.customObjectsApi,
+          namespace: workspace.runtimeScope,
+          name: workspace.workloadName,
+        });
+        await this.refreshWorkspaceEgress({
+          sandbox,
+          spec: {
+            taskId: workspace.lastTaskId,
+            agentRuntimeId: workspace.agentId,
+            frozenName: workspace.workloadName,
+            runtimeScope: workspace.runtimeScope,
+            effectiveNetworkPolicy,
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, agentId: params.agentId, workspaceId: workspace.id },
+          "[AgentRuntime] failed to refresh workspace egress",
+        );
+      }
+    }
+  }
+
   async steer(params: {
     session: AgentRunRecord;
     steerMode: AgentRuntimeSteerMode;
@@ -1319,7 +1446,9 @@ class AgentRuntimeManager {
             }
             const turnFailure = agentRuntimeTurnFailure(result);
             const turnReason = agentRuntimeFailureReason(result);
-            const killed = memoryKillBetween(running.atStart, poll.memory);
+            const killed = turnEndingKill(
+              memoryKillBetween(running.atStart, poll.memory),
+            );
             if (!killed) {
               return {
                 outcome: "failed",
@@ -1373,7 +1502,9 @@ class AgentRuntimeManager {
           // read the counters.
           const killed =
             pod?.status?.phase === "Running" && running
-              ? memoryKillBetween(running.atStart, running.latest)
+              ? turnEndingKill(
+                  memoryKillBetween(running.atStart, running.latest),
+                )
               : null;
           const failure = agentRunFailure(
             podFailure && pod
@@ -1406,7 +1537,9 @@ class AgentRuntimeManager {
           ).catch(() => undefined);
           if (params.abortSignal?.aborted) break;
           const killed =
-            now === undefined ? null : memoryKillBetween(running.atStart, now);
+            now === undefined
+              ? null
+              : turnEndingKill(memoryKillBetween(running.atStart, now));
           if (killed) {
             // A container that hit its limit ran out of memory; a node that
             // did took the process with it, which says nothing about the
@@ -1475,6 +1608,7 @@ class AgentRuntimeManager {
     const clients = this.requireClients();
     const names = agentRuntimeNames(session.workloadName);
     const namespace = session.runtimeScope;
+    this.terminatingSandboxes.add(`${namespace}/${names.sandbox}`);
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
       [
@@ -1739,6 +1873,7 @@ class AgentRuntimeManager {
     await this.applyNetworkPolicy(
       buildAgentRuntimePlatformEgressPolicy({
         spec,
+        clusterDnsIps,
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
@@ -1865,6 +2000,10 @@ class AgentRuntimeManager {
         organizationId: session.organizationId,
         tokenId: session.gatewayTokenId,
       });
+    } else if (session.actorKind === "user") {
+      await OAuthAccessTokenModel.deleteById(
+        agentRunGatewayTokenId(session.id),
+      );
     }
     if (!session.virtualApiKeyId) return;
     try {
@@ -2005,6 +2144,7 @@ done`
         podName: running.podName,
         tier: running.tier,
         killed: kill.killed,
+        stopped: kill.stopped,
         atLimit: kill.atLimit,
         memoryLimitBytes: kill.events.limitBytes,
         memoryPeakBytes: kill.events.peakBytes,
@@ -2013,7 +2153,9 @@ done`
           tier: running.tier,
         }),
       },
-      "The kernel killed a process of an Agent Runtime run for memory",
+      kill.killed > 0
+        ? "The kernel killed a process of an Agent Runtime run for memory"
+        : "The memory warden stopped a command of an Agent Runtime run near its memory limit",
     );
   }
 

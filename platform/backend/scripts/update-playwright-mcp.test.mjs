@@ -30,14 +30,27 @@ async function setup(t, options = {}) {
   for (const architecture of options.missingArm
     ? ["amd64"]
     : ["amd64", "arm64"]) {
-    const config = {
-      architecture,
-      config: {
-        Env: [
-          `NODE_VERSION=${architecture === "arm64" && options.armNode ? options.armNode : "24.21.0"}`,
-        ],
-      },
-    };
+    const nodeVersion =
+      architecture === "arm64" && options.armNode ? options.armNode : "24.21.0";
+    const config =
+      options.nodeSource === "buildArg"
+        ? {
+            architecture,
+            config: { Env: ["NODE_ENV=production"] },
+            history: [
+              { created_by: "ARG NODE_VERSION=22.0.0" },
+              { created_by: `ARG NODE_VERSION=${nodeVersion}` },
+              {
+                created_by: `RUN |1 NODE_VERSION=${nodeVersion} /bin/sh -c install-node`,
+              },
+            ],
+          }
+        : options.nodeSource === "none"
+          ? { architecture, config: { Env: ["NODE_ENV=production"] } }
+          : {
+              architecture,
+              config: { Env: [`NODE_VERSION=${nodeVersion}`] },
+            };
     const configDigest = digest(config);
     routes.set(`/v2/playwright/mcp/blobs/${configDigest}`, config);
     const manifest = { config: { digest: configDigest } },
@@ -52,8 +65,10 @@ async function setup(t, options = {}) {
     });
   }
   const index = { manifests };
-  routes.set("/v2/playwright/mcp/manifests/v0.0.83", index);
-  routes.set("/v2/playwright/mcp/manifests/v0.0.84", index);
+  // npm 0.0.85 has no upstream image tag.
+  for (const version of ["0.0.83", "0.0.84"])
+    if (!options.missingImages?.includes(version))
+      routes.set(`/v2/playwright/mcp/manifests/v${version}`, index);
   const dependencies = {
     playwright: "1.65.0",
     "playwright-core": options.badDependencies ? "1.64.0" : "1.65.0",
@@ -127,6 +142,50 @@ test("pins the mature upstream release and actual runtime metadata, then becomes
   assert.equal(await readFile(fixture.file, "utf8"), saved);
 });
 
+test("reads the Node version from the build argument when the image env omits it", async (t) => {
+  const fixture = await setup(t, { nodeSource: "buildArg" });
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  const next = JSON.parse(await readFile(fixture.file, "utf8"));
+  assert.equal(next.mcpVersion, "0.0.84");
+  assert.equal(next.nodeVersion, "24.21.0");
+});
+
+test("keeps the pin when the newest mature release has no upstream image yet", async (t) => {
+  const fixture = await setup(t, { missingImages: ["0.0.84"] });
+  // Pin 0.0.83 exactly as the fake registry serves it.
+  const pinned = `${JSON.stringify(
+    {
+      ...initialMetadata,
+      image: `mcr.microsoft.com/playwright/mcp@${digest(fixture.index)}`,
+      nodeVersion: "24.21.0",
+      playwrightVersion: "1.65.0",
+    },
+    null,
+    2,
+  )}\n`;
+  await writeFile(fixture.file, pinned);
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Skipping Playwright MCP 0\.0\.84/);
+  assert.match(result.stdout, /already current/);
+  assert.equal(await readFile(fixture.file, "utf8"), pinned);
+});
+
+test("pins the newest mature release that has an upstream image", async (t) => {
+  const fixture = await setup(t);
+  // 0.0.85 is mature by then but has no image; 0.0.84 does.
+  const result = await fixture.run("--now", "2026-11-05T00:00:00Z");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Skipping Playwright MCP 0\.0\.85/);
+  const next = JSON.parse(await readFile(fixture.file, "utf8"));
+  assert.equal(next.mcpVersion, "0.0.84");
+  assert.equal(
+    next.image,
+    `mcr.microsoft.com/playwright/mcp@${digest(fixture.index)}`,
+  );
+});
+
 for (const [name, options, message] of [
   [
     "missing architecture",
@@ -138,8 +197,23 @@ for (const [name, options, message] of [
     { armNode: "24.22.1" },
     /different Node versions/,
   ],
+  [
+    "an image without any Node version",
+    { nodeSource: "none" },
+    /Missing Node version for amd64/,
+  ],
   ["tampered manifest", { tamper: true }, /manifest digest mismatch/],
   ["registry failure", { failRegistry: true }, /HTTP 503/],
+  [
+    "no upstream image for any candidate",
+    { missingImages: ["0.0.83", "0.0.84"] },
+    /No upstream Playwright MCP image for 0\.0\.84, 0\.0\.83/,
+  ],
+  [
+    "a release without an upstream image past the grace period",
+    { missingImages: ["0.0.84"], args: ["--now", "2026-11-05T00:00:00Z"] },
+    /0\.0\.84 has had no upstream image for over 30 days/,
+  ],
   [
     "unstable latest channel",
     { latest: "0.0.86-beta.1" },
@@ -158,7 +232,7 @@ for (const [name, options, message] of [
 ])
   test(`rejects ${name} without changing the pin`, async (t) => {
     const fixture = await setup(t, options);
-    const result = await fixture.run();
+    const result = await fixture.run(...(options.args ?? []));
     assert.equal(result.status, 1);
     assert.match(result.stderr, message);
     assert.equal(await readFile(fixture.file, "utf8"), fixture.initial);

@@ -34,6 +34,38 @@ describe("OpenAiResponsesInteraction", () => {
     expect(interaction.getToolNamesUsed()).toEqual(["read_file"]);
   });
 
+  it("lists requested function and custom tool calls with their call ids", () => {
+    const interaction = new OpenAiResponsesInteraction({
+      type: "openai:responses",
+      model: "gpt-4o",
+      request: { model: "gpt-4o", input: [] },
+      response: {
+        output: [
+          {
+            type: "function_call",
+            id: "fc_1",
+            call_id: "call_1",
+            name: "exec_command",
+            arguments: "{}",
+            status: "completed",
+          },
+          {
+            type: "custom_tool_call",
+            id: "ctc_1",
+            call_id: "call_2",
+            name: "apply_patch",
+            input: "*** Begin Patch",
+          },
+        ],
+      },
+    } as unknown as Interaction);
+
+    expect(interaction.getToolCallsRequested()).toEqual([
+      { id: "call_1", name: "exec_command" },
+      { id: "call_2", name: "apply_patch" },
+    ]);
+  });
+
   // The AI SDK serializes Responses turns as "easy input" messages — bare
   // `{role, content}` with no `type` — which the proxy's request adapter
   // already understands. Requiring the tag here dropped every SDK-sent message,

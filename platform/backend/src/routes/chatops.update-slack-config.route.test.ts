@@ -5,10 +5,11 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { SLACK_CONNECT_TIMEOUT_MS } from "@/agents/chatops/constants";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { ChatOpsConfigModel } from "@/models";
+import { ChatOpsChannelBindingModel, ChatOpsConfigModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -64,8 +65,93 @@ vi.mock("@slack/socket-mode", async (importOriginal) => {
   };
 });
 
-describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
+describe("Slack configuration and channel discovery routes", () => {
   const server = useMswServer();
+
+  test("refresh discovers an agent bot's new membership when the router is disabled", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    let channelId = "CINITIAL";
+    let scans = 0;
+    server.use(
+      http.post("https://slack.com/api/auth.test", () =>
+        HttpResponse.json({ ok: true, user_id: "UBOT", team_id: "TLOCAL" }),
+      ),
+      http.post("https://slack.com/api/users.info", () =>
+        HttpResponse.json({ ok: true, user: { name: "synthetic-bot" } }),
+      ),
+      http.post("https://slack.com/api/users.conversations", () => {
+        scans++;
+        return HttpResponse.json({ ok: true, channels: [{ id: channelId }] });
+      }),
+    );
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: false,
+      botToken: "",
+      signingSecret: "",
+      appId: "",
+    });
+    await ChatOpsConfigModel.saveSlackAgentBot({
+      agentId: agent.id,
+      enabled: true,
+      botToken: "xoxb-synthetic-agent",
+      signingSecret: "synthetic",
+      appId: "A_SYNTHETIC",
+      connectionMode: "webhook",
+    });
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      request.organizationId = org.id;
+      request.user = user as typeof request.user;
+    });
+    registerAuditLogHook(app);
+    await app.register(chatopsRoutes);
+    try {
+      await chatOpsManager.initialize();
+      await expect
+        .poll(() => cacheManager.get(`${CacheKey.ChannelDiscovery}-slack-all`))
+        .toBeDefined();
+      expect(chatOpsManager.getSlackProvider()?.getWorkspaceId()).toBeNull();
+      expect(scans).toBe(1);
+      channelId = "CINVITED";
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chatops/channel-discovery/refresh",
+        payload: { provider: "slack" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(scans).toBe(2);
+      expect(
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId: "TLOCAL",
+        }),
+      ).not.toBeNull();
+      expect(
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId: "CINITIAL",
+          workspaceId: "TLOCAL",
+        }),
+      ).toBeNull();
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, org.id));
+      expect(audit?.action).toBe("chatOpsBinding.refreshed");
+      expect(audit.before).not.toEqual(audit.after);
+      expect(JSON.stringify(audit)).not.toContain("xoxb-synthetic-agent");
+    } finally {
+      await chatOpsManager.cleanup();
+      await app.close();
+    }
+  });
 
   test("names slack.com when the connection fails", async ({
     makeOrganization,

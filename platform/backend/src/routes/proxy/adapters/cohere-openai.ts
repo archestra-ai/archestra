@@ -213,12 +213,16 @@ class CohereOpenaiStreamAdapter
     ];
   }
 
+  getOpenAiFinishReason(): string {
+    return this.responseReplacedWithText
+      ? "stop"
+      : mapCohereFinishReason(this.inner.state.stopReason);
+  }
+
   formatEndSSE(): string {
     return `${this.formatChunk({
       delta: {},
-      finishReason: this.responseReplacedWithText
-        ? "stop"
-        : mapCohereFinishReason(this.inner.state.stopReason),
+      finishReason: this.getOpenAiFinishReason(),
       usage: this.state.usage,
     })}data: [DONE]\n\n`;
   }

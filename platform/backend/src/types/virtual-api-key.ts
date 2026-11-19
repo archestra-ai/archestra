@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { CredentialBillingSchema } from "./credential-billing";
 import { LabelWithDetailsSchema } from "./label";
 import { ResourceVisibilityScopeSchema } from "./visibility";
@@ -49,9 +49,9 @@ export const InsertVirtualApiKeySchema = createInsertSchema(
     scope: ResourceVisibilityScopeSchema.optional(),
   });
 
-/** Schema for virtual key response at creation time (includes full token value) */
+/** The token is withheld from team leads creating keys on behalf of a member. */
 export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
-  value: z.string(),
+  value: z.string().optional(),
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
   createdBy: CreatedByNullableSchema,

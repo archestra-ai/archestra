@@ -1,4 +1,4 @@
-import { EnvironmentModel } from "@/models";
+import EnvironmentModel from "@/models/environment";
 import {
   ApiError,
   type EffectiveNetworkPolicy,
@@ -12,12 +12,23 @@ const BUILT_IN_NETWORK_POLICY: EffectiveNetworkPolicy = {
   policy: null,
 };
 
+/**
+ * The egress policy a runtime runs under. An agent's own policy wins over its
+ * environment's, which wins over the organization default. Only the agent's
+ * own runtimes (Agent Runtime pods and Code Sandbox engines) pass
+ * `agentNetworkPolicy`; MCP servers follow their environment.
+ */
 export async function resolveEffectiveNetworkPolicy(params: {
   organizationId: string;
+  agentNetworkPolicy?: NetworkPolicy | null;
   environmentId?: string | null;
   environmentNetworkPolicy?: NetworkPolicy | null;
   defaultNetworkPolicy?: NetworkPolicy | null;
 }): Promise<EffectiveNetworkPolicy> {
+  if (params.agentNetworkPolicy) {
+    return { source: "agent", policy: params.agentNetworkPolicy };
+  }
+
   if (params.environmentId) {
     let environmentNetworkPolicy = params.environmentNetworkPolicy;
     if (environmentNetworkPolicy === undefined) {

@@ -15,18 +15,20 @@ describe("Anthropic bearer credentials", () => {
   test("does not add an ambient API key to an explicit bearer request", async () => {
     config.llm.anthropic.vertexAi.enabled = false;
     vi.stubEnv("ANTHROPIC_API_KEY", "fixture-ambient-api-key");
-    const upstreamFetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
-        id: "msg_fixture",
-        type: "message",
-        role: "assistant",
-        model: "claude-sonnet-4-6",
-        content: [{ type: "text", text: "OK" }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 4, output_tokens: 2 },
-      }),
-    );
+    const upstreamFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        Response.json({
+          id: "msg_fixture",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 4, output_tokens: 2 },
+        }),
+      );
     const client = anthropicAdapterFactory.createClient(
       "Bearer:sk-ant-oat01-fixture-subscription",
       { baseUrl: "https://api.anthropic.com", source: "api" },
@@ -43,6 +45,30 @@ describe("Anthropic bearer credentials", () => {
     expect(request.headers.get("authorization")).toBe(
       "Bearer sk-ant-oat01-fixture-subscription",
     );
+    expect(request.headers.get("anthropic-beta")).toBe("oauth-2025-04-20");
     expect(request.headers.get("x-api-key")).toBeNull();
+
+    const clientWithExistingBeta = anthropicAdapterFactory.createClient(
+      "Bearer:sk-ant-oat01-fixture-subscription",
+      {
+        baseUrl: "https://api.anthropic.com",
+        source: "api",
+        defaultHeaders: {
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+        },
+      },
+    ) as AnthropicProvider;
+
+    await clientWithExistingBeta.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "Reply OK" }],
+    });
+
+    const [secondInput, secondInit] = upstreamFetch.mock.calls[1] ?? [];
+    const secondRequest = new Request(secondInput, secondInit);
+    expect(secondRequest.headers.get("anthropic-beta")).toBe(
+      "interleaved-thinking-2025-05-14,oauth-2025-04-20",
+    );
   });
 });

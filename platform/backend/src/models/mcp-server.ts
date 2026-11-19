@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
@@ -28,7 +29,8 @@ import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
-import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
+import { slugifyMcpServerNameSql } from "@/database/utils/slug-sql";
+import { constructFrozenMcpDeploymentName } from "@/k8s/deployment-names";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -54,6 +56,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
+import { port } from "./ports";
 import TeamModel from "./team";
 import { toolUiResourceUriSql } from "./tool";
 
@@ -596,9 +599,9 @@ class McpServerModel {
       /** Installs of any of these catalog items (the registry's visible page). */
       catalogIds?: string[];
       /**
-       * Installs of catalog items whose name, slugified the way tool names
-       * carry it ({@link slugifyMcpServerName}), is this: a tool's server
-       * prefix, resolved without the caller seeing the catalog item.
+       * Installs of catalog items whose tool prefix ({@link catalogToolPrefix})
+       * is this: a tool's server prefix, resolved without the caller seeing
+       * the catalog item.
        */
       catalogSlug?: string;
       /**
@@ -658,10 +661,9 @@ class McpServerModel {
       );
     }
     if (filters?.catalogSlug !== undefined) {
-      // slugifyMcpServerName in SQL: lowercase, whitespace runs to "_",
-      // anything but [a-z0-9_-] removed.
+      // The item's tool prefix: the allocated one, else its slugified name.
       conditions.push(
-        sql`regexp_replace(regexp_replace(lower(${schema.internalMcpCatalogTable.name}), '[[:space:]]+', '_', 'g'), '[^a-z0-9_-]', '', 'g') = ${filters.catalogSlug}`,
+        sql`coalesce(${schema.internalMcpCatalogTable.toolPrefix}, ${slugifyMcpServerNameSql(schema.internalMcpCatalogTable.name)}) = ${filters.catalogSlug}`,
       );
     }
 
@@ -2032,19 +2034,17 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
-      // Lazy (here and for `mcp-client` below): the runtime and client import
-      // the service layer, which would otherwise load with every model.
-      const { McpServerRuntimeManager } = await import(
-        "@/k8s/mcp-server-runtime"
-      );
+      // Through ports (here and for tool discovery below): the runtime and
+      // the MCP client sit above the models and load on first use.
+      const runtime = await port("mcpServerRuntime");
       try {
         if (opts?.strictCleanup) {
-          await McpServerRuntimeManager.removeMcpServer(id, {
+          await runtime.removeMcpServer(id, {
             strictCleanup: true,
             requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
           });
         } else {
-          await McpServerRuntimeManager.removeMcpServer(id);
+          await runtime.removeMcpServer(id);
         }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
@@ -2118,7 +2118,9 @@ class McpServerModel {
    * revived. Flag-only: single-tenant installs are flagged for per-install
    * reinstall; multitenant installs come back via the catalog-level reinstall
    * (`catalogReinstallRequired`, stamped by the catalog restore), so they are
-   * not per-install flagged here.
+   * not per-install flagged here. Neither is a desktop MCP install: it has no
+   * pod and no credential to redo, and its tunnel client starts the server
+   * again at its next sync.
    */
   static async restoreCascadedForCatalog(
     params: { catalogId: string; deletedAt: Date; multitenant: boolean },
@@ -2131,8 +2133,10 @@ class McpServerModel {
           ? { deletedAt: null }
           : {
               deletedAt: null,
-              reinstallRequired: true,
-              reinstallReason: "new-input",
+              reinstallRequired: sql<boolean>`${schema.mcpServersTable.serverType} <> 'desktop_mcp'`,
+              reinstallReason: sql<
+                "new-input" | null
+              >`case when ${schema.mcpServersTable.serverType} <> 'desktop_mcp' then 'new-input' end`,
             },
       )
       .where(
@@ -2405,7 +2409,7 @@ class McpServerModel {
       }
     }
 
-    const { default: mcpClient } = await import("@/clients/mcp-client");
+    const mcpClient = await port("mcpToolDiscovery");
     try {
       // Use the new structured API for all server types
       const tools = await mcpClient.connectAndGetTools({
@@ -2510,6 +2514,24 @@ class McpServerModel {
     return result || null;
   }
 
+  /** A user's personal servers of one server type, across all catalogs. */
+  static async getUserPersonalServersOfType(
+    userId: string,
+    serverType: McpServer["serverType"],
+  ): Promise<McpServer[]> {
+    return db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, userId),
+          eq(schema.mcpServersTable.scope, "personal"),
+          eq(schema.mcpServersTable.serverType, serverType),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+  }
+
   /**
    * Get a user's personal servers for multiple catalogs in a single query.
    * Returns a Map of catalogId -> McpServer for catalogs where the user has a personal server.
@@ -2611,7 +2633,7 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote") {
-          const { default: mcpClient } = await import("@/clients/mcp-client");
+          const mcpClient = await port("mcpToolDiscovery");
           // Use a temporary ID for validation (we don't have a real server ID yet)
           const tools = await mcpClient.connectAndGetTools({
             catalogItem,
@@ -2719,6 +2741,15 @@ class McpServerModel {
       hasOauthConfig: row.catalogOauthConfig !== null,
       hasSecret: Boolean(s.secretId),
       localInstallationStatus: s.localInstallationStatus,
+      // What the owner added to the command of a desktop MCP catalog item:
+      // how many arguments and their hash, so a change shows in the diff.
+      // Not the arguments: a user can type a token as one.
+      desktopArgumentCount: s.desktopArguments?.length ?? 0,
+      desktopArgumentsHash: s.desktopArguments?.length
+        ? createHash("sha256")
+            .update(JSON.stringify(s.desktopArguments))
+            .digest("hex")
+        : null,
       oauthRefreshError: s.oauthRefreshError ?? null,
       // Lifecycle fields so the soft-delete/restore diff is non-empty: a
       // (flag-only) restore flips deletedAt → null and reinstallRequired → true.
@@ -2823,11 +2854,9 @@ class McpServerModel {
       // Tear the deployment (and its live K8s Secret) down before dropping the
       // row — `removeMcpServer` resolves the deployment through the DB row.
       if (server.serverType === "local") {
-        const { McpServerRuntimeManager } = await import(
-          "@/k8s/mcp-server-runtime"
-        );
+        const runtime = await port("mcpServerRuntime");
         try {
-          await McpServerRuntimeManager.removeMcpServer(server.id);
+          await runtime.removeMcpServer(server.id);
         } catch (error) {
           logger.error(
             { err: error, userId, mcpServerId: server.id },

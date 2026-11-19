@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
+import { stripChildTrajectoryReferences } from "./child-trajectory-reference-format";
+import { grokChildOutputs } from "./grok-child-return";
+import { parseGrokDurableHistory } from "./grok-durable-history";
 
 export type AppaChildReturnCompletion = {
   value: string;
@@ -9,6 +12,11 @@ export type AppaChildReturnCompletion = {
   spawnCallId?: string;
   envelopeId?: string;
   assistantOrigin: boolean;
+  /**
+   * Client coordinates of a report that can occur in several read results.
+   * These are constraints on replay, never proof that a return crossed.
+   */
+  replayIdentity?: { childId: string; turn: number };
 };
 
 export type CollectedChildReturns = {
@@ -66,6 +74,9 @@ export function collectAndStripChildReturns(
     codexMailboxReturns?: boolean;
     /** Copilot CLI reads a finished background agent with `read_agent`. */
     copilotAgentReports?: boolean;
+    grokSubagentReturns?: boolean;
+    /** Internal recursion guard for the native memory extractor's transcript. */
+    grokDurableHistory?: false;
     onRefusal?: RefusalSink;
   } = {},
 ): CollectedChildReturns {
@@ -74,8 +85,15 @@ export function collectAndStripChildReturns(
   };
   const nativeResultCallIds = collectNativeResultCallIds(
     body,
-    options.copilotAgentReports ? COPILOT_REPORT_TOOLS : undefined,
+    options.grokSubagentReturns
+      ? GROK_COMPLETION_TOOLS
+      : options.copilotAgentReports
+        ? COPILOT_REPORT_TOOLS
+        : undefined,
   );
+  const copilotReadAgentIds = options.copilotAgentReports
+    ? collectCopilotReadAgentIds(body)
+    : new Map<string, string>();
   if (options.codexMailboxReturns) {
     collectCodexMailboxReturns(body, collected, options.onRefusal);
   }
@@ -87,6 +105,82 @@ export function collectAndStripChildReturns(
     readOrReport(options.onRefusal, value, () => rewrite(value, context));
   const rewrite = (value: unknown, context: WalkContext): unknown => {
     if (typeof value === "string") {
+      if (options.grokSubagentReturns && !context.assistantOrigin) {
+        const history = parseGrokDurableHistory(value);
+        if (history) {
+          if (options.grokDurableHistory === false)
+            throw new ApiError(
+              409,
+              "OpenAPPA withheld a nested Grok memory transcript.",
+            );
+          // Decode before scanning: escaped examples are not live envelopes,
+          // while actual child outputs still require the retained crossing.
+          const nested = collectAndStripChildReturns(
+            { messages: history.messages },
+            { ...options, grokDurableHistory: false },
+          );
+          collected.completions.push(...nested.completions);
+          return history.serialize();
+        }
+      }
+      if (options.grokSubagentReturns && !context.assistantOrigin) {
+        const convert = (text: string): string | undefined => {
+          const outputs = grokChildOutputs(text);
+          if (!outputs) return undefined;
+          return JSON.stringify({
+            status: Object.fromEntries(
+              outputs.map((output) => {
+                if (output.status !== "completed")
+                  return [output.id, { state: output.status }];
+                const nested = { ...context, childNativeId: output.id };
+                const parsed = stripMarker(output.value ?? "", nested, true);
+                recordCompletion(parsed, nested, collected);
+                return [output.id, { completed: parsed.value }];
+              }),
+            ),
+          });
+        };
+        if (context.nativeResultSite) {
+          const converted = convert(value);
+          if (converted !== undefined) return converted;
+        }
+        // Native completions can also arrive beside an unrelated tool result,
+        // or in an idle auto-wake prompt. Check those bytes at the same boundary.
+        const rewritten = value.replace(
+          /<system-reminder>\n?([\s\S]*?)<\/system-reminder>/g,
+          (block, inside: string) => {
+            if (
+              !/^(?:Background subagent |While you were idle, \d+ background subagents? completed:)/.test(
+                inside,
+              )
+            )
+              return block;
+            const start = inside.search(/=== (?:Task |Multi-wait \()/);
+            if (start < 0)
+              throw new ApiError(
+                409,
+                "OpenAPPA withheld an incomplete Grok child notification.",
+              );
+            const converted = convert(inside.slice(start).trimEnd());
+            if (!converted)
+              throw new ApiError(
+                409,
+                "OpenAPPA withheld an invalid Grok child notification.",
+              );
+            return `<system-reminder>\n${converted}\n</system-reminder>`;
+          },
+        );
+        if (
+          (context.toolResultEnvelope || value.includes("<system-reminder>")) &&
+          (rewritten.includes("<subagent_result>") ||
+            rewritten.includes("<subagent_meta>"))
+        )
+          throw new ApiError(
+            409,
+            "OpenAPPA withheld an unrecognized Grok child notification.",
+          );
+        if (rewritten !== value) return rewritten;
+      }
       // OpenCode and Kilo Code acknowledge a background launch in the task's
       // own framing, and Kilo Code wraps the notice in <task_result>. The
       // acknowledgement returns nothing, so it stays as the client sent it
@@ -188,6 +282,9 @@ export function collectAndStripChildReturns(
       stringField(record["task-id"]) ??
       taskIdIn(record) ??
       context.childNativeId;
+    const copilotReadAgentId = envelopeId
+      ? copilotReadAgentIds.get(normalizeCallId(envelopeId) ?? envelopeId)
+      : undefined;
     const nested: WalkContext = {
       ...context,
       topLevel: false,
@@ -196,6 +293,7 @@ export function collectAndStripChildReturns(
       nativeResultSite,
       ...(envelopeId ? { envelopeId } : {}),
       ...(childNativeId ? { childNativeId } : {}),
+      ...(copilotReadAgentId ? { copilotReadAgentId } : {}),
     };
 
     const status =
@@ -282,6 +380,8 @@ type WalkContext = {
   nativeResultSite: boolean;
   syntheticUserReturn?: boolean;
   topLevel?: boolean;
+  copilotReadAgentId?: string;
+  replayIdentity?: AppaChildReturnCompletion["replayIdentity"];
 };
 
 type ParsedMarkerValue = {
@@ -321,6 +421,10 @@ const MARKER = new RegExp(
   "gm",
 );
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
+const GROK_COMPLETION_TOOLS = new Set([
+  "spawn_subagent",
+  "get_command_or_subagent_output",
+]);
 
 function stripMarker(
   value: string,
@@ -335,7 +439,9 @@ function stripMarker(
   // A complete child reply can carry its trajectory proof before the return
   // marker. That proof is transport metadata. It is not part of the admitted
   // value and is not lineage evidence for the parent.
-  const returnValue = stripChildTrajectoryReceipts(value).text;
+  const returnValue = stripChildTrajectoryReferences(
+    stripChildTrajectoryReceipts(value).text,
+  ).text;
   const pattern = new RegExp(MARKER.source, "g");
   const matches = [...returnValue.matchAll(pattern)];
   if (matches.length === 0) {
@@ -580,12 +686,35 @@ function replaceCopilotAgentReport(
   if (turns.length === 0) {
     throw new ApiError(400, "OpenAPPA received a malformed agent report");
   }
+  // A read's arguments and its report must name the same child. Copilot's
+  // child requests carry no native id, so this is only a replay coordinate;
+  // the verifier still resolves it against a unique retained crossing.
+  const childId = context.copilotReadAgentId;
+  const reportChildId = value
+    .slice(0, turns[0].index)
+    .match(/\bagent_id: ([^,\s]+)(?:,|$)/)?.[1];
+  if (childId && reportChildId !== childId) {
+    throw new ApiError(
+      400,
+      "OpenAPPA received a Copilot agent report for a different child",
+    );
+  }
+  const seenTurns = new Set<number>();
   const parts = [value.slice(0, turns[0].index)];
   turns.forEach((turn, index) => {
+    const turnNumber = Number(turn[1]);
+    if (!Number.isSafeInteger(turnNumber) || seenTurns.has(turnNumber)) {
+      throw new ApiError(400, "OpenAPPA received a malformed agent report");
+    }
+    seenTurns.add(turnNumber);
     const start = (turn.index ?? 0) + turn[0].length;
     const end = turns[index + 1]?.index ?? value.length;
-    const parsed = stripMarker(value.slice(start, end), context, true);
-    if (parsed.marker) recordCompletion(parsed, context, collected);
+    const turnContext = {
+      ...context,
+      ...(childId ? { replayIdentity: { childId, turn: turnNumber } } : {}),
+    };
+    const parsed = stripMarker(value.slice(start, end), turnContext, true);
+    if (parsed.marker) recordCompletion(parsed, turnContext, collected);
     parts.push(turn[0], parsed.value);
   });
   return parts.join("");
@@ -706,6 +835,9 @@ function recordCompletion(
     ...(context.spawnCallId ? { spawnCallId: context.spawnCallId } : {}),
     ...(context.envelopeId ? { envelopeId: context.envelopeId } : {}),
     assistantOrigin: context.assistantOrigin,
+    ...(context.replayIdentity
+      ? { replayIdentity: context.replayIdentity }
+      : {}),
   });
 }
 
@@ -918,6 +1050,10 @@ function collectCodexMailboxMessage(
   const text =
     first?.type === "input_text" ? stringField(first.text) : undefined;
   const kind = text?.match(/^Message Type: ([A-Z_]+)\r?\n/)?.[1];
+  // A message between agents is not a return. In a governed session the
+  // proxy admits it against the runtime's record of its sender's send, and
+  // hides it when there is none; elsewhere it is not read.
+  if (kind === "MESSAGE") return;
   if (
     !text ||
     !isBoundedNativeMetadata(author) ||
@@ -1027,7 +1163,37 @@ const COPILOT_REPORT_TOOLS: ReadonlySet<string> = new Set(["read_agent"]);
  */
 export const COPILOT_AGENT_REPORT =
   /^Agent (?:is idle|completed|has completed)\b/;
-const COPILOT_REPORT_TURN = /(?:^|\r?\n\r?\n)\[Turn \d+\]\r?\n/g;
+const COPILOT_REPORT_TURN = /(?:^|\r?\n\r?\n)\[Turn (\d+)\]\r?\n/g;
+
+/** Reads only native Responses read_agent calls, the wire Copilot supports. */
+function collectCopilotReadAgentIds(body: unknown): Map<string, string> {
+  const ids = new Map<string, string>();
+  const input = asRecord(body)?.input;
+  for (const value of Array.isArray(input) ? input : []) {
+    const call = asRecord(value);
+    if (
+      call?.type !== "function_call" ||
+      call.namespace !== undefined ||
+      call.name !== "read_agent"
+    )
+      continue;
+    const id = normalizeCallId(stringField(call.call_id));
+    const args =
+      typeof call.arguments === "string"
+        ? asRecord(tryParseJson(call.arguments))
+        : asRecord(call.arguments);
+    const childId = args?.agent_id;
+    if (!id || !isBoundedNativeMetadata(childId)) continue;
+    if (ids.has(id) && ids.get(id) !== childId) {
+      throw new ApiError(
+        400,
+        "OpenAPPA received conflicting Copilot agent reads",
+      );
+    }
+    ids.set(id, childId);
+  }
+  return ids;
+}
 
 function collectNativeResultCallIds(
   body: unknown,

@@ -5,6 +5,7 @@ import datetime as dt
 import fnmatch
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -214,6 +215,8 @@ class HandoffFixture(unittest.TestCase):
             root_digest = json.load(archive.extractfile("index.json"))["manifests"][0]["digest"]
         def copy(args, **kwargs):
             self.assertEqual(args[:4], ["skopeo", "copy", "--all", "--preserve-digests"])
+            # A transient registry error retries instead of failing the release run.
+            self.assertEqual(args[args.index("--retry-times") + 1], "3")
             self.assertEqual(args[-1], "docker://" + image + "@" + root_digest)
             self.assertNotIn(":candidate-", " ".join(args))
             Path(args[args.index("--digestfile") + 1]).write_text(root_digest)
@@ -244,7 +247,9 @@ class HandoffFixture(unittest.TestCase):
 
     def test_lookalike_registry_destinations_are_rejected_before_any_transfer(self):
         for image in ("dockerXio/archestra/platform", "docker.io.evil/archestra/platform",
-                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform"):
+                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform",
+                      # Release names belong to the release publisher; runs stage in ci/.
+                      "ghcr.io/archestra-ai/mcp-server-base", "ghcr.io/archestra-ai/ci/nested/mcp-server-base"):
             with patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "destination"):
                 HANDOFF.push(self.index["records"][0], image, "amd64")
             run.assert_not_called()
@@ -253,8 +258,13 @@ class HandoffFixture(unittest.TestCase):
 class WorkflowHandoffTests(unittest.TestCase):
     def test_fixture_dispatch_guards_every_production_step_and_confines_the_read_only_app_token(self):
         source = (ROOT / ".github/workflows/release-please.yml").read_text()
-        job = source.split("  release-please:\n", 1)[1].split("  build-and-push-mcp-server-docker-image:\n", 1)[0]
+        job = re.split(r"^  [a-z][\w-]*:$", source.split("  release-please:\n", 1)[1], maxsplit=1, flags=re.M)[0]
         blocks = re.split(r"(?=^      - name: )", job, flags=re.M)[1:]
+        # The relay legs run only for a release to publish, which a fixture
+        # dispatch never resolves (its resolve step is skipped).
+        relay = source.split("  relay-release-candidates:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertIn("    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}\n", relay)
+        self.assertIn("steps.resolve-release.outputs.should_publish", job.split("      platform_should_publish: ", 1)[1].splitlines()[0])
         exempt = {"Checkout repository", "Generate a token", "Verify non-publishing cross-run fixture with the existing App",
                   "Relay non-publishing fixture to a tokenless consumer"}
         for block in blocks:
@@ -264,12 +274,36 @@ class WorkflowHandoffTests(unittest.TestCase):
                 self.assertIsNotNone(condition, name)
                 self.assertIn("!inputs.handoff-fixture", condition[1], name)
         token = next(block for block in blocks if block.startswith("      - name: Generate a token"))
-        self.assertIn("permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
-        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
+        self.assertIn("permission-actions: read", token)
+        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}", token)
+        # Release PRs are written only by the shared Release Please workflow.
+        for permission in ("permission-pull-requests", "permission-issues", "permission-workflows"):
+            self.assertNotIn(permission, token)
         consumer = source.split("  verify-handoff-fixture:\n", 1)[1]
         self.assertNotIn("secrets.", consumer)
         self.assertNotIn("steps.generate-token", consumer)
         self.assertNotIn("actions:", consumer)
+
+    def test_release_please_runs_only_through_the_shared_app_workflow_without_cloud_identity(self):
+        source = (ROOT / ".github/workflows/release-please.yml").read_text()
+        self.assertNotIn("googleapis/release-please-action", source)
+        jobs = dict(re.findall(r"^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)", source.split("\njobs:\n", 1)[1], re.M | re.S))
+        shared = re.compile(r"^    uses: archestra-ai/\.github/\.github/workflows/release-please\.yml@[0-9a-f]{40} ", re.M)
+        callers = {name: job for name, job in jobs.items() if shared.search(job)}
+        self.assertEqual(set(callers), {"create-releases", "release-pr"})
+        self.assertIn("skip-github-pull-request: true", callers["create-releases"])
+        self.assertIn("skip-github-release: true", callers["release-pr"])
+        for job in callers.values():
+            # A called job presents the shared file as job_workflow_ref, which the
+            # Workload Identity trust for this file does not accept.
+            self.assertIn("    permissions: {}", job)
+            self.assertNotIn("id-token", job)
+            # The key lives only in the releaser environment (main, release/*).
+            self.assertIn("      environment: releaser\n", job)
+            self.assertIn("APP_ID: ${{ secrets.APP_ID }}", job)
+            self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", job)
+            self.assertIn("target-branch: ${{ github.ref_name }}", job)
+        self.assertIn("needs: [release-policy, release-please]", callers["release-pr"])
 
     def test_publishers_cannot_select_digest_or_image_artifacts_from_an_earlier_attempt(self):
         native = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
@@ -287,22 +321,90 @@ class WorkflowHandoffTests(unittest.TestCase):
         policy = HANDOFF.load_module("release-image-policy")
         expected = {row["image"] for row in policy.candidate_matrix(ROOT)["include"]} - {"platform-slim"}
         release = (ROOT / ".github/workflows/release-please.yml").read_text()
-        relay = release.split("      - name: Select the exact scanned queue artifacts\n", 1)[1].split("      - name: Create git tag for draft release", 1)[0]
-        images = re.findall(r"^          image_name: ([a-z0-9-]+)$", relay, re.M)
+        relay = release.split("  relay-release-candidates:\n", 1)[1].split("\n  release-pr:\n", 1)[0]
+        matrix = relay.split("        image:\n", 1)[1].split("    steps:\n", 1)[0]
+        images = re.findall(r"^          - ([a-z0-9-]+)$", matrix, re.M)
         self.assertEqual(set(images), expected)
         self.assertEqual(len(images), len(set(images)))
+        # Each leg relays its matrix image from the selection release-please
+        # validated, and every image build waits for all the legs.
+        self.assertIn("image_name: ${{ matrix.image }}", relay)
+        self.assertIn("name: release-candidate-selection-${{ github.run_attempt }}", relay)
+        for job in re.findall(r"^  (build-and-push-[\w-]+):$", release, re.M):
+            section = re.split(r"^  [a-z][\w-]*:$", release.split(f"  {job}:\n", 1)[1], maxsplit=1, flags=re.M)[0]
+            self.assertIn("      - relay-release-candidates\n", section, job)
         native = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
         build = native.split("      - name: Build Docker image\n", 1)[1].split("      - name:", 1)[0]
         self.assertIn("!startsWith(inputs.checkout_ref, 'platform-v')", build)
         self.assertLess(native.index("Promote exact scanned bytes without rebuilding"), native.index("Export digest"))
-        self.assertLess(native.index("Scan release amd64 bytes before tagging"), native.index("Create manifest list and push"))
-        self.assertLess(native.index("Scan release arm64 bytes before tagging"), native.index("Create manifest list and push"))
+        self.assertLess(native.index("Promote exact scanned bytes without rebuilding"), native.index("Scan release bytes before tagging"))
+        self.assertLess(native.index("Scan release bytes before tagging"), native.index("Create manifest list and push"))
         relay_action = (ROOT / ".github/actions/relay-release-candidate/action.yml").read_text()
         self.assertEqual(relay_action.count("GH_TOKEN: ${{ inputs.token }}"), 2)
         # Credentials stay in the original release job; native publishers use
         # only same-run artifact downloads, with no new App secrets or scopes.
         self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", native)
+        self.assertNotIn("APP_PRIVATE_KEY", native)
         self.assertNotIn("actions: read", native)
+
+
+class RegistryResponse(io.BytesIO):
+    def __init__(self, body, headers=None):
+        super().__init__(body)
+        self.headers = headers or {}
+
+
+class PushIndexTests(unittest.TestCase):
+    """The release pushes the queue's signed multi-arch index, byte for byte."""
+
+    def selection(self):
+        proofs = {arch: fixture_archive(arch)[1] for arch in ("amd64", "arm64")}
+        data = HANDOFF.load_module("release-oci").multi_arch_index(proofs)
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        records = [{"image": "platform", "arch": arch, "oci": proof} for arch, proof in proofs.items()]
+        return {"index": {"records": records, "release_indexes": {"platform": {"digest": digest}}}}, data, digest
+
+    def push(self, selection, stored=None):
+        requests = []
+        def opener(request, timeout):
+            requests.append(request)
+            if request.full_url.startswith("https://ghcr.io/token?"):
+                return RegistryResponse(b'{"token": "bearer"}')
+            return RegistryResponse(b"", {"Docker-Content-Digest": stored})
+        result = HANDOFF.push_index(selection, "platform", "ghcr.io/archestra-ai/ci/platform", "1.5.0-rc.40",
+                                    "github-token", "archestra-releaser[bot]", opener=opener)
+        return result, requests
+
+    def test_pushes_the_index_the_queue_signed(self):
+        selection, data, digest = self.selection()
+        result, requests = self.push(selection, stored=digest)
+        self.assertEqual(result, digest)
+        grant, upload = requests
+        self.assertIn("scope=repository%3Aarchestra-ai%2Fci%2Fplatform%3Apull%2Cpush", grant.full_url)
+        self.assertEqual(upload.get_method(), "PUT")
+        self.assertEqual(upload.full_url, "https://ghcr.io/v2/archestra-ai/ci/platform/manifests/1.5.0-rc.40")
+        self.assertEqual(upload.data, data)
+        self.assertEqual(upload.get_header("Content-type"), "application/vnd.oci.image.index.v1+json")
+        self.assertEqual(upload.get_header("Authorization"), "Bearer bearer")
+
+    def test_an_index_the_queue_did_not_sign_pushes_nothing(self):
+        selection, _, digest = self.selection()
+        for signed in (None, "sha256:" + "0" * 64):
+            changed = deepcopy(selection)
+            changed["index"]["release_indexes"] = {} if signed is None else {"platform": {"digest": signed}}
+            with self.subTest(signed=signed), self.assertRaisesRegex(ValueError, "signed no release index"):
+                self.push(changed, stored=digest)
+
+    def test_a_registry_that_stores_other_bytes_fails(self):
+        selection, _, _ = self.selection()
+        with self.assertRaisesRegex(ValueError, "The registry stored"):
+            self.push(selection, stored="sha256:" + "0" * 64)
+
+    def test_only_staging_names_are_written(self):
+        selection, _, digest = self.selection()
+        with self.assertRaisesRegex(ValueError, "Unexpected release index destination"):
+            HANDOFF.push_index(selection, "platform", "docker.io/archestra/platform", "1.5.0", "t", "a",
+                               opener=lambda *args, **kwargs: self.fail("no request"))
 
 
 if __name__ == "__main__":

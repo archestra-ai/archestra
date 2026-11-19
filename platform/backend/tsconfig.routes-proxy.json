@@ -1,0 +1,96 @@
+{
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/routes-proxy",
+    "tsBuildInfoFile": "./.tsbuild/routes-proxy.tsbuildinfo"
+  },
+  "files": [
+    "src/routes/proxy/routes/anthropic.ts",
+    "src/routes/proxy/routes/archestra.ts",
+    "src/routes/proxy/routes/azure-files.ts",
+    "src/routes/proxy/routes/azure.ts",
+    "src/routes/proxy/routes/bedrock-openai.ts",
+    "src/routes/proxy/routes/bedrock.ts",
+    "src/routes/proxy/routes/cerebras.ts",
+    "src/routes/proxy/routes/cohere.ts",
+    "src/routes/proxy/routes/deepseek.ts",
+    "src/routes/proxy/routes/gemini.ts",
+    "src/routes/proxy/routes/github-copilot.ts",
+    "src/routes/proxy/routes/groq.ts",
+    "src/routes/proxy/routes/jev.ts",
+    "src/routes/proxy/routes/kimi-code.ts",
+    "src/routes/proxy/routes/kimi.ts",
+    "src/routes/proxy/routes/microsoft-365-copilot.ts",
+    "src/routes/proxy/routes/minimax.ts",
+    "src/routes/proxy/routes/mistral.ts",
+    "src/routes/proxy/routes/ollama-native.ts",
+    "src/routes/proxy/routes/ollama.ts",
+    "src/routes/proxy/routes/openai.ts",
+    "src/routes/proxy/routes/openrouter.ts",
+    "src/routes/proxy/routes/perplexity.ts",
+    "src/routes/proxy/routes/proxy-model-listing.ts",
+    "src/routes/proxy/routes/proxy-prehandler.ts",
+    "src/routes/proxy/routes/vllm.ts",
+    "src/routes/proxy/routes/xai.ts",
+    "src/routes/proxy/routes/zhipuai.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../tools/drizzle-migration-linter/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    },
+    {
+      "path": "./tsconfig.provider-adapters.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    },
+    {
+      "path": "./tsconfig.kb.json"
+    },
+    {
+      "path": "./tsconfig.connections.json"
+    },
+    {
+      "path": "./tsconfig.policy-config.json"
+    },
+    {
+      "path": "./tsconfig.services-support.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}

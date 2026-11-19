@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-14
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -28,9 +28,9 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.19" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.40" # x-release-please-version
    helm show values \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
    ```
 
@@ -39,13 +39,15 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 
    ```bash
    helm upgrade archestra-platform \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" \
      --install --namespace archestra --create-namespace \
      --values values.yaml --wait
    ```
 
 The chart generates and preserves authentication and credential-encryption keys. Back them up with your database. To supply existing keys, set `archestra.authSecret.existingSecretName`; the default key names are `auth-secret`, `session-secret`, `secrets-encryption-secret`, and `offer-signing-secret`.
+
+If a tool renders the chart with `helm template`, such as Argo CD, set `archestra.authSecret.existingSecretName`. Those tools cannot read the generated Secret, so every sync would replace the keys and leave stored credentials unreadable.
 
 To use different key names, configure them explicitly. Environment-variable-safe names also let you load the same Secret through `archestra.envFrom` on clusters that reject hyphens in environment variable names:
 
@@ -104,15 +106,7 @@ archestra:
 
 The HPA scales web pods only. Without it, set `archestra.replicaCount`; set `archestra.worker.replicaCount` for workers. [Size database connection capacity](/docs/admin/deployment/database#connection-capacity) for the HPA's maximum replicas and rollout overlap.
 
-Start with the [production sizing example](/docs/admin/deployment/production#cluster-capacity), then adjust `archestra.resources` and `archestra.worker.resources` for pod sizing. To spread each workload across zones:
-
-```yaml
-archestra:
-  topologySpreadConstraints:
-    - maxSkew: 1
-      topologyKey: topology.kubernetes.io/zone
-      whenUnsatisfiable: DoNotSchedule
-```
+Start from the [size](/docs/admin/deployment/scaling#pick-a-size) closest to your organization, then adjust `archestra.resources` and `archestra.worker.resources` for pod sizing. To spread pods across zones and keep serving through node drains, use the [high-availability values](/docs/admin/deployment/scaling#run-without-a-single-point-of-failure).
 
 Agent Runtime pods scale separately from web and worker pods. See [production runtime capacity](/docs/admin/deployment/production#agent-runtime) for node autoscaling and [Runtime Setup](/docs/agents/runtime/setup) for cluster prerequisites.
 

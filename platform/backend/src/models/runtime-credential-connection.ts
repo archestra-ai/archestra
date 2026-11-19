@@ -1,4 +1,5 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { SecretsManagerType } from "@archestra/shared";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -9,6 +10,7 @@ import {
   type RuntimeCredentialConnection,
   type RuntimeCredentialConnectionScope,
 } from "@/types";
+import SecretModel from "./secret";
 
 export default class RuntimeCredentialConnectionModel {
   static async upsert(params: {
@@ -73,6 +75,67 @@ export default class RuntimeCredentialConnectionModel {
     });
     const value = secret?.secret?.[connection.secretKey];
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  /** Fresh values for one owner's credential batch; never retained across operations. */
+  static async resolveValues(params: {
+    organizationId: string;
+    scope: RuntimeCredentialConnectionScope;
+    userId?: string | null;
+    credentialIds: string[];
+  }): Promise<Map<string, PromiseSettledResult<string | null>>> {
+    if (!params.credentialIds.length) return new Map();
+    const connections = schema.runtimeCredentialConnectionsTable;
+    const rows = await db
+      .select()
+      .from(connections)
+      .where(
+        and(
+          eq(connections.organizationId, params.organizationId),
+          eq(connections.scope, params.scope),
+          params.scope === "personal"
+            ? eq(connections.userId, params.userId ?? "")
+            : isNull(connections.userId),
+          inArray(connections.credentialId, [...new Set(params.credentialIds)]),
+        ),
+      );
+    const manager = secretManager();
+    // Database rows can be decrypted in one query. Vault reads keep their
+    // individual outcomes so a denied path cannot hide another credential.
+    const databaseSecrets =
+      manager.type === SecretsManagerType.DB
+        ? new Map(
+            (
+              await SecretModel.findByIds([
+                ...new Set(rows.map((row) => row.secretId)),
+              ])
+            ).map((secret) => [secret.id, secret]),
+          )
+        : null;
+    const secrets = databaseSecrets
+      ? rows.map((row) => ({
+          status: "fulfilled" as const,
+          value: databaseSecrets.get(row.secretId),
+        }))
+      : await Promise.allSettled(
+          rows.map((row) =>
+            manager.getSecret(row.secretId, { skipCache: true }),
+          ),
+        );
+    return new Map<string, PromiseSettledResult<string | null>>(
+      rows.map((row, index) => {
+        const secret = secrets[index];
+        if (secret.status === "rejected") return [row.credentialId, secret];
+        const value = secret.value?.secret[row.secretKey];
+        return [
+          row.credentialId,
+          {
+            status: "fulfilled",
+            value: typeof value === "string" && value.length > 0 ? value : null,
+          },
+        ];
+      }),
+    );
   }
 
   static async delete(params: {

@@ -335,15 +335,11 @@ export function PageLayout({
                     headerSpacing.titleRow,
                     icon ? "col-start-2" : "col-start-1",
                     stackHeaderOnMobile && "col-span-full sm:col-span-1",
-                    maxWidthKey === "wizard"
-                      ? stackHeaderOnMobile
-                        ? "sm:flex-nowrap sm:overflow-hidden"
-                        : "flex-nowrap overflow-hidden"
-                      : // A long detail title wraps inside itself; wrapping
-                        // the row would drop it below the back link.
-                        stackHeaderOnMobile
-                        ? "flex-nowrap"
-                        : "flex-wrap",
+                    // Constrain long titles below, without clipping the back
+                    // control's hover background or keyboard focus ring.
+                    maxWidthKey === "wizard" || stackHeaderOnMobile
+                      ? "flex-nowrap"
+                      : "flex-wrap",
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;
@@ -364,11 +360,13 @@ export function PageLayout({
                           // Detail titles name a record and run long; a step
                           // smaller on phones keeps them to a line or two.
                           backLink && "text-xl sm:text-2xl",
+                          // One line with an ellipsis: a wizard's header never
+                          // changes height, and a title cut at a line break
+                          // reads as a finished one.
                           maxWidthKey === "wizard" &&
-                            (stackHeaderOnMobile
-                              ? "sm:max-h-10 sm:overflow-hidden"
-                              : "max-h-10 overflow-hidden"),
+                            (stackHeaderOnMobile ? "sm:truncate" : "truncate"),
                         )}
+                        title={typeof title === "string" ? title : undefined}
                       >
                         <span key={pathname}>{title}</span>
                       </h1>
@@ -574,8 +572,18 @@ export function PageLayout({
           the bottom of even a short one had a band of nothing under it. */}
         <div
           data-page-content
+          // What a sticky element inside the content must clear: the page
+          // header above it, from `md` up, where the header itself sticks.
+          style={
+            {
+              "--page-header-height": `${headerHeight}px`,
+            } as React.CSSProperties
+          }
           className={cn(
-            "w-full flex-1",
+            // Its own stacking context: a sticky or raised element inside the
+            // content (an explorer's section header, an overlay) must never
+            // paint over the sticky banner or page header.
+            "isolate w-full flex-1",
             fillContent && "flex min-h-0 flex-col",
             minWidth && "min-w-0",
             minWidth &&
@@ -592,6 +600,8 @@ export function PageLayout({
               maxWidth,
               "px-4 py-4 sm:px-6",
               !denseContent && "sm:py-6",
+              // A filled page reaches down to the viewport's bottom edge.
+              fillContent && "pb-2 sm:pb-2",
             )}
           >
             {children}

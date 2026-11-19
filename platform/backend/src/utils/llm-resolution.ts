@@ -1,5 +1,4 @@
 import {
-  findTierDefault,
   isCompleteModelSelection,
   isSubscriptionCredential,
   type ModelInputModality,
@@ -8,26 +7,23 @@ import {
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   resolveModelSelection,
-  type SubagentModelTier,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
-import { userKeyForModel } from "@/auto-routing/eligibility";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import {
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-  ModelModel,
-  OrganizationModel,
+import AutoRouterModel from "@/models/auto-router";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel, {
   selectionKey,
-  TeamModel,
-} from "@/models";
-import { checkModelTeamAccess } from "@/routes/proxy/utils/model-team-access";
+} from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
+import TeamModel from "@/models/team";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { ApiError, type Model } from "@/types";
+import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -54,14 +50,14 @@ interface ResolvedLlmSelection {
  * only when no model is configured anywhere and no provider has a synced
  * model (the env/Vertex/config fallback path). `selectedModel` /
  * `selectedProvider` are the dereferenced values for the LLM proxy.
- *
- * @public — exercised by llm-resolution.subagent-tier.test.ts
  */
 export interface ConversationLlmSelection {
   modelId: string | null;
   chatApiKeyId: string | null;
   selectedModel: string;
   selectedProvider: SupportedProvider;
+  /** The selection is this auto router: its normal tier, routed per session by the proxy. */
+  autoRouterId?: string;
 }
 
 /**
@@ -74,15 +70,33 @@ export interface ConversationLlmSelection {
  * default trio of the first provider with an environment key, or Vertex AI.
  */
 export async function resolveConversationLlmSelectionForAgent(params: {
-  agent: { llmApiKeyId: string | null; modelId: string | null };
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    /** The auto router it is set to; read only with `allowAutoModel`. */
+    autoRouterId?: string | null;
+  };
   organizationId: string;
   userId: string;
   /** The model the user explicitly picked (highest priority). */
   explicitModelId?: string | null;
   /** The API key the user explicitly picked, alongside `explicitModelId`. */
   explicitApiKeyId?: string | null;
+  /** The auto router the user explicitly picked. */
+  explicitAutoRouterId?: string | null;
+  /**
+   * The caller runs a chat or an agent that auto routing may serve: the agent
+   * set to an auto router, or following an organization default that is one,
+   * resolves to the router's normal tier. Never set for Agent Runtime agents.
+   */
+  allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
+
+  if (params.allowAutoModel || params.explicitAutoRouterId) {
+    const auto = await autoSelectionFor(params);
+    if (auto) return auto;
+  }
 
   // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
   // its credential is resolved per-user at request time, so an explicit pick is
@@ -171,6 +185,59 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }
 
 /**
+ * What a chat or run on an auto router names: its normal tier's model on its
+ * key. The proxy routes each session from there, and runs it on this model
+ * while auto routing is off. Null when the deployment has no auto routing,
+ * the router is not the organization's, or it has no normal tier.
+ */
+export async function resolveAutoModelSelection(
+  organizationId: string,
+  routerId: string,
+): Promise<ConversationLlmSelection | null> {
+  const settings = await AutoRouterModel.findInOrganization(
+    organizationId,
+    routerId,
+  );
+  if (!settings?.normalModelId || !settings.normalApiKeyId) return null;
+  const model = await ModelModel.findById(settings.normalModelId);
+  if (!model) return null;
+  return {
+    modelId: model.id,
+    chatApiKeyId: settings.normalApiKeyId,
+    selectedModel: model.modelId,
+    selectedProvider: model.provider,
+    autoRouterId: settings.id,
+  };
+}
+
+/** The auto router selection when the pick, the agent or the organization default is a router. */
+async function autoSelectionFor(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouterId?: string | null;
+  };
+  organizationId: string;
+  explicitModelId?: string | null;
+  explicitAutoRouterId?: string | null;
+  allowAutoModel?: boolean;
+}): Promise<ConversationLlmSelection | null> {
+  const { agent } = params;
+  const followed = async () =>
+    !params.allowAutoModel || params.explicitModelId
+      ? null
+      : (agent.autoRouterId ??
+        (agent.llmApiKeyId === null && agent.modelId === null
+          ? ((await OrganizationModel.getById(params.organizationId))
+              ?.defaultAutoRouterId ?? null)
+          : null));
+  const routerId = params.explicitAutoRouterId ?? (await followed());
+  return routerId
+    ? resolveAutoModelSelection(params.organizationId, routerId)
+    : null;
+}
+
+/**
  * The selection a fork starts from: its parent's model, else the agent's own
  * configuration. The fork runs on the returned key as its agent key, which
  * skips the per-user access check, so the parent's key is kept only while the
@@ -178,10 +245,16 @@ export async function resolveConversationLlmSelectionForAgent(params: {
  * a key for the model the way its parent's turn does.
  */
 export async function resolveForkParentSelection(params: {
-  agent: { llmApiKeyId: string | null; modelId: string | null };
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouterId?: string | null;
+  };
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
+  /** See `resolveConversationLlmSelectionForAgent`. */
+  allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId, parentLlm } = params;
   const model = parentLlm?.modelId
@@ -192,6 +265,7 @@ export async function resolveForkParentSelection(params: {
       agent,
       organizationId,
       userId,
+      allowAutoModel: params.allowAutoModel,
     });
   }
   return {
@@ -237,134 +311,6 @@ async function isParentKeyUsable(params: {
   const key = await LlmProviderApiKeyModel.findById(apiKeyId);
   return (
     key !== null && (await LlmProviderApiKeyModel.canUseKey(key, userId, []))
-  );
-}
-
-/** The optional `fast` / `smart` tiers of the organization's default trio. */
-interface ModelTrioTiers {
-  fastModelId: string | null;
-  smartModelId: string | null;
-}
-
-type ForkTier = Exclude<SubagentModelTier, "normal">;
-
-const ORGANIZATION_TIER_FIELD = {
-  fast: "defaultFastModelId",
-  smart: "defaultSmartModelId",
-} as const satisfies Record<ForkTier, string>;
-
-/**
- * The model and key a forked subagent runs on for `tier`: the organization
- * trio's model for that tier, else the provider's default tier model on the
- * parent's key. The trio's model runs on the parent's key when it serves the
- * model, else on a key the user may use for it, chosen as the Model Router
- * chooses one for the user. Falls back to the parent's own selection.
- */
-export async function resolveSubagentTierSelection(params: {
-  tier: SubagentModelTier;
-  parent: ConversationLlmSelection;
-  organizationId: string;
-  userId: string;
-}): Promise<ConversationLlmSelection> {
-  const { tier, parent } = params;
-  if (tier === "normal" || !parent.modelId) return parent;
-  return (await findTierSelection({ ...params, tier })) ?? parent;
-}
-
-/**
- * The tiers a fork of `parent` can run on: every tier that resolves to a model
- * the user can reach. A tier that lands on the parent's own model is still
- * offered — what counts as fast or smart is the organization's call.
- */
-export async function availableSubagentTiers(params: {
-  parent: ConversationLlmSelection;
-  organizationId: string;
-  userId: string;
-}): Promise<ForkTier[]> {
-  if (!params.parent.modelId) return [];
-  const tiers = await Promise.all(
-    (["fast", "smart"] as const).map(async (tier) =>
-      (await findTierSelection({ ...params, tier })) ? [tier] : [],
-    ),
-  );
-  return tiers.flat();
-}
-
-/** Each set trio tier must be a tool-capable chat model, on any provider. */
-export async function assertModelTrioTiers(
-  trio: ModelTrioTiers,
-): Promise<void> {
-  const ids = [trio.fastModelId, trio.smartModelId].filter((id): id is string =>
-    Boolean(id),
-  );
-  if (ids.length === 0) return;
-  const models = await ModelModel.findByIds(ids);
-  for (const id of ids) {
-    const model = models.find((m) => m.id === id);
-    if (!model || !isSubagentTierCandidate(model)) {
-      throw new ApiError(400, `Model ${id} is not a tool-capable chat model`);
-    }
-  }
-}
-
-async function findTierSelection(params: {
-  tier: ForkTier;
-  parent: ConversationLlmSelection;
-  organizationId: string;
-  userId: string;
-}): Promise<ConversationLlmSelection | undefined> {
-  const { tier, parent } = params;
-  const [organization, parentKeyModels] = await Promise.all([
-    OrganizationModel.getById(params.organizationId),
-    parent.chatApiKeyId
-      ? LlmProviderApiKeyModelLinkModel.getModelsForApiKey(parent.chatApiKeyId)
-      : providerRequiresPerUserCredential(parent.selectedProvider)
-        ? ModelModel.findAll({ provider: parent.selectedProvider })
-        : Promise.resolve([]),
-  ]);
-  const trioModelId = organization?.[ORGANIZATION_TIER_FIELD[tier]] ?? null;
-  const trioModel = trioModelId ? await ModelModel.findById(trioModelId) : null;
-  if (trioModel && isSubagentTierCandidate(trioModel)) {
-    const onParentKey =
-      parent.chatApiKeyId !== null &&
-      parentKeyModels.some((m) => m.id === trioModel.id) &&
-      (
-        await checkModelTeamAccess({
-          provider: trioModel.provider,
-          modelId: trioModel.modelId,
-          organizationId: params.organizationId,
-          authenticatedUserId: params.userId,
-        })
-      ).allowed;
-    const key = onParentKey
-      ? { kind: "found" as const, apiKeyId: parent.chatApiKeyId }
-      : await userKeyForModel({ ...params, model: trioModel });
-    if (key.kind === "found") return toSelection(trioModel, key.apiKeyId);
-  }
-  const fallback = findTierDefault(
-    parentKeyModels.filter(isSubagentTierCandidate),
-    parent.selectedProvider,
-    tier,
-  );
-  return fallback ? toSelection(fallback, parent.chatApiKeyId) : undefined;
-}
-
-function toSelection(
-  model: Model,
-  chatApiKeyId: string | null,
-): ConversationLlmSelection {
-  return {
-    modelId: model.id,
-    chatApiKeyId,
-    selectedModel: model.modelId,
-    selectedProvider: model.provider,
-  };
-}
-
-/** A fork runs the parent's tools, so its model must chat and call tools. */
-function isSubagentTierCandidate(model: Model): boolean {
-  return (
-    ModelModel.supportsTextChat(model) && model.supportsToolCalling !== false
   );
 }
 

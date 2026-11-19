@@ -48,7 +48,14 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
           serverType: "remote",
           oauthConfig: { clientId: "client-123" },
         }
-      : null,
+      : id === "catalog-matlab"
+        ? {
+            id: "catalog-matlab",
+            name: "MATLAB",
+            serverType: "desktop_mcp",
+            desktopConfig: { command: "matlab-mcp", url: null },
+          }
+        : null,
   // Like the real query, nothing is returned while it is disabled.
   useMcpRegistryIssueIndex: issueIndexQueryMock,
 }));
@@ -129,6 +136,27 @@ describe("useMcpInstallOrchestrator", () => {
     });
 
     await waitFor(() => expect(openDialogMock).toHaveBeenCalledTimes(1));
+  });
+
+  // A desktop MCP server has no credentials and no scope to ask for: the
+  // credential dialogs would offer a team or organization install of a
+  // server that only ever runs on its user's own computer.
+  it("opens the dialog that adds a desktop MCP server to the user's computer", async () => {
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), {
+      wrapper,
+    });
+
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-matlab");
+    });
+
+    await waitFor(() =>
+      expect(openDialogMock).toHaveBeenCalledWith("desktop-install"),
+    );
+    expect(openDialogMock).toHaveBeenCalledTimes(1);
+    expect(result.current.desktopCatalogItem).toMatchObject({
+      id: "catalog-matlab",
+    });
   });
 
   it("starts OAuth immediately for pure OAuth re-authentication", async () => {

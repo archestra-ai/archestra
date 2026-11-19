@@ -819,7 +819,11 @@ describe("OAuth helper functions", () => {
     });
 
     test("throws when discovery fails and only one explicit endpoint is configured", async () => {
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error("404")) as Mock;
+      globalThis.fetch = vi
+        .fn()
+        .mockImplementation(
+          async () => new Response(null, { status: 404 }),
+        ) as Mock;
 
       await expect(
         discoverOAuthEndpoints({

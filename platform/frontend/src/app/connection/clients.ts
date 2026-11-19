@@ -1,4 +1,5 @@
 import {
+  CHATGPT_MARK,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   type ClientMark,
@@ -22,11 +23,11 @@ import {
   CODEX_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
-  OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";
 
-const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
+const [ANTHROPIC_BASE_URL_KEY, , GATEWAY_HINT_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
   CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
@@ -299,6 +300,16 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     label: "Grok Build",
     sub: "xAI coding agent",
     ...markFields(GROK_MARK),
+    proxy: {
+      kind: "custom",
+      supportedProviders: ["xai", "openai", "anthropic"],
+      build: ({ provider, url, tokenPlaceholder, appName }) => ({
+        kind: "snippet",
+        language: "toml",
+        code: `[model.archestra]\nname = ${JSON.stringify(appName)}\nmodel = "<model-id>"\nbase_url = ${JSON.stringify(url)}\napi_backend = "${provider === "anthropic" ? "messages" : "chat_completions"}"\napi_key = ${JSON.stringify(tokenPlaceholder)}\nextra_headers = { "X-Archestra-Agent-Id" = "grok-build" }\nsupports_backend_search = false`,
+        note: "This snippet configures one Grok Build model, not every inference role. Use the connection installer and node ~/.archestra/grok/launch.cjs for managed proxy routing and browser MCP authorization. Grok Bot desktop is not configured.",
+      }),
+    },
   },
   {
     id: "hermes-agent",
@@ -378,6 +389,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
                       [CLAUDE_USE_BEDROCK_KEY]: "1",
                       [AWS_REGION_KEY]: "us-east-1",
                       [BEDROCK_BASE_URL_KEY]: url,
+                      [GATEWAY_HINT_KEY]: "1",
                     },
                   },
                   null,
@@ -406,7 +418,12 @@ claude`,
               body: "Merge the snippet below into the file (keep your existing keys). Your Claude subscription keeps working as-is.",
               language: "json",
               code: JSON.stringify(
-                { env: { [ANTHROPIC_BASE_URL_KEY]: url } },
+                {
+                  env: {
+                    [ANTHROPIC_BASE_URL_KEY]: url,
+                    [GATEWAY_HINT_KEY]: "1",
+                  },
+                },
                 null,
                 2,
               ),
@@ -556,9 +573,7 @@ claude`,
     id: "chatgpt",
     label: "ChatGPT",
     sub: "Desktop, Chat and Work",
-    ...markFields(OPENAI_MARK),
-    iconColor: "#171717",
-    tileBg: "#f4f4f5",
+    ...markFields(CHATGPT_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -584,10 +599,20 @@ claude`,
         },
       ],
     },
+    // The desktop app's Work and Codex tabs read Codex's config.toml, so the
+    // Codex setup routes them; chats and dots run on OpenAI's servers.
     proxy: {
-      kind: "unsupported",
-      reason:
-        "Plugin archives do not configure inference. Local ChatGPT Work supports separate native model-gateway configuration; cloud chats and dots do not inherit that local setting.",
+      kind: "custom",
+      supportedProviders: ["openai"],
+      build: ({ appName }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: `Run the ${appName} setup command for Codex`,
+            body: "The ChatGPT desktop app's Work and Codex tabs use the Codex settings on your computer, so the Codex setup routes them too. Restart ChatGPT when it is done.",
+          },
+        ],
+      }),
     },
   },
   {
@@ -1050,6 +1075,24 @@ export COPILOT_MODEL="<model-name>"`,
       svgFillRule:
         client.svgFillRule ?? (client.svgViewBox ? undefined : "evenodd"),
       mcp: { kind: "generic", supportedAuth: "both" },
+      ...(client.id === "grok-build"
+        ? {
+            mcp: {
+              kind: "custom" as const,
+              supportedAuth: "both" as const,
+              configFile: "~/.archestra/grok/native/config.toml",
+              language: "toml" as const,
+              steps: [
+                {
+                  title: "Connect the Grok gateway",
+                  body: "Use the Grok Build connection installer. Its authorization step opens browser consent, verifies the gateway, and returns without starting Grok. Starting Grok is a separate optional step. Grok Bot desktop configuration is not changed.",
+                },
+              ],
+              buildConfig: ({ url, token, serverName }: McpBuildParams) =>
+                `[mcp_servers.${JSON.stringify(serverName)}]\nurl = ${JSON.stringify(url)}\nheaders = { "x-appa-session-id" = "{{session_id}}"${token ? `, "Authorization" = ${JSON.stringify(`Bearer ${token}`)}` : ""} }`,
+            },
+          }
+        : {}),
       proxy: client.proxy ?? { kind: "generic" },
     }),
   ),

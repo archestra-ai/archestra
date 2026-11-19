@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Boxes,
   CheckCircle2,
+  Info,
   Loader2,
   Pencil,
   Plus,
@@ -63,6 +64,11 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -99,6 +105,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
+import { githubOrganizationLabel } from "@/lib/organization-subscription";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
@@ -204,7 +211,7 @@ export default function ApiKeysPage() {
   const linkedCreate = useMemo(
     (): Partial<LlmProviderApiKeyFormValues> | undefined =>
       isSupportedProvider(createProvider) &&
-      !providerCatalog.isHidden(createProvider)
+      providerCatalog.canAddKey(createProvider)
         ? {
             provider: createProvider,
             initialGrants: createShared
@@ -322,6 +329,18 @@ export default function ApiKeysPage() {
     // keeping its old shared secret.
     if (subscriptionSignInRequired(values, editingApiKey)) return;
 
+    // A system key's credentials come from environment variables, so only who
+    // can reach it is edited here.
+    if (editingApiKey.isSystem) {
+      try {
+        await permissionsSave.current?.();
+        closeEditDialog();
+      } catch {
+        // Error already handled by the permissions section's mutation
+      }
+      return;
+    }
+
     const apiKeyChanged =
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.apiKey !== "";
@@ -397,10 +416,9 @@ export default function ApiKeysPage() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = isEditApiKeyFormValid(
-    editFormValues,
-    editingApiKey ?? undefined,
-  );
+  const isEditValid =
+    editingApiKey?.isSystem === true ||
+    isEditApiKeyFormValid(editFormValues, editingApiKey ?? undefined);
 
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
@@ -420,13 +438,14 @@ export default function ApiKeysPage() {
 
   /**
    * Subscription offers shown as cards above the table. A provider the admins
-   * turned off is not offered at all; a key that already connects it keeps its
-   * table row instead, so an admin can still see and delete it.
+   * turned off is not offered at all, and neither is GitHub Copilot when only
+   * its personal subscriptions are off. A key that already connects it keeps
+   * its table row instead, so an admin can still see and delete it.
    */
   const subscriptionOffers = useMemo(
     () =>
-      buildSubscriptionOffers(allApiKeys).filter(
-        ({ provider }) => !providerCatalog.isHidden(provider),
+      buildSubscriptionOffers(allApiKeys).filter(({ provider }) =>
+        providerCatalog.canAddKey(provider),
       ),
     [allApiKeys, providerCatalog],
   );
@@ -484,7 +503,7 @@ export default function ApiKeysPage() {
         allApiKeys.filter((key) => key.userId === currentUserId),
       ).find(
         ({ kind, provider }) =>
-          kind === reconnectKind && !providerCatalog.isHidden(provider),
+          kind === reconnectKind && providerCatalog.canAddKey(provider),
       ) ?? null
     );
   }, [
@@ -519,11 +538,14 @@ export default function ApiKeysPage() {
     () => allApiKeys.filter((key) => key.isGithubAppKey),
     [allApiKeys],
   );
+  const enterprisePlansHidden =
+    providerCatalog.isCopilotPlanHidden("enterprise");
   const [copilotConnect, setCopilotConnect] = useState<{
     manage: {
       id: string;
       name: string;
       organization: string | null;
+      organizationName: string | null;
       reconnect: boolean;
     } | null;
   } | null>(null);
@@ -535,9 +557,13 @@ export default function ApiKeysPage() {
         ...subscriptionOffers.flatMap(({ credential }) =>
           credential ? [credential.id] : [],
         ),
-        ...organizationSubscriptions.map((key) => key.id),
+        // With enterprise plans off there are no cards, so the plans that
+        // exist stay in the table, where an admin can still delete them.
+        ...(enterprisePlansHidden
+          ? []
+          : organizationSubscriptions.map((key) => key.id)),
       ]),
-    [subscriptionOffers, organizationSubscriptions],
+    [subscriptionOffers, organizationSubscriptions, enterprisePlansHidden],
   );
 
   const rows = useMemo(
@@ -654,9 +680,11 @@ export default function ApiKeysPage() {
                 className="rounded dark:invert"
               />
               <span className="truncate">{label}</span>
-              {providerCatalog.isHidden(provider) && (
-                <InlineTag className="shrink-0">Turned off</InlineTag>
-              )}
+              {(providerCatalog.isHidden(provider) ||
+                (provider === "github-copilot" &&
+                  providerCatalog.isCopilotPlanHidden(
+                    row.original.isGithubAppKey ? "enterprise" : "personal",
+                  ))) && <InlineTag className="shrink-0">Turned off</InlineTag>}
             </div>
           );
         },
@@ -732,8 +760,6 @@ export default function ApiKeysPage() {
                   permissions: {
                     llmProviderApiKey: ["update"],
                   },
-                  disabled: isSystem,
-                  disabledTooltip: "System keys cannot be edited",
                   onClick: () => openEditDialog(credential),
                   testId: `${E2eTestId.EditChatApiKeyButton}-${credential.name}`,
                 },
@@ -798,9 +824,10 @@ export default function ApiKeysPage() {
           }}
         />
 
-        {/* Turned off by an admin: no enterprise plan is offered either. */}
-        {providerCatalog.isHidden("github-copilot") ? null : (
+        {/* Turned off by an admin, alone or with GitHub Copilot itself. */}
+        {enterprisePlansHidden ? null : (
           <OrganizationSubscriptionCards
+            name={providerCatalog.enterprisePlanName}
             credentials={organizationSubscriptions}
             isLoading={
               permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
@@ -812,6 +839,7 @@ export default function ApiKeysPage() {
                   id: credential.id,
                   name: credential.name,
                   organization: credential.githubOrganization ?? null,
+                  organizationName: credential.githubOrganizationName ?? null,
                   reconnect: true,
                 },
               })
@@ -987,6 +1015,7 @@ export default function ApiKeysPage() {
               id: editingApiKey.id,
               name: editingApiKey.name,
               organization: editingApiKey.githubOrganization ?? null,
+              organizationName: editingApiKey.githubOrganizationName ?? null,
             }}
           />
         ) : null}
@@ -996,7 +1025,11 @@ export default function ApiKeysPage() {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
-          description="Update the name, the API key value, or who can reach it"
+          description={
+            editingApiKey?.isSystem
+              ? "Update who can reach this key"
+              : "Update the name, the API key value, or who can reach it"
+          }
           onSubmit={handleEdit}
           footer={
             <>
@@ -1008,7 +1041,7 @@ export default function ApiKeysPage() {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                <span>Test & Save</span>
+                <span>{editingApiKey?.isSystem ? "Save" : "Test & Save"}</span>
               </Button>
             </>
           }
@@ -1030,19 +1063,34 @@ export default function ApiKeysPage() {
                   />
                 </span>
               )}
-              <LlmProviderApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                existingKey={editingApiKey}
-                existingKeys={apiKeys}
-                form={editForm}
-                isPending={updateMutation.isPending}
-                progressive
-                hidePermissions
-                labels={editLabels}
-                onLabelsChange={setEditLabels}
-                labelsRef={editLabelsRef}
-              />
+              {editingApiKey.isSystem ? (
+                <InlineNotice variant="neutral">
+                  <Info />
+                  <InlineNoticeBody>
+                    <span className="font-medium">
+                      Configured through environment variables
+                    </span>
+                    <InlineNoticeText>
+                      Change this key's credentials in the deployment's
+                      environment. Here you choose who can reach it.
+                    </InlineNoticeText>
+                  </InlineNoticeBody>
+                </InlineNotice>
+              ) : (
+                <LlmProviderApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  existingKey={editingApiKey}
+                  existingKeys={apiKeys}
+                  form={editForm}
+                  isPending={updateMutation.isPending}
+                  progressive
+                  hidePermissions
+                  labels={editLabels}
+                  onLabelsChange={setEditLabels}
+                  labelsRef={editLabelsRef}
+                />
+              )}
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 id={editingApiKey.id}
@@ -1066,7 +1114,8 @@ export default function ApiKeysPage() {
               isSubscription={deletingSubscription}
               githubAppOrganization={
                 selectedApiKey?.isGithubAppKey
-                  ? (selectedApiKey.githubOrganization ?? "the organization")
+                  ? (githubOrganizationLabel(selectedApiKey) ??
+                    "the organization")
                   : null
               }
               knowledgeBaseUsages={

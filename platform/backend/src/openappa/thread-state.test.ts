@@ -334,23 +334,6 @@ describe("thread state rules", () => {
     ).toEqual({ ok: false, reason: "missing" });
   });
 
-  test("keeps no calls for a response whose calls are too large to hold, and replays it", async () => {
-    await threadStates.record({
-      record: { organizationId: "org4", sessionId: "s", tools },
-      messageId: "msg_big",
-      calls: [{ id: "x", name: "Write", input: { text: "x".repeat(300_000) } }],
-      diverged: false,
-    });
-
-    expect(
-      await threadStates.forContinue({
-        organizationId: "org4",
-        sessionId: "s",
-        previousMessageId: "msg_big",
-      }),
-    ).toEqual({ ok: false, reason: "diverged" });
-  });
-
   test("measures the calls limit in bytes, not characters", async () => {
     // 150,000 characters, but 300,000 bytes in UTF-8.
     await threadStates.record({

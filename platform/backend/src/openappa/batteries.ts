@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -27,6 +28,7 @@ import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
 } from "@/services/guardrails-policy";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { ApiError, GITHUB_COM_API_URL, type GitHubUserId } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
@@ -38,6 +40,7 @@ import type {
   BatteryMatchEvidence,
   BatteryMatches,
   BatteryPackageFile,
+  BatteryPolicySource,
   BatteryScope,
   BatterySummary,
   CompositionView,
@@ -82,7 +85,10 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { withReportingTool } from "./reporting-tool";
+import {
+  withHostClientCodingAliases,
+  withHostToolRules,
+} from "./host-tool-rules";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -280,7 +286,7 @@ class OpenAppaBatteriesService {
   async policyDeclarations(
     organizationId: string,
   ): Promise<PolicyDeclarationsView> {
-    const { policy, batteries, unusedAliases } =
+    const { policy, batteries, unusedAliases, included } =
       await this.current(organizationId);
     const [sync, bindings] = await Promise.all([
       OpenAppaGithubSyncModel.find(organizationId),
@@ -293,6 +299,7 @@ class OpenAppaBatteriesService {
         served: servedOf(composition, battery),
       })),
       unusedAliases,
+      repositoryFiles: (included ?? []).map(({ path }) => ({ path })),
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
       composition,
@@ -330,7 +337,26 @@ class OpenAppaBatteriesService {
   }
 
   /** Show the exact policy bytes an include currently resolves to. */
-  async policySource(organizationId: string, entry: string) {
+  async policySource(
+    organizationId: string,
+    entry: string,
+  ): Promise<BatteryPolicySource> {
+    // A file of the policy repository: the bytes the composition folds in,
+    // read at the accepted commit.
+    if (openappaRepositoryIncludes.isRepositoryFile(entry)) {
+      const { included } = await this.current(organizationId);
+      const content = included?.some((file) => file.path === entry)
+        ? (
+            await openappaRepositoryIncludes.readAccepted({
+              organizationId,
+              paths: [entry],
+            })
+          ).get(entry)
+        : undefined;
+      if (content === undefined)
+        throw new ApiError(404, "This policy file is no longer included");
+      return { entry, name: entry, kind: "repository", content };
+    }
     const root = await guardrailsPolicyService.get(organizationId);
     const resolution = await openappaDeclarations.resolve({
       organizationId,
@@ -349,6 +375,7 @@ class OpenAppaBatteriesService {
     return {
       entry: included.entry,
       name: included.name,
+      kind: "battery",
       content: deployedSource(deployed),
     };
   }
@@ -418,7 +445,10 @@ class OpenAppaBatteriesService {
       held: new Set(held.map((battery) => battery.name)),
     });
     return {
-      refusal: (composed.content ?? null) === null ? composed.errors : [],
+      refusal:
+        (composed.content ?? null) === null
+          ? [...(planned.foldErrors ?? []), ...composed.errors]
+          : [],
       heldBack: held.map(heldBackNote),
     };
   }
@@ -1119,6 +1149,7 @@ class OpenAppaBatteriesService {
       const values = await this.compose({
         root: planned.root,
         roster: planned.roster,
+        serverName: planned.serverName,
         planned: planned.batteries,
         composed,
         installFingerprint,
@@ -1126,6 +1157,7 @@ class OpenAppaBatteriesService {
         previousInstalls: previous,
         installs,
         now,
+        foldErrors: planned.foldErrors,
       });
       const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
@@ -1220,6 +1252,7 @@ class OpenAppaBatteriesService {
   private async compose(params: {
     root: GuardrailsPolicy;
     roster: HostMemberRoster;
+    serverName: string;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
@@ -1229,14 +1262,35 @@ class OpenAppaBatteriesService {
     installs: readonly BatteryInstall[];
     /** When this composition is stored; its record says it was composed then. */
     now: Date;
+    /** Why the root's repository files could not be read, named in the refusal. */
+    foldErrors?: readonly string[];
   }): Promise<EffectivePolicyValues> {
-    const { root, planned, composed, installFingerprint, expected } = params;
+    const {
+      root,
+      planned,
+      composed,
+      installFingerprint,
+      expected,
+      serverName,
+    } = params;
     const native = await loadNative();
-    const result = await native.composeOpenappaPolicy({
+    const rosters = memberRosters(params.roster);
+    const augmentedRoot = withHostClientCodingAliases({
       root: root.content,
       batteries: composed,
-      memberRosters: memberRosters(params.roster),
     });
+    let result = await native.composeOpenappaPolicy({
+      root: augmentedRoot,
+      batteries: composed,
+      memberRosters: rosters,
+    });
+    if ((result.content ?? null) === null && augmentedRoot !== root.content) {
+      result = await native.composeOpenappaPolicy({
+        root: root.content,
+        batteries: composed,
+        memberRosters: rosters,
+      });
+    }
     // A refused composition carries no document. napi renders that absence as
     // `undefined`, not the `null` the generated typing spells, so normalize it
     // before deciding whether the runtime refused: an identity test against
@@ -1245,8 +1299,9 @@ class OpenAppaBatteriesService {
     const accepted =
       composedContent === null
         ? null
-        : await withReportingTool({
+        : await withHostToolRules({
             composed: composedContent,
+            serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           });
     const values = (
@@ -1266,6 +1321,7 @@ class OpenAppaBatteriesService {
     };
     if (accepted === null) {
       const error = [
+        ...(params.foldErrors ?? []),
         ...result.errors,
         ...heldBack(planned).map(heldBackNote),
       ].join("\n");
@@ -1275,8 +1331,18 @@ class OpenAppaBatteriesService {
       const carried = expected
         ? carriedServed({ expected, installs: params.previousInstalls })
         : null;
+      // A composition stored before a host rule existed takes it here too, so
+      // a refusal does not strand its peer reads.
       return expected && carried
-        ? values(expected.content, error, () => carried)
+        ? values(
+            await withHostToolRules({
+              composed: expected.content,
+              serverName,
+              validate: (text) => native.validateHostedOpenappaPolicy(text),
+            }),
+            error,
+            (contentHash) => ({ ...carried, contentHash }),
+          )
         : values(root.content, error, (contentHash) => ({
             v: 1,
             kind: "root_only",
@@ -1312,7 +1378,12 @@ class OpenAppaBatteriesService {
       content: params.root.content,
     });
     const { resolution, credentialSource } = bound;
-    const root = { ...params.root, content: bound.content };
+    // A root whose repository files cannot be read composes as written: the
+    // runtime refuses its unanswered entries, and the last composition stays.
+    const root = {
+      ...params.root,
+      content: bound.foldErrors ? params.root.content : bound.content,
+    };
     const [prefixes, bindable] = await Promise.all([
       catalogToolPrefixes(organizationId, {
         targets: resolution.aliases.flatMap((alias) => alias.servers),
@@ -1478,11 +1549,14 @@ class OpenAppaBatteriesService {
       resolution,
       deployed,
       roster,
+      serverName: archestraMcpBranding.serverName,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
         (alias) => !declared.has(alias.namespace),
       ),
+      ...(bound.included ? { included: bound.included } : {}),
+      ...(bound.foldErrors ? { foldErrors: bound.foldErrors } : {}),
     };
   }
 
@@ -2031,9 +2105,14 @@ type PlannedComposition = {
   resolution: PolicyResolution;
   deployed: DeployedEntries;
   roster: HostMemberRoster;
+  serverName: string;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
+  /** The repository files folded into the root, when it includes any. */
+  included?: Array<{ path: string; sha256: string; tools?: string[] }>;
+  /** Why the root's repository files could not be read; it is then refused. */
+  foldErrors?: string[];
 };
 
 type Recomposition = PlannedComposition & {
@@ -2141,9 +2220,13 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // rows whose retirement suffix covers credential keys but not the stored
 // opening policies (v7), rows that do not record what they serve (v8),
 // rows that leave `yell` to the catch-all (v9), rows that dropped a retired
-// name live opening policies bound differently (v10), and rows that keep
-// retired annotators for conversations opened under earlier policies (v11).
-const COMPOSITION_VERSION = "v11:";
+// name live opening policies bound differently (v10), rows that keep
+// retired annotators for conversations opened under earlier policies (v11),
+// rows without the empty peer read rule (v12), rows that rule the peer read
+// under the default server name on a white-labeled deployment (v13), and rows
+// composed before host client coding tool aliases were supplied to saved
+// revisions (v14).
+const COMPOSITION_VERSION = "v14:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -2163,9 +2246,14 @@ function compositionFingerprint(params: {
         batteries,
         credentials: planned.resolution.credentials,
         roster: [...planned.roster].sort(([a], [b]) => a - b),
+        serverName: planned.serverName,
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),
+        // Absent unless the root includes repository files, so every other
+        // organization keeps the fingerprint its stored composition carries.
+        ...(planned.included ? { included: planned.included } : {}),
+        ...(planned.foldErrors ? { foldErrors: planned.foldErrors } : {}),
       }),
     ) +
     (root.revision === 0 ? `:${root.contentHash}` : "")

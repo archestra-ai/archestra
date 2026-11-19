@@ -22,12 +22,20 @@ const MAX_SECRET_ENV_VARS: usize = 16;
 const MAX_SECRET_VALUE_BYTES: usize = 64 * 1024;
 /// bound on the live command's stdin, which is inlined into the exec query.
 const MAX_STDIN_BYTES: usize = 1024 * 1024;
+/// set on every command exec (live and replayed) to that command's id. it is
+/// part of the exec definition, so it keys Dagger's content-addressed cache:
+/// a replay reuses the layer its own live run produced, while two sandboxes
+/// (or two calls) with the same command text never share a result.
+pub(crate) const COMMAND_ID_ENV: &str = "ARCHESTRA_SANDBOX_COMMAND_ID";
+/// bound on a command id: ids are inlined into engine queries.
+const MAX_COMMAND_ID_BYTES: usize = 128;
 
 /// variables the Dagger backend sets on the warm base or during replay
 /// (`build_warm_base` / the skill-mount PYTHONPATH layer). a caller-supplied
 /// secret must not shadow them: overriding PATH or the venv would silently
 /// change which interpreter runs the command.
 const RESERVED_ENV_NAMES: &[&str] = &[
+    COMMAND_ID_ENV,
     "HOME",
     "PATH",
     "PYTHONPATH",
@@ -71,6 +79,26 @@ pub(crate) fn validate_secret_env(vars: &[SecretEnvVar]) -> Result<()> {
                 var.name
             )));
         }
+    }
+    Ok(())
+}
+
+/// a command id is opaque, but it is inlined into engine queries and set as an
+/// environment value, so it must be short and plain: ascii letters, digits,
+/// `-` and `_`.
+pub(crate) fn validate_command_id(id: &str) -> Result<()> {
+    if id.is_empty() || id.len() > MAX_COMMAND_ID_BYTES {
+        return Err(SandboxError::InvalidInput(format!(
+            "command id must be 1 to {MAX_COMMAND_ID_BYTES} bytes"
+        )));
+    }
+    if !id
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(SandboxError::InvalidInput(
+            "command id may only contain ascii letters, digits, '-' and '_'".to_string(),
+        ));
     }
     Ok(())
 }

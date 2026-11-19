@@ -14,7 +14,7 @@ export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
 /**
  * Where a Teams user starts and finishes signing in to the bot so it can read
- * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the files they share in channels and group chats. Public: the pending sign-in key and OAuth state are
  * the proof, and the ChatOps webhook prefix is already allowlisted.
  */
 export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
@@ -25,15 +25,41 @@ export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback
  * GitHub Actions setting.
  */
 export const GITHUB_ACTIONS_TOKEN_PATH = "/api/github-actions/token";
+/**
+ * Public RFC 8693 token exchange: an OIDC token from a workload's own issuer
+ * for a short-lived service account token. The handler checks the token
+ * against the account's federated credentials.
+ */
+export const WORKLOAD_IDENTITY_TOKEN_PATH = "/api/workload-identity/token";
+/**
+ * Archestra's issuer of agents' SPIFFE JWT-SVIDs, and its public discovery
+ * document, key set and SPIFFE trust bundle below it.
+ */
+export const SPIFFE_ISSUER_PATH = "/api/agent-identity/spiffe";
+export const SPIFFE_DISCOVERY_PATH = `${SPIFFE_ISSUER_PATH}/.well-known/openid-configuration`;
+export const SPIFFE_JWKS_PATH = `${SPIFFE_ISSUER_PATH}/keys`;
+export const SPIFFE_BUNDLE_PATH = `${SPIFFE_ISSUER_PATH}/bundle`;
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";
+/**
+ * Endpoints the tunnel client of a desktop device calls. They follow the
+ * OpenAI tunnel-client wire protocol and authenticate with the device key.
+ */
+export const DESKTOP_TUNNEL_PREFIX = "/v1/tunnels";
+/** Download of the `archestra` program, one file per system and CPU. */
+export const ARCHESTRA_CLI_DOWNLOAD_PREFIX = "/api/archestra-cli";
+export const DESKTOP_DEVICES_PATH = "/api/desktop-devices";
+export const DESKTOP_DEVICE_SIGN_IN_PATH = `${DESKTOP_DEVICES_PATH}/sign-in`;
+export const DESKTOP_DEVICE_SETUP_CODES_PATH = `${DESKTOP_DEVICES_PATH}/setup-codes`;
 export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
+export const UNIFIED_MODEL_PREFIX = `${PROXY_API_PREFIX}/unified-model`;
 
-/** An LLM proxy route: `/v1/<provider>/...` or the model router. */
+/** An LLM proxy route: `/v1/<provider>/...` or the unified model API. */
 export function isLlmProxyPath(url: string): boolean {
   return (
     url.startsWith(MODEL_ROUTER_PREFIX) ||
+    url.startsWith(UNIFIED_MODEL_PREFIX) ||
     SupportedProviders.some((provider) =>
       url.startsWith(`${PROXY_API_PREFIX}/${provider}`),
     )
@@ -161,3 +187,6 @@ export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
 
 /** Authenticated read-only instruction refresh for installed connection wrappers. */
 export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";
+
+/** Cursor hooks report each chat step to Guardrails with an installation credential. */
+export const CONNECTION_HOOKS_CURSOR_PATH = "/v1/connection-hooks/cursor";

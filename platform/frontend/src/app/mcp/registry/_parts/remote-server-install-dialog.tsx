@@ -7,7 +7,12 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
+import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -61,7 +66,7 @@ interface RemoteServerInstallDialogProps {
   onConfirm: (
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
-  ) => Promise<void>;
+  ) => Promise<string | undefined> | Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
   /** When true, shows re-authentication mode (info banner, different title) */
@@ -101,6 +106,7 @@ export function RemoteServerInstallDialog({
   presentation = "dialog",
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -144,20 +150,28 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      await onConfirm(catalogItem, {
+      setInstallError(null);
+      const errorMessage = await onConfirm(catalogItem, {
         catalogId: catalogItem.id,
         metadata,
         scope,
         teamId: selectedTeamId,
       });
+      if (errorMessage) {
+        setInstallError(errorMessage);
+        return;
+      }
       resetForm();
       onClose();
-    } catch (_error) {
-      // Error handling is done in the parent component
+    } catch (error) {
+      setInstallError(
+        error instanceof Error ? error.message : "Connection failed",
+      );
     }
   };
 
   const resetForm = () => {
+    setInstallError(null);
     setConfigValues({});
     setSelectedTeamId(null);
     setScope(orgOnly ? "org" : "personal");
@@ -294,6 +308,22 @@ export function RemoteServerInstallDialog({
         ) : null
       }
     >
+      {installError && (
+        <InlineNotice variant="error">
+          <AlertTriangle aria-hidden />
+          <InlineNoticeBody>
+            <span className="font-medium">Connection failed</span>
+            <InlineNoticeText>
+              Check the server credentials and provider configuration, then try
+              again.
+            </InlineNoticeText>
+          </InlineNoticeBody>
+          <InlineNoticeDetails label="diagnostics">
+            {installError}
+          </InlineNoticeDetails>
+        </InlineNotice>
+      )}
+
       {isReauth && (
         <InlineNotice variant="neutral">
           <KeyRound />
@@ -442,26 +472,25 @@ export function RemoteServerInstallDialog({
       )}
 
       {canInstall && catalogItem.serverUrl && (
-        <div className="rounded-md bg-muted p-4">
-          <h4 className="text-sm font-medium mb-2">Server Details:</h4>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium">URL:</span> {catalogItem.serverUrl}
+        <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+          <p className="flex min-w-0 gap-2">
+            <span className="shrink-0">Server</span>
+            <span className="truncate font-mono" title={catalogItem.serverUrl}>
+              {catalogItem.serverUrl}
+            </span>
+          </p>
+          {catalogItem.docsUrl && (
+            <p>
+              <a
+                href={catalogItem.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Documentation
+              </a>
             </p>
-            {catalogItem.docsUrl && (
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium">Documentation:</span>{" "}
-                <a
-                  href={catalogItem.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  {catalogItem.docsUrl}
-                </a>
-              </p>
-            )}
-          </div>
+          )}
         </div>
       )}
     </FormShell>

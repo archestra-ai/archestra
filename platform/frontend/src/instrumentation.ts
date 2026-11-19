@@ -1,16 +1,4 @@
-import { shouldEnableFrontendTelemetry } from "../sentry.shared";
-
-const ERROR_REPORTING_DSN =
-  process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
-
-function errorReportingEnabled(): boolean {
-  return shouldEnableFrontendTelemetry({
-    dsn: process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "",
-    environment:
-      process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() ||
-      process.env.NODE_ENV?.toLowerCase(),
-  });
-}
+import { getFrontendServerErrorReporting } from "../sentry.shared";
 
 /**
  * Request errors that are benign client disconnects rather than server faults,
@@ -34,8 +22,9 @@ function isIgnorableRequestError(error: unknown): boolean {
 }
 
 export async function register() {
+  const reportErrors = getFrontendServerErrorReporting().enabled;
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    if (ERROR_REPORTING_DSN) {
+    if (reportErrors) {
       await import("../sentry.server.config");
     }
     // Every document's <head> reads it; fetch it before the first one asks.
@@ -43,14 +32,14 @@ export async function register() {
     warmDeploymentFavicon();
   }
 
-  if (process.env.NEXT_RUNTIME === "edge" && ERROR_REPORTING_DSN) {
+  if (process.env.NEXT_RUNTIME === "edge" && reportErrors) {
     await import("../sentry.edge.config");
   }
 }
 
 export const onRequestError: typeof import("@sentry/nextjs").captureRequestError =
   async (...args) => {
-    if (!errorReportingEnabled()) return;
+    if (!getFrontendServerErrorReporting().enabled) return;
     if (isIgnorableRequestError(args[0])) return;
 
     const { captureRequestError } = await import("@sentry/nextjs");

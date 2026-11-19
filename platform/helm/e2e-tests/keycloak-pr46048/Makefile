@@ -1,7 +1,7 @@
 KEYCLOAK_REPO ?= https://github.com/Hitachi/keycloak.git
 KEYCLOAK_BRANCH ?= ISSUE-43971-IDJAGReceiver
 KEYCLOAK_COMMIT ?= 5afbf425b19a3f4b4a1b5a37cba890fcfee977a4
-IMAGE ?= europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/keycloak:pr46048-5afbf42
+IMAGE ?= ghcr.io/archestra-ai/ci/keycloak:pr46048-5afbf42
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILD_DIR ?= /tmp/keycloak-idjag-pr46048-build
 BUILDER ?= archestra-multiarch
@@ -70,7 +70,8 @@ build-image:
 		$(BUILD_DIR)/quarkus/container
 
 publish:
-	gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+	# Needs a token with write:packages: gh auth refresh -s write:packages
+	gh auth token | docker login ghcr.io -u "$$(gh api user --jq .login)" --password-stdin
 	cp $(BUILD_DIR)/quarkus/dist/target/keycloak-*.tar.gz $(BUILD_DIR)/quarkus/container/
 	docker buildx build \
 		--builder $(BUILDER) \

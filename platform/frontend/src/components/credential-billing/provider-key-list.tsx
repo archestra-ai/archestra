@@ -361,12 +361,15 @@ function ProviderLine({
   onRemove: () => void;
 }) {
   const ownerLabel = useKeyOwnerLabel();
+  const { enterprisePlanName } = useModelProviderCatalog();
   const chosenIds = chosen.map((key) => key.id);
   const items = keys.map((key) => {
     const count = modelIdsByKey.get(key.id)?.length ?? 0;
     // An organization subscription reads as one, not as an API key.
     const organization = isOrganizationSubscription(key);
-    const name = organization ? organizationSubscriptionName(key) : key.name;
+    const name = organization
+      ? organizationSubscriptionName(key, enterprisePlanName)
+      : key.name;
     return {
       value: key.id,
       label: name,

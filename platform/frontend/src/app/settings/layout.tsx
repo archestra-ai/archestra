@@ -8,14 +8,22 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
-import { useDisableInvitations } from "@/lib/config/config.query";
+import { Badge } from "@/components/ui/badge";
+import {
+  useDisableInvitations,
+  useEnterpriseFeature,
+} from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
+import { AgentsSubnav } from "./agents/_parts/agents-navigation";
 import { AppearanceSubnav } from "./appearance/_parts/appearance-navigation";
 import { MessagingProvidersSubnav } from "./messaging-channels/_parts/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
-const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
+const PAGE_CONFIG: Record<
+  string,
+  { title: string; description: ReactNode; status?: ReactNode }
+> = {
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
@@ -27,9 +35,15 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
       "Register applications for MCP Gateway, A2A, and LLM Proxy. One client can access several APIs, as itself or for signed-in users.",
   },
   "/settings/agents": {
-    title: "Agents",
+    title: "General",
     description:
-      "Defaults for agents and chats — default model, default agent, file uploads, and the channels agents can be reached through.",
+      "The default model and agent, file uploads, browser access, and the channels agents answer on.",
+  },
+  "/settings/agents/runtimes": {
+    title: "Runtimes",
+    description:
+      "The runtimes agents run in, their compute tiers, and the backend that hosts them.",
+    status: <Badge variant="secondary">Beta</Badge>,
   },
   "/settings/messaging-channels": {
     title: "Messaging Channels",
@@ -42,6 +56,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/guardrails": {
     title: "Guardrails",
     description: <GuardrailsDescription />,
+  },
+  "/settings/blob-providers": {
+    title: "Blob Providers",
+    description: <BlobProvidersDescription />,
   },
   "/settings/credentials": {
     title: "Credentials",
@@ -91,20 +109,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/roles": {
     title: "Roles",
-    description: (
-      <>
-        Manage built-in and custom roles and what they allow. People who sign up
-        with email and password, or join through ChatOps, get the default role.
-        You can change it in{" "}
-        <Link
-          href="/settings/auth"
-          className="font-medium underline underline-offset-4"
-        >
-          Settings → Auth
-        </Link>
-        .
-      </>
-    ),
+    description: <RolesDescription />,
   },
   "/settings/secrets": {
     title: "Secrets",
@@ -126,6 +131,31 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
  * invitations at all (`ARCHESTRA_AUTH_DISABLE_INVITATIONS`), so the blurb
  * stops promising it when the tab and the invite button are hidden.
  */
+/**
+ * The link opens the built-in roles reference, a dialog the enterprise roles
+ * page renders; without that feature there is nothing for it to open.
+ */
+function RolesDescription() {
+  const enterprise = useEnterpriseFeature("core");
+  return (
+    <>
+      <span>Custom roles, for access the built-in roles don't cover.</span>
+      {enterprise && (
+        <>
+          {" "}
+          <Link
+            href="/settings/roles?role=admin"
+            scroll={false}
+            className="font-medium underline underline-offset-4"
+          >
+            View built-in roles
+          </Link>
+        </>
+      )}
+    </>
+  );
+}
+
 function UsersDescription() {
   const disableInvitations = useDisableInvitations();
   return disableInvitations === false
@@ -138,6 +168,8 @@ export type SettingsPageHeader = {
   /** Browser tab title, when `title` is composed markup rather than a string. */
   documentTitle?: string;
   description?: React.ReactNode;
+  /** The record's own mark, drawn beside the title as on a detail page. */
+  icon?: React.ReactNode;
   backLink?: React.ReactNode;
   status?: React.ReactNode;
   /**
@@ -193,8 +225,10 @@ export default function SettingsLayout({
   // it knows its subject; until then the prefix match keeps a detail page
   // under a section reading as that section rather than as bare "Settings".
   const sectionHref = resolveSettingsSection(pathname, tabs);
+  // A section's own pages (Agents → Runtimes, say) have their own header.
   const config = sectionHref
-    ? (PAGE_CONFIG[sectionHref] ?? {
+    ? (PAGE_CONFIG[pathname] ??
+      PAGE_CONFIG[sectionHref] ?? {
         title: "Settings",
         description: "Configure your platform, teams, and integrations.",
       })
@@ -205,14 +239,43 @@ export default function SettingsLayout({
 
   const contextValue = useMemo(() => ({ setActionButton, setPageHeader }), []);
 
+  // A record's own page (a role, say) is read and edited like any other
+  // detail page: the content centred at the wizard width, with the back link
+  // as the way out. The section list is for moving between settings pages,
+  // and this is not one of them. Decided from the path, so the page does not
+  // first draw with the list and then lose it.
+  if (isSettingsRecordPath(pathname)) {
+    return (
+      <SettingsLayoutContext.Provider value={contextValue}>
+        <PageLayout
+          maxWidth="wizard"
+          minWidth="phone"
+          contentOverflowX="clip"
+          title={pageHeader?.title ?? config.title}
+          documentTitle={pageHeader?.documentTitle}
+          description={pageHeader?.description}
+          icon={pageHeader?.icon}
+          backLink={pageHeader?.backLink}
+          status={pageHeader?.status ?? config.status}
+          tabs={pageHeader?.tabs}
+          mobileVisibleCount={pageHeader?.tabs?.length}
+          actionButton={actionButton}
+        >
+          {children}
+        </PageLayout>
+      </SettingsLayoutContext.Provider>
+    );
+  }
+
   return (
     <SettingsLayoutContext.Provider value={contextValue}>
       <PageLayout
         title={pageHeader?.title ?? config.title}
         documentTitle={pageHeader?.documentTitle}
         description={pageHeader ? pageHeader.description : config.description}
+        icon={pageHeader?.icon}
         backLink={pageHeader?.backLink}
-        status={pageHeader?.status}
+        status={pageHeader?.status ?? config.status}
         tabs={pageHeader?.tabs}
         // Every tab stays on the row rather than collapsing into an overflow
         // popover: a record page here carries a handful of facets, not the
@@ -223,8 +286,9 @@ export default function SettingsLayout({
         {/* The section list sits beside the content rather than as a tab row
             above it: at sixteen entries the row scrolled sideways, so the
             settings you were not already looking at were off-screen. Below
-            `lg` the row sits 8px under the header: PageLayout pads the content
-            16px on phones and 24px from `sm`, so the pull-up follows suit. */}
+            `lg` it is one button, 8px under the header: PageLayout pads the
+            content 16px on phones and 24px from `sm`, so the pull-up follows
+            suit. */}
         <div className="-mt-2 grid items-start gap-2 sm:-mt-4 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav
@@ -234,7 +298,9 @@ export default function SettingsLayout({
                   ? { ...tab, subnav: <MessagingProvidersSubnav /> }
                   : tab.href === "/settings/appearance"
                     ? { ...tab, subnav: <AppearanceSubnav /> }
-                    : tab,
+                    : tab.href === "/settings/agents"
+                      ? { ...tab, subnav: <AgentsSubnav /> }
+                      : tab,
               )}
               activeHref={sectionHref}
             />
@@ -245,6 +311,16 @@ export default function SettingsLayout({
     </SettingsLayoutContext.Provider>
   );
 }
+
+/** The pages that stand for one record rather than for a settings section. */
+function isSettingsRecordPath(pathname: string) {
+  return SETTINGS_RECORD_PATHS.some((pattern) => pattern.test(pathname));
+}
+
+const SETTINGS_RECORD_PATHS = [
+  /^\/settings\/roles\/[^/]+/,
+  /^\/settings\/service-accounts\/[^/]+/,
+];
 
 function GuardrailsDescription() {
   const appName = useAppName();
@@ -259,6 +335,18 @@ function GuardrailsDescription() {
         OpenAPPA
       </ExternalDocsLink>{" "}
       policy on tool calls, and where the policy lives.
+    </>
+  );
+}
+
+function BlobProvidersDescription() {
+  return (
+    <>
+      Object storage that features write files to, such as scheduled cost
+      exports. Configure a bucket once and reuse it everywhere.{" "}
+      <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformBlobProviders)}>
+        Learn more
+      </ExternalDocsLink>
     </>
   );
 }

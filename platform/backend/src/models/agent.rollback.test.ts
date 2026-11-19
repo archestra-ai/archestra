@@ -366,6 +366,7 @@ describe("AgentModel", () => {
           id: includedAgent.id,
           name: "Included Agent",
           agentType: includedAgent.agentType,
+          environmentId: includedAgent.environmentId,
         },
       ]);
     });
@@ -402,11 +403,13 @@ describe("AgentModel", () => {
           id: newerAgent.id,
           name: "Newer Agent",
           agentType: newerAgent.agentType,
+          environmentId: newerAgent.environmentId,
         },
         {
           id: olderAgent.id,
           name: "Older Agent",
           agentType: olderAgent.agentType,
+          environmentId: olderAgent.environmentId,
         },
       ]);
     });
@@ -753,7 +756,13 @@ describe("AgentModel", () => {
         true,
       );
       expect(fields).not.toBeNull();
-      expect(fields).toEqual({ llmApiKeyId: null, modelId: null });
+      expect(fields).toEqual({
+        llmApiKeyId: null,
+        modelId: null,
+        modelPoolId: null,
+        autoRouterId: null,
+        runtime: null,
+      });
     });
 
     test("findLlmSelectionFieldsById returns selection fields for a user in an assigned team", async ({

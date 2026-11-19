@@ -236,6 +236,17 @@ class ConnectionSetupModel {
     return rows.map((row) => row.pluginId);
   }
 
+  static async findBySkillShareLinkId(
+    id: string,
+  ): Promise<ConnectionSetup | null> {
+    const [row] = await db
+      .select()
+      .from(schema.connectionSetupsTable)
+      .where(eq(schema.connectionSetupsTable.skillShareLinkId, id))
+      .limit(1);
+    return row ?? null;
+  }
+
   /** Records the lazily-created share link on the setup row (audit/revocation). */
   static async attachSkillShareLink(params: {
     connectionSetupId: string;

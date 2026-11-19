@@ -13,6 +13,7 @@ import {
   KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
+import { codexGuardClient } from "./clients/codex";
 import { renderStartupGuardScript } from "./startup-guard";
 import { renderStartupGuardPowerShell } from "./startup-guard.windows";
 
@@ -74,6 +75,7 @@ export const StartupGuardArtifactRequestSchema = z.strictObject({
         marketplaceName: text,
         cloneUrl: z.literal("ARCH_GUARD_PRIVATE_CLONE_URL"),
         hasSkills: z.boolean().optional(),
+        connectionPlugin: z.boolean().optional(),
         pluginNames: z.array(text).max(PLUGIN_DELIVERY_MAX_COUNT).optional(),
       })
       .nullable(),
@@ -95,7 +97,9 @@ export function startupGuardArtifact(
 ) {
   const clients = {
     "claude-code": CLAUDE_CODE_GUARD_CLIENT,
-    codex: CODEX_GUARD_CLIENT,
+    codex: request.context.skills?.connectionPlugin
+      ? codexGuardClient(true)
+      : CODEX_GUARD_CLIENT,
     "copilot-cli": COPILOT_GUARD_CLIENT,
     "kimi-code": KIMI_CODE_GUARD_CLIENT,
     opencode: OPENCODE_GUARD_CLIENT,

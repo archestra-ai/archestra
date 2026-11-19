@@ -79,7 +79,6 @@ describe("anthropicToOpenai", () => {
             description: "Weather for a city",
             input_schema: { type: "object", properties: {} },
           },
-          { type: "web_search_20250305", name: "web_search" },
         ],
         tool_choice: { type: "any" },
       }),
@@ -289,5 +288,57 @@ describe("createOpenaiToAnthropicStreamTranslator", () => {
     const translator = createOpenaiToAnthropicStreamTranslator(ctx);
     translator.translate(chunk({ content: "Hal" }));
     expect(() => translator.finish()).toThrow(/ended before it finished/);
+  });
+});
+
+test("rejects Anthropic server tools instead of silently deleting them", () => {
+  expect(() =>
+    anthropicToOpenai(
+      req({ tools: [{ type: "web_search_20250305", name: "web_search" }] }),
+    ),
+  ).toThrow("cannot translate server tools");
+});
+
+// A content filter is a refusal to an Anthropic client. Reported as end_turn,
+// Claude Code would take a blocked turn for a finished answer.
+describe("content_filter reaches an Anthropic client as refusal", () => {
+  test("without streaming", () => {
+    const response = openaiResponseToAnthropic(
+      {
+        id: "chatcmpl-1",
+        object: "chat.completion",
+        created: 1,
+        model: "glm-5",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "content_filter",
+            message: { role: "assistant", content: "" },
+          },
+        ],
+      } as unknown as OpenAi.Types.ChatCompletionsResponse,
+      ctx,
+    );
+    expect(response.stop_reason).toBe("refusal");
+  });
+
+  test("when streaming", () => {
+    const translator = createOpenaiToAnthropicStreamTranslator(ctx);
+    const events = [
+      ...translator.translate({
+        id: "chatcmpl-1",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "glm-5",
+        choices: [{ index: 0, delta: {}, finish_reason: "content_filter" }],
+      } as unknown as OpenAi.Types.ChatCompletionChunk),
+      ...translator.finish(),
+    ];
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "message_delta",
+        delta: { stop_reason: "refusal", stop_sequence: null },
+      }),
+    );
   });
 });

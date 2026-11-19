@@ -94,6 +94,7 @@ const model = {
   priceSource: "models_dev",
   pricePerMillionCacheRead: null,
   pricePerMillionCacheWrite: null,
+  syncedLongContextPricing: null,
   longContextThreshold: null,
   longContextPricePerMillionInput: null,
   longContextPricePerMillionOutput: null,
@@ -112,6 +113,12 @@ let modelRequests = 0;
 const routerPush = vi.fn();
 
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/resource-permissions/llmModel/:id/subjects`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+    HttpResponse.json([]),
+  ),
   http.get(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill`, () =>
     HttpResponse.json(null),
   ),
@@ -201,6 +208,97 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("confirms deletion, refreshes the list, and leaves the model visible after a refusal", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    let deleted = false;
+    let refuse = true;
+    let deletes = 0;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json(deleted ? [] : [model]),
+      ),
+      http.delete(`${API_ORIGIN}/api/llm-models/${model.id}`, () => {
+        deletes++;
+        if (refuse)
+          return HttpResponse.json(
+            {
+              error: {
+                message:
+                  "This model is used by a model pool. Remove that reference before deleting it.",
+                type: "api_conflict_error",
+              },
+            },
+            { status: 409 },
+          );
+        deleted = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        {
+          name: `More actions ${model.modelId}`,
+        },
+        { timeout: 5000 },
+      ),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete model" });
+    expect(dialog).toHaveTextContent("Recorded requests and spend will remain");
+    expect(dialog).toHaveTextContent(
+      "Only unconfigured entries observed in requests can be removed",
+    );
+    expect(deletes).toBe(0);
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("model pool"),
+        expect.any(Object),
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Delete model" })).toBeVisible();
+    expect(toast.success).not.toHaveBeenCalled();
+    refuse = false;
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: `Edit ${model.modelId}` }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Model deleted");
+  });
+
+  it("disables deletion without global model management permission", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        {
+          name: `More actions ${model.modelId}`,
+        },
+        { timeout: 5000 },
+      ),
+    );
+    const action = screen.getByRole("menuitem", { name: "Delete" });
+    expect(action).toHaveAttribute("aria-disabled", "true");
+    await user.click(action);
+    expect(
+      screen.queryByRole("dialog", { name: "Delete model" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("round-trips precise price defaults while setting and resetting unknown cache prices", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -419,6 +517,101 @@ describe("ModelsPage", () => {
         }),
       ]),
     );
+  });
+
+  it("shows synced tiers without turning inherited prices into overrides", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const updates: archestraApiTypes.UpdateModelData["body"][] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            syncedLongContextPricing: {
+              threshold: 272000,
+              pricePerMillionInput: "4",
+              pricePerMillionOutput: "18",
+              pricePerMillionCacheRead: "0.4",
+              pricePerMillionCacheWrite: null,
+            },
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/llmModel/${model.id}`,
+        () =>
+          HttpResponse.json({
+            resource: "llmModel",
+            scope: model.id,
+            name: model.modelId,
+            ownerId: null,
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "update", "manage-permissions"],
+            canShareOrganizationWide: true,
+            actorSubjects: [],
+          } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
+      ),
+      http.patch(
+        `${API_ORIGIN}/api/llm-models/${model.id}`,
+        async ({ request }) => {
+          const body =
+            (await request.json()) as archestraApiTypes.UpdateModelData["body"];
+          updates.push(body);
+          return HttpResponse.json({ ...model, ...body });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText(/Synced tier above/)).toHaveTextContent(
+      "272,000",
+    );
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Above prompt tokens")).toHaveValue("");
+    expect(screen.getByLabelText("Above prompt tokens")).toHaveAttribute(
+      "placeholder",
+      "272,000",
+    );
+    expect(screen.getByLabelText("Long input")).toHaveValue("");
+    expect(screen.getByLabelText("Long input")).toHaveAttribute(
+      "placeholder",
+      "4.00",
+    );
+    expect(screen.getByLabelText("Long cache write")).toHaveAttribute(
+      "placeholder",
+      "Not reported",
+    );
+    await user.type(screen.getByLabelText("Long input"), "6");
+    await user.click(screen.getByRole("button", { name: "Use synced tier" }));
+    expect(screen.getByLabelText("Long input")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        longContextThreshold: null,
+        longContextPricePerMillionInput: null,
+        longContextPricePerMillionOutput: null,
+        longContextPricePerMillionCacheRead: null,
+        longContextPricePerMillionCacheWrite: null,
+      }),
+    );
+    expect(updates[0]).not.toHaveProperty("syncedLongContextPricing");
   });
 
   it("opens model permissions through Edit without a duplicate row action", async () => {
@@ -679,8 +872,11 @@ describe("ModelsPage", () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText("$2.00 / $8.00")).toBeVisible();
-    expect(screen.getByText("$0.50 / -")).toBeVisible();
+    // Key discovery can refetch the table and replace a row after it is found.
+    await waitFor(() => {
+      expect(screen.getByText("$2.00 / $8.00")).toBeVisible();
+      expect(screen.getByText("$0.50 / -")).toBeVisible();
+    });
   });
 
   it("hydrates filter state from the URL query params", async () => {

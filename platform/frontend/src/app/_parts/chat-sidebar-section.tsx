@@ -27,6 +27,7 @@ import { ConversationProjectActions } from "@/app/_parts/conversation-project-ac
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { AgentIcon } from "@/components/agent-icon";
+import { runActionConfirmCopy } from "@/components/agent-pages/agent-run-actions-copy";
 import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
@@ -1154,10 +1155,8 @@ export function ChatSidebarSection({
       <DeleteConfirmDialog
         open={stopRunId !== null}
         onOpenChange={(open) => !open && setStopRunId(null)}
-        title="Stop this run?"
-        description="The Agent process will stop and its terminal output will be retained."
+        {...runActionConfirmCopy({ action: "stop", count: 1 })}
         isPending={cancelRunMutation.isPending}
-        confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={async () => {
           if (!stopRunId) return;
@@ -1169,10 +1168,8 @@ export function ChatSidebarSection({
       <DeleteConfirmDialog
         open={deleteRunId !== null}
         onOpenChange={(open) => !open && setDeleteRunId(null)}
-        title="Delete run?"
-        description="This removes the session and its retained output. This action cannot be undone."
+        {...runActionConfirmCopy({ action: "delete", count: 1 })}
         isPending={deleteRunMutation.isPending}
-        confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
           if (!deleteRunId) return;

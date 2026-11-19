@@ -18,7 +18,7 @@ import {
   isProviderApiKeyOptional,
   OCR_PDF_INPUT_PROVIDERS,
 } from "@archestra/shared";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import {
   AlertCircle,
   ArrowUpRight,

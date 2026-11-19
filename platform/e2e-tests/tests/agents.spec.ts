@@ -55,7 +55,7 @@ async function createViaWizard(
   const nameField = page.getByRole("textbox", { name: /^Name\b/ });
   const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
   const startFromScratchButton = page.getByRole("button", {
-    name: /^New .* agent/,
+    name: /Built into .* for chat\./,
   });
 
   // 1. Open the wizard — retry the trigger until the name field mounts. The

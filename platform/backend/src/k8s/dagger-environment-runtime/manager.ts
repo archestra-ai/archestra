@@ -11,6 +11,7 @@ import {
 } from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   createK8sClients,
   getK8sNamespace,
@@ -19,7 +20,7 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { EnvironmentModel, OrganizationModel } from "@/models";
+import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import {
   type Environment,
@@ -29,6 +30,7 @@ import {
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
+  buildDaggerEngineIngressPolicy,
   type DaggerEgressPolicyObject,
   daggerEngineDeploymentName,
   daggerEnginePodLabels,
@@ -54,6 +56,19 @@ interface EngineReconcileTarget {
   organizationId: string;
   namespace: string;
   networkPolicyOverride: NetworkPolicy | null;
+  /** Set for an agent's own engine; it wins over every other policy. */
+  agentNetworkPolicy?: NetworkPolicy | null;
+}
+
+/**
+ * An agent with its own egress policy, and the namespace its engine runs in
+ * (its bound environment's, or the organization default when unbound).
+ */
+interface AgentEngineTarget {
+  id: string;
+  organizationId: string;
+  networkPolicy: NetworkPolicy;
+  namespace: string | null;
 }
 
 /**
@@ -72,7 +87,7 @@ interface EngineScheduling {
   tolerations: k8s.V1Toleration[] | null;
 }
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.9";
+const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.11";
 const ENGINE_CONTAINER = "dagger-engine";
 const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
 const ORGANIZATION_LABEL = "archestra.io/dagger-organization";
@@ -136,6 +151,24 @@ class DaggerEnvironmentRuntimeManager {
   }
 
   /**
+   * The isolation target for an agent's own engine — the runtime an agent with
+   * its own network policy routes to, wherever it is bound. The id is derived
+   * from the agent id so it never collides with an environment's engine or an
+   * organization's default engine; the engine is provisioned by
+   * `reconcileAgent`.
+   */
+  agentTarget(agent: {
+    id: string;
+    namespace: string | null | undefined;
+  }): EnvironmentTarget | undefined {
+    if (!isK8sConfigured()) return undefined;
+    return {
+      environmentId: deriveAgentEngineId(agent.id),
+      namespace: this.engineNamespace(agent.namespace),
+    };
+  }
+
+  /**
    * Provision every environment's engine and every organization's default
    * engine on startup, so an agent never routes to a pod that was never created
    * (the create/update paths only cover rows touched after boot). Best-effort;
@@ -184,6 +217,7 @@ class DaggerEnvironmentRuntimeManager {
         );
       }
     }
+    await this.reconcileAgentEngines({});
     await this.cleanupOrphanedEngines();
   }
 
@@ -215,6 +249,81 @@ class DaggerEnvironmentRuntimeManager {
         { err: error, organizationId },
         "[DaggerEnvRuntime] failed to reconcile organization default engine",
       );
+    }
+    await this.reconcileAgentEngines({ organizationId });
+  }
+
+  /**
+   * Provision (or move) the engines of every agent with its own policy that
+   * matches the filter — e.g. the agents bound to an environment whose
+   * namespace changed, or an organization's unbound agents after its default
+   * namespace changed. Best-effort per agent; never throws.
+   */
+  async reconcileAgentEngines(filter: {
+    organizationId?: string;
+    environmentId?: string;
+  }): Promise<void> {
+    if (!this.isEnabled()) return;
+    let agents: AgentEngineTarget[];
+    try {
+      agents = await AgentModel.listNetworkPolicyEngineTargets(filter);
+    } catch (error) {
+      logger.error(
+        { err: error, ...filter },
+        "[DaggerEnvRuntime] failed to list agents with their own network policy",
+      );
+      return;
+    }
+    for (const agent of agents) {
+      try {
+        await this.reconcileAgent(agent.id);
+      } catch (error) {
+        logger.error(
+          { err: error, agentId: agent.id },
+          "[DaggerEnvRuntime] failed to reconcile agent engine",
+        );
+      }
+    }
+  }
+
+  /**
+   * Converge one agent's own engine on its current row: provision it (with the
+   * agent's egress policy) in the namespace it should run in, and remove it from
+   * every other managed namespace. An agent that was deleted, or whose policy
+   * was cleared to inherit its environment's, ends with no engine at all. Call
+   * after any change to an agent's network policy or environment binding.
+   */
+  async reconcileAgent(agentId: string): Promise<void> {
+    if (!this.isEnabled()) return;
+    const [current] = await AgentModel.listNetworkPolicyEngineTargets({
+      agentId,
+    });
+    const engineId = deriveAgentEngineId(agentId);
+    let desiredNamespace: string | null = null;
+    if (current) {
+      desiredNamespace = this.engineNamespace(current.namespace);
+      try {
+        await this.reconcileEngine({
+          engineId,
+          organizationId: current.organizationId,
+          namespace: desiredNamespace,
+          networkPolicyOverride: null,
+          agentNetworkPolicy: current.networkPolicy,
+        });
+      } finally {
+        // As for environments: a concurrent clear, move or delete wins even
+        // when an in-flight Kubernetes create finishes after its teardown.
+        const [latest] = await AgentModel.listNetworkPolicyEngineTargets({
+          agentId,
+        });
+        desiredNamespace = latest
+          ? this.engineNamespace(latest.namespace)
+          : null;
+      }
+    }
+    for (const namespace of this.managedNamespaces()) {
+      if (namespace === desiredNamespace) continue;
+      await this.teardownEngine(engineId, namespace);
     }
   }
 
@@ -255,11 +364,7 @@ class DaggerEnvironmentRuntimeManager {
    * database. Without that evidence they are left for operator review.
    */
   private async cleanupOrphanedEngines(): Promise<void> {
-    const namespaces = new Set([
-      getK8sNamespace(),
-      ...config.orchestrator.kubernetes.environmentNamespaces,
-    ]);
-    for (const namespace of namespaces) {
+    for (const namespace of this.managedNamespaces()) {
       try {
         const { kubeConfig } = loadKubeConfig();
         const clients = createK8sClients(kubeConfig, namespace);
@@ -346,8 +451,27 @@ class DaggerEnvironmentRuntimeManager {
         const defaultIds = new Set(
           defaults.map((org) => deriveOrgEngineId(org.id)),
         );
+        // A default engine is kept only in its organization's engine
+        // namespace; a copy left where it ran before is torn down.
+        const defaultEngineNamespaces = new Map(
+          defaults.map((org) => [
+            deriveOrgEngineId(org.id),
+            this.engineNamespace(org.defaultEnvironmentNamespace),
+          ]),
+        );
+        // Likewise read after enumeration: an agent engine is kept only in the
+        // namespace its agent currently runs in. One whose agent was deleted,
+        // cleared its policy, or moved is an orphan like any other.
+        const agentEngineNamespaces = new Map(
+          (await AgentModel.listNetworkPolicyEngineTargets()).map((agent) => [
+            deriveAgentEngineId(agent.id),
+            this.engineNamespace(agent.namespace),
+          ]),
+        );
         for (const [id, candidate] of candidates) {
-          if (candidate.foreign || defaultIds.has(id)) continue;
+          if (candidate.foreign) continue;
+          if (defaultEngineNamespaces.get(id) === namespace) continue;
+          if (agentEngineNamespaces.get(id) === namespace) continue;
           // An explicitly shared external runtime-owner Role is not a database
           // identity. Require the resource's organization to exist here too.
           if (
@@ -556,6 +680,12 @@ class DaggerEnvironmentRuntimeManager {
       ...(owner ? { [OWNER_LABEL]: owner } : {}),
     };
 
+    // Before the engine exists, so it is never reachable over the pod network.
+    await this.applyNetworkPolicy(
+      clients.networkingApi,
+      namespace,
+      buildDaggerEngineIngressPolicy(owner ? { [OWNER_LABEL]: owner } : {}),
+    );
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
     await this.applyEngineConfig(
@@ -615,6 +745,23 @@ class DaggerEnvironmentRuntimeManager {
     return config.skillsSandbox.enabled && isK8sConfigured();
   }
 
+  // Every namespace an engine may be provisioned in: the dedicated engine
+  // namespace, the release namespace and the declared environment namespaces
+  // (see `engineNamespace`). Engines found anywhere but their resolved
+  // namespace are torn down, which is how turning on the dedicated namespace
+  // moves them out of the MCP namespaces.
+  private managedNamespaces(): Set<string> {
+    return new Set([
+      ...(config.daggerRuntime.namespace
+        ? [config.daggerRuntime.namespace]
+        : []),
+      getK8sNamespace(),
+      ...config.orchestrator.kubernetes.environmentNamespaces,
+      // Never an engine's namespace, so every engine there is torn down.
+      ...retiredWorkloadNamespaces(),
+    ]);
+  }
+
   // Mirrors the MCP runtime's resolution (the configured namespace, else the
   // release namespace), so an engine only ever lands where the chart already
   // grants RBAC: a declared `environmentNamespaces` namespace or the release
@@ -627,7 +774,13 @@ class DaggerEnvironmentRuntimeManager {
   // release namespace — the behaviour those installs already had — rather than
   // wedging them. Provisioning and routing both resolve through here, so they
   // cannot disagree about where the engine lives.
+  //
+  // ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE takes every engine, whatever its
+  // Environment's namespace: engines are privileged, and keeping them out of
+  // the MCP namespaces is what lets those enforce a stricter Pod Security
+  // level. Each Environment keeps its own engine and egress policy there.
   private engineNamespace(namespace: string | null | undefined): string {
+    if (config.daggerRuntime.namespace) return config.daggerRuntime.namespace;
     const trimmed = namespace?.trim();
     if (!trimmed) return getK8sNamespace();
     if (!KubernetesNamespaceSchema.safeParse(trimmed).success) {
@@ -649,6 +802,7 @@ class DaggerEnvironmentRuntimeManager {
       await OrganizationModel.getDefaultNetworkPolicy(target.organizationId);
     return resolveEffectiveNetworkPolicy({
       organizationId: target.organizationId,
+      agentNetworkPolicy: target.agentNetworkPolicy,
       environmentId: target.engineId,
       environmentNetworkPolicy: target.networkPolicyOverride,
       defaultNetworkPolicy,
@@ -1109,6 +1263,18 @@ const ORG_DEFAULT_ENGINE_NAMESPACE = "a7c3e0d2-6b1f-4e8a-9c5d-2f0b8e4a1d63";
  */
 function deriveOrgEngineId(organizationId: string): string {
   return uuidv5(organizationId, ORG_DEFAULT_ENGINE_NAMESPACE);
+}
+
+// Fixed namespace for deriving an agent's own engine id, distinct from the
+// organization one so the two derivations can never meet.
+const AGENT_ENGINE_NAMESPACE = "4f9b2c71-8e3d-4a5f-b6c0-91d7e2a8f354";
+
+/**
+ * Stable engine id for an agent with its own network policy. Derived rather
+ * than the agent id itself, so it can never equal an environment's engine id.
+ */
+function deriveAgentEngineId(agentId: string): string {
+  return uuidv5(agentId, AGENT_ENGINE_NAMESPACE);
 }
 
 const CRD_COORDS: Record<

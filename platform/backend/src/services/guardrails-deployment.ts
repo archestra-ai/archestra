@@ -1,4 +1,5 @@
 import { userHasPermission } from "@/auth";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
@@ -6,10 +7,15 @@ import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
-import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
+import type {
+  HumanApprovalMode,
+  UnapprovableBlockMode,
+  UnsupportedAppaClientAction,
+} from "@/types/guardrails-policy";
 
 export type GuardrailsV2Activation = "active" | "inactive";
 
@@ -40,13 +46,23 @@ export async function getGuardrailsDeploymentFromSnapshot(
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode,
+    unapprovableBlockMode,
     annotatorModelId,
     annotatorLlmApiKeyId,
   } = await GuardrailsDeploymentModel.get(snapshot);
+  // An environment variable, while set, wins over the stored setting.
+  const overrides = config.openappa.breakTheGlassOverrides ?? {};
   return {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode: overrides.humanApprovalMode ?? humanApprovalMode,
+    unapprovableBlockMode:
+      overrides.unapprovableBlockMode ?? unapprovableBlockMode,
+    environmentOverrides: BREAK_THE_GLASS_VARIABLES.filter(
+      ({ setting }) => overrides[setting] !== undefined,
+    ),
     annotatorModelId,
     annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
@@ -79,6 +95,8 @@ export async function setGuardrailsDeployment(
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
+    humanApprovalMode?: HumanApprovalMode;
+    unapprovableBlockMode?: UnapprovableBlockMode;
     annotatorModelId?: string | null;
     annotatorLlmApiKeyId?: string | null;
   },
@@ -102,8 +120,18 @@ export async function setGuardrailsDeployment(
       );
   }
   const before = await getGuardrailsDeployment();
+  for (const { setting, variable } of before.environmentOverrides) {
+    if (update[setting] !== undefined)
+      throw new ApiError(
+        400,
+        `${variable} sets this deployment's ${setting}. Unset it to edit this setting.`,
+      );
+  }
   await GuardrailsDeploymentModel.set(update);
   const after = await getGuardrailsDeployment();
+  // Back on: each repository's policy is pulled now, so what merged while
+  // enforcement was off is enforced, not the commit accepted before.
+  if (after.enabled && !before.enabled) await queueGitSyncs();
   // A switch changes what every running session and runtime may do, so the
   // moment it happened must be findable in the backend log, not only in the
   // audit log.
@@ -120,6 +148,22 @@ export async function setGuardrailsDeployment(
   return after;
 }
 
+/** Queue a pull for every organization whose policy syncs from a repository. */
+async function queueGitSyncs() {
+  try {
+    for (const {
+      organizationId,
+    } of await OpenAppaGithubSyncModel.findSyncing())
+      await OpenAppaGithubSyncModel.enqueue(organizationId);
+  } catch (error) {
+    // The schedule pulls them anyway; the switch itself has happened.
+    logger.warn(
+      { error },
+      "OpenAPPA could not queue the Git syncs after enforcement turned on",
+    );
+  }
+}
+
 function deploymentSettings(
   deployment: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
 ) {
@@ -128,6 +172,8 @@ function deploymentSettings(
     active: deployment.active,
     unsupportedClientAction: deployment.unsupportedClientAction,
     breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+    humanApprovalMode: deployment.humanApprovalMode,
+    unapprovableBlockMode: deployment.unapprovableBlockMode,
     annotatorModelId: deployment.annotatorModelId,
     annotatorLlmApiKeyId: deployment.annotatorLlmApiKeyId,
   };
@@ -273,3 +319,15 @@ async function refusedPolicies(): Promise<string[]> {
   }
   return refusals;
 }
+
+/** The Break the glass settings an environment variable can set, and its name. */
+const BREAK_THE_GLASS_VARIABLES = [
+  {
+    setting: "humanApprovalMode",
+    variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+  },
+  {
+    setting: "unapprovableBlockMode",
+    variable: "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+  },
+] as const;

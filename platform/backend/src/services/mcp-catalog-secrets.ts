@@ -1,6 +1,11 @@
 import { SecretsManagerType } from "@archestra/shared/types";
 import { secretManager } from "@/secrets-manager";
-import type { LocalConfig } from "@/types";
+import type { EnterpriseManagedCredentialConfig, LocalConfig } from "@/types";
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS,
+  ENTERPRISE_MANAGED_PRIVATE_KEY_OVERRIDE_SECRET_KEY,
+} from "@/types/enterprise-managed-credentials";
 import { SecretDecryptionError } from "@/utils/secret-decryption-error";
 
 interface LocalConfigSecretExtraction {
@@ -231,6 +236,74 @@ export async function upsertCatalogClientSecretValue(params: {
   );
   return { id: secret.id, rotated };
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Bag keys an unreadable client secret bag must be resupplied with before it
+ * is replaced, for an item with this enterprise-managed config. The private
+ * key counts only when its key ID shows one was configured.
+ */
+export function enterpriseManagedOverrideRecoveryKeys(
+  config: EnterpriseManagedCredentialConfig | null | undefined,
+): string[] {
+  if (!config) return [];
+  return [
+    ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+    ...(config.privateKeyIdOverride
+      ? [ENTERPRISE_MANAGED_PRIVATE_KEY_OVERRIDE_SECRET_KEY]
+      : []),
+  ];
+}
+
+/** Override credential values in a write payload, keyed by their bag key. */
+export function enterpriseManagedOverrideSecretValues(
+  config: EnterpriseManagedCredentialConfig | null | undefined,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const { field, key } of ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS) {
+    const value = config?.[field];
+    if (value) values[key] = value;
+  }
+  return values;
+}
+
+/**
+ * Moves the override credentials out of an enterprise-managed config and into
+ * the catalog item's client secret bag, deleting them from the config so the
+ * row never stores them. Returns the bag id to persist.
+ */
+export async function moveEnterpriseManagedOverrideSecrets(params: {
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null | undefined;
+  clientSecretId: string | null | undefined;
+  catalogName: string;
+  recovery?: { requiredKeys: string[]; values: Record<string, string> };
+}): Promise<{ clientSecretId: string | null | undefined; rotated: boolean }> {
+  let clientSecretId = params.clientSecretId;
+  let rotated = false;
+  const config = params.enterpriseManagedConfig;
+  if (!config) return { clientSecretId, rotated };
+
+  for (const { field, key } of ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS) {
+    const value = config[field];
+    if (value) {
+      const result = await upsertCatalogClientSecretValue({
+        clientSecretId,
+        catalogName: params.catalogName,
+        key,
+        value,
+        recovery: params.recovery,
+      });
+      clientSecretId = result.id;
+      rotated ||= result.rotated;
+    }
+    delete config[field];
+  }
+
+  return { clientSecretId, rotated };
+}
+// SPDX-SnippetEnd
 
 // === Internal ===
 

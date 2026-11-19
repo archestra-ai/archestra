@@ -20,24 +20,25 @@ class RoutingDecisionModel {
   /**
    * The client's session id, else the virtual key plus the hash of the first
    * user message, so a client resending its conversation keeps its tier.
-   * Identical first messages under one key share a decision. Null when there
+   * Identical first messages and scoring context under one key share a decision. Null when there
    * is nothing to stick to.
    */
   static sessionKey(params: {
     sessionId: string | null;
     virtualKeyId: string | null;
     firstUserMessage: unknown;
+    contextFingerprint?: string;
   }): RoutingSessionKey | null {
     const { sessionId, virtualKeyId, firstUserMessage } = params;
     if (sessionId) return RoutingSessionKeySchema.parse(sessionId);
     if (!virtualKeyId || firstUserMessage == null) return null;
     return RoutingSessionKeySchema.parse(
-      `auto-routing:${virtualKeyId}:${hashMessage(firstUserMessage)}`,
+      `auto-routing:${virtualKeyId}:${hashMessage(firstUserMessage)}${params.contextFingerprint ? `:${params.contextFingerprint}` : ""}`,
     );
   }
 
   static async find(params: {
-    organizationId: string;
+    routerId: string;
     sessionKey: RoutingSessionKey;
     segment?: number;
   }): Promise<RoutingDecision | null> {
@@ -46,12 +47,61 @@ class RoutingDecisionModel {
       .from(decisions)
       .where(
         and(
-          eq(decisions.organizationId, params.organizationId),
+          eq(decisions.routerId, params.routerId),
           eq(decisions.sessionKey, params.sessionKey),
           eq(decisions.segment, params.segment ?? 0),
         ),
       );
     return row ? SelectRoutingDecisionSchema.parse(row) : null;
+  }
+
+  /** Follow the actual usage link, never guess a decision from a coincident session ID. */
+  static async findForInteraction(params: {
+    organizationId: string;
+    interactionId: string;
+  }) {
+    const models = schema.modelsTable;
+    const versions = schema.routingScorerVersionsTable;
+    const routers = schema.autoRoutersTable;
+    const [row] = await db
+      .select({
+        decision: decisions,
+        model: {
+          id: models.id,
+          provider: models.provider,
+          modelId: models.modelId,
+        },
+        router: { id: routers.id, name: routers.name },
+        scorerVersion: {
+          id: versions.id,
+          name: versions.name,
+          model: versions.model,
+          specHash: versions.specHash,
+        },
+      })
+      .from(usage)
+      .innerJoin(decisions, eq(decisions.id, usage.decisionId))
+      .innerJoin(models, eq(models.id, decisions.modelId))
+      .innerJoin(routers, eq(routers.id, decisions.routerId))
+      .leftJoin(versions, eq(versions.id, decisions.scorerVersionId))
+      .where(
+        and(
+          eq(usage.interactionId, params.interactionId),
+          eq(decisions.organizationId, params.organizationId),
+        ),
+      );
+    if (!row) return null;
+    const {
+      organizationId: _organizationId,
+      sessionKey: _sessionKey,
+      ...decision
+    } = SelectRoutingDecisionSchema.parse(row.decision);
+    return {
+      ...decision,
+      model: row.model,
+      router: row.router,
+      scorerVersion: row.scorerVersion,
+    };
   }
 
   /** The session's decision: `values` when first, else the one a concurrent request stored. */
@@ -62,11 +112,7 @@ class RoutingDecisionModel {
       .insert(decisions)
       .values(values)
       .onConflictDoNothing({
-        target: [
-          decisions.organizationId,
-          decisions.sessionKey,
-          decisions.segment,
-        ],
+        target: [decisions.routerId, decisions.sessionKey, decisions.segment],
       })
       .returning();
     if (inserted) {

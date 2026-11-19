@@ -1936,6 +1936,10 @@ interface UserContext {
  * that engine's egress and silently defeat the environment's network isolation,
  * so this fails closed instead.
  *
+ * An agent with its own network policy always routes to its own engine, in its
+ * bound environment's namespace (or the organization default when unbound), and
+ * fails closed the same way, whatever runner host is configured.
+ *
  * An unbound agent routes to its organization's default engine, unless a runner
  * host is configured — then it returns undefined, meaning "use the process-default
  * engine", and no org-default engine is provisioned. Also returns undefined when
@@ -1949,6 +1953,16 @@ async function resolveEnvironmentTarget(
   if (!agentId || !organizationId) return undefined;
 
   const agent = await AgentModel.findById(agentId);
+  if (agent?.networkPolicy) {
+    return resolveAgentEngineTarget({
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        environmentId: agent.environmentId,
+      },
+      organizationId,
+    });
+  }
   if (!agent?.environmentId) {
     // Unbound agent → the organization's default engine. But when an operator
     // configured an explicit runner host (a BYO engine), defer to it: returning
@@ -1993,6 +2007,62 @@ async function resolveEnvironmentTarget(
     );
     throw new SkillSandboxError(
       `Could not resolve the isolated runtime for environment "${environment.name}" — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
+    );
+  }
+  return target;
+}
+
+/**
+ * The engine of an agent with its own network policy. Its sandbox MUST run
+ * there: the shared or environment engine would give its code a different
+ * egress policy than the one the agent declares, so every miss fails closed.
+ */
+async function resolveAgentEngineTarget(params: {
+  agent: { id: string; name: string; environmentId: string | null };
+  organizationId: string;
+}): Promise<EnvironmentTarget> {
+  const { agent, organizationId } = params;
+  let namespace: string | null;
+  if (agent.environmentId) {
+    const environment = await EnvironmentModel.findByIdForOrganization(
+      agent.environmentId,
+      organizationId,
+    );
+    if (!environment) {
+      logger.error(
+        {
+          agentId: agent.id,
+          environmentId: agent.environmentId,
+          organizationId,
+        },
+        "[Sandbox] bound agent's environment was not found",
+      );
+      throw new SkillSandboxError(
+        `Agent is bound to environment ${agent.environmentId}, which was not found — refusing to run on the shared runtime.`,
+      );
+    }
+    namespace = environment.namespace;
+  } else {
+    const organization =
+      await OrganizationModel.getDefaultEngineTarget(organizationId);
+    if (!organization) {
+      throw new SkillSandboxError(
+        `Could not resolve the isolated runtime for agent "${agent.name}" — refusing to run on the shared runtime.`,
+      );
+    }
+    namespace = organization.defaultEnvironmentNamespace;
+  }
+  const target = daggerEnvironmentRuntimeManager.agentTarget({
+    id: agent.id,
+    namespace,
+  });
+  if (!target) {
+    logger.error(
+      { agentId: agent.id, organizationId },
+      "[Sandbox] could not resolve the isolated runtime for an agent with its own network policy",
+    );
+    throw new SkillSandboxError(
+      `Could not resolve the isolated runtime for agent "${agent.name}", which has its own network policy — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
     );
   }
   return target;

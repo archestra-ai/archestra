@@ -92,4 +92,24 @@ describe("connection model defaults", () => {
       }),
     ).toBe("local-model");
   });
+
+  it("uses native provider defaults only for opted-in caller-key setup without a catalog", () => {
+    expect(
+      defaultConnectionModel({ provider: "xai", modelIds: [] }),
+    ).toBeNull();
+    expect(
+      defaultConnectionModel({
+        provider: "xai",
+        modelIds: [],
+        allowProviderDefault: true,
+      }),
+    ).toBe("grok-4.3");
+    expect(
+      defaultConnectionModel({
+        provider: "xai",
+        modelIds: ["grok-custom"],
+        allowProviderDefault: true,
+      }),
+    ).toBe("grok-custom");
+  });
 });

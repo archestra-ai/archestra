@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -115,10 +115,13 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ## Prompt Caching
 
-For models that support explicit context caching, pass the provider-created cache name in `cachedContent` when calling the native `generateContent` or `streamGenerateContent` endpoint. Archestra forwards the reference and records provider-reported cached input tokens, including implicit cache hits.
+Cache a long system prompt or tool list once, and every request that references it bills its input at Gemini's cached rate.
 
-It does not create cache objects or manage their storage lifetime. Model eligibility and cache storage charges follow [Gemini’s caching rules](https://ai.google.dev/gemini-api/docs/caching).
+1. Create the cache through Archestra with your Google SDK's caches API, such as `client.caches.create(...)`. Use the same base URL and key as for generation.
+2. Pass the returned cache name in `cachedContent` when calling `generateContent` or `streamGenerateContent`.
 
-The [Model Router](/docs/llm-proxy/model-router) also accepts `cachedContent` alongside Chat Completions or Responses input when targeting Gemini. Reference a cache created for that Gemini model, and follow Google's restrictions on supplying system instructions or tools alongside cached content.
+Archestra records provider-reported cached input tokens, including implicit cache hits. Cache lifetime, model eligibility, and storage charges follow [Gemini’s caching rules](https://ai.google.dev/gemini-api/docs/caching).
+
+The [Unified Model API](/docs/llm-proxy/unified-model) also accepts `cachedContent` alongside Chat Completions or Responses input when targeting Gemini. Reference a cache created for that Gemini model, and follow Google's restrictions on supplying system instructions or tools alongside cached content.
 
 Anthropic-style `cache_control` markers and OpenAI-specific cache options cannot be translated to Gemini; the router rejects them with a 400 error instead of silently ignoring them.

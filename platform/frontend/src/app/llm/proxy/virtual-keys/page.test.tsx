@@ -200,8 +200,12 @@ describe("VirtualKeysPage provider-key filter", () => {
 
     renderPage("");
 
-    const table = await screen.findByRole("table");
-    expect(await within(table).findByText("Regional key")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).getByText("Regional key"),
+      ).toBeInTheDocument(),
+    );
+    const table = screen.getByRole("table");
     expect(
       within(table).getByRole("button", { name: "View 1 label" }),
     ).toBeInTheDocument();

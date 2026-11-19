@@ -7,7 +7,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";

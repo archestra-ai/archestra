@@ -44,6 +44,19 @@ describe("MCP gateway task reaper", () => {
     return row ?? null;
   }
 
+  test("malformed pool hints do not prevent later cache cleanup", async () => {
+    const expired = JSON.stringify({ value: "old", expires: 1 });
+    const laterKey = `keyv:${CacheKey.SubagentLoadBalancer}-expired-proof`;
+    await db.execute(
+      sql`INSERT INTO keyv_cache (key, value) VALUES ('model-pool-usage:malformed', 'not-json'), (${laterKey}, ${expired})`,
+    );
+    await mcpGatewayTaskReaper.sweep();
+    const rows = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key = ${laterKey}`,
+    );
+    expect(rows.rows).toHaveLength(0);
+  });
+
   test("marks expired working rows failed and leaves everything else alone", async ({
     makeAgent,
   }) => {
@@ -133,20 +146,22 @@ describe("MCP gateway task reaper", () => {
         ${key}, ${JSON.stringify({ value: { direction: "download" }, expires })}
       )`);
     }
-    // GitHub Actions exchange state: used token ids and per-IP budgets.
-    const githubActionsKeys = {
+    // One-time token ids and idle authentication budgets must also expire.
+    const expiringKeys = {
       expired: [
         `keyv:${CacheKey.GitHubActionsTokenJti}-expired`,
+        `keyv:${CacheKey.McpGatewayRateLimit}-expired`,
         `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.1`,
       ],
       live: [
         `keyv:${CacheKey.GitHubActionsTokenJti}-live`,
+        `keyv:${CacheKey.McpGatewayRateLimit}-live`,
         `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.2`,
       ],
     };
     for (const [keys, expires] of [
-      [githubActionsKeys.expired, Date.now() - 1_000],
-      [githubActionsKeys.live, Date.now() + TTL_MS],
+      [expiringKeys.expired, Date.now() - 1_000],
+      [expiringKeys.live, Date.now() + TTL_MS],
     ] as const) {
       for (const key of keys) {
         await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
@@ -176,14 +191,14 @@ describe("MCP gateway task reaper", () => {
     expect(tickets.rows).toEqual([{ key: liveTicket }]);
     const githubActions = await db.execute<{ key: string }>(
       sql`SELECT key FROM keyv_cache WHERE key IN (${sql.join(
-        [...githubActionsKeys.expired, ...githubActionsKeys.live].map(
+        [...expiringKeys.expired, ...expiringKeys.live].map(
           (key) => sql`${key}`,
         ),
         sql`, `,
       )})`,
     );
     expect(githubActions.rows.map((row) => row.key).sort()).toEqual(
-      [...githubActionsKeys.live].sort(),
+      [...expiringKeys.live].sort(),
     );
   });
 

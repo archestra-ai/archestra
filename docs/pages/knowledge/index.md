@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -96,23 +96,22 @@ Search results count as sensitive data. [Guardrails](/docs/agents/guardrails) ca
 
 ## Permissions
 
-Search uses the identity behind the request. Personal credentials use the person’s access; service-account credentials use that account’s access.
+Search uses the identity behind the request. Personal credentials use the person’s access; service-account credentials use that account’s access; an OAuth client without a service-account binding uses that OAuth client’s access.
 
 Who may read each document depends on where it comes from:
 
 | Source | Who finds its documents |
 | --- | --- |
-| A connector | People with **Can use** on the connector |
-| A connector with **Sync permissions from the source** on | People who can open the document in the source. A private Confluence space stays private. |
-| A file | People with **Can use** on the file |
+| A connector | Recipients with **Can use** on the connector or on a Knowledge Base it is in |
+| A connector with **Sync permissions from the source** on | People who can open the document in the source, or an OAuth client whose creator can open it in the source. A private Confluence space stays private. |
+| A file | Recipients with **Can use** on the file or on the Knowledge Base it sits in |
 
-When the search goes through a Knowledge Base, the person also needs **Can use** on the base. **Can read** lets a person browse a source, but not search it.
+When the search goes through a Knowledge Base, the caller needs **Can use** on the base. **Can read** lets someone browse a source, but not search it.
 
-Set **Can use** in the permissions of each connector, file, or Knowledge Base. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Set **Can use** in the permissions of each connector, file, or Knowledge Base. Grant access to people, teams, service accounts, OAuth clients, roles, or everyone in the organization. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
-- Sharing a Knowledge Base does not share its connectors or files. Each one needs its own grant.
+- Files and connectors in a Knowledge Base inherit that base's **Can use** grants. Removing a file or connector from the base revokes that inherited grant at once.
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
-- An [OAuth application](/docs/mcp/authentication/applications#oauth-client-credentials-applications) without a service-account binding searches only explicitly assigned sources shared with **Everyone in the organization** at **Can use**, through MCP or A2A. The Knowledge Base and each connector or uploaded file need that grant; directly assigned connectors need it too. Source permissions still exclude private documents.
-- Applications without a service-account binding do not inherit the client creator’s personal or team access. Bind a service account when the application needs access granted to a particular account.
+- An [OAuth application](/docs/mcp/authentication/applications#oauth-client-credentials-applications) without a service-account binding searches sources shared with **Everyone in the organization** or granted to that **OAuth client** at **Can use**, through MCP or A2A. For connectors with **Sync permissions from the source** on, source document access follows the user who created the OAuth client.
 
 Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).

@@ -406,6 +406,43 @@ describe("LlmProviderApiKeyDropdown", () => {
 
     expect(onSelectOrganizationDefault).toHaveBeenCalledTimes(1);
   });
+
+  it("offers one option per auto router and names the selected one on the trigger", async () => {
+    const user = userEvent.setup();
+    const onSelectAuto = vi.fn();
+    const onSelectSupport = vi.fn();
+    renderDropdown({
+      availableKeys: [],
+      selectedApiKeyId: null,
+      onSelectKey: vi.fn(),
+      triggerVariant: "button",
+      autoRouters: [
+        {
+          id: "router-a",
+          label: "Auto",
+          description: "Haiku, Sonnet, Opus",
+          selected: false,
+          onSelect: onSelectAuto,
+        },
+        {
+          id: "router-b",
+          label: "Auto · support",
+          description: "Flash, Pro, Ultra",
+          selected: true,
+          onSelect: onSelectSupport,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Auto · support" }));
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    await user.click(
+      screen.getByRole("option", { name: /^Auto\s*Haiku, Sonnet, Opus/ }),
+    );
+
+    expect(onSelectAuto).toHaveBeenCalledTimes(1);
+    expect(onSelectSupport).not.toHaveBeenCalled();
+  });
 });
 
 function renderDropdown(

@@ -47,6 +47,8 @@ type ConsultAttribution = {
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
 type ArchestraAnnotationRequest = {
+  /** Which component asks; an authority is served as an annotation is. */
+  kind: "annotation" | "sanitizer" | "authority";
   system: string;
   input: string;
   schema: Record<string, unknown>;
@@ -77,6 +79,10 @@ type ArchestraAnnotationOutcome =
  * answer against the annotator's mandate; this side only picks the model and
  * returns its structured answer. The call goes through the LLM proxy as the
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
+ *
+ * A sanitizer's consult carries the raw result the policy withheld and is
+ * answered with the whole rewritten result, so it runs on the full model with
+ * its whole output budget, and its log row keeps no content.
  */
 class OpenAppaArchestraAnnotator {
   async annotate(params: {
@@ -87,6 +93,7 @@ class OpenAppaArchestraAnnotator {
     abortSignal: AbortSignal;
   }): Promise<ArchestraAnnotationOutcome> {
     const { request, encryptedChat, replay, abortSignal } = params;
+    const sanitizer = request.kind === "sanitizer";
     const owner: CallOwner = encryptedChat
       ? { kind: "encrypted-chat", chat: encryptedChat }
       : replay
@@ -110,16 +117,16 @@ class OpenAppaArchestraAnnotator {
       };
     // The model Guardrails settings pick for annotators, else the fast tier of
     // the key the organization default resolves to, else that default; never a
-    // model someone pinned on the configuration agent.
+    // model someone pinned on the configuration agent. A sanitizer rewrites the
+    // whole result, so it skips the fast tier.
     const { annotatorModelId, annotatorLlmApiKeyId } =
       await GuardrailsDeploymentModel.get();
     const resolved = await resolveAgentLlmOrDefault({
       agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
     });
-    const selection = annotatorModelId
-      ? resolved
-      : await withFastModel(resolved);
+    const selection =
+      annotatorModelId || sanitizer ? resolved : await withFastModel(resolved);
     if (isApiKeyRequired(selection.provider, selection.apiKey))
       return {
         kind: "unconfigured",
@@ -131,7 +138,7 @@ class OpenAppaArchestraAnnotator {
       apiKey: selection.apiKey,
       agentId: agent.id,
       modelName: selection.modelName,
-      source: "guardrail:annotator",
+      source: sanitizer ? "guardrail:sanitizer" : "guardrail:annotator",
       internalCall: true,
       ...ownerIdentity(owner),
       baseUrl: selection.baseUrl,
@@ -166,12 +173,30 @@ class OpenAppaArchestraAnnotator {
     }) as SystemModelMessage[];
     // A fraction of the budget, so the tagged truncation retry's extra room
     // still fits under the model's real output cap. Both forms reserve the
-    // same, so the format is all that tells one request from the other.
+    // same, so the format is all that tells one request from the other. A
+    // sanitizer's answer restates the whole result, so it gets all of it.
     const maxOutputTokens =
-      budget === undefined
-        ? undefined
+      budget === undefined || sanitizer
+        ? budget
         : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
-    const call = { model, system, request, maxOutputTokens, abortSignal };
+    // These Kimi Code families always reason. Keep short classifications at
+    // their supported low effort rather than the high/max default, which can
+    // consume the runtime's entire consult deadline before returning JSON.
+    // The older kimi-for-coding-highspeed model has no adjustable effort.
+    const providerOptions =
+      selection.provider === "kimi-code" &&
+      /^(?:k3(?:[.-]|$)|kimi-for-coding$)/.test(selection.modelName)
+        ? { "kimi-code": { reasoningEffort: "low" } }
+        : undefined;
+    const call = {
+      model,
+      system,
+      request,
+      maxOutputTokens,
+      maxOutputCeiling: budget,
+      abortSignal,
+      providerOptions,
+    };
     const formatKey = JSON.stringify([
       selection.provider,
       selection.modelName,
@@ -332,7 +357,10 @@ type AnnotationCall = {
   system: SystemModelMessage;
   request: ArchestraAnnotationRequest;
   maxOutputTokens: number | undefined;
+  /** The model's real output cap, which a truncation retry never exceeds. */
+  maxOutputCeiling: number | undefined;
   abortSignal: AbortSignal;
+  providerOptions: Parameters<typeof generateText>[0]["providerOptions"];
 };
 
 /**
@@ -374,6 +402,7 @@ async function structuredAnswer(
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
       abortSignal: call.abortSignal,
+      providerOptions: call.providerOptions,
     });
     if (!isPlainObject(output)) return { kind: "unparsed" };
     formatStrikes.delete(call.formatKey);
@@ -400,7 +429,9 @@ async function taggedAnswer(
     system: call.system,
     prompt: call.request.input,
     maxOutputTokens: call.maxOutputTokens,
+    maxOutputCeiling: call.maxOutputCeiling,
     abortSignal: call.abortSignal,
+    providerOptions: call.providerOptions,
   });
   return text === null ? null : parseObject(text);
 }

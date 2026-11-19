@@ -1,4 +1,8 @@
-import { archestraApiClient, E2eTestId } from "@archestra/shared";
+import {
+  archestraApiClient,
+  BUILT_IN_AGENT_IDS,
+  E2eTestId,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -159,6 +163,48 @@ describe("AgentEditPage", () => {
       screen.getByText("showing: configuration,runtime"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
+  });
+
+  it("keeps permissions editable for the built-in SRE agent", () => {
+    access = { ...access, isBuiltIn: true };
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        ...agent,
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    render(<AgentEditPage id="a1" />);
+
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(
+      screen.getByText("mounted: configuration,tools"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
+    ).toBeVisible();
+  });
+
+  it("keeps permissions editable for the built-in APPA Keeper agent", () => {
+    access = { ...access, isBuiltIn: true };
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        ...agent,
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    render(<AgentEditPage id="a1" />);
+
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(
+      screen.getByText("mounted: configuration,tools"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
+    ).toBeVisible();
   });
 
   it("jumps to any step from the header, on the same mount", async () => {

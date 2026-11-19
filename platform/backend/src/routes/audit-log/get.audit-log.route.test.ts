@@ -17,7 +17,8 @@
 import { RouteId } from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { vi } from "vitest";
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { MemberModel } from "@/models";
@@ -343,6 +344,27 @@ describe("GET /api/audit-logs", () => {
       true,
     );
     expect(body.data.some((r: AuditLog) => r.id === agentRow.id)).toBe(true);
+  });
+
+  test("resourceType filter accepts a comma-separated list", async () => {
+    const directoryRow = await seedRow(organizationId, {
+      resourceType: "knowledgeDirectory",
+    });
+    const fileRow = await seedRow(organizationId, {
+      resourceType: "knowledgeFile",
+    });
+    const agentRow = await seedRow(organizationId, { resourceType: "agent" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?resourceType=knowledgeDirectory,knowledgeFile",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().data.map((r: AuditLog) => r.id);
+    expect(ids).toContain(directoryRow.id);
+    expect(ids).toContain(fileRow.id);
+    expect(ids).not.toContain(agentRow.id);
   });
 
   test("resourceId filter narrows results", async () => {

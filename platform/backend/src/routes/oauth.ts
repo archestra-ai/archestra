@@ -86,6 +86,7 @@ async function discoverOAuthResourceMetadata(
     : [...new Set([`${rootWellKnownUrl}${pathname}`, rootWellKnownUrl])];
 
   let lastError: unknown;
+  let originResourceError: OAuthMetadataValidationError | undefined;
   for (const wellKnownUrl of wellKnownUrls) {
     try {
       const response = await (overrides?.fetchFn ?? createMcpOAuthFetch())(
@@ -115,9 +116,21 @@ async function discoverOAuthResourceMetadata(
           ? url.origin
           : serverUrl;
       if (metadata?.resource !== expectedResource) {
-        throw new OAuthMetadataValidationError(
+        const error = new OAuthMetadataValidationError(
           "Protected resource metadata resource does not match the requested resource",
         );
+        if (
+          !overrides?.resourceMetadataUrl &&
+          wellKnownUrl !== rootWellKnownUrl &&
+          metadata?.resource === url.origin
+        ) {
+          // Some servers serve origin metadata at every well-known path.
+          // Discard this document and independently validate the root document;
+          // none of its scopes or authorization servers are trusted here.
+          originResourceError = error;
+          continue;
+        }
+        throw error;
       }
       return metadata;
     } catch (error) {
@@ -129,6 +142,10 @@ async function discoverOAuthResourceMetadata(
       lastError = error;
     }
   }
+
+  // A failed root lookup must not turn an identity failure into a transport
+  // failure that callers can bypass with legacy discovery or endpoint overrides.
+  if (originResourceError) throw originResourceError;
 
   throw new Error(
     `Resource metadata discovery failed: ${lastError instanceof Error ? lastError.message : "Unknown error"}`,
@@ -327,7 +344,7 @@ async function discoverAuthorizationServerMetadataWithOverrides(
   const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
   const discoveryOrigin = new URL(discoveryUrl).origin;
   let validationError: OAuthMetadataValidationError | undefined;
-  let lastUrlError: unknown;
+  const discoveryFailures: string[] = [];
 
   for (const url of urls) {
     try {
@@ -340,21 +357,21 @@ async function discoverAuthorizationServerMetadataWithOverrides(
         },
       );
 
-      // If we get a 4xx error, try the next URL
-      if (!response.ok && response.status >= 400 && response.status < 500) {
-        continue;
-      }
-
+      // Keep failed discovery attempts for diagnostics if no valid fallback exists.
       if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status} from discovery endpoint: ${url}`,
+        discoveryFailures.push(
+          `${metadataDiagnosticUrl(url)}: HTTP ${response.status}`,
         );
+        continue;
       }
 
       const metadata: AuthorizationServerMetadata = await response.json();
 
       // Validate that we got the required fields
-      if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+      if (!metadata?.authorization_endpoint || !metadata.token_endpoint) {
+        discoveryFailures.push(
+          `${metadataDiagnosticUrl(url)}: Missing authorization or token endpoint`,
+        );
         continue;
       }
       // A known issuer must survive every discovery fallback. Only legacy
@@ -370,7 +387,7 @@ async function discoverAuthorizationServerMetadataWithOverrides(
         return metadata;
       }
       validationError ??= new OAuthMetadataValidationError(
-        "Authorization server metadata issuer does not match the expected issuer",
+        `Authorization server metadata issuer does not match the expected issuer at ${metadataDiagnosticUrl(url)} (expected: ${metadataDiagnosticUrl(expectedIssuer)}; received: ${metadataDiagnosticUrl(metadata.issuer)})`,
       );
     } catch (error) {
       if (
@@ -378,23 +395,49 @@ async function discoverAuthorizationServerMetadataWithOverrides(
         error instanceof OAuthMetadataValidationError
       )
         throw error;
-      if (url === urls[urls.length - 1]) {
-        lastUrlError = error;
-      }
+      const reason =
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+          ? "Request timed out"
+          : error instanceof SyntaxError
+            ? "Invalid JSON response"
+            : "Request failed";
+      discoveryFailures.push(`${metadataDiagnosticUrl(url)}: ${reason}`);
     }
   }
 
-  if (validationError) throw validationError;
+  const failureDetails = discoveryFailures.length
+    ? ` Discovery failures: ${discoveryFailures.join("; ")}`
+    : "";
+  if (validationError) {
+    throw new OAuthMetadataValidationError(
+      `${validationError.message}${failureDetails}`,
+    );
+  }
 
-  if (lastUrlError) {
+  if (discoveryFailures.length) {
     throw new Error(
-      `Authorization server metadata discovery failed: ${lastUrlError instanceof Error ? lastUrlError.message : "Unknown error"}`,
+      `Authorization server metadata discovery failed.${failureDetails}`,
     );
   }
 
   throw new Error(
     "Authorization server metadata discovery failed: No valid metadata found at any discovery endpoint",
   );
+}
+
+// Preserve issuer spelling (validation is exact), but never display credentials,
+// query parameters, fragments, or arbitrary content from malformed metadata.
+function metadataDiagnosticUrl(value: unknown): string {
+  if (typeof value !== "string" || !value) return "missing";
+  if (!URL.canParse(value) || !/^https?:\/\//i.test(value))
+    return "invalid URL";
+  const parsed = new URL(value);
+  const display =
+    parsed.username || parsed.password
+      ? `${parsed.protocol}//${parsed.host}${parsed.pathname}`
+      : value.split(/[?#]/)[0];
+  return JSON.stringify(display).slice(1, -1).slice(0, 512);
 }
 
 interface AuthorizationServerMetadata {

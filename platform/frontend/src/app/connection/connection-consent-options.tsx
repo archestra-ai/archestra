@@ -80,8 +80,12 @@ export function ConnectionConsentOptions({
     include: boolean;
     setInclude: (value: boolean) => void;
     mode: ConsentProxyMode;
+    ownKeyLabel?: string;
     providerLabels: string[];
-    /** The account a per-user provider bills, such as an enterprise plan. */
+    /**
+     * The account a per-user provider bills, as the summary names it:
+     * "GitHub Copilot · Personal subscription" or "GitHub Copilot acme".
+     */
     accountLabel?: string | null;
     /** Provider choice, offered only for the user's own key. */
     providerPicker: ReactNode;
@@ -90,6 +94,7 @@ export function ConnectionConsentOptions({
     /** The accounts of a per-user provider still to connect, as cards. */
     accountCards?: ReactNode;
     modelPicker: ReactNode;
+    stackedModelFields?: boolean;
   } | null;
   skills: {
     include: boolean;
@@ -200,7 +205,13 @@ export function ConnectionConsentOptions({
                   proxy.accountPicker ||
                   proxy.accountCards ||
                   proxy.modelPicker) && (
-                  <div className="flex flex-wrap gap-2">
+                  <div
+                    className={
+                      proxy.stackedModelFields
+                        ? "grid min-w-0 gap-3"
+                        : "flex flex-wrap gap-2"
+                    }
+                  >
                     {proxy.providerPicker}
                     {proxy.accountPicker}
                     {proxy.accountCards && (
@@ -249,6 +260,7 @@ export function ConnectionConsentOptions({
             label="Platform"
             summary="Shell for the command"
             control={platform}
+            wrapControl={proxy?.stackedModelFields}
           />
         </div>
       </CollapsibleContent>
@@ -264,6 +276,7 @@ function Row({
   toggle,
   control,
   children,
+  wrapControl,
 }: {
   label: string;
   summary: string;
@@ -274,11 +287,17 @@ function Row({
   };
   control?: ReactNode;
   children?: ReactNode;
+  wrapControl?: boolean;
 }) {
   const id = useId();
   return (
     <div className="py-1">
-      <div className="flex min-h-8 items-center gap-3">
+      <div
+        className={cn(
+          "flex min-h-8 items-center gap-3",
+          wrapControl && "flex-wrap sm:flex-nowrap",
+        )}
+      >
         {toggle ? (
           <Label htmlFor={id} className={LABEL_CLASS}>
             {label}
@@ -298,7 +317,11 @@ function Row({
             className="shrink-0"
           />
         )}
-        {control && <div className="min-w-0 shrink-0">{control}</div>}
+        {control && (
+          <div className={cn("min-w-0 shrink-0", wrapControl && "ml-auto")}>
+            {control}
+          </div>
+        )}
       </div>
       {children && (
         <div className={cn(INDENT_CLASS, "pt-1 pb-1.5")}>{children}</div>
@@ -505,15 +528,17 @@ function proxySummary(
     case "admin-key":
       return `${list} · key managed by your admin`;
     case "own-key":
+      if (proxy.ownKeyLabel) return proxy.ownKeyLabel;
       return proxy.providerPicker || labels.length !== 1
         ? "Your own key or subscription"
         : `Your own ${labels[0]} key or subscription`;
     case "all-providers":
       return `${list} · one virtual key, plus your own sign-ins`;
     case "per-user":
-      return proxy.accountLabel
-        ? `${labels[0] ?? "Your provider"} · ${proxy.accountLabel}`
-        : `Connect your own ${labels[0] ?? "provider"} account`;
+      return (
+        proxy.accountLabel ??
+        `Connect your own ${labels[0] ?? "provider"} account`
+      );
     case "unavailable":
       return "No provider key available";
   }

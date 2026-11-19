@@ -8,9 +8,8 @@ const config: KnipConfig = {
     "typescript-7",
   ],
   ignoreBinaries: [
-    // biome, concurrently, and tsx are in the workspace root package.json
+    // biome and tsx are in the workspace root package.json
     "biome",
-    "concurrently",
     "tsx",
   ],
   rules: {

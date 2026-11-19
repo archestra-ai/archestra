@@ -14,6 +14,7 @@ import AgentModel from "./agent";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
+import { port } from "./ports";
 import RoleCompositionModel from "./role-composition";
 import SkillModel from "./skill";
 
@@ -46,12 +47,11 @@ class UserModel {
         return existing[0];
       }
 
-      // Imported lazily so that merely importing UserModel does not construct
-      // the Better Auth instance (which eagerly initializes its context and
-      // requires the auth secret). This keeps UserModel usable from standalone
-      // scripts that never sign anyone up.
-      const { betterAuth } = await import("@/auth");
-      const result = await betterAuth.api.signUpEmail({
+      // Through a port, loaded on first use, so that merely importing
+      // UserModel does not construct the Better Auth instance (which eagerly
+      // initializes its context and requires the auth secret). This keeps
+      // UserModel usable from standalone scripts that never sign anyone up.
+      const result = await (await port("authAccounts")).signUpEmail({
         body: {
           email,
           password,

@@ -49,6 +49,10 @@ const inlineNoticeVariants = cva(
         neutral:
           "bg-muted/40 text-foreground [&>svg]:text-muted-foreground **:data-[slot=inline-notice-text]:text-muted-foreground",
       },
+      mobileLayout: {
+        stacked:
+          "max-sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-1 max-sm:[&>[data-slot=inline-notice-action]]:ml-0 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-1 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-2 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-1",
+      },
       /**
        * The notice sits over content that scrolls under it, such as a sticky
        * form footer. It needs a backdrop of its own so the page does not read
@@ -90,13 +94,14 @@ const inlineNoticeVariants = cva(
 export function InlineNotice({
   className,
   variant,
+  mobileLayout,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inlineNoticeVariants>) {
   return (
     <div
       role="alert"
       data-slot="inline-notice"
-      className={cn(inlineNoticeVariants({ variant }), className)}
+      className={cn(inlineNoticeVariants({ variant, mobileLayout }), className)}
       {...props}
     />
   );

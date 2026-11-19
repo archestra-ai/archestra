@@ -43,6 +43,18 @@ class AgentWorkspaceModel {
     return row ?? null;
   }
 
+  /** `findByWorkloadName` for many names at once, keyed by workload name. */
+  static async findByWorkloadNames(
+    names: string[],
+  ): Promise<Map<string, AgentWorkspace>> {
+    if (names.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.agentWorkspacesTable)
+      .where(inArray(schema.agentWorkspacesTable.workloadName, names));
+    return new Map(rows.map((row) => [row.workloadName, row]));
+  }
+
   // A new turn refreshes activity, never the workspace's original hard deadline.
   static async claim(params: {
     id: string;
@@ -99,6 +111,25 @@ class AgentWorkspaceModel {
           eq(table.workloadName, params.workloadName),
           eq(table.activeTaskId, params.taskId),
           eq(table.state, "active"),
+        ),
+      );
+  }
+
+  /** Kubernetes workspaces of one Agent whose Pod may be running now. */
+  static async listRunningForAgent(params: {
+    agentId: string;
+    organizationId: string;
+  }): Promise<AgentWorkspace[]> {
+    const table = schema.agentWorkspacesTable;
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.agentId, params.agentId),
+          eq(table.organizationId, params.organizationId),
+          eq(table.backend, "kubernetes"),
+          inArray(table.state, ["active", "idle"]),
         ),
       );
   }

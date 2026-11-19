@@ -19,9 +19,17 @@ import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ModelModel } from "@/models";
+import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { geminiAdapterFactory } from "../adapters/gemini";
@@ -799,7 +807,7 @@ describe("Gemini proxy routing", () => {
   beforeEach(async () => {
     mockUpstream = Fastify();
 
-    mockUpstream.get("/v1/models", async (request) => {
+    mockUpstream.get("/v1beta/models", async (request) => {
       upstreamHeaders = request.headers;
       return {
         models: [
@@ -812,7 +820,7 @@ describe("Gemini proxy routing", () => {
       };
     });
 
-    mockUpstream.get("/v1/models/:model", async (request) => ({
+    mockUpstream.get("/v1beta/models/:model", async (request) => ({
       name: `models/${(request.params as { model: string }).model}`,
       displayName: "Gemini Model",
     }));
@@ -830,7 +838,7 @@ describe("Gemini proxy routing", () => {
       await fastify.register(fastifyHttpProxy, {
         upstream: `http://localhost:${upstreamPort}`,
         prefix: `${API_PREFIX}/v1beta`,
-        rewritePrefix: "/v1",
+        rewritePrefix: "/v1beta",
         preHandler: (request, reply, next) => {
           if (
             request.method === "POST" &&
@@ -970,7 +978,7 @@ describe("Gemini countTokens passthrough", () => {
       { parseAs: "string" },
       (_request, body, done) => done(null, body),
     );
-    upstream.post("/v1/models/*", async (request) => {
+    upstream.post("/v1beta/models/*", async (request) => {
       forwardedBodies.push(request.body as string);
       return { totalTokens: 42 };
     });
@@ -1370,6 +1378,121 @@ type GeminiSdkRequest = {
   }>;
 };
 
+describe("Gemini pass-through with a Google SDK credential", () => {
+  // The virtual-key rate limiter records failed attempts in the cache.
+  setupTestCacheManager();
+  let upstream: FastifyInstance;
+  let forwarded: { url: string; headers: Record<string, unknown> }[];
+  const originalBaseUrl = config.llm.gemini.baseUrl;
+
+  beforeEach(async () => {
+    forwarded = [];
+    upstream = Fastify();
+    // cachedContents exists only on v1beta, as it does on Google's API.
+    upstream.post("/v1beta/cachedContents", async (request) => {
+      forwarded.push({ url: request.url, headers: request.headers });
+      return { name: "cachedContents/synthetic" };
+    });
+    await upstream.listen({ port: 0 });
+    const address = upstream.server.address();
+    const port = typeof address === "string" ? 0 : address?.port;
+    // Read when the catch-all proxy registers.
+    config.llm.gemini.baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    config.llm.gemini.baseUrl = originalBaseUrl;
+    await upstream.close();
+  });
+
+  test.for([
+    "x-goog-api-key",
+    "key query parameter",
+    "bearer",
+  ] as const)("creates a v1beta cache with a virtual key sent as %s, forwarding the mapped key in x-goog-api-key", async (placement, {
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const secret = await makeSecret({
+      secret: { apiKey: "mapped-gemini-key" },
+    });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "gemini" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "google-sdk",
+      ...accessGrants("org"),
+      providerApiKeys: [
+        { provider: "gemini", providerApiKeyId: providerKey.id },
+      ],
+    });
+    const app = createGeminiProxyTestApp();
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url:
+          placement === "key query parameter"
+            ? `/v1/gemini/v1beta/cachedContents?alt=json&key=${virtualKey}`
+            : "/v1/gemini/v1beta/cachedContents?alt=json",
+        headers: {
+          "content-type": "application/json",
+          ...(placement === "x-goog-api-key"
+            ? { "x-goog-api-key": virtualKey }
+            : placement === "bearer"
+              ? { authorization: `Bearer ${virtualKey}` }
+              : {}),
+        },
+        payload: {
+          model: "models/gemini-2.5-flash",
+          systemInstruction: { parts: [{ text: "You are a test assistant." }] },
+          ttl: "60s",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ name: "cachedContents/synthetic" });
+    } finally {
+      await app.close();
+    }
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0].url).toBe("/v1beta/cachedContents?alt=json");
+    expect(forwarded[0].headers["x-goog-api-key"]).toBe("mapped-gemini-key");
+    expect(forwarded[0].headers).not.toHaveProperty("authorization");
+  });
+
+  test("rejects an unknown platform-shaped key in x-goog-api-key before it reaches Gemini", async ({
+    makeAgent,
+  }) => {
+    await makeAgent();
+    const app = createGeminiProxyTestApp();
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/cachedContents",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": "arch_0000000000000000000000000000dead",
+        },
+        payload: { model: "models/gemini-2.5-flash", ttl: "60s" },
+      });
+
+      expect(response.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+    expect(forwarded).toEqual([]);
+  });
+});
+
 function createGeminiProxyTestApp() {
   return createFastifyInstance();
 }
@@ -1534,3 +1657,151 @@ function findStreamedFunctionCallPart(body: string): StreamedFunctionCallPart {
   }
   return part;
 }
+
+describe("native Gemini model execution availability", () => {
+  test.for([
+    "embedContent",
+    "batchEmbedContents",
+    "asyncBatchEmbedContent",
+    "predict",
+    "predictLongRunning",
+    "batchGenerateContent",
+  ] as const)("checks the selected model before forwarding %s", async (method, {
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const upstream = Fastify();
+    const forwarded: string[] = [];
+    upstream.post("/v1beta/models/*", async (request) => {
+      forwarded.push(request.url);
+      return {
+        embedding: { values: [0.1, 0.2] },
+        embeddings: [{ values: [0.1, 0.2] }],
+        name: "batches/synthetic",
+      };
+    });
+    upstream.get("/v1beta/models/*", async () => ({
+      name: "models/gemini-embedding-001",
+    }));
+    const address = await upstream.listen({ port: 0, host: "127.0.0.1" });
+    const previous = config.llm.gemini.baseUrl;
+    config.llm.gemini.baseUrl = address;
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId, { role: "admin" });
+    const token = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const modelId =
+      method === "predict"
+        ? "imagen-4.0-generate-001"
+        : method === "predictLongRunning"
+          ? "veo-3.1-generate-preview"
+          : method === "batchGenerateContent"
+            ? "gemini-2.5-flash"
+            : "gemini-embedding-001";
+    const row = await ModelModel.create({
+      provider: "gemini",
+      modelId,
+      externalId: `gemini/${modelId}`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      ignored: true,
+    });
+    const app = createFastifyInstance();
+    await app.register(geminiProxyRoutes);
+    const headers = {
+      "x-goog-api-key": "synthetic-provider-key",
+      "x-archestra-virtual-key": token,
+    };
+    const ask = (model = row.modelId, encoded = false) => {
+      const embedRequest = {
+        model: `models/${model}`,
+        content: { parts: [{ text: "fixture" }] },
+      };
+      const resource = `${model}:${method}`;
+      return app.inject({
+        method: "POST",
+        url: `/v1/gemini/${agent.id}/v1beta/models/${encoded ? encodeURIComponent(resource) : resource}`,
+        headers,
+        payload:
+          method === "embedContent"
+            ? { content: embedRequest.content }
+            : method === "batchEmbedContents"
+              ? { requests: [embedRequest] }
+              : method === "predict" || method === "predictLongRunning"
+                ? { instances: [{ prompt: "synthetic image" }] }
+                : method === "batchGenerateContent"
+                  ? {
+                      batch: {
+                        displayName: "synthetic",
+                        inputConfig: {
+                          requests: {
+                            requests: [
+                              {
+                                request: {
+                                  contents: [{ parts: [{ text: "fixture" }] }],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                    }
+                  : {
+                      batch: {
+                        displayName: "synthetic",
+                        inputConfig: {
+                          requests: { requests: [{ request: embedRequest }] },
+                        },
+                      },
+                    },
+      });
+    };
+    try {
+      for (const encoded of [false, true]) {
+        const hidden = await ask(row.modelId, encoded);
+        expect(hidden.statusCode, hidden.body).toBe(403);
+      }
+      expect(forwarded).toEqual([]);
+      if (method === "embedContent") {
+        const metadata = await app.inject({
+          method: "GET",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}`,
+          headers,
+        });
+        expect(metadata.statusCode, metadata.body).toBe(200);
+        const count = await app.inject({
+          method: "POST",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}:countTokens`,
+          headers,
+          payload: { contents: [{ parts: [{ text: "fixture" }] }] },
+        });
+        expect(count.statusCode, count.body).toBe(200);
+        forwarded.length = 0;
+      }
+      if (method === "predictLongRunning") {
+        const poll = await app.inject({
+          method: "POST",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}:fetchPredictOperation`,
+          headers,
+          payload: { operationName: "operations/synthetic" },
+        });
+        expect(poll.statusCode, poll.body).toBe(200);
+        forwarded.length = 0;
+      }
+      await ModelModel.update(row.id, { ignored: false });
+      const visible = await ask();
+      expect(visible.statusCode, visible.body).toBe(200);
+      const custom = await ask("uncatalogued-custom-model");
+      expect(custom.statusCode, custom.body).toBe(200);
+      expect(forwarded).toHaveLength(2);
+    } finally {
+      config.llm.gemini.baseUrl = previous;
+      await app.close();
+      await upstream.close();
+    }
+  });
+});

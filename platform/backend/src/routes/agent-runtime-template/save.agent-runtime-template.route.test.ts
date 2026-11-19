@@ -31,6 +31,8 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     const overrides = {
       codex: { position: 0 },
       "claude-code": { position: 2, hidden: true },
+      // Taking the Custom image choice off the list is saved with the rest.
+      "custom-image": { hidden: true },
     };
     const created = await save({
       revision: 0,
@@ -41,6 +43,7 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     expect(created.json()).toEqual({
       revision: 1,
       templates: [template],
+      builtIns: {},
       popularAgentOverrides: overrides,
     });
     const stored = await db.select().from(schema.secretsTable);
@@ -185,6 +188,7 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     expect(read.json()).toEqual({
       revision: 2,
       templates: [template],
+      builtIns: {},
       popularAgentOverrides: updated,
     });
   });

@@ -83,6 +83,11 @@ const SSO_ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
     message:
       "Your SSO account could not be linked to an existing account. Please contact your administrator to verify the SSO provider configuration.",
   },
+  sso_subject_conflict: {
+    title: "Account Belongs to Someone Else",
+    message:
+      "Your email is already used by another person's account. Ask your administrator to remove the previous account, then sign in again.",
+  },
   invalid_provider: {
     title: "SSO Provider Error",
     message:

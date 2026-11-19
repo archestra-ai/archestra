@@ -1,7 +1,7 @@
 import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { LabelWithDetailsSchema } from "./label";
 
 export const SelectServiceAccountSchema = createSelectSchema(
@@ -30,6 +30,8 @@ export const ServiceAccountResponseSchema = z.object({
   createdBy: CreatedByNullableSchema,
   organizationId: z.string(),
   name: z.string(),
+  /** What the account is for; null when nobody wrote it down. */
+  description: z.string().nullable(),
   icon: z.string().nullable(),
   role: z.string(),
   /**
@@ -56,6 +58,16 @@ export const ServiceAccountResponseSchema = z.object({
    * either no key works, or every working key is open-ended.
    */
   soonestExpiryAt: z.coerce.date().nullable(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Trust policies that let an external workload exchange its OIDC token for
+   * a short-lived token of this account. An account with one can authenticate
+   * without any API key.
+   */
+  federatedCredentialCount: z.number().int().nonnegative(),
+  // SPDX-SnippetEnd
 });
 
 export const ServiceAccountDetailResponseSchema =
@@ -68,8 +80,21 @@ export const ServiceAccountTokenWithValueResponseSchema =
     token: z.string(),
   });
 
+/**
+ * Optional free text. A blank value clears it, so the form can send what the
+ * field holds without a separate "remove" control.
+ */
+const ServiceAccountDescriptionSchema = z
+  .string()
+  .trim()
+  .max(1000)
+  .nullable()
+  .optional()
+  .transform((value) => (value === "" ? null : value));
+
 export const CreateServiceAccountBodySchema = z.object({
   name: z.string().trim().min(1).max(256),
+  description: ServiceAccountDescriptionSchema,
   icon: z.string().nullable().optional(),
   role: z.string().trim().min(1).max(256),
   teamId: z.string().min(1).nullable().optional(),
@@ -79,6 +104,7 @@ export const CreateServiceAccountBodySchema = z.object({
 export const UpdateServiceAccountBodySchema = z
   .object({
     name: z.string().trim().min(1).max(256).optional(),
+    description: ServiceAccountDescriptionSchema,
     icon: z.string().nullable().optional(),
     role: z.string().trim().min(1).max(256).optional(),
     teamId: z.string().min(1).nullable().optional(),

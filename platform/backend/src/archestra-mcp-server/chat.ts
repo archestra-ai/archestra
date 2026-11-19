@@ -12,12 +12,16 @@ import {
 } from "@/openappa/current-trajectory";
 import {
   getHitlAskUserArguments,
+  getHitlInspectableAskUserArguments,
+  getHitlInspectionResult,
   hitlRulingFromLabels,
   peekHitlDecision,
   recordHitlRuling,
+  resolveHitlInspectableAnswer,
   reviewSessionFromTrajectory,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
+import { hitlReviewCardAnswer } from "@/openappa/hitl-review-overview";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
@@ -130,9 +134,9 @@ const AskUserExecutionSchema = AskUserSchema.extend({
   // scoped, server-held review before allowing that exception.
   question: z.string().min(1),
   // SPDX-SnippetEnd
-  // Earlier proxy versions rewrote a staged review's ask_user call with option
-  // previews for Claude Code. They are not advertised to models, and the
-  // handler uses the server-held review, so a preview is ignored here.
+  // Earlier proxy versions attached option previews to staged review calls.
+  // Bound reviews use server-held arguments; ordinary questions still use
+  // the public option schema.
   options: z
     .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
     .min(2)
@@ -141,7 +145,7 @@ const AskUserExecutionSchema = AskUserSchema.extend({
 });
 
 const NO_CHOICE_FORM_MESSAGE =
-  "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
+  "This client did not answer the choice form. Use its own question tool only if the user permits it and it supports all choices. Otherwise explain that this gateway question could not be shown and wait for the user. Do not repeat this call unchanged or treat it as a user answer. Do not ask this as a plain-text chat question.";
 
 // A headless run (A2A, ChatOps, a schedule, a subagent) has no one to show a
 // form to; the reply is the only place a question can reach the user.
@@ -169,7 +173,11 @@ const registry = defineArchestraTools([
       const { agent: contextAgent } = context;
 
       logger.info(
-        { agentId: contextAgent.id, todoArgs: args },
+        {
+          agentId: contextAgent.id,
+          argumentKeys: Object.keys(args),
+          argumentsSize: JSON.stringify(args).length,
+        },
         "todo_write tool called",
       );
 
@@ -186,7 +194,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. For guardrail reviews, use this tool with the offer IDs: the platform shows the review in the client's own question card or form. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect to show the complete review in the conversation. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For guardrail reviews, use this tool with the offer IDs: the platform shows the review in the client's own question card or form. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect to show the complete review in the conversation. For ordinary questions, prefer the client's own question tool (Claude Code AskUserQuestion, Codex, OpenCode) when it supports all choices and the user has not explicitly requested this gateway tool. Otherwise call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Some clients use proxy conversion to their native question tool when it supports all choices. Other clients without MCP elicitation cannot show this form. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -198,6 +206,7 @@ const registry = defineArchestraTools([
         ? await getHitlAskUserArguments({
             session,
             offerIds: liveOffers,
+            presentation: "form",
           })
         : undefined;
       // SPDX-SnippetBegin
@@ -207,9 +216,20 @@ const registry = defineArchestraTools([
       // Only a live review supplies the canonical text shown to the user.
       if (!hitlArgs) AskUserSchema.parse(args);
       // SPDX-SnippetEnd
+      // A client whose form shows one paragraph gets the short review with
+      // Inspect, Allow and Deny. A review that is already ruled on has no
+      // such form, and keeps the plain one.
+      const inspectable =
+        hitlArgs && session && context.inspectableReviewForm
+          ? await getHitlInspectableAskUserArguments({
+              session,
+              offerIds: liveOffers,
+              presentation: "form",
+            })
+          : undefined;
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
-      const effectiveArgs = hitlArgs ?? args;
+      const effectiveArgs = inspectable?.card ?? hitlArgs ?? args;
       const labels = effectiveArgs.options.map((option) => option.label);
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
@@ -251,7 +271,19 @@ const registry = defineArchestraTools([
         requestedSchema: withTextField({
           schema: effectiveArgs.allowMultiple
             ? buildMultiChoiceSchema(effectiveArgs.options)
-            : buildSingleChoiceSchema(effectiveArgs.options),
+            : buildSingleChoiceSchema(
+                effectiveArgs.options,
+                hitlArgs ? "Decision" : "Choice",
+                // A form preselects a choice. The short review form starts
+                // on Allow when it offers it, so a reviewer who has read the
+                // call, or has just inspected it, is not sent to Inspect
+                // again; it starts on Inspect while Allow waits for it.
+                inspectable
+                  ? (["Allow", "Inspect"].find((label) =>
+                      labels.includes(label),
+                    ) ?? undefined)
+                  : undefined,
+              ),
           allowText,
         }),
         toolCallId: context.currentToolCallId,
@@ -333,6 +365,17 @@ const registry = defineArchestraTools([
       if (!effectiveArgs.allowMultiple && selected.length > 1) {
         return errorResult("The user selected more than one option.");
       }
+      if (hitlArgs && session && inspectable) {
+        return inspectableReviewAnswer({
+          session,
+          offerId: hitlArgs.remedy_offer_ids[0],
+          label: selected[0],
+          digest: inspectable.digest,
+          // An inspection asked for on an earlier form returned the complete
+          // review as that call's result, which this form followed.
+          carriedReviewText: inspectable.reviewText !== undefined,
+        });
+      }
       const hitlRuling = hitlArgs ? hitlRulingFromLabels(selected) : undefined;
       if (hitlArgs && !hitlRuling) {
         return errorResult("The HITL review returned an invalid choice.");
@@ -343,11 +386,7 @@ const registry = defineArchestraTools([
           offerId: hitlArgs.remedy_offer_ids[0],
           ruling: hitlRuling,
         });
-        if (!recorded) {
-          return errorResult(
-            "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.",
-          );
-        }
+        if (!recorded) return errorResult(REVIEW_NO_LONGER_PENDING);
       }
 
       return structuredSuccessResult(
@@ -380,6 +419,58 @@ export const toolEntries = registry.toolEntries;
 
 export const tools = registry.tools;
 
+const REVIEW_NO_LONGER_PENDING =
+  "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.";
+
+/**
+ * Reads the answer to a short review form. Inspect returns the complete
+ * review for the agent to print, and rules nothing; Allow and Deny are
+ * recorded against the exact review the form showed.
+ */
+async function inspectableReviewAnswer(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  label: string | undefined;
+  digest: string;
+  carriedReviewText: boolean;
+}) {
+  const { session, offerId } = params;
+  const answer = params.label ? hitlReviewCardAnswer(params.label) : undefined;
+  if (!answer)
+    return errorResult("The HITL review returned an invalid choice.");
+  const resolved = await resolveHitlInspectableAnswer({
+    session,
+    offerId,
+    answer,
+    carriedReviewText: params.carriedReviewText,
+    claimDigest: params.digest,
+    presentation: "form",
+  });
+  if (resolved.status === "closed")
+    return errorResult(REVIEW_NO_LONGER_PENDING);
+  if (resolved.status === "stale") {
+    return errorResult(
+      "The review changed while its form was open, so this answer was not recorded. Call this tool again with the same remedy_offer_ids to show the current review.",
+    );
+  }
+  if (resolved.status !== "recorded") {
+    const review = await getHitlInspectionResult({ session, offerId });
+    if (!review) return errorResult(REVIEW_NO_LONGER_PENDING);
+    return structuredSuccessResult(
+      { action: "accept" as const, selected: [params.label ?? ""] },
+      review,
+    );
+  }
+  return structuredSuccessResult(
+    { action: "accept" as const, selected: [params.label ?? ""] },
+    resolved.ruling === "deny"
+      ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
+      : `The user allowed the call. Live remedy offer: ${offerId}. Apply it with ${archestraMcpBranding.getToolName(
+          TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+        )} using the offer_id and plan from the ruling, then retry the blocked call after the plan is authorized. The user already answered, so do not ask about the same plan again.`,
+  );
+}
+
 async function sealOrReturnStoredRuling(params: {
   session: OpenAppaSession;
   offerId: string;
@@ -400,6 +491,8 @@ async function sealOrReturnStoredRuling(params: {
 
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
+  title = "Choice",
+  preselected?: string,
 ) {
   const enumDescriptions = options.map((option) => option.description);
   return {
@@ -407,8 +500,9 @@ function buildSingleChoiceSchema(
     properties: {
       choice: {
         type: "string" as const,
-        title: "Choice",
+        title,
         enum: options.map((option) => option.label),
+        ...(preselected ? { default: preselected } : {}),
         ...(enumDescriptions.some((description) => description)
           ? { enumDescriptions }
           : {}),

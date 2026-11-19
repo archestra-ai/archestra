@@ -114,6 +114,7 @@ function getSourceIcon({
     "skill:description_generation": <Sparkles className="h-3 w-3 shrink-0" />,
     "guardrail:dual_llm": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "guardrail:annotator": <ShieldCheck className="h-3 w-3 shrink-0" />,
+    "guardrail:sanitizer": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "guardrail:hitl_summary": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image
@@ -160,6 +161,7 @@ function getSourceIcon({
     "knowledge:ocr": <Database className="h-3 w-3 shrink-0" />,
     "app:llm_complete": <LayoutGrid className="h-3 w-3 shrink-0" />,
     "app:recording_enhancement": <Sparkles className="h-3 w-3 shrink-0" />,
+    "tool_search_text:generation": <Sparkles className="h-3 w-3 shrink-0" />,
   };
 
   return sourceIcon[source];

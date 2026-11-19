@@ -1,3 +1,4 @@
+import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
@@ -9,6 +10,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -41,12 +43,22 @@ type AgentRuntimeCredentialResolution = {
  */
 export async function resolveAgentRuntimeCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
-    Partial<Pick<ResolvedAgentRuntime, "command">>;
+    Partial<
+      Pick<
+        ResolvedAgentRuntime,
+        "command" | "allowAgentSuppliedCredentialValues"
+      >
+    >;
   organizationId: string;
   userId: string | null;
   authorizationUserId?: string | null;
+  ephemeralCredentials?: Record<string, string>;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  const effectiveEphemeral =
+    params.runtime.allowAgentSuppliedCredentialValues !== false
+      ? params.ephemeralCredentials
+      : undefined;
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
@@ -97,10 +109,30 @@ export async function resolveAgentRuntimeCredentials(params: {
 
   if (perUser.length > 0) {
     if (!params.userId) {
+      for (const entry of perUser) {
+        const ephemeralValue = effectiveEphemeral?.[entry.key];
+        if (typeof ephemeralValue === "string" && ephemeralValue.length > 0) {
+          env[entry.key] = ephemeralValue;
+        } else if (entry.required) {
+          missing.push(toMissing(entry));
+        }
+      }
+      if (effectiveEphemeral) {
+        const sharedKeys = new Set(shared.map((d) => d.key));
+        for (const [key, value] of Object.entries(effectiveEphemeral)) {
+          if (
+            typeof value === "string" &&
+            value.length > 0 &&
+            !sharedKeys.has(key)
+          ) {
+            env[key] = value;
+          }
+        }
+      }
       return {
         env,
         renewableCredentials,
-        missing: perUser.filter((entry) => entry.required).map(toMissing),
+        missing,
         misconfigured,
       };
     }
@@ -115,8 +147,13 @@ export async function resolveAgentRuntimeCredentials(params: {
     });
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
+      const ephemeralValue = effectiveEphemeral?.[declaration.key];
+      if (typeof ephemeralValue === "string" && ephemeralValue.length > 0) {
+        env[declaration.key] = ephemeralValue;
+        continue;
+      }
       const credential = declaration.credentialId
-        ? await batch.resolve({
+        ? await resolvePersonalCredential(batch, {
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -124,6 +161,12 @@ export async function resolveAgentRuntimeCredentials(params: {
             minimumValidityMs: 50 * 60_000,
           })
         : null;
+      if (credential === RECONNECT) {
+        if (declaration.required) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
+        continue;
+      }
       const value = declaration.credentialId
         ? credential?.value
         : resolved.values[declaration.key];
@@ -143,6 +186,19 @@ export async function resolveAgentRuntimeCredentials(params: {
     }
   }
 
+  if (effectiveEphemeral) {
+    const sharedKeys = new Set(shared.map((d) => d.key));
+    for (const [key, value] of Object.entries(effectiveEphemeral)) {
+      if (
+        typeof value === "string" &&
+        value.length > 0 &&
+        !sharedKeys.has(key)
+      ) {
+        env[key] = value;
+      }
+    }
+  }
+
   return { env, renewableCredentials, missing, misconfigured };
 }
 
@@ -152,10 +208,16 @@ export async function resolveAgentRuntimeCredentials(params: {
  */
 export async function preflightAgentRuntimeCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
-    Partial<Pick<ResolvedAgentRuntime, "command">>;
+    Partial<
+      Pick<
+        ResolvedAgentRuntime,
+        "command" | "allowAgentSuppliedCredentialValues"
+      >
+    >;
   organizationId: string;
   userId: string | null;
   authorizationUserId?: string | null;
+  ephemeralCredentials?: Record<string, string>;
   /**
    * Report organization credentials the caller may not run with as `missing`
    * entries marked `adminOnly`, instead of refusing the whole check. For the
@@ -163,6 +225,12 @@ export async function preflightAgentRuntimeCredentials(params: {
    * refuses.
    */
   reportAdminOnlyCredentials?: boolean;
+  /**
+   * Report stale personal connections (`reconnect: true`) even when the
+   * declaration is optional, so read-only setup checks can offer to reconnect
+   * without blocking launch preflight.
+   */
+  reportOptionalReconnect?: boolean;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -171,6 +239,10 @@ export async function preflightAgentRuntimeCredentials(params: {
   const declarations = splitDeclarations(applicableCredentials(params));
   const { perUser } = declarations;
   let { shared } = declarations;
+  const effectiveEphemeral =
+    params.runtime.allowAgentSuppliedCredentialValues !== false
+      ? params.ephemeralCredentials
+      : undefined;
   const adminOnly: MissingAgentRuntimeCredential[] = [];
   try {
     await requireSharedCredentialAccess({
@@ -235,7 +307,14 @@ export async function preflightAgentRuntimeCredentials(params: {
 
   if (perUser.length > 0) {
     if (!params.userId) {
-      missing.push(...perUser.filter((entry) => entry.required).map(toMissing));
+      for (const entry of perUser) {
+        const ephemeralValue = effectiveEphemeral?.[entry.key];
+        if (typeof ephemeralValue === "string" && ephemeralValue.length > 0) {
+          configured.push(entry.key);
+        } else if (entry.required) {
+          missing.push(toMissing(entry));
+        }
+      }
       return { configured, missing, misconfigured };
     }
     const legacyDeclarations = perUser.filter(
@@ -248,18 +327,29 @@ export async function preflightAgentRuntimeCredentials(params: {
       keys: legacyDeclarations.map((declaration) => declaration.key),
     });
     for (const declaration of perUser) {
-      const connected = declaration.credentialId
-        ? Boolean(
-            (
-              await batch.resolve({
-                organizationId: params.organizationId,
-                scope: "personal",
-                userId: params.userId,
-                credentialId: declaration.credentialId,
-              })
-            )?.value,
-          )
-        : present.has(declaration.key);
+      const hasEphemeral =
+        typeof effectiveEphemeral?.[declaration.key] === "string" &&
+        effectiveEphemeral[declaration.key].length > 0;
+      const credential =
+        !hasEphemeral && declaration.credentialId
+          ? await resolvePersonalCredential(batch, {
+              organizationId: params.organizationId,
+              scope: "personal",
+              userId: params.userId,
+              credentialId: declaration.credentialId,
+            })
+          : null;
+      if (credential === RECONNECT) {
+        if (declaration.required || params.reportOptionalReconnect) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
+        continue;
+      }
+      const connected =
+        hasEphemeral ||
+        (declaration.credentialId
+          ? Boolean(credential?.value)
+          : present.has(declaration.key));
       if (connected) {
         configured.push(declaration.key);
       } else if (declaration.required) {
@@ -319,7 +409,7 @@ async function requireSharedCredentialAccess(params: {
 }
 
 /** A person without organization settings access tried to run with an organization credential. */
-class SharedCredentialAccessDeniedError extends ApiError {
+export class SharedCredentialAccessDeniedError extends ApiError {
   constructor() {
     super(
       403,
@@ -363,6 +453,51 @@ export async function transferPersonalRuntimeCredential(params: {
   });
 
   return { declarationCreated };
+}
+
+/**
+ * Validate that a personal credential value can be supplied ephemerally for an
+ * Agent Runtime run without mutating the Agent's declarations or persisting the
+ * value in `user_credentials`.
+ */
+export async function validateEphemeralRuntimeCredential(params: {
+  runtime: ResolvedAgentRuntime;
+  organizationId: string;
+  userId: string;
+  key: string;
+  label?: string;
+}): Promise<void> {
+  if (params.key === "CLAUDE_CODE_OAUTH_TOKEN") {
+    throw new ApiError(
+      400,
+      "Use the native Claude Code sign-in instead of storing a subscription token.",
+    );
+  }
+  const existing = params.runtime.credentials?.find(
+    (entry) => entry.key === params.key,
+  );
+  if (existing?.scope === "shared") {
+    throw new ApiError(
+      400,
+      `"${params.key}" is declared as a shared credential on this Agent. A shared value applies to every user's runs, so it is set in Settings rather than transferred from a client.`,
+    );
+  }
+  if (!existing) {
+    AgentRuntimeCredentialDeclarationSchema.parse({
+      key: params.key,
+      scope: "per_user",
+      label: params.label?.trim() || params.key,
+      required: false,
+    });
+  } else if (existing.credentialId) {
+    await CredentialAccess.requireOnKey({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      key: existing.credentialId,
+      action: "use",
+      message: `You don't have access to the "${existing.label}" credential. Ask an admin to share it with you.`,
+    });
+  }
 }
 
 /**
@@ -634,6 +769,26 @@ async function readSharedBag(
   return secret.secret ?? {};
 }
 
+/**
+ * A personal value, or `RECONNECT` when the person's stored connection exists
+ * but no longer works. Other failures still propagate.
+ */
+async function resolvePersonalCredential(
+  batch: CredentialResolutionBatch,
+  params: Parameters<CredentialResolutionBatch["resolve"]>[0],
+): Promise<
+  Awaited<ReturnType<CredentialResolutionBatch["resolve"]>> | typeof RECONNECT
+> {
+  try {
+    return await batch.resolve(params);
+  } catch (error) {
+    if (error instanceof GitHubReconnectRequiredError) return RECONNECT;
+    throw error;
+  }
+}
+
+const RECONNECT = Symbol("reconnect");
+
 function toMissing(
   declaration: AgentRuntimeCredentialDeclaration,
 ): MissingAgentRuntimeCredential {
@@ -671,7 +826,7 @@ function applicableCredentials(params: {
   organizationId: string;
   userId: string | null;
 }) {
-  return params.runtime.command?.[0] === "archestra-claude-code"
+  return isClaudeCodeRuntimeCommand(params.runtime.command?.[0])
     ? params.runtime.credentials?.filter(
         ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
       )

@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared";
+import config from "@/config";
 import type { ChatMessage } from "@/types";
 
 const BASE64_MARKER = ";base64,";
@@ -34,10 +35,24 @@ const PROVIDER_ATTACHMENT_LIMIT_BYTES: Partial<
  * single attachment can never be the reason a request is refused — it is left
  * in the Files panel instead.
  */
-export function providerAttachmentLimitBytes(
+function providerAttachmentLimitBytes(
   provider: SupportedProvider,
 ): number | undefined {
   return PROVIDER_ATTACHMENT_LIMIT_BYTES[provider];
+}
+
+/**
+ * Largest decoded attachment sent inline to `provider`: the configured chat
+ * inline budget, or the provider's documented ceiling when that is smaller.
+ * Anything larger stays out of the request (Files panel or sandbox).
+ */
+export function chatAttachmentInlineByteLimit(
+  provider: SupportedProvider,
+): number {
+  return Math.min(
+    config.chat.attachmentInlineBytesLimit,
+    providerAttachmentLimitBytes(provider) ?? Number.POSITIVE_INFINITY,
+  );
 }
 
 /** Maximum decoded size of one inline image for providers with such a limit. */

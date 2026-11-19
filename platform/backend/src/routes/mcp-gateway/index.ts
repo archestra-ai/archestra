@@ -10,8 +10,8 @@ import {
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
-
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { RequestLookups } from "@/auth/request-lookups";
 import { requestScope } from "@/auth/request-scope";
@@ -33,12 +33,18 @@ import {
   resolveGatewayRuntimeSession,
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
-import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
+import {
+  McpGatewayAuthenticationBusyError,
+  McpGatewayRateLimiter,
+  withMcpGatewayAuthenticationCapacity,
+} from "@/services/mcp-gateway-rate-limit";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
   ApiError,
   constructResponseSchema,
+  generateErrorResponseSchema,
   type McpGatewayCallSource,
   UuidOrSlugSchema,
 } from "@/types";
@@ -50,6 +56,7 @@ import {
   encodeCapabilitySession,
   readCapabilitySession,
 } from "./client-capabilities";
+import { isCursorClient } from "./cursor-forms";
 import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
@@ -100,8 +107,6 @@ import {
   ensureRequestSocketDestroySoon,
   extractBearerToken,
   extractPassthroughHeaders,
-  extractProfileIdAndTokenFromRequest,
-  validateMCPGatewayToken,
 } from "./utils";
 
 // =============================================================================
@@ -206,6 +211,7 @@ async function logHandshake(params: {
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
       oauthClientId: tokenAuthContext?.oauthClientId ?? null,
+      serviceAccountId: tokenAuthContext?.serviceAccountId ?? null,
       source: tokenAuthContext?.source ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
@@ -456,6 +462,10 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      grokToolNames:
+        /^grok-cli\//i.test(String(request.headers["user-agent"] ?? "")) ||
+        request.headers["x-archestra-agent-id"] === "grok-build",
+      cursorForms: isCursorClient(request.headers["user-agent"]),
       openappaSession,
       currentToolCallId,
       agentId: profileId,
@@ -662,6 +672,108 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     legacySseSessions.close();
   });
 
+  const rateLimitResponses = {
+    429: generateErrorResponseSchema("api_rate_limit_error"),
+    503: generateErrorResponseSchema("api_service_unavailable_error"),
+  };
+  const rateLimiter = new McpGatewayRateLimiter();
+  const verifiedRequests = new WeakSet<FastifyRequest>();
+  const rateLimitCaller = (request: FastifyRequest) => ({
+    credential: extractBearerToken(request) ?? undefined,
+    gateway: (request.params as { profileId?: string }).profileId ?? "",
+  });
+  fastify.addHook("onRequest", async (request, reply) => {
+    // Tokenless requests only return the OAuth discovery challenge; they do
+    // not perform credential validation and must remain usable behind a NAT.
+    if (config.authRateLimitDisabled || !extractBearerToken(request)) return;
+    try {
+      // request.ip follows Fastify's configured trustProxy policy.
+      const admission = await rateLimiter.consume(
+        request.ip,
+        1,
+        rateLimitCaller(request),
+      );
+      if (admission.consumedPoints === 0) verifiedRequests.add(request);
+    } catch (error) {
+      reply.header("Cache-Control", "no-store");
+      if (error instanceof RateLimiterRes) {
+        const limited = new ApiError(
+          429,
+          "Too many gateway authentication attempts. Retry after the indicated delay.",
+        );
+        limited.retryAfterSeconds = Math.max(
+          1,
+          Math.ceil(error.msBeforeNext / 1000),
+        );
+        throw limited;
+      }
+      if (error instanceof McpGatewayAuthenticationBusyError) {
+        reply.header("Retry-After", 1);
+        throw new ApiError(
+          503,
+          "Gateway authentication is busy. Retry shortly.",
+        );
+      }
+      logger.error({ err: error }, "Gateway rate-limit storage unavailable");
+      throw new ApiError(
+        503,
+        "Gateway authentication is temporarily unavailable",
+      );
+    }
+  });
+  const withAuthenticationCapacity = async <T>(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    operation: () => Promise<T>,
+  ): Promise<T> => {
+    if (config.authRateLimitDisabled) return operation();
+    const credential = extractBearerToken(request);
+    try {
+      return await withMcpGatewayAuthenticationCapacity(
+        operation,
+        verifiedRequests.has(request) && credential
+          ? { pool: "verified", credential }
+          : { pool: "unverified" },
+      );
+    } catch (error) {
+      if (!(error instanceof McpGatewayAuthenticationBusyError)) throw error;
+      reply.header("Cache-Control", "no-store").header("Retry-After", 1);
+      throw new ApiError(503, "Gateway authentication is busy. Retry shortly.");
+    }
+  };
+  const extractRequestCredentials = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
+    const token = extractBearerToken(request);
+    if (!token) return { token: null, profileId: null };
+    const { profileId } = request.params as { profileId: string };
+    const resolved = await withAuthenticationCapacity(request, reply, () =>
+      AgentModel.resolveIdFromIdOrSlug(profileId),
+    );
+    return { token, profileId: resolved };
+  };
+  const authenticate = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    profileId: string,
+    token: string,
+    lookups?: RequestLookups,
+  ) =>
+    withAuthenticationCapacity(request, reply, async () => {
+      const outcome = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+        lookups,
+      );
+      if (!config.authRateLimitDisabled) {
+        if (outcome.result)
+          await rateLimiter.recordSuccess(rateLimitCaller(request));
+        else await rateLimiter.recordDenial(rateLimitCaller(request));
+      }
+      return outcome;
+    });
+
   // GET opens the legacy HTTP+SSE stream for a client that asks for one. Any
   // other GET is answered 405: the gateway offers nothing else on GET, and a
   // Streamable HTTP client reads 405 as "no standalone stream" and stops.
@@ -671,10 +783,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "mcpGatewayGet",
         tags: ["MCP Gateway"],
+        description:
+          "Open an MCP Gateway SSE stream for a client that requests one. Other GET requests return 405 because the gateway does not offer a standalone stream for them.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),
         response: {
+          ...rateLimitResponses,
           405: z.object({
             jsonrpc: z.literal("2.0"),
             error: z.object({
@@ -687,12 +802,18 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             error: z.string(),
             message: z.string(),
           }),
+          403: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+      const { profileId, token } = await extractRequestCredentials(
+        request,
+        reply,
+      );
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
@@ -704,15 +825,18 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         };
       }
 
-      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+      const { result: tokenAuth, reason } = await authenticate(
+        request,
+        reply,
         profileId,
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
-          error: "Unauthorized",
+          error: forbidden ? "Forbidden" : "Unauthorized",
           message: describeGatewayAuthFailure(reason),
         };
       }
@@ -755,6 +879,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     {
       schema: {
         operationId: RouteId.McpGatewayDelete,
+        response: { 204: z.void(), ...rateLimitResponses },
         hide: true,
         params: z.object({
           profileId: UuidOrSlugSchema,
@@ -762,21 +887,29 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+      const { profileId, token } = await extractRequestCredentials(
+        request,
+        reply,
+      );
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
         throw new ApiError(401, "Missing or invalid Authorization header");
       }
 
-      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+      const { result: tokenAuth, reason } = await authenticate(
+        request,
+        reply,
         profileId,
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        throw new ApiError(401, describeGatewayAuthFailure(reason));
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(
+          forbidden ? 403 : 401,
+          describeGatewayAuthFailure(reason),
+        );
       }
 
       const sessionId = readHeader(request, MCP_SESSION_ID_HEADER);
@@ -807,6 +940,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "mcpGatewaySseMessage",
         tags: ["MCP Gateway"],
+        description:
+          "Send a JSON-RPC message for a legacy HTTP+SSE session. The gateway sends the result on the SSE stream opened by GET, not in this response.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),
@@ -815,8 +950,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         }),
         body: z.record(z.string(), z.unknown()),
         response: {
+          ...rateLimitResponses,
           202: z.object({ accepted: z.literal(true) }),
           401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+          403: z.object({
             error: z.string(),
             message: z.string(),
           }),
@@ -828,9 +968,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       },
     },
     async (request, reply) => {
-      const token = extractBearerToken(request);
-      const profileId = await AgentModel.resolveIdFromIdOrSlug(
-        request.params.profileId,
+      const { token, profileId } = await extractRequestCredentials(
+        request,
+        reply,
       );
 
       if (!profileId || !token) {
@@ -843,15 +983,18 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         };
       }
 
-      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+      const { result: tokenAuth, reason } = await authenticate(
+        request,
+        reply,
         profileId,
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
-          error: "Unauthorized",
+          error: forbidden ? "Forbidden" : "Unauthorized",
           message: describeGatewayAuthFailure(reason),
         };
       }
@@ -899,25 +1042,38 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "reportAgentRuntimeStatus",
         tags: ["MCP Gateway"],
+        description:
+          "Update the attention state of a native agent run using its MCP Gateway credential. This does not change the run's lifecycle state.",
         params: z.object({ profileId: UuidOrSlugSchema }),
         body: z.object({
           taskId: z.string().uuid(),
           attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
         }),
-        response: constructResponseSchema(z.object({ updated: z.boolean() })),
+        response: {
+          ...constructResponseSchema(z.object({ updated: z.boolean() })),
+          ...rateLimitResponses,
+        },
       },
     },
     async (request, reply) => {
-      const token = extractBearerToken(request);
-      const profileId = await AgentModel.resolveIdFromIdOrSlug(
-        request.params.profileId,
+      const { token, profileId } = await extractRequestCredentials(
+        request,
+        reply,
       );
       if (!profileId || !token) {
         throw new ApiError(401, "Unauthorized");
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { result: tokenAuth, reason } = await authenticate(
+        request,
+        reply,
+        profileId,
+        token,
+      );
       if (!tokenAuth) {
+        if (reason === "no_gateway_access") {
+          throw new ApiError(403, describeGatewayAuthFailure(reason));
+        }
         throw new ApiError(401, "Unauthorized");
       }
 
@@ -947,7 +1103,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     {
       schema: {
         operationId: "mcpGatewayPost",
+        response: { default: z.unknown(), ...rateLimitResponses },
         tags: ["MCP Gateway"],
+        description:
+          "Send an MCP JSON-RPC request through the gateway for the specified agent profile. Authenticate with a platform-managed bearer token or agent ID.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),
@@ -955,8 +1114,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+      const { profileId, token } = await extractRequestCredentials(
+        request,
+        reply,
+      );
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
@@ -983,19 +1144,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // authentication and every tools/list helper share one caller and agent
       // resolution for this request only.
       const lookups = new RequestLookups();
-      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+      const { result: tokenAuth, reason } = await authenticate(
+        request,
+        reply,
         profileId,
         token,
         lookups,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        // A gateway grant cannot be obtained by signing in again or requesting
+        // broader OAuth scopes. Do not invite either retry on an access denial.
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
           jsonrpc: "2.0",
           error: {
             code: -32000,
-            message: `Unauthorized: ${describeGatewayAuthFailure(reason)}`,
+            message: `${forbidden ? "Forbidden" : "Unauthorized"}: ${describeGatewayAuthFailure(reason)}`,
           },
           id: null,
         };
@@ -1138,17 +1304,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       // Skills extension methods (SEP-2640). Handled at the route because the
-      // SDK has no handler slot for extension methods. Gated on the same
-      // predicate as the capability declaration, so when the surface is off
-      // these fall through to the SDK and get method-not-found — a client that
-      // was shown no capability is never given a half-open surface.
+      // SDK has no handler slot for extension methods.
       // `resources/read` of a `skill://` URI is deliberately *not* here: it is
       // an ordinary SDK request, and its skill branch lives in utils.ts.
       // Requests only: `isSkillMethod` refuses a body without an id, so a
       // notification spelling of these methods falls through to the SDK
       // transport, which answers 202 with no body — a notification must never
       // get a JSON-RPC response.
-      if (skillsSurfaceEnabled() && isSkillMethod(request.body)) {
+      if (isSkillMethod(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         // Nothing downstream of here turns a throw into a JSON-RPC error: this
         // surface is dispatched ahead of the SDK, so an unexpected failure
@@ -1271,8 +1434,18 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
-      const llmSessionId = gatewayLlmSessionId(request);
       const llmToolCallId = gatewayLlmToolCallId(request.body);
+      // Claude Code names the call's tool_use id but not its session; the
+      // proxy recorded which session that call came from.
+      const llmSessionId =
+        gatewayLlmSessionId(request) ??
+        (llmToolCallId
+          ? await llmToolCallSessions.resolve({
+              organizationId: tokenAuth.organizationId,
+              userId: tokenAuth.userId,
+              toolCallId: llmToolCallId,
+            })
+          : undefined);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,

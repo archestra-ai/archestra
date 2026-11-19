@@ -48,6 +48,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     config.orchestrator.kubernetes.kubeconfig = undefined;
     config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
     managerMock.deploymentNamesAdopted = Promise.resolve();
+    config.orchestrator.enabled = true;
 
     user = await makeUser();
     const organization = await makeOrganization();
@@ -465,6 +466,33 @@ spec:
       .where(eq(schema.mcpServersTable.id, installedServer.id));
     expect(serverRow.name).toBe(installedServer.name);
     expect(serverRow.deploymentName).toBeNull();
+  });
+
+  test("with the orchestrator turned off, a rename does not wait on the adopt pass that never ran", async () => {
+    config.orchestrator.enabled = false;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+    const rejected = Promise.reject(new Error("runtime never initialized"));
+    rejected.catch(() => {});
+    managerMock.deploymentNamesAdopted = rejected;
+
+    const catalog = await createCatalog({
+      name: "orchestrator-off",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { name: "orchestrator-off-renamed" },
+    });
+
+    expect(putResponse.statusCode).toBe(200);
+    const [catalogRow] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(catalogRow.name).toBe("orchestrator-off-renamed");
   });
 
   async function createCatalog(payload: Record<string, unknown>): Promise<{

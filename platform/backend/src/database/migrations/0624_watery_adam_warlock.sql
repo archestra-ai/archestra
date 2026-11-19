@@ -1,0 +1,2 @@
+ALTER TABLE "agent_runs" ADD COLUMN "origin_llm_session_id" text;--> statement-breakpoint
+CREATE INDEX "agent_runs_org_origin_llm_session_idx" ON "agent_runs" USING btree ("organization_id","origin_llm_session_id") WHERE "agent_runs"."origin_llm_session_id" IS NOT NULL;

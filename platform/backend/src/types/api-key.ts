@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 

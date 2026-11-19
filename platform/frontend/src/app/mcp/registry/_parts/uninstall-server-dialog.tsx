@@ -18,6 +18,7 @@ import {
   useDeleteMcpServer,
   useMcpServersAssignedAgents,
 } from "@/lib/mcp/mcp-server.query";
+import { desktopRemoveCopy } from "./desktop-mcp-install";
 import { agentOwnerLabel } from "./mcp-server-agent-usage";
 import {
   agentsLosingAccessOnUninstall,
@@ -31,6 +32,13 @@ export interface UninstallServerInstall {
     name: string;
     scope?: "personal" | "team" | "org";
     teamId?: string | null;
+    /** A desktop MCP server is removed from its user's computer. */
+    serverType?: string | null;
+    /**
+     * Whether the install is the viewer's own; a desktop MCP server of
+     * another user is removed from their computer. Unset reads as own.
+     */
+    ownedByViewer?: boolean;
   };
 }
 
@@ -99,11 +107,20 @@ export function UninstallServerDialog({
     ).values(),
   );
   const isBulk = installs.length > 1;
+  // Removing one desktop MCP server stops it on its user's computer: no team
+  // or organization connection is involved, and no installation in progress
+  // is canceled.
+  const computer = !isBulk && server ? desktopComputerOf(server) : undefined;
+  const desktopCopy =
+    server && computer
+      ? desktopRemoveCopy({ name: server.name, mine: computer === "mine" })
+      : null;
+  const isDesktop = desktopCopy !== null;
 
   const handleConfirm = async () => {
     if (!server || isLoadingAgents) return;
 
-    if (isCancelingInstallation && onCancelInstallation) {
+    if (isCancelingInstallation && !isDesktop && onCancelInstallation) {
       onCancelInstallation(server.id);
     }
 
@@ -111,37 +128,46 @@ export function UninstallServerDialog({
       await uninstallMutation.mutateAsync({
         id: install.server.id,
         name: install.server.name,
+        desktop: desktopComputerOf(install.server),
       });
     }
     onUninstalled?.(servers.map(({ id }) => id));
     onClose();
   };
 
-  const title = isCancelingInstallation
-    ? "Cancel Installation"
-    : isBulk
-      ? "Uninstall MCP Servers"
-      : "Uninstall MCP Server";
-  const description = isCancelingInstallation
-    ? `Are you sure you want to cancel the installation of "${server?.name || ""}"?`
-    : isBulk
-      ? `Are you sure you want to uninstall ${installs.length} selected MCP server connections?`
-      : [
-          `Are you sure you want to uninstall "${server?.name || ""}"?`,
-          server ? uninstallConsequence(server, !!seesSharedInstalls) : null,
-        ]
-          .filter(Boolean)
-          .join(" ");
-  const confirmButtonText = isCancelingInstallation
-    ? "Cancel Installation"
-    : isBulk
-      ? "Uninstall selected"
-      : "Uninstall";
-  const confirmingButtonText = isCancelingInstallation
-    ? "Canceling..."
-    : isBulk
-      ? "Uninstalling selected..."
-      : "Uninstalling...";
+  const title =
+    desktopCopy?.title ??
+    (isCancelingInstallation
+      ? "Cancel Installation"
+      : isBulk
+        ? "Uninstall MCP Servers"
+        : "Uninstall MCP Server");
+  const description =
+    desktopCopy?.description ??
+    (isCancelingInstallation
+      ? `Are you sure you want to cancel the installation of "${server?.name || ""}"?`
+      : isBulk
+        ? `Are you sure you want to uninstall ${installs.length} selected MCP server connections?`
+        : [
+            `Are you sure you want to uninstall "${server?.name || ""}"?`,
+            server ? uninstallConsequence(server, !!seesSharedInstalls) : null,
+          ]
+            .filter(Boolean)
+            .join(" "));
+  const confirmButtonText =
+    desktopCopy?.confirm ??
+    (isCancelingInstallation
+      ? "Cancel Installation"
+      : isBulk
+        ? "Uninstall selected"
+        : "Uninstall");
+  const confirmingButtonText =
+    desktopCopy?.confirming ??
+    (isCancelingInstallation
+      ? "Canceling..."
+      : isBulk
+        ? "Uninstalling selected..."
+        : "Uninstalling...");
 
   return (
     <Dialog
@@ -152,7 +178,13 @@ export function UninstallServerDialog({
     >
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="border-b-0">
-          <DialogTitle>{title}</DialogTitle>
+          {/* The desktop title is a full question: on a phone it stays left
+              and clear of the close button. */}
+          <DialogTitle
+            className={isDesktop ? "pr-6 text-left leading-snug" : undefined}
+          >
+            {title}
+          </DialogTitle>
         </DialogHeader>
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
@@ -180,15 +212,20 @@ export function UninstallServerDialog({
             {isLoadingAgents && (
               <InlineNotice variant="neutral">
                 <Loader2 className="animate-spin" />
-                <span>Searching agents using this connection...</span>
+                <span>
+                  {isDesktop
+                    ? "Searching agents that use it..."
+                    : "Searching agents using this connection..."}
+                </span>
               </InlineNotice>
             )}
             {!isCancelingInstallation && agentUsage.isError && (
               <InlineNotice variant="error">
                 <span className="font-medium">Agents could not be loaded</span>
                 <InlineNoticeText>
-                  Agents with tools assigned from this connection may lose
-                  access to them.
+                  {isDesktop
+                    ? "Agents with its tools may lose access to them."
+                    : "Agents with tools assigned from this connection may lose access to them."}
                 </InlineNoticeText>
               </InlineNotice>
             )}
@@ -213,8 +250,11 @@ export function UninstallServerDialog({
                       return owner ? `${agent.name} (${owner})` : agent.name;
                     })
                     .join(", ")}{" "}
-                  {assignedAgents.length === 1 ? "has" : "have"} tools assigned
-                  from this connection and may lose access to them.
+                  {isDesktop
+                    ? assignedAgents.length === 1
+                      ? "uses its tools and loses them."
+                      : "use its tools and lose them."
+                    : `${assignedAgents.length === 1 ? "has" : "have"} tools assigned from this connection and may lose access to them.`}
                 </InlineNoticeText>
               </InlineNotice>
             )}
@@ -237,4 +277,15 @@ export function UninstallServerDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Whose computer a desktop MCP server is removed from; undefined for a server
+ * of another type.
+ */
+function desktopComputerOf(
+  server: UninstallServerInstall["server"],
+): "mine" | "theirs" | undefined {
+  if (server.serverType !== "desktop_mcp") return undefined;
+  return server.ownedByViewer === false ? "theirs" : "mine";
 }

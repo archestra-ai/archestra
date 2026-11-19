@@ -5,14 +5,16 @@ import {
   eq,
   exists,
   getTableColumns,
+  gte,
   ilike,
   inArray,
   isNotNull,
   isNull,
+  lte,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
 import conversationsTable, {
   notDeletedConversation,
 } from "@/database/schemas/conversation";
@@ -21,11 +23,22 @@ import {
   createCursorPaginatedResult,
   decodeCursor,
 } from "@/database/utils/pagination";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import type {
   InsertOpenAppaYell,
+  OpenAppaYellKind,
   OpenAppaYellQuery,
 } from "@/types/openappa-yell";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
+
+/**
+ * The yells a read may reach: the organization's, narrowed to one caller's
+ * (such as `user:<id>`) when `callerId` is set.
+ */
+type YellScope = { organizationId: string; callerId?: string };
+
+/** A yell's creation time at the precision a cursor carries. */
+const CREATED_MS = sql`date_trunc('milliseconds', ${table.createdAt})`;
 
 export default class OpenAppaYellModel {
   static async findByIdForAudit(id: string, organizationId: string) {
@@ -41,7 +54,12 @@ export default class OpenAppaYellModel {
       .values(input)
       .onConflictDoNothing()
       .returning(metadataColumns());
-    if (row) return row;
+    if (row) {
+      // Outside a transaction, so the insert has committed. A retried call
+      // finds its earlier row below and is not counted again.
+      observeOpenappaYell({ kind: row.kind, superyell: row.superyell });
+      return row;
+    }
     const [existing] = await db
       .select(metadataColumns())
       .from(table)
@@ -55,6 +73,61 @@ export default class OpenAppaYellModel {
       );
     if (!existing) throw new Error("Could not record OpenAPPA yell");
     return existing;
+  }
+
+  /**
+   * Records calls the platform let through under the Break the glass
+   * settings. Repeats of the same tool and kind in a session add to one
+   * unresolved yell, so a looping agent does not flood the Guardrails log; once
+   * resolved, the next repeat raises it again as a new yell. `calls` is how
+   * many distinct calls this record stands for; the caller counts a call once.
+   */
+  static async recordWaiver(
+    input: {
+      organizationId: string;
+      callerId: string;
+      sessionId: string;
+      kind: Exclude<OpenAppaYellKind, "agent">;
+      tool: string;
+      message: string;
+      superyell: boolean;
+      calls?: number;
+    },
+    executor: typeof db | Transaction = db,
+  ) {
+    const calls = input.calls ?? 1;
+    await executor
+      .insert(table)
+      .values({
+        organizationId: input.organizationId,
+        callerId: input.callerId,
+        sessionId: input.sessionId,
+        // Not a call id: the key repeats merge under.
+        toolCallId: `${input.kind}:${input.tool}`,
+        message: input.message,
+        withTrajectory: false,
+        kind: input.kind,
+        count: calls,
+        superyell: input.superyell,
+      })
+      .onConflictDoUpdate({
+        target: [
+          table.organizationId,
+          table.callerId,
+          table.sessionId,
+          table.toolCallId,
+        ],
+        // A resolved yell is raised again as a new one: its count and age
+        // start over, so the Guardrails log lists it as new.
+        set: {
+          count: sql`case when ${table.resolvedAt} is null then ${table.count} + ${calls} else ${calls} end`,
+          createdAt: sql`case when ${table.resolvedAt} is null then ${table.createdAt} else now() end`,
+          message: input.message,
+          superyell: input.superyell,
+          resolvedAt: null,
+          resolvedBy: null,
+        },
+      });
   }
 
   static async storeArchive(params: {
@@ -74,7 +147,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async findArchive(params: { id: string; organizationId: string }) {
+  static async findArchive(params: YellScope & { id: string }) {
     const [row] = await db
       .select({ archive: table.archive })
       .from(table)
@@ -82,6 +155,7 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       );
     return row ? normalizeByteaField(row, "archive").archive : null;
@@ -106,7 +180,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async find(params: { id: string; organizationId: string }) {
+  static async find(params: YellScope & { id: string }) {
     const [row] = await db
       .select(metadataColumns())
       .from(table)
@@ -114,12 +188,13 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       );
     return row ?? null;
   }
 
-  static async summary(params: { organizationId: string }) {
+  static async summary(params: YellScope) {
     const [row] = await db
       .select({
         unresolved: count(),
@@ -132,6 +207,7 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
           isNull(table.resolvedAt),
         ),
       );
@@ -142,7 +218,8 @@ export default class OpenAppaYellModel {
   }
 
   static async list(
-    params: OpenAppaYellQuery & { organizationId: string; sessionId?: string },
+    params: OpenAppaYellQuery &
+      YellScope & { sessionId?: string; from?: Date; to?: Date },
   ) {
     const position = decodeCursor(params.cursor);
     const validCursor =
@@ -155,12 +232,15 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
           params.status === "unresolved"
             ? isNull(table.resolvedAt)
             : params.status === "resolved"
               ? isNotNull(table.resolvedAt)
               : undefined,
           params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
+          params.from ? gte(table.createdAt, params.from) : undefined,
+          params.to ? lte(table.createdAt, params.to) : undefined,
           // OpenAPPA's session id is the caller scope, `|`, then the client's
           // own session id, which is the LLM session id.
           params.llmSessionId
@@ -172,12 +252,16 @@ export default class OpenAppaYellModel {
                 `%${params.search.replace(/[\\%_]/g, "\\$&")}%`,
               )
             : undefined,
+          // The cursor carries milliseconds and the column microseconds:
+          // both sides are compared, and the rows ordered, at the cursor's
+          // precision, so a row sharing the last one's millisecond is not
+          // skipped.
           validCursor
-            ? sql`(${table.createdAt}, ${table.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`
+            ? sql`(${CREATED_MS}, ${table.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`
             : undefined,
         ),
       )
-      .orderBy(desc(table.createdAt), desc(table.id))
+      .orderBy(desc(CREATED_MS), desc(table.id))
       .limit(params.limit + 1);
     return createCursorPaginatedResult(rows, params, (row) => ({
       value: row.createdAt.toISOString(),
@@ -245,12 +329,13 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async setResolved(params: {
-    id: string;
-    organizationId: string;
-    userId: string;
-    resolved: boolean;
-  }) {
+  static async setResolved(
+    params: YellScope & {
+      id: string;
+      userId: string;
+      resolved: boolean;
+    },
+  ) {
     const [row] = await db
       .update(table)
       .set({
@@ -261,11 +346,18 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       )
       .returning(metadataColumns());
     return row ?? null;
   }
+}
+
+function callerCondition(scope: YellScope) {
+  return scope.callerId === undefined
+    ? undefined
+    : eq(table.callerId, scope.callerId);
 }
 
 function metadataColumns() {

@@ -24,27 +24,32 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
-  getAgentCatalogImageTag,
   gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
-  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  pinReleaseImage,
   providerSupportsChat,
+  type ReleaseImageDigests,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import {
+  isAnalyticsEnabled,
+  resolveErrorReporting,
+} from "@archestra/shared/error-reporting";
 import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
+import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -75,9 +80,17 @@ export type FileStorageS3Config = {
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+// Tests read .env.example, as CI does (it copies .env.example to .env): a
+// developer's own settings, such as API keys, URLs or a kubeconfig, would
+// make tests behave differently locally than in CI.
+dotenv.config({
+  path: path.resolve(
+    __dirname,
+    process.env.VITEST ? "../../.env.example" : "../../.env",
+  ),
+  quiet: true,
+});
 
-const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
@@ -130,6 +143,27 @@ const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
 
+/**
+ * Parse `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`, the SPIFFE trust domain
+ * agents' SPIFFE IDs live in (`spiffe://<trust domain>/agent/<id>`). Defaults
+ * to the frontend's hostname. A trust domain is lowercase letters, digits,
+ * dots, dashes and underscores (SPIFFE ID standard, section 2.1).
+ * @public — exported for testability
+ */
+export function parseSpiffeTrustDomain(params: {
+  rawValue: string | undefined;
+  frontendBaseUrl: string;
+}): string {
+  const trustDomain =
+    params.rawValue?.trim() || new URL(params.frontendBaseUrl).hostname;
+  if (!/^[a-z0-9._-]+$/.test(trustDomain)) {
+    throw new Error(
+      `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN must be a SPIFFE trust domain: lowercase letters, digits, dots, dashes and underscores (got "${trustDomain}")`,
+    );
+  }
+  return trustDomain;
+}
+
 /** @public — validates an operator-provided webhook base URL. */
 export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
   const trimmed = rawValue?.trim();
@@ -153,6 +187,13 @@ const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
 /**
+ * Archestra's Sentry project for backend errors. A DSN only allows sending
+ * events to the project, so it is public by design.
+ */
+const DEFAULT_SENTRY_BACKEND_DSN =
+  "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232";
+
+/**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
  * @public — exported for testability
@@ -167,6 +208,24 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
  */
 export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
   buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
+
+/**
+ * The audit log's own OTLP log exporter, or null when
+ * ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT is unset and audit records share the
+ * backend's log pipeline. A dedicated collector gets only its own credentials:
+ * the shared OTLP credentials belong to a different destination.
+ * @public — exported for testability
+ */
+export const getAuditLogOtelExporter = (
+  envValue: string | undefined = process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT,
+): Pick<OTLPExporterNodeConfigBase, "url" | "headers"> | null => {
+  const endpoint = envValue?.trim();
+  if (!endpoint) return null;
+  return {
+    url: getOtelExporterOtlpLogEndpoint(endpoint),
+    headers: buildOtlpAuthHeaders("ARCHESTRA_AUDIT_LOG_OTEL_AUTH"),
+  };
+};
 
 const buildOtlpAuthHeaders = (
   envPrefix: string,
@@ -730,14 +789,9 @@ export const parseLogFormat = (
 export const parseLogContentMode = (
   envValue?: string | undefined,
 ): LogContentMode => {
-  const value = envValue?.toLowerCase().trim();
-  if (!value) return "full";
-  const parsed = LogContentModeSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
-  logger.warn(
-    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
-  );
-  return "metadata_only";
+  return parseApplicationLogContentMode(envValue, () => {
+    logger.warn("Invalid ARCHESTRA_LOGS_CONTENT_MODE, storing metadata only");
+  });
 };
 
 /** @public — exported for testability */
@@ -770,6 +824,17 @@ function parsePoolSize(params: {
 
   return parsed;
 }
+
+/** @public — exported for testability */
+export const isChatMaxOutputTokensConfigured = (envValue?: string): boolean => {
+  if (!envValue?.trim()) return false;
+  const parsed = Number(envValue.trim());
+  return (
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_CHAT_MAX_OUTPUT_TOKENS
+  );
+};
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -805,11 +870,7 @@ const parseOutputTokenCeiling = (params: {
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
   // ("1.5") are rejected rather than silently truncated to a tiny cap.
   const parsed = Number(value);
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 1 ||
-    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
-  ) {
+  if (!isChatMaxOutputTokensConfigured(value)) {
     logger.warn(
       `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
@@ -1214,7 +1275,6 @@ function getMcpIdleHibernationConfig() {
 
   return {
     ...parsed,
-    betaEnabled: process.env.ARCHESTRA_BETA === "true",
     lastUsedRefreshIntervalMs: acceleratedE2eTiming ? 1_000 : 30_000,
     demandHeartbeatIntervalMs: acceleratedE2eTiming ? 500 : 15_000,
   };
@@ -1384,7 +1444,16 @@ export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> =>
  *   undefined / ""  → false
  *   "true"          → true
  *   "false"         → false
- *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ *   anything else   → the trimmed IP/CIDR list, with `loopback` added
+ *
+ * Why `loopback` joins any list: the bundled frontend runs in the backend's
+ * container and its rewrites reach the API over 127.0.0.1, passing the load
+ * balancer's X-Forwarded-For on unchanged. Without trusting that hop, every
+ * request from the web UI resolves to 127.0.0.1, so audit records and per-IP
+ * rate limits never see the client the operator configured the list for.
+ * Only processes inside the pod connect from loopback, and trust decisions
+ * that must not honor forwarded headers read the raw socket peer
+ * (`isLoopbackRequest`), not `request.ip`.
  * @public — exported for testability
  */
 export const parseTrustProxy = (
@@ -1393,11 +1462,13 @@ export const parseTrustProxy = (
   const trimmed = envValue?.trim();
   if (!trimmed || trimmed === "false") return false;
   if (trimmed === "true") return true;
-  return trimmed
+  const proxies = trimmed
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean)
-    .join(",");
+    .filter(Boolean);
+  // proxy-addr's name for 127.0.0.0/8 and ::1.
+  if (!proxies.includes("loopback")) proxies.unshift("loopback");
+  return proxies.join(",");
 };
 
 /** @public — exported for testability */
@@ -1582,19 +1653,20 @@ export function parseCommaSeparatedList(value: string): string[] {
 
 /** @public — exported for testability */
 export const getAnalyticsConfig = () => {
-  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
-  // Evaluated at call time (not the module-level `isProduction`) so tests can
-  // exercise both environments.
-  const isProductionEnv = ["production", "prod"].includes(
-    process.env.NODE_ENV?.toLowerCase() ?? "",
-  );
   return {
-    // Analytics (PostHog product analytics, instance heartbeats, and backend
-    // error tracking) defaults to on only in production builds. Local dev and
-    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
-    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
-    // wins in both directions ("disabled" → off, any other value → on).
-    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    // Analytics (PostHog product analytics, instance heartbeats, and error
+    // reports to Archestra's Sentry) defaults to on only in production builds
+    // without an activated enterprise license. Local dev and test runs (bare
+    // `pnpm dev`, vitest — where NODE_ENV isn't "production") and enterprise
+    // deployments stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // which always wins in both directions ("disabled" → off, any other value
+    // → on). Evaluated at call time so tests can exercise both environments.
+    enabled: isAnalyticsEnabled({
+      analytics: process.env.ARCHESTRA_ANALYTICS,
+      nodeEnv: process.env.NODE_ENV,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+    }),
     posthog: {
       key:
         process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
@@ -1606,9 +1678,62 @@ export const getAnalyticsConfig = () => {
   };
 };
 
+/**
+ * Backend error reporting. Without ARCHESTRA_SENTRY_BACKEND_DSN, errors (and
+ * only errors) go to Archestra's Sentry project while analytics is on. An
+ * explicit DSN reports to that project with full diagnostics, independent of
+ * ARCHESTRA_ANALYTICS.
+ * @public — exported for testability
+ */
+export const getSentryConfig = () =>
+  resolveErrorReporting({
+    dsnOverride: process.env.ARCHESTRA_SENTRY_BACKEND_DSN,
+    defaultDsn: DEFAULT_SENTRY_BACKEND_DSN,
+    environmentOverride: process.env.ARCHESTRA_SENTRY_ENVIRONMENT,
+    nodeEnv: process.env.NODE_ENV,
+    analyticsEnabled: getAnalyticsConfig().enabled,
+  });
+
+/**
+ * Parse `ARCHESTRA_RELEASE_IMAGE_DIGESTS`, the digests the release pipeline
+ * writes into the Helm chart: `{"version": "<platform version>", "images":
+ * {"<image name>": "sha256:<hex>"}}`. Digests recorded for another version
+ * (a chart run with a different platform image) are ignored, so the default
+ * images fall back to their version tags. Unset, as in development builds,
+ * there is nothing to pin. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseReleaseImageDigests(params: {
+  rawValue: string | undefined;
+  appVersion: string;
+}): ReleaseImageDigests | null {
+  const raw = params.rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_RELEASE_IMAGE_DIGESTS must be JSON");
+  }
+  if (!isReleaseImageDigests(parsed)) {
+    throw new Error(
+      'ARCHESTRA_RELEASE_IMAGE_DIGESTS must look like {"version": "1.2.3", "images": {"mcp-server-base": "sha256:<64 hex>"}}',
+    );
+  }
+  return parsed.version === params.appVersion ? parsed : null;
+}
+
+const releaseImageDigests = parseReleaseImageDigests({
+  rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
+  appVersion,
+});
+
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
+  pinReleaseImage({
+    image: `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`,
+    digests: releaseImageDigests,
+  });
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -1679,10 +1804,10 @@ const MCP_IMAGE_PREPULL_DEFAULTS = {
  * the container registry.
  *
  * `enabled` is a KILL SWITCH, not a feature gate — pre-pulling follows idle
- * hibernation (beta flag + enterprise licence + organization toggle), and this
- * only lets an operator turn the extra per-node pod off while keeping
- * hibernation on. Hence default-on and an explicit `"false"` to disable, the
- * mirror of the hibernation flag's default-off shape.
+ * hibernation (operator kill switch + enterprise licence + organization
+ * toggle), and this only lets an operator turn the extra per-node pod off
+ * while keeping hibernation on. Hence default-on and an explicit `"false"` to
+ * disable.
  *
  * `priorityClassName` is unset by default (the namespace default applies).
  * Point it at a low or negative-priority class so warming a cache can never
@@ -1786,6 +1911,32 @@ export const parseHelmReleaseName = (
   return releaseName;
 };
 // SPDX-SnippetEnd
+
+/**
+ * Parses an optional workload namespace setting such as
+ * ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid Kubernetes
+ * namespace name (a DNS-1123 label) is ignored with a warning, so workloads
+ * keep their namespace instead of failing on every launch.
+ *
+ * @public — exported for testability
+ */
+export const parseOptionalNamespace = (
+  envValue: string | undefined,
+  envName: string,
+): string | undefined => {
+  const namespace = envValue?.trim();
+  if (!namespace) return undefined;
+  if (
+    namespace.length > 63 ||
+    !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
+  ) {
+    logger.warn(
+      `Ignoring ${envName} "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+    );
+    return undefined;
+  }
+  return namespace;
+};
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -2046,12 +2197,14 @@ export const isCodeRuntimeEnabled = ({
   codeRuntimeEnabledEnv,
   kubeconfig,
   loadKubeconfigFromCurrentCluster,
+  orchestratorEnabledEnv,
 }: {
   runnerHost: string | undefined;
   runnerHostEnv: string | undefined;
   codeRuntimeEnabledEnv: string | undefined;
   kubeconfig: string | undefined;
   loadKubeconfigFromCurrentCluster: string | undefined;
+  orchestratorEnabledEnv?: string | undefined;
 }): boolean => {
   if (codeRuntimeEnabledEnv === "false") return false;
   if (runnerHost !== undefined) return true;
@@ -2062,28 +2215,11 @@ export const isCodeRuntimeEnabled = ({
   const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
   if (runnerHostRejected) return false;
   const k8sConfigured =
-    loadKubeconfigFromCurrentCluster === "true" ||
-    (kubeconfig?.trim().length ?? 0) > 0;
+    orchestratorEnabledEnv !== "false" &&
+    (loadKubeconfigFromCurrentCluster === "true" ||
+      (kubeconfig?.trim().length ?? 0) > 0);
   return codeRuntimeEnabledEnv === "true" && k8sConfigured;
 };
-
-/**
- * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
- * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
- * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
- * this helper while a per-feature flag keeps its own opt-out. Backs *product*
- * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
- * Azure/Vertex Entra).
- *
- * @public — the shared gate for a product feature that ships off by default; also exported for testability
- */
-export function betaFeatureEnabled(envValue: string | undefined): boolean {
-  if (envValue === undefined || envValue === "") {
-    return process.env.ARCHESTRA_BETA === "true";
-  }
-  return envValue === "true";
-}
 
 const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
@@ -2127,7 +2263,17 @@ export function parseOpenAppaConfig({
   reviewSummaryProvider,
   reviewSummaryModel,
   authSecret,
+  humanApprovalMode,
+  softBlockMode,
+  policyCheckName,
+  selfService,
+  selfServiceAutoMerge,
 }: {
+  humanApprovalMode?: string;
+  softBlockMode?: string;
+  policyCheckName?: string;
+  selfService?: string;
+  selfServiceAutoMerge?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2159,12 +2305,50 @@ export function parseOpenAppaConfig({
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
+  // Release 1.4 sets these two Break the glass settings only here. While one
+  // is set it overrides the stored setting, so a cluster upgraded from 1.4
+  // keeps the behaviour it was configured for.
+  const breakTheGlassOverrides = {
+    ...optionalChoice(
+      "humanApprovalMode",
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+      humanApprovalMode,
+      ["block", "unattended", "everywhere"] as const,
+    ),
+    ...optionalChoice(
+      "unapprovableBlockMode",
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+      softBlockMode,
+      ["refuse", "allow"] as const,
+    ),
+  };
   const reviewSummary = parseOpenAppaReviewSummary({
     provider: reviewSummaryProvider,
     model: reviewSummaryModel,
   });
+  // Whether an MCP server's editors change its own Guardrails rules through
+  // Git sync. Release 1.4 sets it only here; from 1.5 on, while it is set it
+  // overrides the setting saved with the Git sync source, so a cluster
+  // upgraded from 1.4 keeps the behaviour it was configured for.
+  const selfServiceOverride = optionalChoice(
+    "selfService",
+    OPENAPPA_SELF_SERVICE_VARIABLE,
+    selfService,
+    ["enabled", "disabled"] as const,
+  );
+  // Whether the GitHub App merges a self-served rules pull request once its
+  // policy check passes. While set, it overrides the saved setting.
+  const selfServiceAutoMergeOverride = optionalChoice(
+    "selfServiceAutoMerge",
+    OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+    selfServiceAutoMerge,
+    ["enabled", "disabled"] as const,
+  );
   return {
     enabled: true,
+    policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
+    ...selfServiceOverride,
+    ...selfServiceAutoMergeOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2175,7 +2359,35 @@ export function parseOpenAppaConfig({
     // Omitted (not `undefined`) when disabled so exact-shape consumers and
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
+    ...(Object.keys(breakTheGlassOverrides).length > 0
+      ? { breakTheGlassOverrides }
+      : {}),
   };
+}
+
+/** The variable that turns self-service Guardrails on or off for the deployment. */
+export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
+
+/** The variable that turns auto-merge of self-served pull requests on or off. */
+export const OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE";
+
+/** An unset or empty variable sets nothing; any other value must be a choice. */
+function optionalChoice<
+  K extends string,
+  const T extends readonly [string, ...string[]],
+>(
+  key: K,
+  name: string,
+  value: string | undefined,
+  choices: T,
+): { [P in K]?: T[number] } {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed === "") return {};
+  if (!choices.includes(trimmed)) {
+    throw new Error(`${name} must be one of: ${choices.join(", ")}`);
+  }
+  return { [key]: trimmed } as { [P in K]?: T[number] };
 }
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
@@ -2205,6 +2417,22 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  * from the organization's default provider. Validation errors name variables
  * only, never credential values.
  */
+/**
+ * The name of the check Archestra posts on the policy repository's pull
+ * requests, and of the branch ruleset that requires it. Carries no product
+ * name by default, so a white-labeled deployment shows its users none.
+ * @public — exported for testability
+ */
+export function parseOpenAppaPolicyCheckName(value?: string): string {
+  const name = value?.trim() ?? "";
+  if (name === "") return "Check OpenAPPA Guardrails";
+  if (name.length > 100)
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+  return name;
+}
+
 function parseOpenAppaReviewSummary({
   provider,
   model,
@@ -2256,6 +2484,7 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
   kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
   loadKubeconfigFromCurrentCluster:
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+  orchestratorEnabledEnv: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED,
 });
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
 // runnerHost is the optional process-default/BYO engine — unset in the
@@ -2294,6 +2523,11 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
+  softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
+  policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
+  selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
+  selfServiceAutoMerge: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -2366,6 +2600,12 @@ const config = {
   },
   openappa,
   frontendBaseUrl,
+  agentIdentity: {
+    spiffeTrustDomain: parseSpiffeTrustDomain({
+      rawValue: process.env.ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN,
+      frontendBaseUrl,
+    }),
+  },
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
@@ -2469,13 +2709,34 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
       0,
     ),
+  },
+  mcpBridge: {
     /**
-     * Both directions of the draft MCP Skills extension: publishing local
-     * Skills through gateways and projecting external Skills from installed
-     * servers. Deployment-global; follows the ARCHESTRA_BETA master switch,
-     * with no flag of its own.
+     * Longest time (ms) a tunnel client's poll is held open while its queue is
+     * empty. Keep it below the timeout of the load balancer in front of the
+     * API, or the load balancer cuts every idle poll.
      */
-    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
+    pollMaxWaitMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS,
+      8000,
+    ),
+    /**
+     * Whether the MCP bridge on a user's computer replaces itself with the
+     * program this deployment serves. Off: the user runs `archestra update`.
+     */
+    autoUpdateEnabled:
+      process.env.ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED !== "false",
+  },
+  archestraCli: {
+    /**
+     * Folder with the `archestra` programs the Device tab offers for
+     * download, one file per target named `archestra-<target>` (for example
+     * `archestra-darwin-arm64`, or `archestra-windows-x86_64.exe` on Windows),
+     * and `manifest.json` with their version. The default is where the
+     * platform image puts them; a deployment that runs outside the image (a
+     * dev stack) has no such folder and offers no download.
+     */
+    downloadDir: process.env.ARCHESTRA_CLI_DIR?.trim() || "/app/archestra-cli",
   },
   mcpServer: {
     /**
@@ -2507,6 +2768,16 @@ const config = {
    * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
    */
   agentRuntime: {
+    /**
+     * Namespace for Agent Runtime pods whose Agent's Environment sets none,
+     * so runs can live apart from MCP servers. An Environment's own namespace
+     * still wins; unset falls back to the organization's default Environment
+     * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+    ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
@@ -2524,17 +2795,31 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
     /**
      * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
-     * them can move the registry and pin the tag; the tag otherwise follows
-     * the platform version.
+     * them can move the registry and pin the tag; the tag otherwise is the
+     * platform version, pinned to the digest its release shipped with.
      */
-    catalogImages: getAgentCatalogImages({
-      registry:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
-        AGENT_CATALOG_IMAGE_REGISTRY,
-      tag:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
-        getAgentCatalogImageTag(appVersion),
-    }),
+    catalogImages: Object.fromEntries(
+      Object.entries(
+        getAgentCatalogImages({
+          registry:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+            AGENT_CATALOG_IMAGE_REGISTRY,
+          tag:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() || appVersion,
+        }),
+      ).map(([id, image]) => [
+        id,
+        pinReleaseImage({ image, digests: releaseImageDigests }),
+      ]),
+    ) as ReturnType<typeof getAgentCatalogImages>,
+    /**
+     * Pre-pull the whole catalog onto every runtime node at startup and on
+     * each platform version, so a cold-started Agent does not wait on a
+     * multi-GB pull. Off in local development (Tilt), where it would pull
+     * every image for every release onto a laptop.
+     */
+    imagePrefetchEnabled:
+      process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED !== "false",
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
@@ -2595,6 +2880,28 @@ const config = {
       {},
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
     ),
+    /**
+     * Node pool for privileged Agent Runtime pods only, in the same key=value
+     * form as `nodeSelector` (each pair also becomes a NoSchedule
+     * toleration). Docker-in-Docker runs have node-level access, so a
+     * dedicated tainted pool keeps them away from unprivileged runs and other
+     * workloads. Empty (the default) places privileged runs with `nodeSelector`.
+     */
+    privilegedNodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR",
+    ),
+    /**
+     * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
+     * GKE Sandbox node pool, so a run's processes do not share the node's
+     * kernel. Privileged runtimes never receive it: gVisor cannot host a
+     * privileged container, and their nested Docker needs one. Unset runs
+     * with the cluster's default runtime.
+     */
+    runtimeClassName:
+      process.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME?.trim() ||
+      undefined,
     /**
      * How long a launched run may stay Pending before it is declared failed.
      * Covers node scale-up of a dedicated (scale-to-zero) Agent Runtime pool plus a
@@ -2724,6 +3031,10 @@ const config = {
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
+    iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    entraAuthEnabled:
+      process.env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true",
+    awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
   // is a per-provider config map iterated as provider descriptors).
@@ -2736,6 +3047,17 @@ const config = {
     // billing-mode override. See resolveInteractionBillingMode.
     subscriptionAutodetect:
       process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
+  },
+  // The automatic keys of keyless providers (Vertex AI, Entra ID, IAM). Kept
+  // out of `llm` for the same reason as `llmCost`.
+  llmSystemKeys: {
+    // On (default): this deployment deletes a provider's system key once the
+    // provider is no longer enabled in its environment. Off: it never deletes
+    // one. For deployments sharing a database, where a provider enabled in
+    // only one of them would otherwise lose its key, virtual key mappings and
+    // model pool members whenever another one starts.
+    autoDeleteEnabled:
+      process.env.ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED !== "false",
   },
   llm: {
     openai: {
@@ -3167,6 +3489,11 @@ const config = {
     ),
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    // Nova high cannot send maxTokens. Distinguish the automatic default from
+    // an operator's explicit cap without adding another configuration option.
+    maxOutputTokensExplicitlyConfigured: isChatMaxOutputTokensConfigured(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),
@@ -3210,6 +3537,14 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
+    /**
+     * `ARCHESTRA_ORCHESTRATOR_ENABLED=false` turns the Kubernetes orchestrator
+     * off: no kubeconfig is loaded (not even the in-cluster service account)
+     * and nothing in the cluster is created, changed or deleted. For an
+     * install that shares its database with another install that owns the
+     * workloads.
+     */
+    enabled: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED !== "false",
     mcpServerBaseImage,
     mcpServerResources,
     /**
@@ -3243,12 +3578,9 @@ const config = {
      * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
      * MCP server must sit unused before it is scaled to zero (default 30 min,
      * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
-     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
-     * the whole feature ships behind — off by default, a blank value falling
-     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-     * Whether hibernation runs at all is decided together with the enterprise
-     * licence and the organization's own toggle — see
-     * `k8s/mcp-server-runtime/hibernation.ee`.
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`. Whether hibernation runs at all is
+     * decided together with the enterprise licence and the organization's own
+     * toggle — see `k8s/mcp-server-runtime/hibernation.ee`.
      */
     mcpIdleHibernation: getMcpIdleHibernationConfig(),
     /**
@@ -3296,6 +3628,12 @@ const config = {
       // editor can offer a namespace dropdown instead of free text.
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
+      // Namespaces workloads ran in before a namespace change (Helm
+      // rbac.retiredNamespaces). The platform removes what it left there and
+      // lets Agent Runtime sessions finish, then logs that it is done.
+      retiredNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES ?? "",
       ),
     },
   },
@@ -3389,6 +3727,18 @@ const config = {
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
+    /**
+     * Namespace for the code sandbox's Dagger engines, apart from MCP
+     * servers. Engines run privileged, and Pod Security is per namespace, so
+     * sharing one forces the MCP namespace to allow `privileged`. When set,
+     * every engine runs here, whatever its Environment's namespace; each
+     * Environment still gets its own engine and egress policy. Unset keeps
+     * engines in their Environment's namespace (or the orchestrator's).
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE",
+    ),
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
@@ -3568,10 +3918,7 @@ const config = {
       ),
     },
     sentry: {
-      enabled: sentryDsn !== "",
-      dsn: sentryDsn,
-      environment:
-        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+      ...getSentryConfig(),
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
         0.1,
@@ -3590,13 +3937,6 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
-    // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Model Router from resolving a model name to a pool. Off
-    // by default; a blank value falls back to the ARCHESTRA_BETA master switch
-    // (see betaFeatureEnabled).
-    modelPoolsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
-    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3617,8 +3957,6 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
@@ -3636,15 +3974,11 @@ const config = {
       undefined,
     // BETA gate for the M-Files connector: hides the connector type in the
     // frontend, rejects creating connectors of the type, and disables the VAF
-    // Add On distribution endpoints. Off by default; a blank value falls back
-    // to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-    mfilesConnectorEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED,
-    ),
+    // Add On distribution endpoints. Off unless set to "true".
+    mfilesConnectorEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED === "true",
     // Gate for the M-Files Application Account (OAuth client-credentials)
-    // auth method. Deliberately NOT wired through betaFeatureEnabled: the
-    // method stays hidden until this flag is set explicitly, even on
-    // deployments running with the ARCHESTRA_BETA master switch on.
+    // auth method. The method stays hidden until this flag is set explicitly.
     // Intentionally undocumented while the method is being validated.
     mfilesOauthEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
@@ -3659,7 +3993,10 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+        pinReleaseImage({
+          image: `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+          digests: releaseImageDigests,
+        }),
       p4Binary: {
         x64: {
           url:
@@ -3893,19 +4230,6 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
     /**
-     * Development override for where the Archestra VAF Add On install script
-     * gets the add-on from. Set to a git ref of archestra-ai/archestra (a
-     * pushed commit SHA, branch, or tag) to have the script compile the
-     * add-on from that source instead of downloading a release package, or
-     * to the special value `local` to use this backend checkout's HEAD
-     * commit. Unset (the default, and the right value for production), the
-     * script downloads the package of the release matching this platform
-     * version, falling back to the latest release.
-     */
-    mfilesVafAddOnSourceRef:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
-      null,
-    /**
      * Directory holding the VAF Add On package compiled into the platform
      * image (a versioned `archestra-m-files-vaf-add-on-<version>.mfappx`
      * plus a stable-named copy — see the vaf-add-on-builder stage in
@@ -3913,21 +4237,11 @@ const config = {
      * connector form's download from it, with no GitHub dependency. The
      * default matches where the image puts it; deployments running outside
      * the image (dev stacks) simply have no such directory and fall back to
-     * the source-ref override or the newest add-on release.
+     * the newest add-on release.
      */
     mfilesVafAddOnPackageDir:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR?.trim() ||
       "/app/mfiles-vaf-add-on",
-    /**
-     * GitHub token used to download the source ref's CI-built add-on package
-     * (GitHub requires authentication for Actions artifact downloads even on
-     * public repositories). Only read when the source-ref override above is
-     * set; without it the install script compiles the add-on from source
-     * instead. Never sent to clients — the backend proxies the package.
-     */
-    mfilesVafAddOnGithubToken:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN?.trim() ||
-      null,
     // A document still `pending`/`processing` this long after its last touch has
     // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
     // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
@@ -4038,12 +4352,6 @@ const config = {
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   /**
-   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
-   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
-   * the new connection page the default Connect destination — can key off it.
-   */
-  beta: process.env.ARCHESTRA_BETA === "true",
-  /**
    * Internal UI feedback overlay for the team's own deployments: pin a comment
    * on an element and post it, with a screenshot and an optional screen clip,
    * to a Slack channel. Slack is the only storage. It posts as a chatops
@@ -4102,6 +4410,10 @@ const config = {
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    otelExporter: getAuditLogOtelExporter(),
+    // Adds the actor's email and display name to each exported record.
+    otelIncludeActorIdentity:
+      process.env.ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY === "true",
     // Retention is enterprise-licensed; the boot-time assertion in
     // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(
@@ -4138,6 +4450,25 @@ export const shouldRunWorker =
 export default config;
 
 // ===== Internal helpers =====
+
+function isReleaseImageDigests(value: unknown): value is ReleaseImageDigests {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const { version, images, ...rest } = value as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || typeof version !== "string" || !version) {
+    return false;
+  }
+  if (typeof images !== "object" || images === null || Array.isArray(images)) {
+    return false;
+  }
+  return Object.entries(images).every(
+    ([name, digest]) =>
+      /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
+      typeof digest === "string" &&
+      /^sha256:[0-9a-f]{64}$/.test(digest),
+  );
+}
 
 /**
  * Get the environment variable API key for a provider.

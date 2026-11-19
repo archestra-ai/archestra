@@ -2,7 +2,7 @@
 title: Amazon Bedrock
 description: Connect Amazon Bedrock with an API key, AWS access keys, or the IAM identity of your Archestra deployment.
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,7 +21,7 @@ Use every model in your Amazon Bedrock account through Archestra. Connect with a
 
 The key appears in the provider table, and available models appear under **Models**. For a private endpoint, set **Base URL** under **Advanced**. Ensure the selected region matches that endpoint.
 
-Proxy clients use `https://<archestra-host>/v1/bedrock`. The proxy supports Bedrock Converse and InvokeModel requests. Through Model Router, use `bedrock:<model-id>`.
+Proxy clients use `https://<archestra-host>/v1/bedrock`. The proxy supports Bedrock Converse and InvokeModel requests. Through Unified Model API, use `bedrock:<model-id>`.
 
 ### IAM Authentication Setup (IRSA)
 
@@ -94,12 +94,22 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 
 Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS) to a comma-separated list such as `anthropic,amazon` to limit discovered model vendors. [`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS) limits inference-region prefixes such as `us,global`. Empty values allow all.
 
+## Structured Output
+
+Get JSON that matches your schema from a Bedrock model through the OpenAI-compatible endpoints. Send `response_format` with `type: "json_schema"` to `/v1/bedrock/openai/chat/completions` or the [Unified Model API](/docs/llm-proxy/unified-model). Archestra passes the schema to Bedrock as a native [structured output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) constraint.
+
+What to know:
+
+- Bedrock enforces a schema only on models that support structured output. For other models, Archestra sends the request without the schema, and the answer is not constrained.
+- Bedrock has no JSON mode. Archestra accepts `type: "json_object"` and sends the request without a constraint, so ask for JSON in the prompt.
+- Bedrock returns a 400 error for a schema it cannot use. The AWS page lists the supported JSON Schema features.
+
 ## Prompt Caching
 
 The native Converse and ConverseStream endpoints forward caller-supplied `cachePoint` blocks in system messages, message content, and tool definitions. Cache reads and writes reported by Bedrock are recorded.
 
 Archestra does not insert checkpoints into native proxy requests. Use a model and region that support [Bedrock prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html); checkpoints do not guarantee cache hits.
 
-Through the [Model Router](/docs/llm-proxy/model-router), use `cache_control: { "type": "ephemeral" }` on supported OpenAI-shaped content blocks, messages, or function tool definitions. The router converts these explicit boundaries to Bedrock `cachePoint` blocks for Chat Completions and Responses requests; it does not create checkpoints automatically.
+Through the [Unified Model API](/docs/llm-proxy/unified-model), use `cache_control: { "type": "ephemeral" }` on supported OpenAI-shaped content blocks, messages, or function tool definitions. The router converts these explicit boundaries to Bedrock `cachePoint` blocks for Chat Completions and Responses requests; it does not create checkpoints automatically.
 
 Top-level `cache_control` is not a Bedrock checkpoint. The router rejects it, incompatible provider cache options, and conflicting outer and inner function-tool cache markers with a 400 error.

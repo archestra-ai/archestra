@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "connection_page_hidden" boolean DEFAULT false NOT NULL;

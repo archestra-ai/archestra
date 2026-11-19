@@ -43,6 +43,7 @@ import {
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { AgentRunActorKind } from "@/types";
 
 const RUNTIME_BINDING_ENV = "ARCHESTRA_AGENT_RUNTIME_BINDING";
@@ -72,7 +73,7 @@ const native = vi.hoisted(() => ({
   })),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 describe("OpenAPPA sessions on the MCP gateway", () => {
   let app: FastifyInstance;

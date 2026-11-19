@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
+} from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { EnvironmentModel, SkillModel } from "@/models";
 import {
@@ -17,6 +21,7 @@ import type { Agent } from "@/types";
 import {
   buildSkillCatalogPrompt,
   listAccessibleCatalogSkills,
+  SKILL_CATALOG_CHAR_BUDGET,
 } from "./skill-catalog-prompt";
 
 /**
@@ -62,6 +67,96 @@ describe("buildSkillCatalogPrompt (sandbox unavailable)", () => {
       agentId: agent.id,
     });
     expect(prompt).toMatchSnapshot();
+  });
+
+  describe("prompt budget", () => {
+    const listedNames = (prompt: string | null) =>
+      [...(prompt ?? "").matchAll(/<skill name="([^"]+)"/g)].map(
+        ([, name]) => name,
+      );
+
+    async function seedCatalog(descriptionLength: number) {
+      const skill = await seedSkill(organizationId);
+      if (!skill) throw new Error("skill seed failed");
+      return [
+        { ...skill, name: "alpha", description: "a".repeat(descriptionLength) },
+        { ...skill, name: "beta", description: "short description" },
+      ];
+    }
+
+    const render = (
+      catalogSkills: Awaited<ReturnType<typeof seedCatalog>>,
+      canSearchCatalog: boolean,
+    ) =>
+      buildSkillCatalogPrompt({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        catalogSkills,
+        promptBudget: { canSearchCatalog },
+      });
+
+    test("a catalog at the budget renders as it does without one", async () => {
+      const overhead =
+        '<skill name="alpha"></skill>\n<skill name="beta">short description</skill>'
+          .length;
+      const catalogSkills = await seedCatalog(
+        SKILL_CATALOG_CHAR_BUDGET - overhead,
+      );
+      expect(await render(catalogSkills, true)).toEqual(
+        await buildSkillCatalogPrompt({
+          organizationId,
+          userId,
+          agentId: agent.id,
+          catalogSkills,
+        }),
+      );
+      expect(await render(catalogSkills, true)).toContain("short description");
+    });
+
+    test("one character over the budget keeps every name and drops every description", async () => {
+      const overhead =
+        '<skill name="alpha"></skill>\n<skill name="beta">short description</skill>'
+          .length;
+      const prompt = await render(
+        await seedCatalog(SKILL_CATALOG_CHAR_BUDGET - overhead + 1),
+        true,
+      );
+      expect(listedNames(prompt)).toEqual(["alpha", "beta"]);
+      expect(prompt).toContain('<skill name="beta"/>');
+      expect(prompt).not.toContain("short description");
+      expect(prompt).not.toContain("aaaa");
+    });
+
+    test("the over-budget block is deterministic and depends on whether the catalog can be searched", async () => {
+      const catalogSkills = await seedCatalog(SKILL_CATALOG_CHAR_BUDGET + 1);
+      const searchable = await render(catalogSkills, true);
+      expect(await render(catalogSkills, true)).toBe(searchable);
+      const listSkills = archestraMcpBranding.getToolName(
+        TOOL_LIST_SKILLS_SHORT_NAME,
+      );
+      expect(searchable).toContain(listSkills);
+      expect(await render(catalogSkills, false)).not.toContain(listSkills);
+    });
+
+    test("an agent-designated skill keeps its agent attribute without a description", async () => {
+      const [alpha, beta] = await seedCatalog(SKILL_CATALOG_CHAR_BUDGET + 1);
+      const prompt = await render(
+        [alpha, { ...beta, agentName: "reviewer" }],
+        true,
+      );
+      expect(prompt).toContain('<skill name="beta" agent="reviewer"/>');
+    });
+
+    test("without a prompt budget a large catalog keeps its descriptions", async () => {
+      const prompt = await buildSkillCatalogPrompt({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        catalogSkills: await seedCatalog(SKILL_CATALOG_CHAR_BUDGET + 1),
+      });
+      expect(prompt).toContain("short description");
+    });
   });
 
   test("metadata catalog reads retain visibility and prompt output while runtime reads keep instruction bodies", async () => {

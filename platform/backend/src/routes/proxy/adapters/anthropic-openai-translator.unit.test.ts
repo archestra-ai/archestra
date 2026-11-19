@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
-import { openaiToAnthropic } from "./anthropic-openai-translator";
+import {
+  mapStopReason,
+  openaiToAnthropic,
+} from "./anthropic-openai-translator";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 
@@ -174,5 +177,39 @@ describe("openaiToAnthropic — multimodal user content", () => {
         content: "plain result",
       },
     ]);
+  });
+});
+
+test("rejects provider file references instead of dropping them on Anthropic fallback", () => {
+  expect(() =>
+    openaiToAnthropic({
+      model: "pool",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read this" },
+            { type: "file", file: { file_id: "file-source-provider" } },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof openaiToAnthropic>[0]),
+  ).toThrow("inline file data");
+});
+
+describe("mapStopReason", () => {
+  test("maps Anthropic stop reasons to OpenAI finish reasons", () => {
+    expect(mapStopReason("end_turn")).toBe("stop");
+    expect(mapStopReason("stop_sequence")).toBe("stop");
+    expect(mapStopReason("max_tokens")).toBe("length");
+    expect(mapStopReason("tool_use")).toBe("tool_calls");
+  });
+
+  test("reports a refusal as content_filter instead of a normal stop", () => {
+    expect(mapStopReason("refusal")).toBe("content_filter");
+  });
+
+  test("reports an exhausted context window as length instead of a normal stop", () => {
+    expect(mapStopReason("model_context_window_exceeded")).toBe("length");
   });
 });

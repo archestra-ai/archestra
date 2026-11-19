@@ -8,16 +8,10 @@ import {
   useAllMatchingAgentCatalog,
 } from "./agent-catalog.query";
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getAgentCatalog: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getAgentCatalog: vi.fn(),
+}));
 
 const sdk = vi.mocked(archestraApiSdk);
 

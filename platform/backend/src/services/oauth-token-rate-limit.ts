@@ -52,3 +52,8 @@ export const oauthTokenRateLimiter = new TokenEndpointRateLimiter(
 export const githubActionsTokenRateLimiter = new TokenEndpointRateLimiter(
   CacheKey.GitHubActionsTokenRateLimit,
 );
+
+/** The workload identity token exchange, a budget of its own. */
+export const workloadIdentityTokenRateLimiter = new TokenEndpointRateLimiter(
+  CacheKey.WorkloadIdentityTokenRateLimit,
+);

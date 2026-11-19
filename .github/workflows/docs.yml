@@ -45,7 +45,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -64,7 +64,7 @@ jobs:
       actions: read # Verify the combined generator's exact successful run attempt.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -101,11 +101,11 @@ jobs:
       - name: Require current release benchmark tables
         if: >-
           github.event_name == 'pull_request' &&
-          github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+          github.event.pull_request.user.login == 'archestra-releaser[bot]' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           startsWith(github.event.pull_request.head.ref, 'release-please--branches--') &&
           endsWith(github.event.pull_request.head.ref, '--components--platform')
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const { verifyGeneration } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-pr-generation.mjs`);
@@ -136,7 +136,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Report screenshot validation
@@ -149,12 +149,12 @@ jobs:
   docs-screenshot-capture:
     name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 25
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           # Standalone validation checks the selected manual ref.
@@ -166,14 +166,14 @@ jobs:
     name: Docs Screenshots
     # Release PR captures belong to the single generation coordinator.
     if: github.event_name == 'workflow_dispatch' && !inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.
       pull-requests: write # Required to open the screenshot pull request on manual runs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -181,13 +181,15 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write # push the screenshot branch
+          permission-pull-requests: write # open the screenshot PR
 
       - name: Checkout with push credentials
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

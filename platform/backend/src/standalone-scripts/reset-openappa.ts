@@ -15,6 +15,8 @@
  *
  *   pnpm db:reset-openappa
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import config from "@/config";
 import db, { initializeDatabase } from "@/database";
 import {
@@ -25,6 +27,11 @@ import {
   openappaEffectivePoliciesTable,
   openappaGithubSyncTable,
 } from "@/database/schemas";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 async function main() {
   if (config.production)

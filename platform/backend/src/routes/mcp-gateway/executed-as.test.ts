@@ -11,7 +11,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 const executeToolCallForOwnerMock = vi.hoisted(() => vi.fn());
 

@@ -38,6 +38,16 @@ export class FakeS3Client {
     });
   }
 
+  /** The stored body of an object, as text, if it exists. */
+  read(key: string): string | undefined {
+    return this.objects.get(key)?.body.toString("utf8");
+  }
+
+  /** Every stored key, sorted. */
+  keys(): string[] {
+    return [...this.objects.keys()].sort();
+  }
+
   // === internal ===
 
   private put(input: { Key?: string; Body?: unknown; IfNoneMatch?: string }) {

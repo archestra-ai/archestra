@@ -30,6 +30,7 @@ const SESSION_SOURCES: Exclude<SessionSource, null>[] = [
   "header",
   "meta_header",
   "codex_session",
+  "chatgpt_session",
   "pi_session",
   "copilot_session",
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
@@ -303,6 +304,43 @@ class RoutingHistoryModel {
     return rows.map((row) => SelectRoutingHistorySessionSchema.parse(row));
   }
 
+  /**
+   * Sessions each scoring job scored, counted by when its scores were
+   * written: an organization runs one job at a time, so a job's window
+   * holds only its own scores.
+   */
+  static async scoredByJob(
+    organizationId: string,
+    jobs: {
+      id: string;
+      scorerVersionId: string;
+      startedAt: Date;
+      endedAt: Date | null;
+    }[],
+  ): Promise<Map<string, number>> {
+    if (jobs.length === 0) return new Map();
+    const windows = sql.join(
+      jobs.map(
+        (job) =>
+          sql`(${job.id}::uuid, ${job.scorerVersionId}::uuid, ${job.startedAt.toISOString()}::timestamptz, ${job.endedAt?.toISOString() ?? null}::timestamptz)`,
+      ),
+      sql`, `,
+    );
+    const result = await db.execute<{ id: string; scored: number }>(sql`
+      select j.id, count(*)::int as scored
+      from (values ${windows}) as j(id, scorer_version_id, started_at, ended_at)
+      join routing_history_scores sc
+        on sc.scorer_version_id = j.scorer_version_id
+        and sc.status = 'scored'
+        and sc.created_at >= j.started_at
+        and sc.created_at <= coalesce(j.ended_at, now())
+      join routing_history_sessions s
+        on s.id = sc.history_session_id
+        and s.organization_id = ${organizationId}
+      group by j.id`);
+    return new Map(result.rows.map((row) => [row.id, row.scored]));
+  }
+
   /** How far scoring of the sample got for the scorer version. */
   static async sampleProgress(params: SampleParams): Promise<SampleProgress> {
     const result = await db.execute<{
@@ -433,7 +471,13 @@ class RoutingHistoryModel {
       .values({ ...values, scorerCost })
       .onConflictDoUpdate({
         target: [scores.historySessionId, scores.scorerVersionId],
-        set: { status: values.status, features: values.features, scorerCost },
+        // Restamped on settling, so the job that scored it gets the credit.
+        set: {
+          status: values.status,
+          features: values.features,
+          scorerCost,
+          createdAt: sql`now()`,
+        },
         setWhere: sql`${scores.status} = 'pending'`,
       });
   }
@@ -587,7 +631,7 @@ class RoutingHistoryModel {
    * Deletes, `batchSize` rows per statement, history no fit can read any
    * more: sessions started before `windowStart` (with their usage and
    * scores), scores by a scorer version that is neither `keepScorerVersionId`
-   * nor the organization's, and finished backfills whose sessions are gone.
+   * nor that of the organization's router reading past sessions, and finished backfills whose sessions are gone.
    * Nothing a running or waiting backfill covers is touched.
    */
   static async purgeExpired(params: {
@@ -610,18 +654,25 @@ class RoutingHistoryModel {
               and not ${active(sql`s.organization_id`, sql`s.started_at >= b.window_start`)}
             limit ${limit})`,
       ),
+      // Build the compact reference set once per batch instead of allowing
+      // an agent-table scan for every candidate score.
       scores: await deleteInBatches(
         batchSize,
         (limit) => sql`
+          with referenced_scorers as materialized (
+            select distinct organization_id, scorer_version_id
+            from auto_routers
+            where uses_past_sessions and scorer_version_id is not null
+          )
           delete from routing_history_scores where (history_session_id, scorer_version_id) in (
             select sc.history_session_id, sc.scorer_version_id
             from routing_history_scores sc
             join routing_history_sessions s on s.id = sc.history_session_id
             where sc.scorer_version_id <> ${params.keepScorerVersionId}
               and not exists (
-                select 1 from agents a
+                select 1 from referenced_scorers a
                 where a.organization_id = s.organization_id
-                  and a.auto_routing_scorer_version_id = sc.scorer_version_id
+                  and a.scorer_version_id = sc.scorer_version_id
               )
               and not ${active(sql`s.organization_id`, sql`b.scorer_version_id = sc.scorer_version_id`)}
             limit ${limit})`,

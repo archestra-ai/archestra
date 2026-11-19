@@ -2,7 +2,7 @@ import {
   providerHasEndpointLocalModels,
   type SupportedProvider,
 } from "@archestra/shared";
-import { LlmProviderApiKeyModelLinkModel } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import { ApiError } from "@/types";
 
 // ===================================================================

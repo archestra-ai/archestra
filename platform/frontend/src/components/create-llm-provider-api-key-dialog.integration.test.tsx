@@ -184,6 +184,45 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     expect(screen.getByRole("button", { name: "Test & Create" })).toBeVisible();
   });
 
+  it("creates a key without submitting its parent form through the dialog portal", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onParentSubmit = vi.fn();
+    const onSuccess = vi.fn();
+    server.use(
+      http.post(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json({ id: "created-key" }),
+      ),
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onParentSubmit();
+          }}
+        >
+          <input aria-label="Pending timeout" defaultValue="42" />
+          <CreateLlmProviderApiKeyDialog
+            open
+            onOpenChange={vi.fn()}
+            onSuccess={onSuccess}
+            title="Add API Key"
+            description="Create a provider key"
+            allowedProviders={["anthropic"]}
+          />
+        </form>
+      </QueryClientProvider>,
+    );
+    await user.type(screen.getByLabelText(/^API Key/), "test-provider-key");
+    await user.click(screen.getByRole("button", { name: "Test & Create" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("created-key"));
+    expect(onParentSubmit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Pending timeout")).toHaveValue("42");
+  });
+
   it("submits endpoint settings from Advanced without leaving the creation form", async () => {
     const user = userEvent.setup();
     const client = new QueryClient({

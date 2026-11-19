@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
 import {
@@ -47,6 +48,8 @@ type ArchestraToolAuditSpec = {
   action: AuditEventName;
   /** Some tools create a resource only in one of their successful branches. */
   recordWhen?: (result: CallToolResult) => boolean;
+  /** Match HTTP mutations that skip auditing successful, unchanged state. */
+  skipUnchanged?: boolean;
   beforeFromArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
   afterFromResult?: (
     result: Record<string, unknown>,
@@ -193,6 +196,13 @@ export async function recordToolAudit(params: {
               await spec.fetchById(resourceId, ctx.organizationId),
             )
           : null;
+
+    if (
+      outcome === "success" &&
+      spec.skipUnchanged &&
+      isDeepStrictEqual(capture.before, after)
+    )
+      return;
 
     const actor = await UserModel.getById(ctx.userId);
     await AuditLogModel.create({
@@ -447,6 +457,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   create_mcp_gateway: agentCreateSpec,
   edit_agent: agentEditSpec,
   edit_mcp_gateway: agentEditSpec,
+  patch_agent_skill_policy: { ...agentEditSpec, skipUnchanged: true },
 
   // Teams (incl. membership and external-group mutations — team.updated with
   // the members/externalGroups diff, same as the HTTP child routes).

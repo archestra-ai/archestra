@@ -45,6 +45,84 @@ const CUSTOM = resolveAgentRuntimeTiers(
 );
 
 describe("runtime tiers", () => {
+  test("rejects a larger CPU pool when only its memory limit is too small", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Requested",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "LowLimit",
+            cpuRequest: 2,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+          },
+          {
+            name: "Enough",
+            cpuRequest: 3,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Requested",
+      },
+      { defaultWarmSpares: 1 },
+    );
+    expect(
+      warmTierCandidates("Requested", "Enough", tiers).map((tier) => tier.name),
+    ).toEqual(["Requested", "Enough"]);
+  });
+
+  test("allocates independent memory with fractional CPU and keeps memory-heavy runs out of smaller pools", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+          {
+            name: "CPU",
+            cpuRequest: 2,
+            memoryRequestMiB: 4096,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "Both",
+            cpuRequest: 4,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Memory",
+      },
+      { defaultWarmSpares: 1 },
+    );
+    expect(resolveRunResources("Memory", tiers)).toEqual({
+      cpuRequest: "500m",
+      memoryRequest: "8Gi",
+      memoryLimit: "8Gi",
+    });
+    expect(
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, maxTier: "Both" },
+        tiers,
+        requested: { minCpu: 0.5, minMemoryGib: 8 },
+      }).tier,
+    ).toBe("Memory");
+    expect(
+      warmTierCandidates("Memory", "Both", tiers).map((tier) => tier.name),
+    ).toEqual(["Memory", "Both"]);
+    expect(
+      warmTierCandidates("Memory", "CPU", tiers).map((tier) => tier.name),
+    ).toEqual(["Memory"]);
+  });
   test("an Agent without a tier runs at the organization's default; a run gets its tier's size", () => {
     expect(agentRuntimeTier(DEFAULTS, TIERS)).toBe("M");
     expect(agentRuntimeTier({ tier: "L" }, TIERS)).toBe("L");
@@ -64,12 +142,12 @@ describe("runtime tiers", () => {
     });
   });
 
-  test("memory follows the CPU: 2 GiB per CPU, a limit of twice that or the CPU limit's share", () => {
+  test("default memory limit covers twice the memory request and twice each CPU amount", () => {
     expect(resolveRunResources("XL", CUSTOM)).toEqual({
       cpuRequest: "8",
       cpuLimit: "12",
       memoryRequest: "16Gi",
-      memoryLimit: "24Gi",
+      memoryLimit: "32Gi",
     });
     const half = resolveAgentRuntimeTiers(
       {
@@ -84,7 +162,7 @@ describe("runtime tiers", () => {
       cpuRequest: "500m",
       cpuLimit: "750m",
       memoryRequest: "1Gi",
-      memoryLimit: "1536Mi",
+      memoryLimit: "2Gi",
     });
   });
 
@@ -370,7 +448,7 @@ describe("runtime tiers", () => {
         cpuRequest: 4,
         cpuLimit: null,
         memoryRequestMiB: 8192,
-        memoryLimitMiB: 16384,
+        memoryLimitMiB: 8192,
         warmSpares: 0,
         pooled: false,
         workspaceGiB: null,
@@ -384,7 +462,7 @@ describe("runtime tiers", () => {
     );
     expect(tokenRetargeted).toBe(
       "System prompt header.\n\n" +
-        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M $& (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M $& (4 CPU, 8 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
         "System prompt footer.",
     );
     // Retargets cleanly when tier name contains a period and the closing clause
@@ -396,7 +474,7 @@ describe("runtime tiers", () => {
         cpuRequest: 2,
         cpuLimit: null,
         memoryRequestMiB: 4096,
-        memoryLimitMiB: 8192,
+        memoryLimitMiB: 4096,
         warmSpares: 0,
         pooled: false,
         workspaceGiB: null,
@@ -406,7 +484,7 @@ describe("runtime tiers", () => {
         cpuRequest: 8,
         cpuLimit: null,
         memoryRequestMiB: 16384,
-        memoryLimitMiB: 32768,
+        memoryLimitMiB: 16384,
         warmSpares: 0,
         pooled: false,
         workspaceGiB: null,
@@ -414,7 +492,7 @@ describe("runtime tiers", () => {
     ];
     const clausePrompt =
       "System prompt header.\n\n" +
-      `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ${clauseTierName} (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n` +
+      `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ${clauseTierName} (2 CPU, 4 GiB (4 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n` +
       "System prompt footer.";
     const clauseTiersEnv = runtimeTiersEnv(clauseTiers, clauseTierName, 20);
     const clauseRetargeted = retargetScaleupDisabledPrompt(
@@ -424,7 +502,7 @@ describe("runtime tiers", () => {
     );
     expect(clauseRetargeted).toBe(
       "System prompt header.\n\n" +
-        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to L (8 CPU, 16 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
         "System prompt footer.",
     );
   });

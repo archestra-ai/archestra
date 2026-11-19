@@ -78,7 +78,7 @@ export async function buildSkillDiscoveryPreview(params: {
           `A skill with an agent attribute runs in that subagent: call its ${SKILL_TOOL_PREFIX}<name> tool with your task as message instead of loading it.`,
         ]
       : []),
-    `When a skill matches the task, call ${loadTool} with its exact name before doing the work. Call ${listTool} for the complete, current catalog, including skills omitted from this preview. Availability is rechecked when loading.`,
+    `When a skill matches the task, call ${loadTool} with its exact name before doing the work. Call ${listTool} with a query to find skills omitted from this preview, or with query "*" for the complete, current catalog. Availability is rechecked when loading.`,
   ].join("\n");
 }
 

@@ -23,12 +23,15 @@ export const ManagedOauthClientMetadataSchema = z.object({
   billingTeamId: z.string().nullable().default(null),
   /** Model pools the client may call by name; see `mayUseModelPool`. */
   modelPoolIds: z.array(z.string().uuid()).default([]),
+  /** Auto routers the client may call by name; see `authOnRouter`. */
+  autoRouterIds: z.array(z.string().uuid()).default([]),
 });
 export const ManagedOauthClientSchema = LlmOauthClientSchema.extend({
   scopes: z.array(OAuthClientScopeSchema),
   allowedGatewayIds: z.array(z.string().uuid()),
   includeFutureProviders: z.boolean(),
   modelPoolIds: z.array(z.string().uuid()),
+  autoRouterIds: z.array(z.string().uuid()),
 });
 export const ManagedOauthClientWithSecretSchema =
   ManagedOauthClientSchema.extend({ clientSecret: z.string() });

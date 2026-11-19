@@ -505,9 +505,7 @@ describe("CreateConnectorDialog", () => {
       expect(
         screen.getByLabelText("Labels to Skip (optional)"),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByLabelText("File Types (optional)"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("File Types (optional)")).not.toBeVisible();
 
       await user.click(
         screen.getByRole("switch", { name: /Include Repository Files/ }),
@@ -1022,7 +1020,7 @@ describe("CreateConnectorDialog", () => {
       ).not.toBeChecked();
     });
 
-    it("shows permission sync with all beta flags off", async () => {
+    it("shows permission sync with all feature flags off", async () => {
       mockUseFeature.mockImplementation(() => false);
       await renderConfigureStep();
       expect(
@@ -1164,7 +1162,7 @@ describe("CreateConnectorDialog", () => {
     async function renderMFilesConfigureStep() {
       const user = userEvent.setup();
       const result = renderDialog();
-      // The M-Files tile appears only after the beta flag arrives with the
+      // The M-Files tile appears only after its flag arrives with the
       // config query, so the first lookup must await it.
       await user.click(await screen.findByText("M-Files"));
       await waitFor(() => {

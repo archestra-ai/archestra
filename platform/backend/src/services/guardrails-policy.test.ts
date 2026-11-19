@@ -120,6 +120,29 @@ describe("initialPolicy", () => {
     });
   });
 
+  test("the docs servers' tools keep an empty label and are not left to the model that labels unnamed tools", () => {
+    const { policy } = parse(initialPolicy()) as unknown as {
+      policy: { tool: Array<{ name: string; annotator?: string }> };
+    };
+    // The runtime picks the first rule that matches a call.
+    const rule = (tool: string) =>
+      policy.tool.find((r) => r.name === tool || r.name === "*");
+    for (const tool of [
+      "archestra_docs__list_docs",
+      "archestra_docs__read_doc",
+      "archestra_docs__search_docs",
+      "openappa_docs__list_docs",
+      "openappa_docs__read_doc",
+      "openappa_docs__search_docs",
+    ])
+      expect(rule(tool)).toEqual({ name: tool, delta: {} });
+    // The same for the tool that installs and signs in Cursor's CLI.
+    expect(rule("host/archestra/CursorWebSetup")).toEqual({
+      name: "host/archestra/CursorWebSetup",
+      delta: {},
+    });
+  });
+
   test.each([
     ["the default branding", null],
     ["a white-labeled deployment", "Acme Hub"],

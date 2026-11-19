@@ -29,6 +29,7 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { openaiAdapterFactory } from "./openai";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -82,7 +83,7 @@ export const jevAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: apiKey.replace(/^Bearer\s+/i, ""),
       baseURL: options.baseUrl || config.llm.jev.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },

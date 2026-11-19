@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import LimitModel from "@/models/limit";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
 import type { PassthroughIdentity } from "../passthrough-log";
@@ -106,6 +106,50 @@ describe("createProxyPreHandler", () => {
       });
     }
     expect(upstreamHits).toBe(hits);
+  });
+
+  test("a shared key cannot evade user spend limits through forwarded inference", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1,
+    });
+    await setupProxy({
+      apiPrefix: "/v1/openai",
+      endpointSuffix: "/chat/completions",
+      providerName: "OpenAI",
+      authenticate: async () => ({
+        agent,
+        authMethod: "virtual_key",
+        virtualKeyId: TEST_UUID,
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/openai/batches",
+      headers: { "x-archestra-user-id": user.id },
+    });
+    expect(response.statusCode, response.body).toBe(401);
+    expect(upstreamHits).toBe(0);
+    const metadata = await app.inject({
+      method: "GET",
+      url: "/v1/openai/v1/models",
+    });
+    expect(metadata.statusCode, metadata.body).toBe(200);
+    expect(upstreamHits).toBe(1);
   });
 
   async function setupProxy(params: {

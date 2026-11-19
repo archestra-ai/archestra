@@ -27,9 +27,9 @@ const UNSET = "all";
 
 /**
  * Fast and Smart model pickers of the organization trio: the models a forked
- * subagent runs on when its parent asks for a faster or smarter tier, and the
- * tiers auto routing chooses between. Each tier may be on any provider; an
- * unset tier falls back to the parent provider's default.
+ * subagent runs on when its parent asks for a faster or smarter tier. Each
+ * tier may be on any provider; an unset tier falls back to the parent
+ * provider's default. Auto routers have tiers of their own.
  */
 export function ModelTierPickers({
   value,

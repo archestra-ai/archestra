@@ -1,10 +1,13 @@
+import net from "node:net";
 import { describe, expect, test } from "vitest";
 import {
   collectErrorCodes,
   getConnectionFailureTarget,
+  getNetworkErrorCode,
   isConnectionErrno,
   isFetchConnectivityError,
   isTimeoutErrno,
+  outboundRequestTargets,
 } from "./network-errors";
 
 describe("isConnectionErrno", () => {
@@ -130,6 +133,47 @@ describe("isFetchConnectivityError", () => {
 });
 
 describe("getConnectionFailureTarget", () => {
+  test.each([
+    [
+      "Connect Timeout Error (attempted address: api.example.com:443, timeout: 10000ms)",
+      { host: "api.example.com", port: 443 },
+    ],
+    [
+      "Connect Timeout Error (attempted addresses: 2001:db8::1:443, 203.0.113.10:443, timeout: 10000ms)",
+      { host: "2001:db8::1", port: 443 },
+    ],
+  ])("reads the endpoint from undici's connect timeout: %s", (message, target) => {
+    const error = new TypeError("fetch failed", {
+      cause: Object.assign(new Error(message), {
+        code: "UND_ERR_CONNECT_TIMEOUT",
+      }),
+    });
+    expect(getConnectionFailureTarget(error)).toEqual(target);
+  });
+
+  test("reads the origin of a failed outbound request that names no endpoint", async () => {
+    outboundRequestTargets.install();
+    const peer = net.createServer((socket) => {
+      socket.on("data", () => socket.resetAndDestroy());
+    });
+    await new Promise<void>((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const { port } = peer.address() as net.AddressInfo;
+    try {
+      const error = await fetch(`http://127.0.0.1:${port}/`).catch(
+        (failure: unknown) => failure,
+      );
+      // The reset itself carries no address, port, or host name.
+      expect((error as Error).cause).not.toHaveProperty("address");
+      expect(getConnectionFailureTarget(error)).toEqual({
+        host: "127.0.0.1",
+        port,
+      });
+      expect(getNetworkErrorCode(error)).toBe("ECONNRESET");
+    } finally {
+      await new Promise((resolve) => peer.close(resolve));
+    }
+  });
+
   test("reads the dialed address and port from a connect failure", () => {
     const error = Object.assign(new Error("connect ECONNREFUSED"), {
       code: "ECONNREFUSED",

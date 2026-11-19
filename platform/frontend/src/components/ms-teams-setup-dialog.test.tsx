@@ -62,7 +62,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-describe("MsTeamsSetupDialog group-chat files", () => {
+describe("MsTeamsSetupDialog file sign-in", () => {
   it("reopens on the saved setting, with the redirect URI to register", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/chatops/status`, () =>
@@ -86,11 +86,9 @@ describe("MsTeamsSetupDialog group-chat files", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(
-      await screen.findByRole("tab", { name: /group chats/i }),
-    );
+    await userEvent.click(await screen.findByRole("tab", { name: /sign-in/i }));
     const toggle = await screen.findByRole("switch", {
-      name: /sign in for group-chat files/i,
+      name: /sign in for the files they share/i,
     });
     // The config arrives after the first render; the switch must follow it.
     await waitFor(() => expect(toggle).toBeChecked());
@@ -133,11 +131,9 @@ describe("MsTeamsSetupDialog group-chat files", () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(
-      await screen.findByRole("tab", { name: /group chats/i }),
-    );
+    await userEvent.click(await screen.findByRole("tab", { name: /sign-in/i }));
     const toggle = await screen.findByRole("switch", {
-      name: /sign in for group-chat files/i,
+      name: /sign in for the files they share/i,
     });
     await waitFor(() => expect(toggle).toBeEnabled());
     await userEvent.click(toggle);

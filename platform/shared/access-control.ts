@@ -28,12 +28,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete", "configure-runtime"],
+  agent: ["read", "create", "delete"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  sre: ["read"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -48,6 +47,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
+  costExport: ["read", "create", "update", "delete"],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -63,6 +63,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: ["read", "admin"],
+  // "read" shows and resolves the yells of your own sessions; "admin" widens
+  // that to every yell in the organization. Separate from `log`, so seeing
+  // every yell does not also open every member's LLM and MCP logs.
+  guardrailsYell: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -94,7 +98,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  sre: [],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -103,6 +106,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
+  // Cost exports send organization-wide spend out of the platform.
+  costExport: [],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -117,9 +122,10 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
-  // Editors see only their own logs; org-wide visibility is log:admin,
-  // reserved for admin-tier roles.
+  // Editors see only their own logs and yells; org-wide visibility is
+  // log:admin and guardrailsYell:admin, reserved for admin-tier roles.
   log: ["read"],
+  guardrailsYell: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -151,7 +157,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Members do not see the Guardrails pages or read the policy. Enforcement,
   // yells, and remedies do not depend on this permission.
   guardrailsPolicy: [],
-  sre: [],
 
   // LLM
   llmProxy: ["read"],
@@ -164,6 +169,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmModel: ["read"],
   llmLimit: [],
   llmCost: [],
+  costExport: [],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -183,6 +189,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: [],
+  guardrailsYell: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -253,9 +260,9 @@ export const adminPermissions: Record<Resource, Action[]> = {
 
 /**
  * Platform Admin: runs the deployment — full user, role, and settings
- * management — while org-wide log visibility, impersonation, and the SRE
- * agent (which reads pod specs that can carry credentials) stay withheld.
- * They keep log:read / auditLog:read, so their OWN activity stays visible to
+ * management — while org-wide log and yell visibility and impersonation stay
+ * withheld. They keep log:read / auditLog:read / guardrailsYell:read, so their
+ * OWN activity stays visible to
  * them. Combined with the no-escalation rule (a role can only be granted by
  * someone holding every permission it carries), holders cannot hand
  * themselves or anyone else a role that would widen their visibility.
@@ -264,7 +271,7 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   log: ["read"],
   auditLog: ["read"],
-  sre: [],
+  guardrailsYell: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
 };
 
@@ -317,6 +324,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
     externalAgent: "agent",
+    agentRuntime: "organizationSettings",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -339,8 +347,6 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
-  "agent:configure-runtime":
-    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
@@ -392,6 +398,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:delete": "Remove usage limits",
   "llmCost:read":
     "View organization-wide LLM usage cost statistics and analytics",
+  "costExport:read": "View scheduled cost exports and their run status",
+  "costExport:create": "Schedule cost exports to a blob provider",
+  "costExport:update": "Change, pause, resume, and run cost exports",
+  "costExport:delete": "Delete cost exports",
 
   // Other
   "chat:read": "View and access chat conversations",
@@ -407,7 +417,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
   "log:read":
-    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
+    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -438,8 +448,10 @@ export const permissionDescriptions: Record<string, string> = {
     "View every audit event in your organization (also requires Read)",
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
-  "sre:read":
-    "Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
+  "guardrailsYell:read":
+    "View and resolve the Guardrails yells of your own sessions",
+  "guardrailsYell:admin":
+    "View and resolve every Guardrails yell in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -543,8 +555,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
   [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.GetMcpRuntimeTiers]: {},
+  [RouteId.UpdateMcpRuntimeTiers]: { organizationSettings: ["update"] },
   [RouteId.ListAgentRuntimeTemplates]: {},
-  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.ListBuiltInAgentRuntimeSettings]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped agentRuntime:use check in the handler.
+  [RouteId.ListAgentRuntimeAccess]: {},
+  [RouteId.ApplyAgentRuntimeToAgents]: { organizationSettings: ["update"] },
+  [RouteId.CountAgentsBehindRuntime]: { organizationSettings: ["update"] },
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   /** Names the default model for every member, so "Organization default" reads the same for all. */
@@ -595,6 +613,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
   [RouteId.DeleteAgentRun]: {},
+  // Like the single-run routes: each run is checked against its owner.
+  [RouteId.BulkDeleteAgentRuns]: {},
+  [RouteId.BulkCancelAgentRuns]: {},
+  [RouteId.BulkDeleteAgentWorkspaces]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -609,6 +631,27 @@ export const requiredEndpointPermissionsMap: Partial<
   // The decision service verifies setup ownership and revalidates its scope.
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
+  // Desktop devices. The tunnel client's own calls are public: sign-in start and
+  // poll carry a polling proof, the program download is not secret, and the
+  // tunnel endpoints authenticate with the device key.
+  [RouteId.StartDesktopDeviceSignIn]: {},
+  [RouteId.PollDesktopDeviceSignIn]: {},
+  [RouteId.DownloadArchestraCli]: {},
+  [RouteId.GetDesktopTunnel]: {},
+  [RouteId.PollDesktopTunnel]: {},
+  [RouteId.RespondDesktopTunnel]: {},
+  [RouteId.DeleteDesktopTunnel]: {},
+  // Any signed-in user may approve a sign-in for, see, and remove their own device.
+  [RouteId.GetDesktopDeviceSignIn]: {},
+  [RouteId.DecideDesktopDeviceSignIn]: {},
+  [RouteId.CreateDesktopDeviceSetupCode]: {},
+  [RouteId.GetDesktopDeviceSetupSignIn]: {},
+  [RouteId.GetDesktopDevices]: {},
+  [RouteId.DeleteDesktopDevice]: {},
+  [RouteId.UpdateDesktopDeviceServer]: {},
+  [RouteId.RestartDesktopDeviceServer]: {},
+  [RouteId.TestDesktopDeviceServer]: {},
+  [RouteId.GetDesktopDeviceServerLog]: {},
   [RouteId.CreateConnectionSetup]: {},
   // A signed-in member may start a short connection window for their own user.
   // Reports whether a pre-built VAF Add On package exists for this
@@ -627,6 +670,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // A signed-in member lists and disconnects only their own connected clients.
   [RouteId.GetConnectedClients]: {},
   [RouteId.DisconnectConnectedClient]: {},
+  // A reference for the member's own cleanup prompt; the handler takes a
+  // browser session only.
+  [RouteId.GetDisconnectReference]: {},
   // Who connected which agent is per-employee activity, so the org-wide log
   // of it takes org-wide log visibility (admin tier) plus reading members.
   [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
@@ -642,6 +688,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RenderStartupGuard]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
+  [RouteId.ReportCursorHookEvent]: {},
   [RouteId.GetConnectionRuntime]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
@@ -657,6 +704,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
   [RouteId.GetAgentDefaultSuggestedPrompts]: {},
+  // Agent read access is checked in the handler (requireReadableAgent); a
+  // change also takes identityProvider:update, checked by the binding guard.
+  [RouteId.GetAgentIdentityBindings]: {},
+  [RouteId.ReplaceAgentIdentityBindings]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.
@@ -727,9 +778,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmProxy]: {
     llmProxy: ["update"],
   },
-  [RouteId.GetAutoRoutingSettings]: { llmProxy: ["read"] },
-  [RouteId.UpdateAutoRoutingSettings]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRoutingState]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRoutingState]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRouters]: { llmProxy: ["read"] },
+  // Names only, for whoever assigns routers to a virtual key.
+  [RouteId.GetAvailableAutoRouters]: { llmProviderApiKey: ["read"] },
+  [RouteId.CreateAutoRouter]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRouter]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRouter]: { llmProxy: ["update"] },
+  [RouteId.DeleteAutoRouter]: { llmProxy: ["update"] },
   [RouteId.GetAutoRoutingPlans]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingUsage]: { llmProxy: ["read"] },
   [RouteId.GetAutoRoutingPlan]: { llmProxy: ["read"] },
   [RouteId.ReplanAutoRouting]: { llmProxy: ["update"] },
   // Preview spends on the scorer, so it needs the same right as changing settings.
@@ -769,6 +828,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteraction]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionAutoRouting]: {
+    log: ["read"],
+  },
   [RouteId.GetUniqueExternalAgentIds]: {
     log: ["read"],
   },
@@ -781,6 +843,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
+  [RouteId.GetLlmProxyLogs]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSummaries]: { log: ["read"] },
+  [RouteId.GetLlmProxyLog]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogAutoRouting]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogExternalAgentIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionChatErrors]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionHandoffs]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},
@@ -853,6 +925,13 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.RestoreMcpServer]: {
     mcpServerInstallation: ["delete"],
+  },
+  [RouteId.UpdateMcpServerDesktopArguments]: {
+    // The arguments belong to an installation the caller made, so the route
+    // is gated like installation (:create). The handler then admits only the
+    // owner of the installation: nobody sets what runs on another user's
+    // device.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
@@ -1114,6 +1193,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // only obtains the caller's own OAuth credential for a new personal xAI
   // (SuperGrok subscription) key.
   [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiNativeMetadataWithDefaultAgent]: {},
+  [RouteId.XaiNativeMetadataWithAgent]: {},
+  [RouteId.XaiNativePrivacyWithDefaultAgent]: {},
+  [RouteId.XaiNativePrivacyWithAgent]: {},
   [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {},
   [RouteId.UpdateLlmProviderApiKey]: {},
@@ -1159,6 +1242,24 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateServiceAccountToken]: {},
   [RouteId.UpdateServiceAccountToken]: {},
   [RouteId.DeleteServiceAccountToken]: {},
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // A federated credential lets an outside workload act as the account, so
+  // it is gated like a key: read on the account to list, update to change.
+  // The handlers check the grant on the account itself.
+  [RouteId.GetServiceAccountFederatedCredentials]: {},
+  [RouteId.CreateServiceAccountFederatedCredential]: {},
+  [RouteId.UpdateServiceAccountFederatedCredential]: {},
+  [RouteId.DeleteServiceAccountFederatedCredential]: {},
+  // Public: the OIDC token in the body is the proof, checked in the handler
+  // against the account's federated credentials. The authnz layer exempts it.
+  [RouteId.ExchangeWorkloadIdentityToken]: {},
+  // Public: verifiers fetch the SPIFFE issuer's keys to trust agents' SVIDs.
+  [RouteId.GetSpiffeDiscoveryDocument]: {},
+  [RouteId.GetSpiffeJwks]: {},
+  [RouteId.GetSpiffeTrustBundle]: {},
+  // SPDX-SnippetEnd
   [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },
   [RouteId.GetVirtualApiKeyLabelValues]: { llmVirtualKey: ["read"] },
@@ -1182,30 +1283,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateOauthClientSecret]: {},
   [RouteId.DeleteOauthClient]: {},
   [RouteId.BulkDeleteOauthClients]: {},
-  [RouteId.GetLlmOauthClients]: {},
-  [RouteId.GetLlmOauthClientLabelKeys]: { oauthClient: ["read"] },
-  [RouteId.GetLlmOauthClientLabelValues]: { oauthClient: ["read"] },
-  [RouteId.CreateLlmOauthClient]: {
-    oauthClient: ["create"],
-  },
-  [RouteId.UpdateLlmOauthClient]: {},
-  [RouteId.RotateLlmOauthClientSecret]: {},
-  [RouteId.DeleteLlmOauthClient]: {},
-  [RouteId.BulkDeleteLlmOauthClients]: {},
-  [RouteId.GetMcpOauthClients]: {},
-  [RouteId.GetMcpOauthClientLabelKeys]: { oauthClient: ["read"] },
-  [RouteId.GetMcpOauthClientLabelValues]: { oauthClient: ["read"] },
-  [RouteId.CreateMcpOauthClient]: {
-    oauthClient: ["create"],
-  },
-  [RouteId.UpdateMcpOauthClient]: {},
-  [RouteId.RotateMcpOauthClientSecret]: {},
-  [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
   [RouteId.GetLlmModelIdsByKey]: {},
   [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
+  // Deletion removes global catalog metadata, not just a scoped assignment.
+  [RouteId.DeleteModel]: { llmModel: ["update"] },
   // Cost backfill: scoped llmModel:update checked in the handler
   [RouteId.PreviewModelCostBackfill]: {},
   [RouteId.StartModelCostBackfill]: {},
@@ -1260,6 +1344,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateAgentSettings]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.GetDefaultModelRuntimeDependents]: {
+    organizationSettings: ["read"],
   },
   [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
@@ -1327,6 +1414,32 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateGithubPat]: {},
   [RouteId.DeleteGithubPat]: {},
+  // Blob providers hold organization-wide storage credentials, so they sit
+  // with the other organization settings.
+  // organizationSettings:read, or costExport:create/update to pick a
+  // destination: checked in the handler.
+  [RouteId.ListBlobProviders]: {},
+  [RouteId.CreateBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.UpdateBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.DeleteBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.TestBlobProvider]: { organizationSettings: ["update"] },
+  // A cost export ships organization-wide spend out of the platform: changing
+  // one also needs cost visibility, so the permission cannot be used to read
+  // spend its holder could not see.
+  [RouteId.ListCostExports]: { costExport: ["read"] },
+  [RouteId.CreateCostExport]: {
+    costExport: ["create"],
+    llmCost: ["read"],
+  },
+  [RouteId.UpdateCostExport]: {
+    costExport: ["update"],
+    llmCost: ["read"],
+  },
+  [RouteId.DeleteCostExport]: { costExport: ["delete"] },
+  [RouteId.RunCostExport]: {
+    costExport: ["update"],
+    llmCost: ["read"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     organizationSettings: ["update"],
   },
@@ -1444,9 +1557,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  // Handlers require llmCost:read, or scope a team admin to the teams they
+  // administer (see services/cost-access.ts).
+  [RouteId.GetTeamStatistics]: {},
   [RouteId.GetModelUsage]: { llmCost: ["read"] },
   [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
@@ -1485,9 +1598,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetCostStatistics]: {
-    llmCost: ["read"],
-  },
+  // Same team admin scoping as GetTeamStatistics.
+  [RouteId.GetCostStatistics]: {},
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1495,6 +1607,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // require member:read before returning anyone else's usage, and app/skill
   // usage narrow to the apps and skills the caller can see.
   [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer. Like GetProxyCostStatistics, a
+  // credential breakdown narrows to the caller's own usage without member:read,
+  // since a virtual key can be one person's own (see the handler).
+  [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },
   [RouteId.GetAppUsage]: {
@@ -1763,6 +1882,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetGuardrailsDeployment]: {},
   [RouteId.UpdateGuardrailsDeployment]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
+  [RouteId.GetAppaRepositoryProtection]: { organizationSettings: ["read"] },
+  [RouteId.GetAppaGithubAppGrants]: { organizationSettings: ["read"] },
+  // Whoever may open the MCP registry learns whether its servers' editors
+  // change their own rules: the registry shows the action only then.
+  [RouteId.GetAppaSelfService]: { mcpRegistry: ["read"] },
+  // A server's own rules take no Guardrails permission: the handlers list and
+  // return only the files of servers the caller may open in the MCP registry.
+  [RouteId.GetOpenappaServerRulesFiles]: { mcpRegistry: ["read"] },
+  [RouteId.GetOpenappaServerRulesSource]: { mcpRegistry: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
@@ -1818,14 +1946,19 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
   // per-process bridge bearer inside the route.
   [RouteId.AnnotateOpenappaToolWithArchestra]: {},
-  // Log readers see and resolve all yells and read their own consults;
-  // log:admin widens consult visibility to the whole organization.
-  [RouteId.GetOpenAppaYells]: { log: ["read"] },
-  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
-  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
-  [RouteId.GetOpenAppaYell]: { log: ["read"] },
-  [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
+  // Yell readers see and resolve their own yells; guardrailsYell:admin widens
+  // that to the whole organization. Log readers read their own consults, and
+  // log:admin widens those.
+  [RouteId.GetOpenAppaYells]: { guardrailsYell: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { guardrailsYell: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { guardrailsYell: ["read"] },
+  [RouteId.GetOpenAppaYell]: { guardrailsYell: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { guardrailsYell: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Consults and yells in one timeline, each scoped as its own list is. It
+  // opens with either `log:read` (consults) or `guardrailsYell:read` (yells),
+  // so the handler checks and leaves out the kind the caller may not read.
+  [RouteId.GetOpenappaGuardrailEvents]: {},
   [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
   [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
@@ -2140,6 +2273,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
+  "/llm/cost-exports": { costExport: ["read"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
   "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },
@@ -2151,16 +2285,20 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/openappa": { guardrailsPolicy: ["read"] },
+  // Also open to a member who may read some MCP server's rules file: the
+  // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
-  "/openappa/yells": { log: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
+  // Consults and yells in one timeline: `log:read` opens it for consults, and
+  // `guardrailsYell:read` for yells (`alternativePagePermissionsMap`).
   "/consults/logs": { log: ["read"] },
   "/consults/logs/[id]": { log: ["read"] },
+  "/consults/logs/yells/[id]": { guardrailsYell: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
@@ -2179,6 +2317,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/skills": { organizationSettings: ["read"] },
   "/settings/agents": { organizationSettings: ["read"] },
+  "/settings/agents/runtimes": { organizationSettings: ["read"] },
   "/settings/messaging-channels": { organizationSettings: ["read"] },
   "/settings/messaging-channels/slack": { organizationSettings: ["read"] },
   "/settings/messaging-channels/ms-teams": { organizationSettings: ["read"] },
@@ -2190,16 +2329,29 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
+  "/settings/roles/new": { ac: ["create"] },
+  "/settings/roles/[id]": { ac: ["read"] },
+  "/settings/roles/[id]/edit": { ac: ["update"] },
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
+  "/settings/blob-providers": { organizationSettings: ["read"] },
   "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/appearance/[section]": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
+};
+
+/**
+ * Pages that also open with a second set of permissions, for a page that
+ * shows two kinds of record each gated on its own: holding either set opens
+ * it, and the page shows what the caller may read.
+ */
+export const alternativePagePermissionsMap: Record<string, Permissions> = {
+  "/consults/logs": { guardrailsYell: ["read"] },
 };
 
 // === Internal helpers

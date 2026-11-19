@@ -25,6 +25,36 @@ describe("Azure backing-model evidence", () => {
     ).toMatchObject({ kind, operations });
   });
 
+  test("Claude backing models serve only Responses, whatever they advertise", () => {
+    // Foundry lists Claude with chat_completion: true but answers Chat
+    // Completions with 404 api_not_supported.
+    expect(
+      azureModelEvidence({
+        underlyingModelName: "claude-haiku-5-5",
+        source: "deployment",
+        capabilities: { chat_completion: true },
+      }),
+    ).toMatchObject({
+      kind: "text",
+      underlyingModelName: "claude-haiku-5-5",
+      operations: ["responses"],
+    });
+    expect(
+      azureModelEvidence({
+        underlyingModelName: "opaque-backing-name",
+        modelFormat: "Anthropic",
+        source: "deployment",
+      }),
+    ).toMatchObject({ kind: "text", operations: ["responses"] });
+    expect(
+      azureModelEvidence({
+        underlyingModelName: "gpt-4.1",
+        modelFormat: "OpenAI",
+        source: "deployment",
+      })?.operations,
+    ).toEqual(["chat", "responses"]);
+  });
+
   test("missing or blank backing identity stays unknown", () => {
     expect(azureModelEvidence({ source: "deployment" })).toBeNull();
     expect(

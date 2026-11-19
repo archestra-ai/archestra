@@ -127,6 +127,34 @@ describe("CopilotAccountCards", () => {
     expect(screen.queryByTestId("copilot-account-cards")).toBeNull();
   });
 
+  it("offers no card for a plan the organization turned off", () => {
+    const { rerender } = render(
+      <CopilotAccountCards
+        keys={[]}
+        hiddenPlans={{ enterprise: true }}
+        pending={false}
+        onToken={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByTestId("copilot-account-card-personal"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("copilot-account-card-enterprise")).toBeNull();
+
+    // With the only offered account connected, nothing is left to show.
+    rerender(
+      <CopilotAccountCards
+        keys={[own]}
+        hiddenPlans={{ enterprise: true }}
+        pending={false}
+        onToken={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("copilot-account-cards")).toBeNull();
+    expect(copilotAccountMissing([own], { enterprise: true })).toBe(false);
+    expect(copilotAccountMissing([own], { personal: true })).toBe(true);
+  });
+
   it("gates connecting a plan on the permission to create provider keys", () => {
     grant({});
     render(<CopilotAccountCards keys={[]} pending={false} onToken={vi.fn()} />);

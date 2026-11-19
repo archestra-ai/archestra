@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Prebuilt native addons for the dev stack.
+// Prebuilt native addons for the dev stack and the backend tests.
 //
 // CI builds the five napi addons (`pnpm build:dev`, Debian bookworm, linux
 // x64 glibc) for every `main` tree of archestra-rs and publishes them as an
 // OCI artifact in the public registry, tagged with the key below. A dev stack
 // on a checkout whose archestra-rs tree matches a published one installs
-// those binaries instead of compiling them (about 3.5 minutes of 7 CPUs).
+// those binaries instead of compiling them (about 3.5 minutes of 7 CPUs); the
+// backend's vitest config installs them the same way when a checkout nobody
+// prepared, such as a code review's, has none (backend/src/test/native-addons.ts).
 //
 //   node scripts/napi-prebuilt.mjs <package>...   install, e.g. app-runtime-rs
 //   node scripts/napi-prebuilt.mjs --key          print the cache key
@@ -44,8 +46,7 @@ const STAMP = ".napi-prebuilt";
 const LOCK = ".napi-prebuilt.lock";
 // CI builds on Debian bookworm; older glibc cannot load the binaries.
 const MIN_GLIBC = "2.36";
-const DEFAULT_REPOSITORY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/napi-dev-cache";
+const DEFAULT_REPOSITORY = "ghcr.io/archestra-ai/ci/napi-dev-cache";
 const MANIFEST_TYPES = [
   "application/vnd.oci.image.index.v1+json",
   "application/vnd.oci.image.manifest.v1+json",

@@ -623,11 +623,32 @@ describe("runAgentStream", () => {
     expect(onReasoningSummaryUnsupported).not.toHaveBeenCalled();
   });
 
-  test("drops replayed reasoning and retries when the provider rejects a thinking signature", async () => {
-    const model = modelFor(
-      errorChunks(thinkingSignatureRejection()),
-      renderableChunks(),
-    );
+  test.each([
+    ["thinking signature", thinkingSignatureRejection()],
+    [
+      "redacted GPT reasoning",
+      new Error(
+        "Bedrock API error (400): The model returned the following errors: messages.1.content.0: Invalid `data` in `redacted_thinking` block",
+      ),
+    ],
+    [
+      "Claude reasoning text",
+      new Error(
+        "This model doesn't support the reasoningContent.reasoningText.text field for assistant messages. Remove reasoningContent.reasoningText.text and try again.",
+      ),
+    ],
+    [
+      "wrapped response body",
+      new Error("Provider request failed", {
+        cause: {
+          responseBody: JSON.stringify({
+            message: "Invalid `data` in `redacted_thinking` block",
+          }),
+        },
+      }),
+    ],
+  ])("drops replayed reasoning and retries a %s rejection", async (_label, error) => {
+    const model = modelFor(errorChunks(error), renderableChunks());
     const messages: ModelMessage[] = [
       { role: "user", content: "first" },
       {
@@ -644,9 +665,11 @@ describe("runAgentStream", () => {
       { role: "user", content: "second" },
     ];
 
+    const originalMessages = structuredClone(messages);
     const { result } = await runAgentStream({ config: { model, messages } });
     await drain(result);
 
+    expect(messages).toEqual(originalMessages);
     expect(model.doStreamCalls).toHaveLength(2);
     const partTypes = (call: (typeof model.doStreamCalls)[number]) =>
       call.prompt.flatMap((message) =>
@@ -659,11 +682,14 @@ describe("runAgentStream", () => {
     expect(await result.text).toBe("hi");
   });
 
-  test("does not retry a thinking-signature rejection when there is no reasoning to drop", async () => {
-    const model = modelFor(
-      errorChunks(thinkingSignatureRejection()),
-      renderableChunks(),
-    );
+  test.each([
+    thinkingSignatureRejection(),
+    new Error("Invalid `data` in `redacted_thinking` block"),
+    new Error(
+      "This model doesn't support the reasoningContent.reasoningText.text field for assistant messages.",
+    ),
+  ])("does not retry a replayed-reasoning rejection when there is nothing to drop: %s", async (error) => {
+    const model = modelFor(errorChunks(error), renderableChunks());
 
     const { result } = await runAgentStream({
       config: { model, messages: [{ role: "user", content: "hello" }] },
@@ -671,6 +697,85 @@ describe("runAgentStream", () => {
     await drain(result);
 
     expect(model.doStreamCalls).toHaveLength(1);
+  });
+
+  test("replayed reasoning recovery is bounded and preserves text and tool history", async () => {
+    const error = new Error("Invalid `data` in `redacted_thinking` block");
+    const model = modelFor(errorChunks(error));
+    const messages: ModelMessage[] = [
+      { role: "user", content: "first" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { bedrock: { redactedContent: "c3ludGhldGlj" } },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "checking" },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "lookup",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "lookup",
+            output: { type: "text", value: "found" },
+          },
+        ],
+      },
+      { role: "user", content: "continue" },
+    ];
+    const { result, getCapturedStreamError } = await runAgentStream({
+      config: { model, messages },
+    });
+    await drain(result);
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(model.doStreamCalls[1].prompt).toEqual(
+      model.doStreamCalls[0].prompt.filter((_, index) => index !== 1),
+    );
+    expect(getCapturedStreamError()).toBe(error);
+  });
+
+  test.each([
+    "This model doesn't support the reasoningConfig field",
+    "Invalid data in content block",
+    "Invalid signature in tool block",
+  ])("does not strip earlier reasoning for unrelated error: %s", async (message) => {
+    const error = new Error(message);
+    const model = modelFor(errorChunks(error));
+    const { result, getCapturedStreamError } = await runAgentStream({
+      config: {
+        model,
+        messages: [
+          { role: "user", content: "first" },
+          {
+            role: "assistant",
+            content: [
+              { type: "reasoning", text: "thinking" },
+              { type: "text", text: "answer" },
+            ],
+          },
+          { role: "user", content: "continue" },
+        ],
+      },
+    });
+    await drain(result);
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(getCapturedStreamError()).toBe(error);
   });
 
   test("does not strip-retry an unrelated provider error even with reasoningSummary set", async () => {

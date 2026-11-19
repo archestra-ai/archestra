@@ -124,16 +124,10 @@ vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   },
 }));
 vi.mock("@/lib/organization.query");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getSkills: vi.fn(async () => ({ data: null })),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: vi.fn(async () => ({ data: null })),
+}));
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({
     children,
@@ -668,7 +662,7 @@ describe("ConnectPage guardrails chip", () => {
   });
 
   it("does not mark an unsupported client as supporting guardrails", () => {
-    setup("cursor", { active: true, unsupportedClientAction: "block" });
+    setup("n8n", { active: true, unsupportedClientAction: "block" });
     expect(
       screen.queryByRole("img", { name: "Supports LLM proxy guardrails" }),
     ).not.toBeInTheDocument();
@@ -697,7 +691,7 @@ describe("ConnectPage guardrails chip", () => {
     "block",
     "bypass",
   ] as const)("lists the supported clients for an unrecognized agent (%s)", async (unsupportedClientAction) => {
-    setup("cursor", { active: true, unsupportedClientAction });
+    setup("n8n", { active: true, unsupportedClientAction });
     await userEvent.hover(
       screen.getByRole("button", { name: "What the guardrails do" }),
     );
@@ -722,7 +716,7 @@ describe("ConnectPage guardrails chip", () => {
 
   it("says guardrails are not enforced for an allowed unrecognized agent", () => {
     expect(
-      setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
+      setup("n8n", { active: true, unsupportedClientAction: "bypass" }),
     ).toHaveTextContent("Not enforced");
   });
 
@@ -737,9 +731,60 @@ describe("ConnectPage guardrails chip", () => {
     ).toBeNull();
   });
 
-  it("says an unrecognized agent is blocked", () => {
+  it("says Cursor is enforced while it keeps its own models", async () => {
+    // Cursor's model routing starts off: setup's hooks check its chats. The
+    // hooks come with the gateway.
+    const gateway = {
+      id: "default-gateway",
+      name: "Default gateway",
+      slug: "default-gateway",
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    };
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateway,
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: params.ids.includes(gateway.id) ? [gateway] : [],
+          isPending: false,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    vi.mocked(useProfile).mockReturnValue({
+      data: gateway,
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Enforced");
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Each of Cursor's tool calls is checked against your organization's policy, through hooks that setup adds to Cursor. Cursor keeps its own models and your Cursor plan.",
+    );
+  });
+
+  it("says Cursor is not enforced when its setup has no gateway, and so adds no hooks", async () => {
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    expect(
+      setup("cursor", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Not enforced");
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Guardrails reach Cursor through hooks that setup adds together with the MCP gateway, and the gateway is left out",
+    );
+  });
+
+  it("says an unrecognized agent is blocked", () => {
+    expect(
+      setup("n8n", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Blocked");
   });
 });
@@ -863,6 +908,23 @@ describe("ConnectPage (no connect request)", () => {
     });
     render(<ConnectionPage />);
     expect(screen.getByText("Not active")).toBeVisible();
+  });
+
+  it("Grok includes shared marketplace delivery in its connection command", () => {
+    window.localStorage.clear();
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["grok-build"],
+        connectionSkillsEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+    expect(screen.getByText(/--client grok-build$/)).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Your organization hasn't shared any skills yet. They show up here.",
+      ),
+    ).toBeNull();
   });
 
   it("Pi keeps model routing required and includes shared skills while excluding plugins", async () => {
@@ -1029,6 +1091,77 @@ describe("ConnectPage (no connect request)", () => {
       "data-exclude",
       "skills",
     );
+  });
+
+  it("offers ChatGPT one desktop command and keeps web plugin setup separate", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=chatgpt") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProfile).mockReturnValue({
+      data: { id: "gw-1", name: "Team gateway", slug: "team", tools: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    mockOrganization({ data: { connectionDefaultMcpGatewayId: "gw-1" } });
+    render(<ConnectionPage />);
+    const band = screen.getByRole("region", { name: "Connect" });
+    expect(band).toHaveTextContent("Run the command in your terminal");
+    expect(band).toHaveTextContent("--client chatgpt");
+    expect(band).not.toHaveTextContent("--exclude plugins");
+    expect(band).toHaveTextContent("Quit ChatGPT");
+    expect(
+      within(band).queryByRole("button", { name: "Download ChatGPT plugin" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    expect(
+      within(band).getByRole("heading", {
+        name: "Download the plugin for ChatGPT",
+      }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(band).getByRole("button", { name: "Download ChatGPT plugin" }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", {
+        name: "Use the Windows command",
+      }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(within(band).getByRole("button", { name: "Copy" })).toBeVisible();
+    await userEvent.click(
+      within(band).getByRole("button", { name: "Use the Windows command" }),
+    );
+    expect(band).toHaveTextContent("irm ");
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(
+      within(band).getByRole("button", {
+        name: "Use the macOS / Linux command",
+      }),
+    ).toBeVisible();
   });
 
   it("re-reads the connection settings when the tab comes back", () => {
@@ -1729,7 +1862,7 @@ describe("ConnectPage after copying the command", () => {
 
   it("starts waiting when the command text is copied by hand", () => {
     show(["cursor"]);
-    fireEvent.copy(screen.getByText(/--client cursor$/));
+    fireEvent.copy(screen.getByText(/--client cursor --exclude proxy$/));
     expect(status()).toHaveTextContent("Waiting for approval");
   });
 

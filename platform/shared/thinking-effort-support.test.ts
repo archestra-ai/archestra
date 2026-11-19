@@ -12,6 +12,19 @@ describe("supportsThinkingEffort", () => {
     ["openai", "gpt-4o", false],
     ["anthropic", "claude-opus-5", true],
     ["anthropic", "claude-haiku-4-5", false],
+    ["bedrock", "amazon.nova-2-lite-v1:0", true],
+    ["bedrock", "eu.amazon.nova-2-lite-v1:0", true],
+    ["bedrock", "global.amazon.nova-2-lite-v1:0", true],
+    ["bedrock", "us.anthropic.claude-sonnet-4-6", true],
+    ["bedrock", "us.anthropic.claude-opus-4-6-v1:0", true],
+    ["bedrock", "au.anthropic.claude-sonnet-4-6", true],
+    ["bedrock", "au.anthropic.claude-opus-4-6-v1", true],
+    ["bedrock", "ca.anthropic.claude-haiku-5-5", true],
+    ["bedrock", "us-gov.anthropic.claude-opus-4-8", true],
+    ["bedrock", "anthropic.claude-haiku-4-5", false],
+    ["bedrock", "global.openai.gpt-6-luna", false],
+    ["bedrock", "amazon.nova-lite-v1:0", false],
+    ["bedrock", "custom-model", false],
   ])("%s/%s -> %s", (provider, modelId, expected) => {
     expect(supportsThinkingEffort(provider, modelId)).toBe(expected);
   });

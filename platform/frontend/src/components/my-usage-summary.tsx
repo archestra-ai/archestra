@@ -1,7 +1,7 @@
 "use client";
 
 import type { StatisticsTimeFrame } from "@archestra/shared";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { Area, AreaChart, XAxis, YAxis } from "recharts";
 import { BilledCost } from "@/components/billed-cost";
 import {

@@ -2,7 +2,7 @@
 title: MCP Servers
 description: Add MCP servers to your organization's registry, install them, and give their tools to agents and gateways
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,7 +15,7 @@ Archestra handles the hard part: signing in to each server for each person.
 
 - [Each person's own account](/docs/mcp/servers/installing), through OAuth 2.1 or an API key they enter once. OAuth tokens refresh when the provider allows it.
 - **[A shared service account](/docs/mcp/servers/installing#shared-service-accounts)** for a team or the whole organization, such as a bot.
-- [Your company identity](/docs/mcp/authentication/servers#identity-provider-token-exchange), with no install at all. Archestra trades the person's identity provider token for one the server accepts, through Entra On-Behalf-Of, Okta, RFC 8693, or ID-JAG.
+- [Your company identity](/docs/mcp/authentication/idp-token-exchange), with no install at all. Archestra trades the person's identity provider token for one the server accepts, through Entra On-Behalf-Of, Okta, RFC 8693, or ID-JAG.
 
 Archestra picks the right account for each call. See [Whose Account a Call Uses](/docs/mcp/authentication/servers#credential-resolution).
 
@@ -47,5 +47,6 @@ A teammate's sign-in expired but yours works? You are not asked to sign in again
 ## What to Know
 
 - Remote or self-hosted? Pick remote when someone already runs the server. Pick self-hosted when Archestra should run it, hold its secrets, and show its logs.
+- Does the MCP server run on a person's own device? Add it as a [desktop MCP server](/docs/mcp/servers/desktop).
 - New tools on a server? Open it, go to **Inspector**, and click **Refresh Tools**. To refresh on a schedule, set [`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`](/docs/admin/deployment/configuration#ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES).
 - **Renaming a server** renames its tools too, such as `reports__export`. Assignments and policies stay. Clients must reload their tool list.

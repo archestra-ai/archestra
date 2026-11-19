@@ -12,14 +12,20 @@ import {
 } from "@archestra/shared/interactions/client";
 
 type SessionSummary =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-type Interaction = archestraApiTypes.GetInteractionResponses["200"];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];
+type Interaction = archestraApiTypes.GetLlmProxyLogResponses["200"];
+type InteractionSummary =
+  archestraApiTypes.GetLlmProxyLogSummariesResponses["200"]["data"][number];
+type ChatError =
+  archestraApiTypes.GetLlmProxyLogSessionChatErrorsResponses["200"]["chatErrors"][number];
 // The factory builds the OpenAI chat-completions member of the interaction
 // union, which keeps `request`/`response` overrides cleanly typed.
 type OpenAiInteraction = Extract<
   Interaction,
   { type: "openai:chatCompletions" }
 >;
+
+export const ORCHESTRATOR_SESSION_ID = "0193a1c2-7d4e-7b21-9c3f-5a1e2d3c4b5a";
 
 type Pagination = {
   currentPage: number;
@@ -41,6 +47,8 @@ export function makeSessionSummary(
     interactionId: null,
     requestCount: 1,
     failedOverCount: 0,
+    failedRequestCount: 0,
+    chatErrorCount: 0,
     totalInputTokens: 100,
     totalOutputTokens: 50,
     totalCacheReadTokens: 0,
@@ -88,6 +96,7 @@ export function makeInteraction(
     attempt: null,
     attemptOutcome: null,
     failureReason: null,
+    failed: false,
     externalAgentId: null,
     runId: null,
     userId: null,
@@ -174,6 +183,47 @@ export const llmLogsSessionsSeed = [
     externalAgentIds: [OPENCODE_CLIENT_ID],
     lastUserMessagePreview: "OpenCode proxy session",
   }),
+  // An Archestra Chat orchestrator whose delegation died inside the proxy
+  // after usage came back: every request row looks healthy, and only the
+  // chat's error card says the turn failed.
+  makeSessionSummary({
+    sessionId: ORCHESTRATOR_SESSION_ID,
+    sessionSource: "header",
+    source: "chat",
+    sources: ["chat"],
+    requestCount: 3,
+    chatErrorCount: 1,
+    totalInputTokens: 18_240,
+    totalOutputTokens: 1_102,
+    totalCost: "0.0614",
+    totalBilledCost: "0.0614",
+    totalBaselineCost: "0.0614",
+    firstRequestTime: "2026-11-17T19:26:41.000Z",
+    lastRequestTime: "2026-11-17T19:27:20.000Z",
+    models: ["claude-sonnet-4-5"],
+    profileName: "Research orchestrator",
+    conversationTitle: "Summarise open incidents across teams",
+    lastInteractionType: "anthropic:messages",
+    lastUserMessagePreview: "Summarise open incidents across teams",
+  }),
+  // A coding-agent session whose provider rejected two requests.
+  makeSessionSummary({
+    sessionId: "cc-failed-session",
+    sessionSource: "claude_metadata",
+    externalAgentIds: [CLAUDE_CODE_CLIENT_ID],
+    claudeCodeTitle: "Refactor the billing worker",
+    requestCount: 4,
+    failedRequestCount: 2,
+    totalInputTokens: 52_100,
+    totalOutputTokens: 2_480,
+    totalCost: "0.1932",
+    totalBilledCost: "0.1932",
+    totalBaselineCost: "0.1932",
+    firstRequestTime: "2026-11-17T18:02:10.000Z",
+    lastRequestTime: "2026-11-17T18:05:44.000Z",
+    models: ["claude-opus-4-1"],
+    lastInteractionType: "anthropic:messages",
+  }),
   makeSessionSummary({
     sessionId: "api-session",
     sessionSource: null,
@@ -244,3 +294,158 @@ export function paginated<T>(
     },
   };
 }
+
+export function makeInteractionSummary(
+  overrides: Partial<InteractionSummary> = {},
+): InteractionSummary {
+  return {
+    id: "test-summary-id",
+    profileId: "test-profile-id",
+    externalAgentId: null,
+    sessionId: "test-session-id",
+    model: "claude-sonnet-4-5",
+    baselineModel: null,
+    billingMode: "metered",
+    inputTokens: 1000,
+    inputTokensEstimated: false,
+    outputTokens: 100,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cost: "0.01",
+    baselineCost: null,
+    durationMs: 2400,
+    createdAt: "2026-11-17T19:00:00.000Z",
+    providerApiKeyId: null,
+    modelPoolId: null,
+    attempt: null,
+    attemptOutcome: null,
+    failureReason: null,
+    attributionLabels: null,
+    failed: false,
+    type: "anthropic:messages",
+    externalAgentIdLabel: null,
+    requestType: "main",
+    source: "chat",
+    userMessagePreview: null,
+    responseToolNames: null,
+    responseToolCalls: null,
+    responseTextPreview: null,
+    autoRouted: false,
+    ...overrides,
+  };
+}
+
+/** Request rows of the seeded failing sessions, oldest first per session. */
+export const llmLogsSummariesSeed: InteractionSummary[] = [
+  makeInteractionSummary({
+    id: "orch-1",
+    sessionId: ORCHESTRATOR_SESSION_ID,
+    createdAt: "2026-11-17T19:26:41.000Z",
+    durationMs: 3100,
+    inputTokens: 5200,
+    outputTokens: 310,
+    cost: "0.0181",
+    userMessagePreview: "Summarise open incidents across teams",
+    responseToolNames: ["archestra__list_agents"],
+  }),
+  makeInteractionSummary({
+    id: "orch-2",
+    sessionId: ORCHESTRATOR_SESSION_ID,
+    createdAt: "2026-11-17T19:27:02.000Z",
+    durationMs: 4200,
+    inputTokens: 6100,
+    outputTokens: 402,
+    cost: "0.0203",
+    userMessagePreview: "Summarise open incidents across teams",
+    responseToolNames: ["agent__incident_triage"],
+  }),
+  // The delegation call re-issued after the guardrail plan was accepted. Its
+  // row is healthy; the delegation itself then failed inside the proxy.
+  makeInteractionSummary({
+    id: "orch-3",
+    sessionId: ORCHESTRATOR_SESSION_ID,
+    createdAt: "2026-11-17T19:27:20.000Z",
+    durationMs: 3900,
+    inputTokens: 6940,
+    outputTokens: 390,
+    cost: "0.0230",
+    userMessagePreview: "Summarise open incidents across teams",
+    responseToolNames: ["agent__incident_triage"],
+  }),
+  makeInteractionSummary({
+    id: "ccf-1",
+    sessionId: "cc-failed-session",
+    source: "api",
+    model: "claude-opus-4-1",
+    createdAt: "2026-11-17T18:02:10.000Z",
+    durationMs: 8200,
+    inputTokens: 14_200,
+    outputTokens: 940,
+    cost: "0.0712",
+    userMessagePreview: "Refactor the billing worker",
+    responseToolNames: ["Read", "Grep"],
+  }),
+  makeInteractionSummary({
+    id: "ccf-2",
+    sessionId: "cc-failed-session",
+    source: "api",
+    model: "claude-opus-4-1",
+    createdAt: "2026-11-17T18:03:31.000Z",
+    durationMs: 61_000,
+    inputTokens: 15_900,
+    outputTokens: 610,
+    cost: "0.0640",
+    failed: true,
+    userMessagePreview: "Refactor the billing worker",
+    responseTextPreview: "I'll split the worker into",
+  }),
+  makeInteractionSummary({
+    id: "ccf-3",
+    sessionId: "cc-failed-session",
+    source: "api",
+    model: "claude-opus-4-1",
+    createdAt: "2026-11-17T18:04:40.000Z",
+    durationMs: 900,
+    inputTokens: null,
+    outputTokens: null,
+    cost: null,
+    failed: true,
+    userMessagePreview: "Refactor the billing worker",
+  }),
+  makeInteractionSummary({
+    id: "ccf-4",
+    sessionId: "cc-failed-session",
+    source: "api",
+    model: "claude-opus-4-1",
+    createdAt: "2026-11-17T18:05:44.000Z",
+    durationMs: 9400,
+    inputTokens: 22_000,
+    outputTokens: 930,
+    cost: "0.0580",
+    userMessagePreview: "Refactor the billing worker",
+    responseTextPreview: "Done. The worker now",
+  }),
+];
+
+/** The chat's error card for the orchestrator session's failed delegation. */
+export const llmLogsChatErrorsSeed: ChatError[] = [
+  {
+    id: "chat-error-1",
+    conversationId: ORCHESTRATOR_SESSION_ID,
+    createdAt: "2026-11-17T19:27:21.000Z",
+    error: {
+      code: "unknown",
+      message:
+        "Guardrails could not settle a withheld tool call (engine_invariant)",
+      isRetryable: false,
+      sessionId: ORCHESTRATOR_SESSION_ID,
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      spanId: "00f067aa0ba902b7",
+      subagent: { name: "Incident triage", model: "claude-sonnet-4-5" },
+      originalError: {
+        type: "engine_invariant",
+        message: "could not settle a withheld tool call",
+      },
+    },
+  },
+];

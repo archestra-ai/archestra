@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, jsonSchema } from "ai";
 import { vi } from "vitest";
 import { ConversationCompactionModel, ModelModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -40,10 +40,12 @@ const MESSAGES: ChatMessage[] = [
   },
 ];
 
-function generated(text: string) {
-  return { text, finishReason: "stop" } as Awaited<
-    ReturnType<typeof generateText>
-  >;
+function generated(text: string, inputTokens = 900) {
+  return {
+    text,
+    finishReason: "stop",
+    usage: { inputTokens, outputTokens: 10 },
+  } as Awaited<ReturnType<typeof generateText>>;
 }
 
 describe("compactMessagesForChat auto trigger", () => {
@@ -152,7 +154,7 @@ describe("compactMessagesForChat auto trigger", () => {
     expect(typeof mockGenerateText.mock.calls[1][0].prompt).toBe("string");
   });
 
-  test("retries in context with a correction turn when the retry fits the window", async () => {
+  test("retries in context with the turn's tools sent read-only", async () => {
     const task: ChatMessage = {
       id: "big-u1",
       role: "user",
@@ -181,22 +183,36 @@ describe("compactMessagesForChat auto trigger", () => {
       ignored: false,
       lastSyncedAt: new Date(),
     });
+    // The provider-reported prompt leaves room for the correction retry.
     mockGenerateText
-      .mockResolvedValueOnce(generated("no tags here"))
+      .mockResolvedValueOnce(generated("no tags here", 1_000))
       .mockResolvedValueOnce(generated("<summary>S-RETRY</summary>"));
+    const execute = vi.fn();
 
     const result = await compactMessagesForChat({
       ...params,
       selectedModel: "qwen3-32b-wide",
       modelId: wideModel.id,
       messages: [task, pending],
+      tools: {
+        lookup: {
+          description: "Look something up.",
+          inputSchema: jsonSchema({ type: "object", properties: {} }),
+          execute,
+        },
+      },
     });
 
     expect(result.status).toBe("created");
     expect(result.compaction?.summary).toBe("S-RETRY");
     expect(result.messages[1]).toEqual(pending);
     expect(mockGenerateText).toHaveBeenCalledTimes(2);
-    expect(mockGenerateText.mock.calls[1][0].messages).toBeDefined();
+    for (const [call] of mockGenerateText.mock.calls) {
+      expect(call.messages).toBeDefined();
+      expect(Object.keys(call.tools ?? {})).toEqual(["lookup"]);
+      expect(call.tools?.lookup.execute).toBeUndefined();
+    }
+    expect(execute).not.toHaveBeenCalled();
   });
 
   test("summarizes an oversized tool call instead of keeping it in the tail", async () => {

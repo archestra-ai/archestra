@@ -7,16 +7,10 @@ import { handleApiError } from "@/lib/utils/api";
 import { useApplyChatOpsBindingPlan } from "./chatops.query";
 
 vi.mock("sonner");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      applyChatOpsBindingPlan: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  applyChatOpsBindingPlan: vi.fn(),
+}));
 vi.mock("@/lib/utils/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/utils/api")>();
   return { ...actual, handleApiError: vi.fn() };

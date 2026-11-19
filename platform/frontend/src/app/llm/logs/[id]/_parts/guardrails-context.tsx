@@ -3,7 +3,13 @@
 // The session trace's guardrails state: the checks and label history, which
 // check is open in the details pane, and the pane that shows it.
 
-import { ArrowRight, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import {
+  ArrowRight,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -19,13 +25,16 @@ import {
 import { toConsultView } from "@/app/consults/logs/_parts/consult-details";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useSessionToolCallAskers } from "@/lib/interactions/interaction.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useSessionConsults } from "@/lib/openappa/external-consults.query";
 import { useSessionLabelChanges } from "@/lib/openappa/label-changes.query";
@@ -41,6 +50,7 @@ import {
   ROLE_LABEL,
   type TraceConsult,
   trustTone,
+  unexplainedCallIds,
 } from "./guardrails";
 import { OverviewSection } from "./overview-parts";
 import { RequestDetails } from "./request-details";
@@ -61,17 +71,25 @@ type GuardrailsState = {
   loading: boolean;
   /** Wraps the page's span selection so picking a span closes a consult. */
   selectSpan: (key: string | null) => void;
+  /** Reading earlier requests for a label change's cause failed. */
+  askerLookup: { failed: boolean; retry: () => void };
 };
 
 const GuardrailsContext = createContext<GuardrailsState | null>(null);
 
 export function GuardrailsProvider({
   timeline,
+  pageEndsAt = null,
   sessionId,
   onSelectSpan,
   children,
 }: {
   timeline: Timeline | null;
+  /**
+   * Where this page's ownership ends, epoch ms: the next page's first
+   * request's start. Null on the last page.
+   */
+  pageEndsAt?: number | null;
   /** The LLM session whose guardrail records to read. */
   sessionId: string;
   onSelectSpan: (key: string | null) => void;
@@ -87,9 +105,37 @@ export function GuardrailsProvider({
       llmSessionId: sessionId,
       enabled: openappaEnabled,
     });
+  // Yells have their own permission, apart from the logs this page needs.
+  const { data: canReadYells } = useHasPermissions({
+    guardrailsYell: ["read"],
+  });
   const { data: yells, isLoading: yellsLoading } = useSessionYells({
     llmSessionId: sessionId,
-    enabled: openappaEnabled,
+    enabled: openappaEnabled && canReadYells,
+  });
+  // A label change a client-run tool caused, whose asking request sits on
+  // another page: found by the call id its response recorded.
+  const offPageCallIds = useMemo(
+    () =>
+      unexplainedCallIds({
+        timeline,
+        labelChanges: labelChanges ?? [],
+        until: pageEndsAt,
+      }),
+    [timeline, labelChanges, pageEndsAt],
+  );
+  const pageStartsAt = useMemo(() => {
+    const starts = (timeline?.spans ?? []).flatMap((span) =>
+      span.type === "request" ? [new Date(span.row.createdAt).getTime()] : [],
+    );
+    return starts.length > 0
+      ? new Date(Math.min(...starts)).toISOString()
+      : null;
+  }, [timeline]);
+  const askers = useSessionToolCallAskers({
+    sessionId,
+    callIds: offPageCallIds,
+    endDate: pageStartsAt,
   });
   const guardrails = useMemo(
     () =>
@@ -98,8 +144,9 @@ export function GuardrailsProvider({
         consults: consults ?? [],
         labelChanges: labelChanges ?? [],
         yells: yells?.data ?? [],
+        askedElsewhere: askers.byCallId,
       }),
-    [timeline, consults, labelChanges, yells],
+    [timeline, consults, labelChanges, yells, askers.byCallId],
   );
 
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(
@@ -126,7 +173,11 @@ export function GuardrailsProvider({
 
   const state: GuardrailsState = {
     guardrails,
-    loading: consultsLoading || labelChangesLoading || yellsLoading,
+    // Until the earlier requests are read, an off-page cause would point at
+    // the wrong row.
+    loading:
+      consultsLoading || labelChangesLoading || yellsLoading || askers.pending,
+    askerLookup: { failed: askers.failed, retry: askers.retry },
     selectedConsultKey,
     selectConsult,
     selectSpan: (key) => {
@@ -154,11 +205,42 @@ export function TraceWaterfall(
     "guardrails" | "selectedConsultKey" | "onSelectConsult"
   >,
 ) {
-  const { guardrails, loading, selectedConsultKey, selectConsult, selectSpan } =
-    useGuardrails();
+  const {
+    guardrails,
+    loading,
+    selectedConsultKey,
+    selectConsult,
+    selectSpan,
+    askerLookup,
+  } = useGuardrails();
   return (
     <RequestWaterfall
       {...props}
+      notice={
+        askerLookup.failed ? (
+          <>
+            <div className="border-b px-4 py-2">
+              <InlineNotice variant="error">
+                <TriangleAlert />
+                <InlineNoticeText>
+                  Couldn't look up which earlier request caused a label change.
+                </InlineNoticeText>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="ml-auto"
+                  onClick={askerLookup.retry}
+                >
+                  <span>Retry</span>
+                </Button>
+              </InlineNotice>
+            </div>
+            {props.notice}
+          </>
+        ) : (
+          props.notice
+        )
+      }
       loading={props.loading || loading}
       onSelect={selectSpan}
       guardrails={guardrails}

@@ -304,6 +304,35 @@ describe("shared K8s utilities", () => {
       const { isK8sConfigured } = await import("./shared");
       expect(isK8sConfigured()).toBe(false);
     });
+
+    test("orchestrator turned off: reports unconfigured and never loads a kubeconfig", async () => {
+      vi.resetModules();
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("@/config")>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              enabled: false,
+              kubernetes: {
+                namespace: "",
+                kubeconfig: "/path/to/kubeconfig",
+                loadKubeconfigFromCurrentCluster: true,
+              },
+            },
+          },
+        };
+      });
+      const { KubeConfig } = await import("@kubernetes/client-node");
+      const fromCluster = vi.spyOn(KubeConfig.prototype, "loadFromCluster");
+      const fromDefault = vi.spyOn(KubeConfig.prototype, "loadFromDefault");
+      const { isK8sConfigured, loadKubeConfig } = await import("./shared");
+
+      expect(isK8sConfigured()).toBe(false);
+      expect(() => loadKubeConfig()).toThrow(/orchestrator is disabled/);
+      expect(fromCluster).not.toHaveBeenCalled();
+      expect(fromDefault).not.toHaveBeenCalled();
+    });
   });
 
   describe("getK8sNamespace", () => {
@@ -361,27 +390,6 @@ describe("shared K8s utilities", () => {
       expect(() => validateKubeconfig("/nonexistent/path")).toThrow(
         "Kubeconfig file not found",
       );
-    });
-  });
-
-  describe("ensureStringIsRfc1123Compliant", () => {
-    async function getEnsureStringIsRfc1123Compliant() {
-      const { ensureStringIsRfc1123Compliant } = await import("./shared");
-      return ensureStringIsRfc1123Compliant;
-    }
-
-    test.each([
-      ["My Server", "my-server"],
-      ["TEST-VALUE", "test-value"],
-      ["hello_world", "helloworld"],
-      ["a..b", "a.b"],
-      ["a--b", "a-b"],
-      ["-leading", "leading"],
-      ["trailing-", "trailing"],
-      ["UPPER CASE", "upper-case"],
-    ])("converts '%s' to '%s'", async (input, expected) => {
-      const fn = await getEnsureStringIsRfc1123Compliant();
-      expect(fn(input)).toBe(expected);
     });
   });
 

@@ -34,7 +34,7 @@ import { ConsultOutcomeBadge } from "./consult-outcome-badge";
  * not-stored consults say so instead.
  */
 export function ConsultPayloads({ view }: { view: ConsultView }) {
-  const { consult, toolCall, diagnostics } = view;
+  const { consult, toolCall, requirements, diagnostics } = view;
   // The server nulls the request of an audience-source consult for callers
   // without member:read.
   const withheld = consult.request === null;
@@ -62,6 +62,7 @@ export function ConsultPayloads({ view }: { view: ConsultView }) {
               content was never stored.
             </InlineNoticeText>
           </InlineNotice>
+          <Requirements requirements={requirements} />
         </Section>
       ) : (
         <>
@@ -70,6 +71,7 @@ export function ConsultPayloads({ view }: { view: ConsultView }) {
               value={toolCall ? toolCall.arguments : consult.request}
               maxHeightClassName="max-h-[320px] overflow-auto"
             />
+            <Requirements requirements={requirements} />
           </Section>
           <Section title="Answer">
             {consult.answer === null ? (
@@ -250,6 +252,25 @@ function ProbabilityRow({
       <span className="text-right tabular-nums">
         {(probability * 100).toFixed(1)}%
       </span>
+    </div>
+  );
+}
+
+// What an authority was asked to approve. Kept under Metadata only too: it
+// names requirements, never content.
+function Requirements({ requirements }: { requirements: unknown[] }) {
+  if (requirements.length === 0) {
+    return null;
+  }
+  return (
+    <div className="mt-3">
+      <h4 className="text-xs font-medium text-muted-foreground">
+        Requirements it was asked to approve
+      </h4>
+      <JsonCodeBlock
+        value={requirements}
+        maxHeightClassName="max-h-[240px] overflow-auto"
+      />
     </div>
   );
 }

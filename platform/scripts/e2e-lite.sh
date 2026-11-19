@@ -23,16 +23,9 @@
 #   MCP_SERVER_BASE_IMAGE  orchestrator base image for MCP server pods
 #                          (default: the published :latest — the embedded Kind
 #                          cluster pulls it straight from the registry).
-#   ARCHESTRA_BETA         turn the beta master switch, and with it the OpenAPPA
-#                          runtime, on in the platform container (default:
-#                          false). Opt-in only: with it on,
-#                          the proxy refuses any request that declares tools
-#                          without both APPA tools, so the default lite suite
-#                          must run with it off. The dedicated `openappa`
-#                          Playwright project is the one that sets it.
 #   ARCHESTRA_AGENT_RUNTIME_ENABLED
 #                          turn Agent Runtime on in the platform container
-#                          (default: false). The beta switch never implies it.
+#                          (default: false).
 #                          The docs screenshots set it to show the runtime
 #                          picker and popular agents.
 
@@ -42,8 +35,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLATFORM_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${PLATFORM_DIR}")"
 
-REGISTRY="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
-CI_REGISTRY="ghcr.io/archestra-ai/ci"
+REGISTRY="ghcr.io/archestra-ai"
+CI_REGISTRY="${REGISTRY}/ci"
+# supply-chain-policy: allow-latest published stable fallback when no image is passed (local runs, fork PRs)
 MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-${REGISTRY}/mcp-server-base:latest}"
 
 NETWORK="archestra-lite-net"
@@ -57,12 +51,12 @@ KEYCLOAK_CONTAINER="e2e-tests-keycloak"
 # its node runs as a sibling container we must clean up ourselves.
 EMBEDDED_KIND_CONTAINER="archestra-mcp-control-plane"
 
-KEYCLOAK_IMAGE="${REGISTRY}/keycloak:pr46048-5afbf42"
+KEYCLOAK_IMAGE="${CI_REGISTRY}/keycloak:pr46048-5afbf42"
 WIREMOCK_IMAGE="wiremock/wiremock:3.13.1"
 
-# Pull from the public registry ignoring configured credential helpers: a
-# stale `gcloud auth configure-docker` helper otherwise fails anonymous pulls
-# with a reauthentication error. Falls back to a normal pull.
+# Pull from the public registry ignoring configured credentials: a stale
+# login or credential helper otherwise fails anonymous pulls. Falls back to a
+# normal pull.
 pull_public() {
   DOCKER_CONFIG="$(mktemp -d)" docker pull --quiet "$1" > /dev/null 2>&1 \
     || docker pull --quiet "$1" > /dev/null
@@ -167,7 +161,6 @@ cmd_up() {
     -p 127.0.0.1:9191:9191 \
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
-    -e "ARCHESTRA_BETA=${ARCHESTRA_BETA:-false}" \
     -e "ARCHESTRA_AGENT_RUNTIME_ENABLED=${ARCHESTRA_AGENT_RUNTIME_ENABLED:-false}" \
     -e "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET=${ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET:-e2e-openappa-offer-signing-secret}" \
     -v /var/run/docker.sock:/var/run/docker.sock \

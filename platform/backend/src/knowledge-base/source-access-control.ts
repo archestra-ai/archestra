@@ -9,6 +9,7 @@ import {
   KbExternalUserGroupModel,
   KbFileModel,
   KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel, {
@@ -314,7 +315,8 @@ class KnowledgeSourceAccessControlService {
 
   /**
    * For a caller with no user of its own: the knowledge bases or connectors
-   * published to the organization at large for `action`.
+   * published to the organization at large (or granted to `principal`, such as
+   * an OAuth client) for `action`.
    */
   async filterPublishedToOrganization<
     T extends { id: string; organizationId: string },
@@ -323,14 +325,43 @@ class KnowledgeSourceAccessControlService {
     resource: "knowledgeBase" | "knowledgeConnector";
     sources: T[];
     action: "read" | "use";
+    principal?: GrantPrincipal;
   }): Promise<T[]> {
-    const published =
-      await ResourcePermissionPolicyModel.findOrganizationWideScopes({
+    const publishedPromise =
+      ResourcePermissionPolicyModel.findOrganizationWideScopes({
         organizationId: params.organizationId,
         resource: params.resource,
         scopes: params.sources.map((source) => source.id),
         action: params.action,
       });
+    if (params.principal) {
+      const [grants, published] = await Promise.all([
+        ResourcePermissions.resolveAll({
+          ...params.principal,
+          resources: [params.resource],
+        }),
+        publishedPromise,
+      ]);
+      const permitted = grants.filter(
+        (grant) =>
+          grant.resource === params.resource && grant.action === params.action,
+      );
+      if (permitted.some((grant) => grant.scope === "*")) {
+        return params.sources.filter(
+          (source) => source.organizationId === params.organizationId,
+        );
+      }
+      const permittedIds = new Set([
+        ...permitted.map((grant) => grant.scope),
+        ...published,
+      ]);
+      return params.sources.filter(
+        (source) =>
+          source.organizationId === params.organizationId &&
+          permittedIds.has(source.id),
+      );
+    }
+    const published = await publishedPromise;
     return params.sources.filter(
       (source) =>
         source.organizationId === params.organizationId &&
@@ -346,29 +377,130 @@ class KnowledgeSourceAccessControlService {
     connectors: KnowledgeBaseConnector[];
     /** Already-visible assigned bases; direct assignments do not add upload access. */
     knowledgeBaseIds: string[];
+    principal?: GrantPrincipal;
   }): Promise<KnowledgeBaseConnector[]> {
-    const [published, uploadConnectorIds] = await Promise.all([
-      this.filterPublishedToOrganization({
-        organizationId: params.organizationId,
-        resource: "knowledgeConnector",
-        sources: params.connectors,
-        action: "use",
-      }),
-      params.connectors.some(
-        (connector) => connector.connectorType === "file_upload",
-      )
-        ? KbFileModel.findPublishedUploadConnectorIds(params)
-        : Promise.resolve([]),
-    ]);
+    const [published, uploadConnectorIds, assignedToVisibleKbs] =
+      await Promise.all([
+        this.filterPublishedToOrganization({
+          organizationId: params.organizationId,
+          resource: "knowledgeConnector",
+          sources: params.connectors,
+          action: "use",
+          principal: params.principal,
+        }),
+        params.connectors.some(
+          (connector) => connector.connectorType === "file_upload",
+        )
+          ? KbFileModel.findPublishedUploadConnectorIds(params)
+          : Promise.resolve([]),
+        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
+          params.knowledgeBaseIds,
+          { canReadAll: true },
+        ),
+      ]);
     const publishedIds = new Set(published.map((connector) => connector.id));
     const uploadIds = new Set(uploadConnectorIds);
+    const assignedIds = new Set(
+      assignedToVisibleKbs.map((connector) => connector.id),
+    );
     return params.connectors.filter(
       (connector) =>
         connector.organizationId === params.organizationId &&
         (connector.connectorType === "file_upload"
           ? uploadIds.has(connector.id)
-          : publishedIds.has(connector.id)),
+          : publishedIds.has(connector.id) || assignedIds.has(connector.id)),
     );
+  }
+
+  /**
+   * Resolve the connectors and knowledge bases reachable by a caller without a
+   * user identity (e.g. an OAuth client or org/team token) on an agent with
+   * "access all tools" enabled ("Every knowledge source, with no exceptions.").
+   */
+  async findQueryableOrganizationConnectorsForNonUser(params: {
+    organizationId: string;
+    environmentId: string | null;
+    excludedConnectorIds: string[];
+    principal?: GrantPrincipal;
+  }): Promise<{
+    connectors: KnowledgeBaseConnector[];
+    knowledgeBases: KnowledgeBase[];
+    queryableCount: number;
+  }> {
+    const [allKbs, rawConnectors] = await Promise.all([
+      KnowledgeBaseModel.findByOrganization({
+        organizationId: params.organizationId,
+      }),
+      KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId: params.organizationId,
+        canReadAll: false,
+        viewerPrincipal: params.principal,
+        visibilityScope: "query",
+        environmentId: params.environmentId,
+      }),
+    ]);
+    const visibleKbs = await this.filterPublishedToOrganization({
+      organizationId: params.organizationId,
+      resource: "knowledgeBase",
+      sources: allKbs,
+      action: "use",
+      principal: params.principal,
+    });
+    const queryableConnectors =
+      await this.filterQueryableConnectorsForOrganization({
+        organizationId: params.organizationId,
+        connectors: rawConnectors,
+        knowledgeBaseIds: visibleKbs.map((kb) => kb.id),
+        principal: params.principal,
+      });
+    const excluded = new Set(params.excludedConnectorIds);
+    const connectors = queryableConnectors.filter(
+      (connector) => !excluded.has(connector.id),
+    );
+    return {
+      connectors,
+      knowledgeBases: visibleKbs,
+      queryableCount: queryableConnectors.length,
+    };
+  }
+
+  /**
+   * Bounded probe for tool-listing: whether a caller without a user identity
+   * can search at least one non-excluded connector in the organization.
+   */
+  async hasQueryableOrganizationConnectorsForNonUser(params: {
+    organizationId: string;
+    environmentId: string | null;
+    excludedConnectorIds: string[];
+    principal?: GrantPrincipal;
+  }): Promise<boolean> {
+    const excluded = new Set(params.excludedConnectorIds);
+    const bounded = await KnowledgeBaseConnectorModel.findByOrganization({
+      organizationId: params.organizationId,
+      canReadAll: false,
+      viewerPrincipal: params.principal,
+      visibilityScope: "query",
+      environmentId: params.environmentId,
+      limit: params.excludedConnectorIds.length + 1,
+    });
+    const nonUpload = bounded.filter(
+      (connector) =>
+        connector.connectorType !== "file_upload" &&
+        !excluded.has(connector.id),
+    );
+    if (nonUpload.length > 0) {
+      const published = await this.filterPublishedToOrganization({
+        organizationId: params.organizationId,
+        resource: "knowledgeConnector",
+        sources: nonUpload,
+        action: "use",
+        principal: params.principal,
+      });
+      if (published.length > 0) return true;
+    }
+    const { connectors } =
+      await this.findQueryableOrganizationConnectorsForNonUser(params);
+    return connectors.length > 0;
   }
   // SPDX-SnippetEnd
 

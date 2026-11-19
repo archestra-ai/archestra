@@ -6,6 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
+import McpServerModel from "@/models/mcp-server";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { createServerScopedServer } from "./mcp-server-gateway.utils";
@@ -275,5 +276,57 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       catalogId: catalog.id,
       caller: { kind: "caller", userId: user.id, organizationId: org.id },
     });
+  });
+
+  test("an installation admin cannot run another user's desktop MCP server; its owner can", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    const owner = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    await makeMember(owner.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "desktop_mcp",
+      desktopConfig: { command: "/opt/files/mcp" },
+    });
+    // As Install creates it: the owner is also a user of the installation.
+    const server = await McpServerModel.create({
+      name: catalog.name,
+      catalogId: catalog.id,
+      serverType: "desktop_mcp",
+      scope: "personal",
+      ownerId: owner.id,
+      userId: owner.id,
+    });
+    mockCreateServerScopedServer.mockImplementation(() => {
+      throw new Error("transport unavailable in test");
+    });
+
+    app = await buildApp(admin.id, org.id);
+    const asAdmin = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/list", {}),
+    });
+    await app.close();
+    app = await buildApp(owner.id, org.id);
+    const asOwner = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/list", {}),
+    });
+
+    expect(asAdmin.statusCode).toBe(403);
+    expect(asAdmin.json().error.message).toMatch(/another user's computer/);
+    // The owner gets through the gate to the transport.
+    expect(asOwner.statusCode).toBe(500);
+    expect(mockCreateServerScopedServer).toHaveBeenCalledTimes(1);
   });
 });

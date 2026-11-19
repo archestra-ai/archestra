@@ -23,14 +23,25 @@ Background worker:
 Background worker: running in-process (worker Deployment disabled)
 {{- end }}
 
-{{- if .Values.postgresql.external_database_url }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict }}
+{{- if or .Values.postgresql.external_database_url (not .Values.postgresql.enabled) }}
 
-Using external PostgreSQL database
+Using external PostgreSQL database{{- if $iamAuth.enabled }} (RDS IAM authentication enabled){{- else if $entraAuth.enabled }} (Microsoft Entra ID authentication enabled){{- end }}
 {{- else }}
 
 Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}
+{{- end }}
+
+{{- if not .Values.archestra.authSecret.existingSecretName }}
+
+Authentication and encryption keys:
+  The chart generated them in Secret {{ include "archestra-platform.authSecretName" . }}. Back it up with your database.
+  Tools that render this chart with `helm template`, such as Argo CD, cannot read that
+  Secret and would replace the keys on every sync, leaving stored credentials unreadable.
+  With such a tool, create the Secret yourself and set archestra.authSecret.existingSecretName.
 {{- end }}
 
 {{- $legacyOverrides := list }}
@@ -50,4 +61,14 @@ Registry migration notice:
   New companion images are published at ghcr.io/archestra-ai.
   Update these overrides to use this release's images, or your internal mirror.
   Existing versions remain available at their original addresses.
+{{- end }}
+
+{{- /* Remove after 1.5.0, when the Artifact Registry chart stops getting versions. */}}
+{{- if semverCompare "<1.5.1-0" .Chart.Version }}
+
+Chart registry notice:
+  This chart is published at oci://ghcr.io/archestra-ai/helm-charts/archestra-platform.
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform
+  gets no versions after 1.5.0. If you install, upgrade, or sync (Argo CD, Flux, Terraform)
+  from that address, switch to the GHCR address. Versions already there stay available.
 {{- end }}

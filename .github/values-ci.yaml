@@ -49,8 +49,6 @@ archestra:
   # Environment variables for e2e testing
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"
-    # Beta features on, so the K8s e2e jobs cover idle hibernation.
-    ARCHESTRA_BETA: "true"
     ARCHESTRA_ANALYTICS: disabled
     # LLM Proxy base URLs (for LLM proxy routes)
     # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
@@ -141,16 +139,6 @@ archestra:
   orchestrator:
     # The shortest accepted idle window keeps negative assertions meaningful.
     mcpIdleHibernationSeconds: 120
-    kubernetes:
-      networkPolicy:
-        # Enable SSRF protection for e2e testing
-        create: true
-        additionalEgressRules:
-          # Allow MCP server pods to reach Keycloak for JWT validation (e2e tests)
-          - to:
-              - podSelector:
-                  matchLabels:
-                    app.kubernetes.io/name: keycloak
 
   # Use NodePort service type to expose services on fixed ports
   service:

@@ -3,7 +3,7 @@ import {
   type StatisticsAxisLabelPrecision,
   type StatisticsTimeFrame,
 } from "@archestra/shared";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 
 /**
  * Label one bucket of a statistics time series for the chart's time axis.

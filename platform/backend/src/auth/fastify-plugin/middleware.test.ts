@@ -7,7 +7,10 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { OrganizationModel } from "@/models";
-import { OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
+import {
+  ARCHESTRA_CLI_DOWNLOAD_PREFIX,
+  OAUTH_CALLBACK_PATH,
+} from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { Authnz } from "./middleware";
@@ -121,6 +124,31 @@ describe("Authnz", () => {
       }
     });
 
+    test("skips auth for GET and HEAD of the archestra program download only", async () => {
+      const handle = (method: string) => {
+        const request = {
+          url: `${ARCHESTRA_CLI_DOWNLOAD_PREFIX}/darwin-arm64`,
+          method,
+          headers: {},
+        } as FastifyRequest;
+        const reply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+        return { done: authnz.handle(request, reply), reply };
+      };
+
+      for (const method of ["GET", "HEAD"]) {
+        const { done, reply } = handle(method);
+        await done;
+        expect(reply.status).not.toHaveBeenCalled();
+        expect(reply.send).not.toHaveBeenCalled();
+      }
+      await expect(handle("POST").done).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+
     test("requires authentication for the MCP installation OAuth callback", async () => {
       const request = {
         url: OAUTH_CALLBACK_PATH,
@@ -167,7 +195,7 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for model router proxy routes", async () => {
+    test("should skip session auth for both unified model API paths", async () => {
       const modelRouterPaths = [
         "/v1/model-router/models",
         "/v1/model-router/chat/completions",
@@ -179,7 +207,12 @@ describe("Authnz", () => {
         "/v1/model-router/some-agent-id/embeddings",
       ];
 
-      for (const url of modelRouterPaths) {
+      for (const url of [
+        ...modelRouterPaths,
+        ...modelRouterPaths.map((path) =>
+          path.replace("model-router", "unified-model"),
+        ),
+      ]) {
         const mockRequest = {
           url,
           method: "POST",
@@ -216,6 +249,39 @@ describe("Authnz", () => {
 
       expect(mockReply.status).not.toHaveBeenCalled();
       expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    test("lets anyone read the SPIFFE issuer's discovery document, keys and bundle, and nothing else there", async () => {
+      for (const url of [
+        "/api/agent-identity/spiffe/.well-known/openid-configuration",
+        "/api/agent-identity/spiffe/keys",
+        "/api/agent-identity/spiffe/bundle",
+      ]) {
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+        await authnz.handle(
+          { url, method: "GET", headers: {} } as FastifyRequest,
+          mockReply,
+        );
+        expect(mockReply.status).not.toHaveBeenCalled();
+      }
+
+      await expect(
+        authnz.handle(
+          {
+            url: "/api/agent-identity/spiffe/keys",
+            method: "POST",
+            headers: {},
+          } as FastifyRequest,
+          {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            header: vi.fn(),
+          } as unknown as FastifyReply,
+        ),
+      ).rejects.toMatchObject({ statusCode: 401 });
     });
 
     test("should skip auth for GET requests to public config endpoint", async () => {
@@ -507,7 +573,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=session when session auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"
@@ -565,7 +631,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=api_key when API key auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"
@@ -625,85 +691,23 @@ describe("Authnz", () => {
   });
 
   describe("setSentryUserContext", () => {
-    test("should set Sentry user context with all available fields", () => {
-      const mockUser = {
+    test("attributes errors to the user id alone, without email, name or IP", () => {
+      authnz.setSentryUserContext({
         id: "user-123",
         email: "test@example.com",
         name: "Test User",
-      };
+      } as { id: string });
 
-      const mockRequest = {
-        headers: {
-          "x-forwarded-for": "192.168.1.1, 10.0.0.1",
-        },
-        ip: "127.0.0.1",
-        // biome-ignore lint/suspicious/noExplicitAny: test...
-      } as any;
-
-      authnz.setSentryUserContext(mockUser, mockRequest);
-
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user-123",
-        email: "test@example.com",
-        username: "Test User",
-        ip_address: "192.168.1.1",
-      });
-    });
-
-    test("should use email as username when name is not available", () => {
-      const mockUser = {
-        id: "user-456",
-        email: "another@example.com",
-      };
-
-      const mockRequest = {
-        headers: {},
-        ip: "127.0.0.1",
-      } as FastifyRequest;
-
-      authnz.setSentryUserContext(mockUser, mockRequest);
-
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user-456",
-        email: "another@example.com",
-        username: "another@example.com",
-        ip_address: "127.0.0.1",
-      });
-    });
-
-    test("should extract IP from x-real-ip header", () => {
-      const mockUser = { id: "user-789" };
-
-      const mockRequest = {
-        headers: {
-          "x-real-ip": "203.0.113.0",
-        },
-        ip: "127.0.0.1",
-        // biome-ignore lint/suspicious/noExplicitAny: test...
-      } as any;
-
-      authnz.setSentryUserContext(mockUser, mockRequest);
-
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user-789",
-        email: undefined,
-        username: undefined,
-        ip_address: "203.0.113.0",
-      });
+      expect(Sentry.setUser).toHaveBeenCalledWith({ id: "user-123" });
     });
 
     test("should handle errors silently", () => {
-      const mockUser = { id: "user-error" };
-      const mockRequest = {} as FastifyRequest;
-
-      // Mock Sentry.setUser to throw an error
       vi.mocked(Sentry.setUser).mockImplementationOnce(() => {
         throw new Error("Sentry error");
       });
 
-      // Should not throw
       expect(() => {
-        authnz.setSentryUserContext(mockUser, mockRequest);
+        authnz.setSentryUserContext({ id: "user-error" });
       }).not.toThrow();
     });
   });

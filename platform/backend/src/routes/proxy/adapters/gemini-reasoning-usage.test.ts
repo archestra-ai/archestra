@@ -52,11 +52,11 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
         expect(result).toMatchObject({
           usage: transport === "chat" ? chatUsage : responsesUsage,
         });
-        // Reporting wire totals must not change the provider-domain counters
-        // used for logging and cost calculation.
+        // The counters used for logging and cost carry the same output as the
+        // wire: thinking included once, not added again on the way out.
         expect(adapter.getUsage()).toMatchObject({
           inputTokens: 200,
-          outputTokens: 100,
+          outputTokens: 600,
           reasoningTokens: 500,
         });
       });
@@ -127,6 +127,42 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
     );
     expect(completions).toHaveLength(1);
     expect(completions[0].response.usage).toMatchObject(responsesUsage);
+  });
+
+  test("built-in tool tokens count as prompt tokens, streamed or not", () => {
+    // Gemini reports tokens fed back from Google Search, URL context and code
+    // execution beside promptTokenCount; its total includes them.
+    const withToolUse: Gemini.Types.GenerateContentResponse = {
+      ...response,
+      usageMetadata: {
+        ...response.usageMetadata,
+        toolUsePromptTokenCount: 300,
+        totalTokenCount: 2900,
+      },
+    };
+    const expected = {
+      prompt_tokens: 2300,
+      completion_tokens: 600,
+      total_tokens: 2900,
+    };
+
+    const factory = makeFactory("chat");
+    expect(
+      factory.createResponseAdapter(withToolUse).getOriginalResponse(),
+    ).toMatchObject({ usage: expected });
+
+    const stream = factory.createStreamAdapter();
+    stream.processChunk(
+      withToolUse as unknown as Parameters<typeof stream.processChunk>[0],
+    );
+    const end = stream.formatEndSSE();
+    const wire = typeof end === "string" ? end : new TextDecoder().decode(end);
+    const streamed = wire
+      .split("\n\n")
+      .filter((part) => part.startsWith("data: {"))
+      .map((part) => JSON.parse(part.slice(6)))
+      .find((event) => event.usage)?.usage;
+    expect(streamed).toMatchObject(expected);
   });
 
   test("missing provider total still counts reasoning once", () => {

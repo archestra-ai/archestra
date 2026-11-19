@@ -55,6 +55,7 @@ import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { CommonToolResult } from "@/types";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
@@ -67,11 +68,10 @@ import {
   unwrapToolResultForPreview,
 } from "./apps";
 
-// The elicitation bridge polls cacheManager for the user's answer; cacheManager
-// is the Postgres-backed singleton (not started in PGlite tests), so back it
-// with the canonical Map-backed fake from src/__mocks__/cache-manager.ts. The
-// bridge and refine_app (the SUT) are real.
-vi.mock("@/cache-manager");
+// The elicitation bridge polls cacheManager for the user's answer, so start
+// the real cache on this file's test database. The bridge and refine_app (the
+// SUT) are real.
+setupTestCacheManager();
 
 function structured(result: { structuredContent?: unknown }): any {
   return result.structuredContent;

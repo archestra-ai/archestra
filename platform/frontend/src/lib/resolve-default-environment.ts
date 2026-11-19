@@ -12,7 +12,7 @@ import type { EnvironmentDefaultableResource } from "@archestra/shared";
  * pre-selecting one would show a value they cannot pick back.
  */
 export function resolveDefaultEnvironmentId(params: {
-  environments: { id: string; canDeploy: boolean }[];
+  environments: { id: string; deployKinds: readonly string[] }[];
   resourceDefaults: Partial<
     Record<EnvironmentDefaultableResource, string | null>
   >;
@@ -27,6 +27,6 @@ export function resolveDefaultEnvironmentId(params: {
     (candidate) => candidate.id === configuredId,
   );
   if (!environment) return null;
-  if (!environment.canDeploy) return null;
+  if (!environment.deployKinds.includes(resource)) return null;
   return environment.id;
 }

@@ -6,7 +6,14 @@ import {
   getAgentCatalogImages,
   type SupportedProvider,
 } from "@archestra/shared";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
@@ -100,7 +107,38 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
     refetch: vi.fn(),
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+  useBuiltInRuntimeDefaults: () => () => undefined,
+  useAgentRuntimePermissions: () => runtimePermissions.current,
+  useAgentRuntimeAccess: () => ({
+    data: {
+      runtimes: [
+        "claude-code",
+        "codex",
+        "opencode",
+        "hermes",
+        "openclaw",
+        "grok",
+        "kimi",
+        "copilot",
+      ].map((id) => ({ id, canUse: true, canConfigure: true })),
+      canConfigureAny: true,
+    },
+    isPending: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
+const runtimePermissions = vi.hoisted(() => ({
+  current: { canChange: true, readOnlyBy: null } as {
+    canChange: boolean | undefined;
+    readOnlyBy: string | null;
+  },
+}));
+// Everyone may use and configure the runtime unless a test says otherwise.
+beforeEach(() => {
+  runtimePermissions.current = { canChange: true, readOnlyBy: null };
+});
 vi.mock("next/navigation");
 
 const {
@@ -215,10 +253,30 @@ const {
     } => ({ data: [], isPending: false, isError: false }),
   ),
   useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
-  useOrganizationDefaultModelMock: vi.fn(() => ({
-    model: null,
-    label: null,
-  })),
+  useOrganizationDefaultModelMock: vi.fn(
+    (): {
+      model: null;
+      label: string | null;
+      autoRoutedTiers: null;
+      autoRouters: Array<{
+        id: string;
+        name: string;
+        label: string;
+        description: string;
+        tiers: Record<
+          "fast" | "normal" | "smart",
+          { id: string; provider: "anthropic"; displayName: string }
+        >;
+      }>;
+      defaultAutoRouterId: string | null;
+    } => ({
+      model: null,
+      label: null,
+      autoRoutedTiers: null,
+      autoRouters: [],
+      defaultAutoRouterId: null,
+    }),
+  ),
   useAgentDelegationsMock: vi.fn(
     (): { data: unknown[]; isSuccess: boolean } => ({
       data: [],
@@ -381,6 +439,19 @@ vi.mock("@/components/initial-resource-permissions", () => ({
   InitialResourcePermissions: () => null,
 }));
 
+// The per-agent network policy editor reads the cluster's policy support.
+vi.mock("@/lib/environment.query", async () => ({
+  ...(await vi.importActual("@/lib/environment.query")),
+  useK8sCapabilities: () => ({
+    data: {
+      networkPolicy: {
+        supportsFqdn: true,
+        enforcementStatus: "verified-enforced",
+      },
+    },
+  }),
+}));
+
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual("@tanstack/react-query");
   return {
@@ -449,6 +520,14 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 }));
 
 vi.mock("sonner");
+
+vi.mock("@/lib/agent-identity-bindings.query", () => ({
+  useAgentIdentityBindings: () => ({ data: [], isSuccess: true }),
+  useReplaceAgentIdentityBindings: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
 
 vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
   useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
@@ -724,16 +803,40 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
     onAddApiKey,
     onSelectKey,
+    onSelectOrganizationDefault,
     providerFilter,
+    autoRouters = [],
   }: {
     onAddApiKey?: () => void;
     onSelectKey: (keyId: string) => void;
+    onSelectOrganizationDefault?: () => void;
     providerFilter?: (provider: SupportedProvider) => boolean;
+    autoRouters?: Array<{
+      id: string;
+      label: string;
+      selected: boolean;
+      onSelect: () => void;
+    }>;
   }) => (
     <>
       <button type="button" onClick={() => onSelectKey("key-1")}>
         Pick API key
       </button>
+      {autoRouters.map((router) => (
+        <button
+          key={router.id}
+          type="button"
+          aria-pressed={router.selected}
+          onClick={router.onSelect}
+        >
+          {`Pick ${router.label}`}
+        </button>
+      ))}
+      {autoRouters.length > 0 && onSelectOrganizationDefault && (
+        <button type="button" onClick={onSelectOrganizationDefault}>
+          Pick organization default
+        </button>
+      )}
       {onAddApiKey && (
         <button type="button" onClick={onAddApiKey}>
           Add provider key
@@ -1166,6 +1269,7 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
+  autoRouterId: null,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -1708,10 +1812,6 @@ describe("AgentForm delegation state", () => {
     // a skill entirely: the count said one, no chip appeared, and there was no
     // way to unpublish it. The assignment endpoint returns the row for exactly
     // this reason.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useAgentSkillsMock.mockReturnValue({
       data: {
         accessAllSkills: false,
@@ -1746,10 +1846,6 @@ describe("AgentForm delegation state", () => {
     // id outlives the scope it was made under. Filtering the picker to org
     // scope alone stranded it: the count said one, no chip appeared, and the id
     // was re-submitted verbatim on every save with no way to drop it.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useAgentSkillsMock.mockReturnValue({
       data: { accessAllSkills: true, skillIds: [], skills: [] },
       isSuccess: true,
@@ -2405,10 +2501,6 @@ describe("AgentForm published skills", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     // Only this flag: the section does not exist without it.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
     useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
@@ -2881,6 +2973,143 @@ describe("AgentForm save payload and failure handling", () => {
     useOrganizationDefaultModelMock.mockReturnValue({
       model: null,
       label: null,
+      autoRoutedTiers: null,
+      autoRouters: [],
+      defaultAutoRouterId: null,
+    });
+  });
+
+  describe("auto routers", () => {
+    const routerTiers = (prefix: string) => ({
+      fast: {
+        id: `${prefix}-fast`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Haiku`,
+      },
+      normal: {
+        id: `${prefix}-normal`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Sonnet`,
+      },
+      smart: {
+        id: `${prefix}-smart`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Opus`,
+      },
+    });
+    const routerA = {
+      id: "router-a",
+      name: "auto",
+      label: "Auto",
+      description: "A Haiku, A Sonnet, A Opus",
+      tiers: routerTiers("A"),
+    };
+    const routerB = {
+      id: "router-b",
+      name: "auto:support",
+      label: "Auto · support",
+      description: "B Haiku, B Sonnet, B Opus",
+      tiers: routerTiers("B"),
+    };
+    const offerRouters = (routers: (typeof routerA)[]) =>
+      useOrganizationDefaultModelMock.mockReturnValue({
+        model: null,
+        label: null,
+        autoRoutedTiers: null,
+        autoRouters: routers,
+        defaultAutoRouterId: null,
+      });
+    const renderOnRouter = (autoRouterId: string | null) =>
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{ ...baseAgent, autoRouterId }}
+          sections={["configuration"]}
+        />,
+      );
+
+    it("offers one option per router and saves the picked router's id", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter(null);
+
+      expect(
+        await screen.findByRole("button", { name: "Pick Auto" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      await user.click(
+        screen.getByRole("button", { name: "Pick Auto · support" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Pick Auto · support" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // The model control names that router, not the first one.
+      expect(
+        screen.getByRole("button", { name: /Auto · support.*3 models/ }),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({
+        autoRouterId: "router-b",
+        llmApiKeyId: null,
+        modelId: null,
+        modelPoolId: null,
+      });
+    });
+
+    it("moves an agent from one router to another", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter("router-b");
+
+      expect(
+        await screen.findByRole("button", { name: "Pick Auto · support" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByRole("button", { name: "Pick Auto" }));
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({ autoRouterId: "router-a" });
+    });
+
+    it("clears the router when the agent goes back to the organization default", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter("router-a");
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Pick organization default",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({ autoRouterId: null });
+    });
+
+    it("clears the router when a provider key is picked", async () => {
+      offerRouters([routerA]);
+      const user = userEvent.setup();
+      renderOnRouter("router-a");
+
+      await user.click(
+        await screen.findByRole("button", { name: "Pick API key" }),
+      );
+      expect(screen.getByRole("button", { name: "Pick Auto" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+
+    it("keeps a saved router selected, as Auto, once it is no longer offered", async () => {
+      offerRouters([routerA]);
+      renderOnRouter("router-gone");
+
+      const options = await screen.findAllByRole("button", {
+        name: "Pick Auto",
+      });
+      expect(
+        options.map((option) => option.getAttribute("aria-pressed")),
+      ).toEqual(["false", "true"]);
     });
   });
 
@@ -3000,6 +3229,8 @@ describe("AgentForm save payload and failure handling", () => {
       );
 
       expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Tools" })).toBeVisible();
+      expect(screen.queryByText("Tools & Knowledge")).toBeNull();
       expect(
         screen.queryByRole("radiogroup", { name: "Tool access" }),
       ).toBeNull();
@@ -3042,14 +3273,9 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
-  it("keeps saved runtime settings read-only without Configure runtime", () => {
+  it("keeps saved runtime settings read-only without use of the runtime", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: !permissions.agent?.includes("configure-runtime"),
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
     render(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
@@ -3057,18 +3283,13 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByRole("button", { name: "Enable runtime" }),
     ).toBeDisabled();
     expect(
-      screen.getByText(/Configure runtime permission is required/),
+      screen.getByText(/You don't have permission to use this agent's runtime/),
     ).toBeInTheDocument();
   });
 
   it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
     const user = userEvent.setup();
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: !permissions.agent?.includes("configure-runtime"),
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
     const runtime = {
       ...defaultAgentRuntime(),
       image: "example.test/worker:v1",
@@ -3646,6 +3867,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
+      autoRouters: [],
       label: "Google · Gemini 2.5 Pro",
       model: {
         dbId: "gemini-default",
@@ -4151,6 +4373,40 @@ describe("AgentForm save payload and failure handling", () => {
     expect(updateAgent).not.toHaveBeenCalled();
   });
 
+  it("sends the agent's own network policy once it is edited", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          networkPolicy: {
+            egressMode: "restricted",
+            domainPreset: "none",
+            allowedDomains: ["api.example.com"],
+            allowedCidrs: [],
+          },
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    const domains = await screen.findByLabelText("Allowed domains");
+    expect(domains).toHaveValue("api.example.com");
+    fireEvent.change(domains, {
+      target: { value: "api.example.com\nregistry.example.com" },
+    });
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "none",
+      allowedDomains: ["api.example.com", "registry.example.com"],
+      allowedCidrs: [],
+    });
+  });
+
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
@@ -4188,7 +4444,7 @@ describe("AgentForm save payload and failure handling", () => {
     // description should mention that regardless.
     renderAdvanced();
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4211,7 +4467,7 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4229,7 +4485,7 @@ describe("AgentForm save payload and failure handling", () => {
 
     // No runtime picked yet for this to-be-created agent, and the org-wide
     // agentRuntime feature is enabled — neither changes the description.
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4569,6 +4825,7 @@ describe("AgentForm save payload and failure handling", () => {
         isFree: false,
       },
       label: "OpenAI · GPT-5.6 Luna",
+      autoRouters: [],
     } as never);
     const user = userEvent.setup();
     const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
@@ -4660,6 +4917,162 @@ describe("AgentForm save payload and failure handling", () => {
       screen.queryByRole("img", { name: /Select a model/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("keeps the Claude account radio cards visible with personal subscription disabled, shows the command notice, and rewrites subscription to provider on save when a Claude runtime uses a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        anthropic: [
+          {
+            dbId: "claude-model",
+            id: "claude-sonnet-4-6",
+            displayName: "Claude Sonnet",
+            provider: "anthropic",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["custom-claude-entrypoint"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(screen.getByText("Whose Claude account runs it")).toBeVisible();
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    const providerRadio = screen.getByRole("radio", {
+      name: /A company API key/,
+    });
+    expect(subscriptionRadio).toBeDisabled();
+    expect(subscriptionRadio).not.toBeChecked();
+    expect(providerRadio).toBeChecked();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toMatchObject({
+      command: ["custom-claude-entrypoint"],
+      claudeCode: {
+        authentication: "provider",
+        model: "opus",
+      },
+    });
+  });
+
+  it("omits runtime from the configuration save when the caller may not use the agent's runtime even if claudeCode.authentication is subscription on a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["custom-claude-entrypoint"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toBeUndefined();
+  });
+
+  it("does not treat a maintained non-Claude harness on the Anthropic protocol as Claude Code", () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/opencode:latest",
+            command: ["archestra-opencode"],
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Whose Claude account runs it"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/change Dedicated runtime → Container → Command/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pick API key" })).toBeVisible();
   });
 
   it("marks the image row until a container image and command are supplied", async () => {

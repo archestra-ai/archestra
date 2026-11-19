@@ -195,6 +195,7 @@ describe("A2AManager full task mode", () => {
       completionTarget: null,
       completionNotificationClaimedAt: null,
       completionNotifiedAt: null,
+      originLlmSessionId: null,
       logs: null,
       startedAt: new Date(),
       endedAt: null,

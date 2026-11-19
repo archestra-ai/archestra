@@ -48,6 +48,7 @@ export async function createAzureProviderFile(
   const context = await resourceContext(request, reply);
   const violation = await LimitValidationService.checkLimitsBeforeRequest({
     ...context.credential.limitContext,
+    allowUnattributed: context.credential.principal.kind === "service_account",
     agentId: context.credential.agent.id,
     agent: context.credential.agent,
     unpricedMediaModel: "file-storage",

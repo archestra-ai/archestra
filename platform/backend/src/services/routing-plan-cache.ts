@@ -3,7 +3,7 @@ import { type ConfigCache, configCache } from "@/services/config-cache";
 import type { RoutingPlan } from "@/types/auto-routing";
 
 /**
- * Each organization's serving plan, read through the proxy configuration
+ * Each auto router's serving plan, read through the proxy configuration
  * cache: `routing_plans` writes notify its channel, and its TTL bounds how
  * long a lost notification can keep a superseded plan in use. The returned
  * plan is shared between requests and must not be mutated.
@@ -12,9 +12,9 @@ import type { RoutingPlan } from "@/types/auto-routing";
 export class RoutingPlanCache {
   constructor(private readonly cache: ConfigCache) {}
 
-  findActive(organizationId: string): Promise<RoutingPlan | null> {
-    return this.cache.read(`routing-plan\0${organizationId}`, () =>
-      RoutingPlanModel.findActive(organizationId),
+  findActive(routerId: string): Promise<RoutingPlan | null> {
+    return this.cache.read(`routing-plan\0${routerId}`, () =>
+      RoutingPlanModel.findActive(routerId),
     );
   }
 }

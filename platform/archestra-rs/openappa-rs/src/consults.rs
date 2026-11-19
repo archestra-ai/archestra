@@ -2,7 +2,7 @@
 //! `openappa_external_consults`: a dataset, never an input to a decision.
 use appa_eventlog::postgres::PostgresError;
 use appa_runtime::api::{
-    ConsultBackend, ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, NoAnswerClass,
+    ConsultBackend, ConsultRecord, ConsultTranscriber, ExternalOutcome, ExternalRole, NoAnswerClass,
 };
 use serde_json::{Value, json};
 use std::{
@@ -26,7 +26,7 @@ struct Buffered {
     dropped: usize,
 }
 
-impl ConsultRecorder for ConsultBuffer {
+impl ConsultTranscriber for ConsultBuffer {
     fn record(&self, record: ConsultRecord) {
         let mut buffered = self.buffered.lock().unwrap_or_else(PoisonError::into_inner);
         if buffered.records.len() < BUFFER_CAP {
@@ -225,11 +225,11 @@ impl FromIterator<ConsultRecord> for Columns {
 const LOG_CONTENT_POLICY_REDACTED_VALUE: &str = "log_content_policy";
 
 /// `record` with its content dropped: the envelope sent to the external, its
-/// answer, raw response and diagnostics. The request keeps only its kind and the
-/// governed tool's name beside the not-stored marker; who consulted which
-/// external, when, how and with what outcome stays.
+/// answer, raw response and diagnostics. The request keeps only its kind, the
+/// governed tool's name and, for an authority, the requirements it was asked
+/// to waive, beside the not-stored marker; who consulted which external, when,
+/// how and with what outcome stays.
 fn without_content(record: ConsultRecord) -> ConsultRecord {
-    let not_stored = || json!({ "__redacted": LOG_CONTENT_POLICY_REDACTED_VALUE });
     let mut request = not_stored();
     if let Some(kind) = record.request.get("kind") {
         request["kind"] = kind.clone();
@@ -237,12 +237,48 @@ fn without_content(record: ConsultRecord) -> ConsultRecord {
     if let Some(name) = record.request.pointer("/artifact/args/name") {
         request["artifact"] = json!({ "args": { "name": name, "arguments": not_stored() } });
     }
+    if let Some(tool) = record.request.pointer("/artifact/tool") {
+        let requirements: Vec<Value> = record
+            .request
+            .pointer("/artifact/requirements")
+            .and_then(Value::as_array)
+            .map(|requirements| {
+                requirements
+                    .iter()
+                    .map(requirement_without_content)
+                    .collect()
+            })
+            .unwrap_or_default();
+        request["artifact"] = json!({
+            "tool": tool,
+            "arguments": not_stored(),
+            "requirements": requirements,
+        });
+    }
     ConsultRecord {
         request,
         answer: None,
         raw_response: None,
         diagnostics: None,
         ..record
+    }
+}
+
+fn not_stored() -> Value {
+    json!({ "__redacted": LOG_CONTENT_POLICY_REDACTED_VALUE })
+}
+
+/// A requirement names policy vocabulary: a trust rank, an effect, an approval
+/// mark, or `public`. A list of required readers can come from the call's own
+/// arguments, so it is content.
+fn requirement_without_content(requirement: &Value) -> Value {
+    match requirement.get("required") {
+        Some(Value::Array(_)) => {
+            let mut kept = requirement.clone();
+            kept["required"] = not_stored();
+            kept
+        }
+        _ => requirement.clone(),
     }
 }
 
@@ -268,6 +304,7 @@ fn backend_name(backend: ConsultBackend) -> &'static str {
         ConsultBackend::ClaudeCode => "claude_code",
         ConsultBackend::Hitl => "hitl",
         ConsultBackend::Archestra => "archestra",
+        ConsultBackend::Stock => "stock",
     }
 }
 
@@ -296,7 +333,7 @@ fn outcome_name(outcome: ExternalOutcome) -> &'static str {
 mod tests {
     use super::{Attribution, BUFFER_CAP, ConsultBuffer, backend_name, outcome_name, role_name};
     use appa_runtime::api::{
-        ConsultBackend, ConsultContext, ConsultRecord, ConsultRecorder, Diagnostics,
+        ConsultBackend, ConsultContext, ConsultRecord, ConsultTranscriber, Diagnostics,
         ExternalOutcome, ExternalRole, NoAnswerClass,
     };
     use serde_json::{Value, json};
@@ -362,6 +399,7 @@ mod tests {
             ConsultBackend::ClaudeCode,
             ConsultBackend::Hitl,
             ConsultBackend::Archestra,
+            ConsultBackend::Stock,
         ] {
             assert_eq!(
                 serde_json::to_value(backend).unwrap(),
@@ -462,6 +500,43 @@ mod tests {
         assert_eq!(columns.call_id, [Some("call:1".to_owned())]);
         assert_eq!(columns.offer_id, [Some("offer".to_owned())]);
         assert_eq!(columns.call_digest, [Some("digest".to_owned())]);
+    }
+
+    #[test]
+    fn a_withheld_authority_consult_keeps_its_tool_and_requirements_never_readers() {
+        let request = json!({
+            "kind": "authority",
+            "name": "desk",
+            "declaration": { "permits": { "trust_below": "trusted" } },
+            "artifact": {
+                "tool": "send",
+                "arguments": { "to": "alice@corp.example" },
+                "requirements": [
+                    { "kind": "trust", "required": "trusted" },
+                    { "kind": "audience", "required": "public" },
+                    { "kind": "audience", "required": ["alice@corp.example"] },
+                    { "kind": "attention", "mark": "irreversible" },
+                ],
+            },
+        });
+        let columns = attribution(true).columns(vec![consulted(request)]);
+        assert_eq!(
+            columns.request,
+            [json!({
+                "__redacted": "log_content_policy",
+                "kind": "authority",
+                "artifact": {
+                    "tool": "send",
+                    "arguments": { "__redacted": "log_content_policy" },
+                    "requirements": [
+                        { "kind": "trust", "required": "trusted" },
+                        { "kind": "audience", "required": "public" },
+                        { "kind": "audience", "required": { "__redacted": "log_content_policy" } },
+                        { "kind": "attention", "mark": "irreversible" },
+                    ],
+                },
+            })]
+        );
     }
 
     #[test]

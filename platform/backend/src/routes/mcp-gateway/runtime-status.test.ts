@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -12,9 +13,15 @@ import {
   TaskModel,
   UserTokenModel,
 } from "@/models";
+import OAuthAccessTokenModel from "@/models/oauth-access-token";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 describe("Agent Runtime status callback", () => {
   let app: FastifyInstance;
@@ -101,6 +108,68 @@ describe("Agent Runtime status callback", () => {
     expect(
       (await AgentRunModel.findByTaskId(taskId))?.attentionState,
     ).toBeNull();
+  });
+
+  test("returns 403 after gateway access is removed and 401 after the token is revoked", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const taskId = await createRun({
+      agentId: agent.id,
+      organizationId: organization.id,
+      actorUserId: user.id,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+    const token = randomUUID();
+    const hash = createHash("sha256").update(token).digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: hash,
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${agent.id}`,
+    });
+    const report = (attentionState: "input_required" | null = null) =>
+      reportStatus({
+        app,
+        agentId: agent.id,
+        taskId,
+        token,
+        attentionState,
+      });
+    expect((await report()).statusCode).toBe(200);
+    const key = {
+      organizationId: organization.id,
+      resource: "mcpGateway" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("Expected gateway policy");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [],
+    });
+    const denied = await report("input_required");
+    expect(denied.statusCode).toBe(403);
+    expect(denied.headers["www-authenticate"]).toBeUndefined();
+    expect(denied.json().error.message).toContain("access");
+    expect(
+      (await AgentRunModel.findByTaskId(taskId))?.attentionState,
+    ).toBeNull();
+    expect(await TaskModel.dequeue(["agent_run_attention_notice"])).toBeNull();
+    await OAuthAccessTokenModel.deleteByTokenHash(hash);
+    const revoked = await report("input_required");
+    expect(revoked.statusCode).toBe(401);
+    expect(revoked.json().error.message).toBe("Unauthorized");
   });
 
   test("does not expose a user-owned run to another valid agent token", async ({

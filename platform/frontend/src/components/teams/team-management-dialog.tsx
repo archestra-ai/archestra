@@ -54,7 +54,7 @@ import {
   type UserSelectOption,
 } from "@/components/user-searchable-multi-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useMemberSearch } from "@/lib/member.query";
 import {
@@ -149,7 +149,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     new Map(),
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const TeamSyncSection = useTeamSyncSection();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const syncAvailable = useEnterpriseFeature("core");
+  const TeamSyncSection = useTeamSyncSection(syncAvailable);
+  // SPDX-SnippetEnd
 
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
@@ -159,7 +164,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     enabled: open && (mode === "create" || canUpdateTeams),
   });
 
-  const syncAvailable = config.enterpriseFeatures.core;
   const navItems = useMemo(() => {
     const syncItem = {
       ...editNavItems[2],
@@ -463,10 +467,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         />
       )}
 
-      {activeSection === "team-sync" &&
-        syncAvailable &&
-        mode === "edit" &&
-        team && <TeamSyncSection open={open} team={team} readOnly={readOnly} />}
+      {activeSection === "team-sync" && mode === "edit" && team && (
+        <TeamSyncSection open={open} team={team} readOnly={readOnly} />
+      )}
     </TabbedDialogShell>
   );
 }
@@ -1142,13 +1145,16 @@ function TeamSyncSectionUnavailable() {
   return <EnterpriseLicenseRequired featureName="Team Sync" />;
 }
 
-function useTeamSyncSection(): TeamSyncSectionComponent {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function useTeamSyncSection(syncAvailable: boolean): TeamSyncSectionComponent {
   const [Section, setSection] = useState<TeamSyncSectionComponent>(
     () => TeamSyncSectionUnavailable,
   );
 
   useEffect(() => {
-    if (!config.enterpriseFeatures.core) return;
+    if (!syncAvailable) return;
 
     let cancelled = false;
 
@@ -1165,7 +1171,8 @@ function useTeamSyncSection(): TeamSyncSectionComponent {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [syncAvailable]);
 
-  return Section;
+  return syncAvailable ? Section : TeamSyncSectionUnavailable;
 }
+// SPDX-SnippetEnd

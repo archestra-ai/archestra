@@ -22,6 +22,7 @@ import {
   type streamText,
   type ToolSet,
 } from "ai";
+import { resolveRunLlmSelection } from "@/agents/a2a/llm-selection";
 import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
@@ -36,8 +37,9 @@ import {
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { canUseAgent } from "@/auth/permission-gated";
+import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
-import { createLLMModelForAgent } from "@/clients/llm-client";
+import { createLLMModelForAgent, type LLMModel } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
@@ -62,6 +64,7 @@ import {
   SubagentProviderError,
 } from "@/routes/chat/errors";
 import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-cache";
+import { chatAttachmentInlineByteLimit } from "@/routes/chat/normalization/enforce-request-size-limit";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
@@ -70,14 +73,16 @@ import {
   authorizeA2AOAuthExecution,
 } from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
+import { compactionTranscriptToolOutput } from "@/services/compaction-llm";
+import {
+  createCompactionSummarizer,
+  generateInContextSummary,
+} from "@/services/context-compaction";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import {
-  resolveForkParentSelection,
-  resolveSubagentTierSelection,
-} from "@/utils/llm-resolution";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -86,20 +91,6 @@ import {
   type StageResult,
   stageAttachmentsIntoSandbox,
 } from "./a2a/stage-attachments";
-
-/**
- * Source-agnostic attachment for A2A execution.
- * Callers (email, Slack, Teams, etc.) should transform their provider-specific
- * attachment types into this format before passing to executeA2AMessage.
- */
-export interface A2AAttachment {
-  /** MIME content type (e.g., 'image/png', 'application/pdf') */
-  contentType: string;
-  /** Base64-encoded content */
-  contentBase64: string;
-  /** Optional filename for context */
-  name?: string;
-}
 
 /**
  * Longest delegation chain (root agent + delegated descendants) allowed before
@@ -361,6 +352,8 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
+  // An agent set to a pool runs on it; a fork runs on its parent's model.
+  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
   const {
     modelId: resolvedModelId,
     selectedModel,
@@ -370,19 +363,20 @@ export async function executeA2AMessage(
     agent,
     organizationId,
     userId,
+    selfFork: params.selfFork,
     ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
   });
   // Run on the key that was selected with the model (the agent's own, or the
   // organization default's). Without it, key lookup prefers the caller's
   // personal key and the run sends a key the selection never chose.
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
-  // An agent set to a pool runs on it; a fork runs on its parent's model.
-  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
   // A fork that asked for fast or smart runs on it, never auto routed; one on
   // normal follows its parent's routing.
-  const autoRoutable =
+  const autoRouterId =
     !modelPoolId &&
-    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"));
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"))
+      ? await agentAutoRouterId(agent, organizationId)
+      : null;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -434,6 +428,7 @@ export async function executeA2AMessage(
       mcpTools,
       organizationId,
       userId,
+      oauthClientId: params.oauthExecution?.clientId,
       agentId: agent.id,
       isFork: params.selfFork === true,
     });
@@ -471,8 +466,10 @@ export async function executeA2AMessage(
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
       modelPoolId,
-      autoRoutable,
+      autoRouterId,
       appaSubagentToken: params.appaSubagent?.token,
+      // A Scheduled task run has no person to answer approvals.
+      unattended: scheduleTriggerRunId !== undefined,
     });
     const authorizeModel = (model: typeof providerModel) =>
       authorizeA2AModel({
@@ -492,6 +489,7 @@ export async function executeA2AMessage(
     ).catch(() => null);
     const ingestibleMimeTypes = getModelReadableMimeTypes(
       modelRow?.inputModalities ?? null,
+      provider,
     );
 
     // A file the model cannot read inline is staged into the agent's sandbox when
@@ -519,6 +517,7 @@ export async function executeA2AMessage(
         provider,
         anthropicNativeEndpoint,
         ingestibleMimeTypes,
+        inlineByteLimit: chatAttachmentInlineByteLimit(provider),
         sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
         stageAttachments: sandboxAvailable
           ? (atts) =>
@@ -603,14 +602,51 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const contextLength = modelRow
+      ? ModelModel.resolveEffectiveContextLength(modelRow)
+      : null;
+    // Summaries run in the run's own session as `a2a:compaction`: the proxy
+    // governs the tool results they repeat and never takes one for the run's
+    // turn or a child's answer.
+    let compactionModel: Promise<LLMModel> | undefined;
+    const summaryModel = () =>
+      (compactionModel ??= createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source: "a2a:compaction",
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: llmApiKeyId,
+        modelPoolId,
+        autoRouterId,
+        appaSubagentToken: params.appaSubagent?.token,
+        unattended: scheduleTriggerRunId !== undefined,
+      }).then((created) => authorizeModel(created.model)));
     const stepContextGuard = createStepContextGuard({
-      model,
-      contextLength: modelRow
-        ? ModelModel.resolveEffectiveContextLength(modelRow)
-        : null,
+      contextLength,
       systemPrompt,
       abortSignal,
       logContext: { agentId: agent.id, sessionId },
+      transcriptToolOutput: compactionTranscriptToolOutput,
+      summarizeMessages: async ({ messages, hasPreviousSummary }) =>
+        generateInContextSummary({
+          model: await summaryModel(),
+          systemPrompt,
+          messages,
+          tools: mcpTools,
+          hasPreviousSummary,
+          contextLength,
+          abortSignal,
+          logFields: { agentId: agent.id, sessionId, provider },
+        }),
+      summarizeTranscript: async (transcript) =>
+        createCompactionSummarizer({
+          model: await summaryModel(),
+          abortSignal,
+        })(transcript),
       ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
         promptCache: {
           provider,
@@ -658,7 +694,7 @@ export async function executeA2AMessage(
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
                 modelPoolId,
-                autoRoutable,
+                autoRouterId,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,
@@ -931,12 +967,15 @@ export async function executeA2AMessage(
         }
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
+          { model: selectedModel },
         );
       }
       if (streamError instanceof SubagentProviderError) {
         throw streamError;
       }
-      throw new ProviderError(mapProviderError(streamError, provider));
+      throw new ProviderError(mapProviderError(streamError, provider), {
+        model: selectedModel,
+      });
     }
 
     logger.info(
@@ -999,7 +1038,8 @@ type StageAttachmentsFn = (
 /** Team and organization tokens run as "system", which never gets a sandbox. */
 type A2AAttachmentRejectionReason =
   | ChatUploadRejectionReason
-  | "credential_has_no_sandbox";
+  | "credential_has_no_sandbox"
+  | "too_large_to_inline";
 
 /**
  * Surface a child run's tool calls while it runs: each call when its input is
@@ -1114,7 +1154,8 @@ export function emitSubagentToolCalls(params: {
  *     into the sandbox so tools can use the bytes;
  *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
  *     provider by `prepareMessagesForProvider`);
- *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
+ *   - other model-ingestible types (PDF, audio, video): kept inline up to
+ *     `inlineByteLimit`; larger ones are treated as unreadable (staged or named);
  *   - anything else, when a sandbox is available and it fits the artifact limit:
  *     staged into the sandbox and referenced by a pointer in `note` so the model
  *     can read it with `run_command`;
@@ -1131,6 +1172,11 @@ export async function buildUserContent(
     provider: SupportedProvider;
     anthropicNativeEndpoint: boolean;
     ingestibleMimeTypes: Set<string>;
+    /**
+     * Largest decoded non-image attachment sent inline; see
+     * `chatAttachmentInlineByteLimit`. Defaults to unbounded.
+     */
+    inlineByteLimit?: number;
     sandboxByteLimit?: number;
     stageAttachments?: StageAttachmentsFn;
     /** The caller's credential cannot have a sandbox, so `stageAttachments` is absent. */
@@ -1184,11 +1230,21 @@ export async function buildUserContent(
     att: A2AAttachment;
     reason: A2AAttachmentRejectionReason;
   }> = [];
+  const inlineByteLimit = opts.inlineByteLimit ?? Number.POSITIVE_INFINITY;
   for (const att of nonImageAttachments) {
+    const byteLength = estimateAttachmentBytes(att);
+    // A readable file over the inline budget is handled like an unreadable
+    // one: staged into the sandbox, or named in the note.
+    const tooLargeToInline =
+      byteLength > inlineByteLimit &&
+      opts.ingestibleMimeTypes.has(att.contentType);
+    const ingestibleMimeTypes = tooLargeToInline
+      ? NO_INGESTIBLE_MIME_TYPES
+      : opts.ingestibleMimeTypes;
     const reason = chatUploadRejectionReason({
       mimeType: att.contentType,
-      byteLength: estimateAttachmentBytes(att),
-      ingestibleMimeTypes: opts.ingestibleMimeTypes,
+      byteLength,
+      ingestibleMimeTypes,
       sandboxAvailable,
       sandboxByteLimit,
     });
@@ -1196,12 +1252,13 @@ export async function buildUserContent(
       rejected.push({
         att,
         reason:
-          opts.credentialHasNoSandbox &&
-          estimateAttachmentBytes(att) <= sandboxByteLimit
+          opts.credentialHasNoSandbox && byteLength <= sandboxByteLimit
             ? "credential_has_no_sandbox"
-            : reason,
+            : tooLargeToInline && reason === "unsupported_type"
+              ? "too_large_to_inline"
+              : reason,
       });
-    } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
+    } else if (canInlineAttachment(att, ingestibleMimeTypes)) {
       inlineNonImage.push(att);
     } else {
       toStage.push(att);
@@ -1317,37 +1374,6 @@ export async function buildUserContent(
 // Internal helper functions
 // ============================================================================
 
-/**
- * A fork starts from its parent's model, moved to its tier when one is asked
- * for; any other run resolves from the agent's own configuration.
- */
-async function resolveRunLlmSelection(params: {
-  agent: {
-    llmApiKeyId: string | null;
-    modelId: string | null;
-  };
-  organizationId: string;
-  userId: string;
-  parentLlm?: ModelSelection;
-  tier?: SubagentModelTier;
-}) {
-  const { llmApiKeyId, modelId } = params.agent;
-  const base = await resolveForkParentSelection({
-    agent: { llmApiKeyId, modelId },
-    organizationId: params.organizationId,
-    userId: params.userId,
-    parentLlm: params.parentLlm,
-  });
-  return params.tier
-    ? resolveSubagentTierSelection({
-        tier: params.tier,
-        parent: base,
-        organizationId: params.organizationId,
-        userId: params.userId,
-      })
-    : base;
-}
-
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {
   return Math.ceil((att.contentBase64.length * 3) / 4);
@@ -1356,6 +1382,8 @@ function estimateAttachmentBytes(att: A2AAttachment): number {
 function describeAttachment(att: A2AAttachment): string {
   return `${att.name ?? "unnamed"} (${att.contentType})`;
 }
+
+const NO_INGESTIBLE_MIME_TYPES: Set<string> = new Set();
 
 /**
  * Whether an accepted non-image attachment is delivered inline (vs staged):
@@ -1383,6 +1411,8 @@ function rejectionText(reason: A2AAttachmentRejectionReason): string {
       return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
+    case "too_large_to_inline":
+      return "too large to send to the model";
     case "credential_has_no_sandbox":
       return "not readable inline, and this credential has no code sandbox to stage it in; use a service account API key";
   }

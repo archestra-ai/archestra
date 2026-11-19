@@ -416,6 +416,7 @@ const BACKEND_LABEL: Record<string, string> = {
   jev: "Jev",
   claude_code: "Claude Code",
   hitl: "Human review",
+  stock: "Auto-approve",
 };
 
 const HTTP_TEXT: Record<number, string> = {

@@ -27,11 +27,12 @@ import {
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   useEnterpriseFeature,
-  useFeature,
   useSmallTeamTier,
 } from "@/lib/config/config.query";
 // SPDX-SnippetEnd
 import {
+  useIsGlobalAdmin,
+  useMcpRuntimeTiers,
   useOrganization,
   useUpdateMcpSettings,
 } from "@/lib/organization.query";
@@ -78,13 +79,15 @@ function setOrganization(
 beforeEach(() => {
   vi.clearAllMocks();
   setPermission(true);
+  vi.mocked(useIsGlobalAdmin).mockReturnValue({
+    isGlobalAdmin: true,
+    isLoading: false,
+  });
   setOrganization();
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
-  // The hibernation block only exists when the beta flag is on.
-  vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useSmallTeamTier).mockReturnValue(
     undefined as ReturnType<typeof useSmallTeamTier>,
   );
@@ -188,14 +191,6 @@ describe("McpSettingsPage", () => {
     expect(blockSelect("Online MCP catalog")).toBeEnabled();
   });
 
-  it("hides hibernation entirely while the beta flag is off", () => {
-    vi.mocked(useFeature).mockReturnValue(false);
-    renderPage();
-
-    expect(screen.queryByText("Idle hibernation")).not.toBeInTheDocument();
-    expect(blockSelect("Online MCP catalog")).toBeEnabled();
-  });
-
   it("enables the hibernation control once enterprise core is active", () => {
     renderPage();
 
@@ -246,4 +241,56 @@ describe("McpSettingsPage", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByText("Online MCP catalog")).not.toBeInTheDocument();
   });
+});
+
+it.each([
+  { isGlobalAdmin: false, permission: true, canEdit: false },
+  { isGlobalAdmin: true, permission: false, canEdit: false },
+  { isGlobalAdmin: true, permission: true, canEdit: true },
+])("gates MCP tier management on global admin and update permission: %j", ({
+  isGlobalAdmin,
+  permission,
+  canEdit,
+}) => {
+  setPermission(permission);
+  vi.mocked(useIsGlobalAdmin).mockReturnValue({
+    isGlobalAdmin,
+    isLoading: false,
+  });
+  vi.mocked(useMcpRuntimeTiers).mockReturnValue({
+    data: {
+      tiers: [
+        {
+          name: "MCP small",
+          cpuRequest: 0.1,
+          cpuLimit: null,
+          memoryRequestMiB: 128,
+          memoryLimitMiB: 512,
+        },
+      ],
+    },
+    isPending: false,
+  } as ReturnType<typeof useMcpRuntimeTiers>);
+  renderPage();
+  expect(screen.getByText("MCP small")).toBeInTheDocument();
+  if (canEdit) {
+    expect(screen.getByRole("button", { name: "Create tier" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Edit MCP small" }),
+    ).toBeEnabled();
+  } else {
+    expect(
+      screen.queryByRole("button", { name: "Create tier" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Edit MCP small|Delete MCP small/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Only administrators can change the tiers."),
+    ).toBeInTheDocument();
+  }
+  // A custom role can still edit ordinary MCP settings, but not runtime tiers.
+  expect(blockSelect("Online MCP catalog").hasAttribute("disabled")).toBe(
+    !permission,
+  );
 });

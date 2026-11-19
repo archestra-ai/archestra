@@ -41,7 +41,7 @@ jobs:
       COPILOT_CLI_FILE: platform/backend/src/services/agent-connection-setup/agents/copilot-cli.ts
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -119,33 +119,51 @@ jobs:
           done
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve latest stable Copilot Chat release
+      # Copilot Chat ships inside VS Code (extensions/copilot): its own
+      # repository is archived and its releases stopped. Both values come from
+      # the stable VS Code release resolved above: the extension version, and
+      # the X-GitHub-Api-Version its @vscode/copilot-api client sends to the
+      # Copilot API (with an older version, /models reports only each model's
+      # default context tier).
+      - name: Resolve Copilot Chat bundled with stable VS Code
         id: copilot-chat
+        if: steps.vscode.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          VSCODE_VERSION: ${{ steps.vscode.outputs.version }}
         run: |
           set -euo pipefail
-          page=1
-          while :; do
-            tag="$(gh api "repos/microsoft/vscode-copilot-chat/releases?per_page=30&page=$page" --jq '
-              if length == 0 then "END"
-              else ([.[] | select(.draft == false and .prerelease == false and
-                (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]{1,4}$"))) | .tag_name] | first // "")
-              end')"
-            if [[ "$tag" == "END" ]]; then
-              echo "::error::No stable Copilot Chat release found"
-              exit 1
-            fi
-            [[ -n "$tag" ]] && break
-            ((page += 1))
-          done
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          manifest="$(gh api -H "Accept: application/vnd.github.raw" \
+            "repos/microsoft/vscode/contents/extensions/copilot/package.json?ref=$VSCODE_VERSION")"
+          version="$(jq -er 'select(.name == "copilot-chat") | .version' <<<"$manifest")"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]{1,4}$ ]]; then
+            echo "::error::Unexpected Copilot Chat version in VS Code $VSCODE_VERSION: $version"
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+          range="$(jq -er '.dependencies["@vscode/copilot-api"]' <<<"$manifest")"
+          package_version="$(npm view "@vscode/copilot-api@$range" version --json |
+            jq -er 'if type == "array" then last else . end')"
+          work="$(mktemp -d)"
+          # npm pack checks the tarball against the registry's integrity hash.
+          # Nothing from the package is executed; its bundle is only searched.
+          npm pack "@vscode/copilot-api@$package_version" --ignore-scripts \
+            --pack-destination "$work" --silent > /dev/null
+          tar -xzf "$work"/vscode-copilot-api-*.tgz -C "$work" package/dist/index.js
+          api_versions="$(grep -oE '_mixinHeaders\([^)]*\)\{.{0,200}"X-GitHub-Api-Version"\]="[0-9]{4}-[0-9]{2}-[0-9]{2}"' \
+            "$work/package/dist/index.js" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}"$' | tr -d '"' | sort -u || true)"
+          if [[ "$(grep -c . <<<"$api_versions")" -ne 1 ]]; then
+            echo "::error::Expected one Copilot API version in @vscode/copilot-api $package_version, found: ${api_versions:-none}"
+            exit 1
+          fi
+          echo "api-version=$api_versions" >> "$GITHUB_OUTPUT"
 
       # The App token makes pushes and the new PR trigger ordinary CI.
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -184,6 +202,7 @@ jobs:
           GROK_VERSION: ${{ steps.grok.outputs.version }}
           VSCODE_VERSION: ${{ steps.vscode.outputs.version }}
           COPILOT_CHAT_TAG: ${{ steps.copilot-chat.outputs.tag }}
+          COPILOT_API_VERSION: ${{ steps.copilot-chat.outputs.api-version }}
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
@@ -215,6 +234,10 @@ jobs:
           if [[ -n "$COPILOT_CHAT_TAG" ]]; then
             run_updater "Copilot Chat ${COPILOT_CHAT_TAG#v}" \
               pnpm --dir backend update:copilot-chat-client-version "$COPILOT_CHAT_TAG" "$TARGET/$COPILOT_FILE"
+          fi
+          if [[ -n "$COPILOT_API_VERSION" ]]; then
+            run_updater "Copilot API $COPILOT_API_VERSION" \
+              pnpm --dir backend update:copilot-api-version "$COPILOT_API_VERSION" "$TARGET/$COPILOT_FILE"
           fi
 
           if [[ "${#summary[@]}" -eq 0 ]]; then
@@ -259,7 +282,7 @@ jobs:
           fi
 
           pr_title="chore: update client versions"
-          pr_body="Track stable Codex CLI, Grok CLI, VS Code, and GitHub Copilot Chat releases. Codex filters the ChatGPT subscription model catalog by client version, xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum, and GitHub Copilot endpoints require a current VS Code and Copilot Chat editor identity."
+          pr_body="Track stable Codex CLI, Grok CLI, VS Code, and GitHub Copilot Chat releases. Codex filters the ChatGPT subscription model catalog by client version, xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum, and GitHub Copilot endpoints require a current VS Code and Copilot Chat editor identity and API version."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -311,7 +334,7 @@ jobs:
       AGENT_DIR: platform/docker_images/agent
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -322,7 +345,7 @@ jobs:
 
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -422,7 +445,7 @@ jobs:
           pr_title="chore: update agent runtime CLIs"
           pr_body="Raise the agent CLIs in the agent catalog images (Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok CLI, Kimi Code, and GitHub Copilot CLI) to their newest stable release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`. Upstream channel pointers cap each pick: npm \`stable\` for Claude Code, npm \`latest\` for Codex, OpenCode, OpenClaw, Kimi Code, and GitHub Copilot CLI, GitHub releases for Hermes, and xAI's stable channel for Grok CLI.
 
-          Merge once every **Validate agent-\*** check passes. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
+          Merge once every **Validate agent-\*** check passes. The \`build-agent-images\` label runs them on this pull request. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -430,10 +453,11 @@ jobs:
               --base main \
               --head "$BRANCH" \
               --title "$pr_title" \
-              --body "$pr_body")"
+              --body "$pr_body" \
+              --label build-agent-images)"
           else
             pr="$existing_pr"
-            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body" --add-label build-agent-images
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 
@@ -460,7 +484,7 @@ jobs:
       IMAGE_FILE: platform/backend/src/playwright-mcp-image.json
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -471,7 +495,7 @@ jobs:
 
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -581,12 +605,28 @@ jobs:
         needs.agent-runtime.result == 'failure' || needs.agent-runtime.outputs.pushed == 'true' ||
         needs.playwright-mcp.result == 'failure' || needs.playwright-mcp.outputs.pushed == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
+    timeout-minutes: 3
+    permissions:
+      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
     steps:
+      # The webhook lives in GCP Secret Manager. A dedicated service account
+      # reads only the alerting secrets, so no repository secret holds it.
+      - name: Authenticate to read the alerting webhook
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the alerting webhook
+        id: alerting
+        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
+        with:
+          secrets: |-
+            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
+
       - name: Post results to alerting
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
           IDENTITY_RESULT: ${{ needs.identity.result }}
           IDENTITY_PUSHED: ${{ needs.identity.outputs.pushed }}
           IDENTITY_SUMMARY: ${{ needs.identity.outputs.summary }}
@@ -603,7 +643,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
-            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack notification."
+            echo "::warning::The alerting webhook secret is empty; skipping Slack notification."
             exit 0
           fi
 

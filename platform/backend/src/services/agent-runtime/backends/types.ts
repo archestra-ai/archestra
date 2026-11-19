@@ -71,10 +71,21 @@ export type AgentRunLaunchSpec = {
    * means no steering.
    */
   nodeSelector: Record<string, string>;
+  /**
+   * Sandboxing RuntimeClass (for example gVisor). Backends apply it to
+   * unprivileged runs only; a privileged run keeps the default runtime.
+   */
+  runtimeClassName?: string;
   imagePullSecrets: string[];
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** Number of durable input files the backend must stage before entrypoint. */
   inputFileCount: number;
+  /**
+   * True when the supervisor is retrying or failing over after a prior attempt
+   * for the same task, so the backend must wait for the prior Sandbox deletion
+   * rather than adopting it.
+   */
+  replacePriorAttempt?: boolean;
 };
 
 /**
@@ -121,7 +132,10 @@ export interface AgentRuntimeBackendDriver {
   /** Recover a durable, unstarted continuation after its launcher disappeared. */
   recoverRun(session: AgentRunRecord): Promise<void>;
   /** Refresh renewable files without replaying the running command. */
-  refreshCredentials?(session: AgentRunRecord): Promise<void>;
+  /** Returns personal credentials whose owner should be asked to connect again. */
+  refreshCredentials?(
+    session: AgentRunRecord,
+  ): Promise<Array<{ key: string; credentialId: string }>>;
   /** Stop only this turn, keeping the workspace available for continuation. */
   stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
   /** Revoke turn-scoped access; a successful live CLI may retain it until workspace cleanup. */

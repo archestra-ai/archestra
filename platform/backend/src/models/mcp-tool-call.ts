@@ -20,6 +20,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   decryptMcpToolCallContent,
   encryptMcpToolCallContent,
@@ -499,6 +500,73 @@ class McpToolCallModel {
     return rows.flatMap((row) =>
       row.sessionId ? [{ ...row, sessionId: row.sessionId }] : [],
     );
+  }
+
+  /**
+   * A session's gateway calls to the named tools, oldest first, with their
+   * arguments and results readable (a locked row keeps its sentinel). Only
+   * calls the Archestra server ran count, so another server's tool of the
+   * same short name never matches. `userId` limits them to that user's calls,
+   * and `since` to calls made from then on.
+   */
+  static async findArchestraCallsBySession(params: {
+    organizationId: string;
+    sessionId: string;
+    toolNames: string[];
+    includeAgentDelegations?: boolean;
+    userId?: string;
+    since?: Date;
+    limit: number;
+  }): Promise<
+    {
+      id: string;
+      toolName: string | null;
+      toolCall: unknown;
+      toolResult: unknown;
+      isError: boolean | null;
+      createdAt: Date;
+    }[]
+  > {
+    if (params.toolNames.length === 0 && !params.includeAgentDelegations)
+      return [];
+    const table = schema.mcpToolCallsTable;
+    const toolNameFilter =
+      params.includeAgentDelegations && params.toolNames.length > 0
+        ? or(
+            inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
+            sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent\\_\\_%'`,
+          )
+        : params.includeAgentDelegations
+          ? sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent\\_\\_%'`
+          : inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames);
+    const rows = await db
+      .select({
+        id: table.id,
+        toolName: MCP_TOOL_CALL_TOOL_NAME,
+        toolCall: table.toolCall,
+        toolResult: table.toolResult,
+        isError: table.isError,
+        encryptedChatConversationId: table.encryptedChatConversationId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.sessionId, params.sessionId),
+          inArray(table.mcpServerName, archestraMcpBranding.allowedServerNames),
+          toolNameFilter,
+          ...(params.userId ? [eq(table.userId, params.userId)] : []),
+          ...(params.since ? [gte(table.createdAt, params.since)] : []),
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .orderBy(asc(table.createdAt))
+      .limit(params.limit);
+    return rows.map((row) => {
+      const { encryptedChatConversationId: _locked, ...readable } =
+        readMcpToolCallRow(row);
+      return readable;
+    });
   }
 
   static async findById(

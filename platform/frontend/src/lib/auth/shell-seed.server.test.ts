@@ -41,18 +41,12 @@ vi.mock("next/headers", () => ({
 vi.mock("@/lib/utils/server", () => ({
   getServerApiHeaders: async () => ({ Cookie: "session=1" }),
 }));
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getBootstrap: getBootstrapMock,
-      getMcpRegistryIssueIndex: getIssueIndexMock,
-      ...sdk,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getBootstrap: getBootstrapMock,
+  getMcpRegistryIssueIndex: getIssueIndexMock,
+  ...sdk,
+}));
 
 import {
   agentRunQueryKey,

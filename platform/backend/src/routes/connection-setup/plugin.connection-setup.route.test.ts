@@ -9,11 +9,6 @@ import { PLUGIN_DELIVERY_MAX_COUNT, type User } from "@/types";
 
 vi.mock("@/auth");
 vi.mock("@/cache-manager");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    beta: false,
-  }),
-);
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -55,6 +50,22 @@ describe("POST /api/connection-setups with plugins", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("Grok refuses explicit plugin delivery without creating a setup", async () => {
+    const plugin = await seedPlugin("claude-code");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "grok-build",
+        platform: "windows",
+        baseUrl: "http://localhost:9000/v1",
+        pluginIds: [plugin.id],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("native skills only");
   });
 
   test("freezes reviewed plugins into a plugin-only setup", async () => {

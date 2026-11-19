@@ -1867,7 +1867,12 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    userId,
+    resource: "app",
+  });
 }
 
 /**
@@ -1928,7 +1933,7 @@ async function environmentIsAssignable(params: {
   userId: string;
 }): Promise<boolean> {
   try {
-    await assertCanAssignEnvironment(params);
+    await assertCanAssignEnvironment({ ...params, resource: "app" });
     return true;
   } catch (error) {
     if (error instanceof ApiError) return false;

@@ -32,6 +32,31 @@ describe("buildSlackManifest", () => {
     ]);
   });
 
+  it.each([
+    "socket",
+    "webhook",
+  ] as const)("bounds long app-name commands in the %s manifest", (connectionMode) => {
+    const manifest = JSON.parse(
+      buildSlackManifest({
+        appName: "Archestra Engineering",
+        connectionMode,
+        webhookUrl: "https://example.test/events",
+        interactiveUrl: "https://example.test/interactive",
+        slashCommandUrl: "https://example.test/commands",
+      }),
+    );
+    expect(manifest.display_information.name).toBe("Archestra Engineering");
+    expect(
+      manifest.features.slash_commands.map(
+        ({ command }: { command: string }) => command,
+      ),
+    ).toEqual([
+      "/archestra-engineer-select-agent",
+      "/archestra-engineer-status",
+      "/archestra-engineer-help",
+    ]);
+  });
+
   it("adds webhook slash command URLs for webhook mode", () => {
     const manifest = JSON.parse(
       buildSlackManifest({

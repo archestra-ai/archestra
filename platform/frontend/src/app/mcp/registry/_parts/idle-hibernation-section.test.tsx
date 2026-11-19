@@ -33,7 +33,7 @@ vi.mock("./catalog-edit-access", () => ({
   useCanModifyCatalogItem: () => mockCanModifyCatalogItem(),
 }));
 
-import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import { makeCatalogItem } from "@/mocks/data/catalog";
 import { makeInstalledServer } from "@/mocks/data/servers";
@@ -65,8 +65,6 @@ beforeEach(() => {
   setOrgHibernation(true);
   setInstalledMode("inherit");
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
-  // The control only exists while the deployment's beta flag is on.
-  vi.mocked(useFeature).mockReturnValue(true);
   mockCanModifyCatalogItem.mockReturnValue({
     canModify: true,
     isLoading: false,
@@ -146,13 +144,6 @@ describe("IdleHibernationSection", () => {
 
   it("stays hidden without an active enterprise licence", () => {
     vi.mocked(useEnterpriseFeature).mockReturnValue(false);
-    render(<IdleHibernationSection item={catalogItem} />);
-
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-  });
-
-  it("stays hidden while the deployment's beta flag is off", () => {
-    vi.mocked(useFeature).mockReturnValue(false);
     render(<IdleHibernationSection item={catalogItem} />);
 
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();

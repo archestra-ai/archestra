@@ -2437,7 +2437,7 @@ describe("model router proxy routes", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toBe(
-        "Model Router virtual key cannot access this Agent.",
+        "Unified Model API virtual key cannot access this Agent.",
       );
     }
   });

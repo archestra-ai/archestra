@@ -243,6 +243,94 @@ describe("Claude Code authentication", () => {
       screen.queryByRole("button", { name: "Sign in with Claude" }),
     ).not.toBeInTheDocument();
   });
+
+  it("enables personal subscription when runtimeCommand is archestra-claude-code-runtime", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ClaudeCodeInferenceSettings
+          agentId=""
+          authentication="subscription"
+          onAuthenticationChange={vi.fn()}
+          model="opus"
+          onModelChange={vi.fn()}
+          provider="anthropic"
+          vertexEnabled={false}
+          runtimeCommand="archestra-claude-code-runtime"
+          apiKeySelector={<button type="button">Provider key</button>}
+          modelSelector={<button type="button">Provider model</button>}
+        />
+      </QueryClientProvider>,
+    );
+
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    expect(subscriptionRadio).not.toBeDisabled();
+    expect(subscriptionRadio).toBeChecked();
+  });
+
+  it("disables personal subscription and explains how to restore the command when runtimeCommand is a custom non-Claude entrypoint", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ClaudeCodeInferenceSettings
+          agentId="agent-1"
+          authentication="subscription"
+          onAuthenticationChange={vi.fn()}
+          model="opus"
+          onModelChange={vi.fn()}
+          provider="anthropic"
+          vertexEnabled={false}
+          runtimeCommand="custom-claude-entrypoint"
+          apiKeySelector={<button type="button">Provider key</button>}
+          modelSelector={<button type="button">Provider model</button>}
+        />
+      </QueryClientProvider>,
+    );
+
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    const providerRadio = screen.getByRole("radio", {
+      name: /A company API key/,
+    });
+    expect(subscriptionRadio).toBeDisabled();
+    expect(subscriptionRadio).not.toBeChecked();
+    expect(providerRadio).toBeChecked();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Provider model" }),
+    ).toBeVisible();
+  });
+
+  it("treats a command with surrounding whitespace as not matching archestra-claude-code", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ClaudeCodeInferenceSettings
+          agentId="agent-1"
+          authentication="subscription"
+          onAuthenticationChange={vi.fn()}
+          model="opus"
+          onModelChange={vi.fn()}
+          provider="anthropic"
+          vertexEnabled={false}
+          runtimeCommand=" archestra-claude-code "
+          apiKeySelector={<button type="button">Provider key</button>}
+          modelSelector={<button type="button">Provider model</button>}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("radio", {
+        name: /Each person's Claude subscription/,
+      }),
+    ).toBeDisabled();
+  });
 });
 
 /** The account control the agent's setup banner shows until sign-in. */

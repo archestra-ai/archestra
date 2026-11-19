@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { AGENT_CATALOG_IDS } from "@archestra/shared";
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
@@ -29,8 +30,10 @@ import {
   connectorSeed,
 } from "./data/connectors";
 import {
+  llmLogsChatErrorsSeed,
   llmLogsInteractionsSeed,
   llmLogsSessionsSeed,
+  llmLogsSummariesSeed,
   makeInteraction,
   paginated,
 } from "./data/interactions";
@@ -74,6 +77,7 @@ import {
   appStatisticsFor,
   appUsageFor,
   costStatisticsFor,
+  llmUsageFor,
   modelUsageFor,
   myStatisticsFor,
   myUsageBreakdownFor,
@@ -164,11 +168,10 @@ const LABELLED_ENTITY_PATHS = [
   "/api/knowledge-bases",
   "/api/knowledge-files",
   "/api/limits",
-  "/api/llm-oauth-clients",
   "/api/llm-provider-api-keys",
   "/api/llm-provider-models",
   "/api/llm-virtual-keys",
-  "/api/mcp-oauth-clients",
+  "/api/oauth-clients",
   "/api/plugins",
   "/api/service-accounts",
   "/api/skills",
@@ -222,6 +225,14 @@ export const handlers: HttpHandler[] = [
   // Read-back routes for API clients such as Terraform; no install or binding
   // is seeded, so single reads answer as the backend does for an unknown id.
   ...getJson("/api/openappa/credential-bindings", []),
+  // Git sync's self-service reads: off, with no protection or App to show,
+  // as a deployment that never set it up answers.
+  ...getJson("/api/openappa/github-sync/self-service", { enabled: false }),
+  // A reader without the Guardrails permission asks which MCP servers' rules
+  // files they may open: none, so the Policy page stays closed to them.
+  ...getJson("/api/openappa/server-rules/files", { files: [] }),
+  ...getJson("/api/openappa/github-sync/protection", null),
+  ...getJson("/api/openappa/github-sync/app-grants", null),
   ...notFound("/api/openappa/credential-bindings/:variable"),
   ...notFound("/api/openappa/battery-installs/:id"),
   ...getJson("/api/openappa/trust-audience", {
@@ -300,11 +311,26 @@ export const handlers: HttpHandler[] = [
       { date: "2026-10-08", blocked: 1, approved: 2, cleaned: 2 },
     ],
   }),
+  // The Policy page lists the validations with its other files; none by default.
+  ...getJson("/api/openappa/policy-tests", {
+    source: "local",
+    files: [],
+    version: "v1",
+    sourceCommit: null,
+    directory: "tests",
+    activeDirectory: "tests",
+    error: null,
+  }),
   ...getJson("/api/openappa/policy-tests/runs", []),
   // A session trace reads its guardrail checks and label history; none by default.
   ...getJson("/api/openappa/external-consults", {
     data: [],
     pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  // The Guardrails log: consults and yells in one timeline; empty by default.
+  ...getJson("/api/openappa/guardrail-events", {
+    data: [],
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
   }),
   ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
@@ -395,6 +421,11 @@ export const handlers: HttpHandler[] = [
     enabled: false,
     featureEnabled: false,
     active: false,
+    unsupportedClientAction: "bypass",
+    breakTheGlassEnabled: true,
+    humanApprovalMode: "block",
+    unapprovableBlockMode: "refuse",
+    environmentOverrides: [],
   }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {
@@ -404,6 +435,15 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
+  ...getJson("/api/agent-runtime-templates/built-ins", []),
+  ...getJson("/api/agent-runtime-templates/access", {
+    runtimes: AGENT_CATALOG_IDS.map((id) => ({
+      id,
+      canUse: true,
+      canConfigure: true,
+    })),
+    canConfigureAny: true,
+  }),
   ...getJson("/api/agent-runtime-templates/settings", {
     revision: 0,
     templates: [],
@@ -454,6 +494,10 @@ export const handlers: HttpHandler[] = [
   ...postJson("/api/onboarding/survey", { ok: true }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
+  ...getJson("/api/connected-clients/disconnect-reference", {
+    reference: "cdr1_sample_0123456789abcdefghijkl",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
   // Connect reads the gateway's served tool list and initial context cost.
   ...getJson("/api/agents/:id/mcp-tool-preview", {
@@ -661,6 +705,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agents/:id/skills", {
+    accessAllSkills: false,
+    skillIds: [],
+    skills: [],
+  }),
   ...getJson("/api/agent-tools", {
     data: [],
     pagination: {
@@ -675,6 +724,8 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
+  ...getJson("/api/agents/:id/identity-bindings", { bindings: [] }),
+  ...putJson("/api/agents/:id/identity-bindings", { bindings: [] }),
   ...getJson("/api/a2a/remote-agents", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
   // The agents list asks which of the caller's agents is their personal
@@ -688,7 +739,24 @@ export const handlers: HttpHandler[] = [
   }),
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
+  // Model pickers, key forms and the connect steps list pools and auto
+  // routers on every deployment. The seeded organization has none, with auto
+  // routing off.
+  ...getJson("/api/model-pools", []),
+  ...getJson("/api/model-pools/available", []),
+  ...getJson("/api/auto-routing/routers", []),
+  ...getJson("/api/auto-routing/routers/available", []),
+  ...getJson("/api/auto-routing/state", {
+    enabled: false,
+    eligibleApiKeyIds: [],
+    decisionProviders: [],
+  }),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
+  // The agent settings page checks which runtime agents run on the default.
+  ...getJson("/api/organization/agent-settings/default-model-dependents", {
+    agents: [],
+    hiddenBlockingCount: 0,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",
@@ -728,21 +796,6 @@ export const handlers: HttpHandler[] = [
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),
 
-  // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
-  // unified OAuth Clients page reads both.
-  ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
-  ...getJson("/api/llm-oauth-clients", {
-    data: [],
-    pagination: {
-      currentPage: 1,
-      limit: 20,
-      total: 0,
-      totalPages: 0,
-      hasNext: false,
-      hasPrev: false,
-    },
-  }),
   // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
   // lists the clients that map the key from here, because this list carries
   // the current-and-future-providers flag the dialog needs.
@@ -767,6 +820,7 @@ export const handlers: HttpHandler[] = [
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
   ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/skills/external", []),
   ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>
@@ -814,17 +868,60 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list and the session detail page).
-  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+  ...getJson("/api/llm-proxy-logs/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],
     forksTruncated: false,
   }),
+  // No handoff to Agent Runtime, and no auto-routing decision, by default.
+  ...getJson("/api/llm-proxy-logs/sessions/:sessionId/handoffs", {
+    handedTo: [],
+    handedFrom: null,
+    moves: [],
+  }),
+  ...getJson("/api/llm-proxy-logs/:logId/auto-routing", { decision: null }),
+  // The chat's error cards, by the conversation whose id is the session id.
+  ...paths("/api/llm-proxy-logs/sessions/:sessionId/chat-errors").map((url) =>
+    http.get(url, ({ params }) =>
+      HttpResponse.json({
+        chatErrors: llmLogsChatErrorsSeed.filter(
+          (e) => e.conversationId === params.sessionId,
+        ),
+      }),
+    ),
+  ),
+  // Request rows of the session detail page, by session and in the order
+  // asked for, paged by limit/offset.
+  ...paths("/api/llm-proxy-logs/summaries").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const sessionId = params.get("sessionId");
+      const limit = Number(params.get("limit") ?? 50);
+      const offset = Number(params.get("offset") ?? 0);
+      const rows = llmLogsSummariesSeed
+        .filter((row) => !sessionId || row.sessionId === sessionId)
+        .sort((a, b) =>
+          params.get("sortDirection") === "desc"
+            ? b.createdAt.localeCompare(a.createdAt)
+            : a.createdAt.localeCompare(b.createdAt),
+        );
+      const page = rows.slice(offset, offset + limit);
+      return HttpResponse.json(
+        paginated(page, {
+          limit,
+          total: rows.length,
+          hasNext: offset + limit < rows.length,
+          hasPrev: offset > 0,
+        }),
+      );
+    }),
+  ),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting
   // against a pre-baked body. Specs needing other data still override it via
   // `mswControl.use(...)` (overrides take precedence).
-  ...paths("/api/interactions/sessions").map((url) =>
+  ...paths("/api/llm-proxy-logs/sessions").map((url) =>
     http.get(url, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const sessionId = params.get("sessionId");
@@ -846,10 +943,35 @@ export const handlers: HttpHandler[] = [
       return HttpResponse.json(paginated(data));
     }),
   ),
-  ...getJson("/api/interactions/user-ids", []),
-  ...getJson("/api/interactions/external-agent-ids", []),
-  ...getJson("/api/interactions", paginated(llmLogsInteractionsSeed)),
-  ...getJson("/api/interactions/:interactionId", makeInteraction()),
+  ...getJson("/api/llm-proxy-logs/user-ids", []),
+  ...getJson("/api/llm-proxy-logs/external-agent-ids", []),
+  // Full rows (the export): a seeded failing session's rows are built from
+  // its summaries, a failed one carrying the error response the proxy stores.
+  ...paths("/api/llm-proxy-logs").map((url) =>
+    http.get(url, ({ request }) => {
+      const sessionId = new URL(request.url).searchParams.get("sessionId");
+      const summaries = llmLogsSummariesSeed.filter(
+        (row) => row.sessionId === sessionId,
+      );
+      return HttpResponse.json(
+        paginated(
+          summaries.length > 0
+            ? summaries.map(interactionFromSummary)
+            : llmLogsInteractionsSeed,
+        ),
+      );
+    }),
+  ),
+  ...paths("/api/llm-proxy-logs/:interactionId").map((url) =>
+    http.get(url, ({ params }) => {
+      const summary = llmLogsSummariesSeed.find(
+        (row) => row.id === params.interactionId,
+      );
+      return HttpResponse.json(
+        summary ? interactionFromSummary(summary) : makeInteraction(),
+      );
+    }),
+  ),
 
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
@@ -943,7 +1065,18 @@ export const handlers: HttpHandler[] = [
     failClosedDocuments: 0,
     nextScheduledAt: "2026-08-27T08:00:00.000Z",
   }),
-  ...getJson("/api/mcp-tool-calls", paginated(mcpToolCallsSeed)),
+  // The seeded failing LLM sessions made no tool calls of their own; the
+  // shared seed would put months-old calls on their trace.
+  ...paths("/api/mcp-tool-calls").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const sessionId = params.get("sessionId") ?? params.get("llmSessionId");
+      const own = llmLogsSummariesSeed.some(
+        (row) => row.sessionId === sessionId,
+      );
+      return HttpResponse.json(paginated(own ? [] : mcpToolCallsSeed));
+    }),
+  ),
   ...paths("/api/mcp-tool-calls/:mcpToolCallId").map((url) =>
     http.get(url, ({ params }) =>
       HttpResponse.json(findMcpToolCall(String(params.mcpToolCallId))),
@@ -964,6 +1097,7 @@ export const handlers: HttpHandler[] = [
   ...statisticsJson("/api/statistics/app-usage", appUsageFor),
   ...statisticsJson("/api/statistics/skill-usage", skillUsageFor),
   ...statisticsJson("/api/statistics/mcp-tool-calls", toolCallUsageFor),
+  ...statisticsJson("/api/statistics/llm-usage", llmUsageFor),
   ...statisticsJson("/api/statistics/apps", appStatisticsFor),
   ...statisticsJson("/api/statistics/skills", skillStatisticsFor),
   ...statisticsJson("/api/statistics/me", myStatisticsFor),
@@ -978,3 +1112,35 @@ const USAGE_STATISTICS_BY_SKILL: Record<
   "skill-release-checklist": skillUsageStatisticsQuietSeed,
   "skill-incident-postmortem": skillUsageStatisticsEmptySeed,
 };
+
+/** A full log row for a seeded summary; a failed one stores `{ error }`. */
+function interactionFromSummary(
+  summary: (typeof llmLogsSummariesSeed)[number],
+) {
+  return makeInteraction({
+    id: summary.id,
+    sessionId: summary.sessionId,
+    createdAt: summary.createdAt,
+    durationMs: summary.durationMs,
+    inputTokens: summary.inputTokens,
+    outputTokens: summary.outputTokens,
+    cost: summary.cost,
+    failed: summary.failed,
+    request: {
+      model: summary.model ?? "gpt-4o",
+      messages: [
+        { role: "user", content: summary.userMessagePreview ?? "Hello" },
+      ],
+    },
+    ...(summary.failed
+      ? {
+          response: {
+            error:
+              summary.inputTokens === null
+                ? "529 Overloaded: the provider is temporarily overloaded"
+                : "Stream ended without a terminal event after 61s",
+          },
+        }
+      : {}),
+  });
+}

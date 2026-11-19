@@ -21,7 +21,9 @@ runs:
     - name: Install Chromium
       working-directory: ./platform
       shell: bash
-      run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
+      run: |
+        "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
+        pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
 
     - name: Check screenshot determinism helpers
       working-directory: ./platform
@@ -36,7 +38,6 @@ runs:
       env:
         PLATFORM_IMAGE: ${{ inputs.platform-image }}
         MCP_SERVER_BASE_IMAGE: ${{ inputs.mcp-server-base-image }}
-        ARCHESTRA_BETA: "true"
         ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
       shell: bash
       run: ./platform/scripts/e2e-lite.sh up

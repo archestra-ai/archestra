@@ -14,6 +14,7 @@ import {
   reviewSessionFromTrajectory,
   stageHitlReview,
 } from "./hitl-review";
+import type { ReviewScopeItem } from "./review-scope";
 import { loadOfferReview } from "./service";
 
 /**
@@ -64,6 +65,8 @@ type HitlReviewDisplay = {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /** Unknown for an older or joined review, which then shows `text`. */
+  scope?: ReviewScopeItem[];
 };
 
 /**
@@ -107,6 +110,7 @@ export async function attachHitlReviews(params: {
         text: review.text,
         ...(review.tool ? { tool: review.tool } : {}),
         ...(review.arguments ? { arguments: review.arguments } : {}),
+        ...(review.scope ? { scope: review.scope } : {}),
       });
   }
   return reviews;

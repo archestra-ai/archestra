@@ -3,9 +3,11 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  Boxes,
   Check,
   Copy,
   ExternalLink,
@@ -37,6 +39,7 @@ import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -284,7 +287,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     !displayAgent &&
     (isRosterPending ||
       isCallerResolvingAgent ||
-      (!currentAgentId && allAgents.some((agent) => !agent.builtIn)));
+      (!currentAgentId &&
+        allAgents.some(
+          (agent) =>
+            !agent.builtIn ||
+            agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE,
+        )));
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   // The trigger's server and knowledge icons: wanted on screen, not for
   // typing, so they wait for the page's first requests too.
@@ -663,14 +671,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   already says this agent starts a dedicated runtime. */}
             </PromptInputButton>
           </PopoverTrigger>
+          {/* Keep the panel steady as results change; shrink only the list
+              when the viewport limits the available space. */}
           <PopoverContent
             side="bottom"
             align="start"
             sideOffset={8}
             collisionPadding={12}
-            className="w-[calc(100vw-1.5rem)] rounded-xl p-0 sm:w-[360px]"
+            className="flex max-h-(--radix-popover-content-available-height) w-[calc(100vw-1.5rem)] flex-col rounded-xl p-0 sm:w-[360px]"
           >
-            <div className="px-2.5 pt-2.5 pb-1">
+            <div className="shrink-0 px-2.5 pt-2.5 pb-1">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input
@@ -743,7 +753,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               aria-busy={page.isFetching}
               role="listbox"
               aria-label="Agents"
-              className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
+              className="h-[320px] min-h-0 overflow-y-auto px-1.5 pb-1.5"
             >
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
@@ -814,7 +824,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            <div className="flex items-center justify-between border-t px-1.5 py-1.5">
+            <div className="flex shrink-0 items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>
                   <Plus />
@@ -1086,6 +1096,19 @@ function AgentPickerRow({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-medium">{agent.name}</span>
+              {agent.builtIn && (
+                <span
+                  role="img"
+                  aria-label="Built-in agent"
+                  title="Built-in agent"
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded border",
+                    platformOwnedStyles,
+                  )}
+                >
+                  <Boxes className="size-2.5" aria-hidden="true" />
+                </span>
+              )}
               {runtimeEnabled && agent.runtime && (
                 <RuntimeCapableIndicator runtime={agent.runtime} />
               )}

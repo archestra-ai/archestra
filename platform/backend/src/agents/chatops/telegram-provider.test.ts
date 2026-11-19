@@ -948,6 +948,55 @@ describe("markdownToTelegramHtml", () => {
 });
 
 describe("initialize and cleanup", () => {
+  for (const stage of ["getMe", "deleteWebhook"]) {
+    test(`shutdown during ${stage} prevents late polling startup`, async () => {
+      const provider = new TelegramProvider({
+        enabled: true,
+        botToken: BOT_TOKEN,
+      });
+      let release = () => {};
+      const responseReady = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const calls: string[] = [];
+      fetchMock.mockImplementation(async (url: unknown, init?: RequestInit) => {
+        const method = String(url).split("/").pop() ?? "";
+        calls.push(method);
+        if (method === stage) await responseReady;
+        if (method === "getMe") {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              result: { id: BOT_ID, username: BOT_USERNAME },
+            }),
+          );
+        }
+        if (method === "deleteWebhook")
+          return new Response(JSON.stringify({ ok: true, result: true }));
+        if (method === "getUpdates") {
+          return new Promise((_, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("aborted")),
+            );
+          });
+        }
+        throw new Error(`Unexpected Telegram API call: ${method}`);
+      });
+      const pending = provider.initialize().catch((error: unknown) => error);
+      try {
+        await vi.waitFor(() => expect(calls).toContain(stage));
+        await provider.beginShutdown();
+        release();
+        expect(await pending).toBeInstanceOf(Error);
+        expect(calls).not.toContain("getUpdates");
+      } finally {
+        release();
+        await pending;
+        await provider.cleanup();
+      }
+    });
+  }
+
   test("authenticates, clears any leftover webhook, and stops polling on cleanup", async () => {
     const provider = new TelegramProvider({
       enabled: true,

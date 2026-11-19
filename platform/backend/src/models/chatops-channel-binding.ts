@@ -14,7 +14,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -935,16 +935,19 @@ class ChatOpsChannelBindingModel {
    * Creates bindings with agentId=null for new channels,
    * updates channelName/workspaceName for existing ones (preserves agentId).
    */
-  static async ensureChannelsExist(params: {
-    organizationId: string;
-    provider: ChatOpsProviderType;
-    channels: Array<{
-      channelId: string;
-      channelName: string | null;
-      workspaceId: string | null;
-      workspaceName: string | null;
-    }>;
-  }): Promise<void> {
+  static async ensureChannelsExist(
+    params: {
+      organizationId: string;
+      provider: ChatOpsProviderType;
+      channels: Array<{
+        channelId: string;
+        channelName: string | null;
+        workspaceId: string | null;
+        workspaceName: string | null;
+      }>;
+    },
+    tx: Transaction | typeof db = db,
+  ): Promise<void> {
     if (params.channels.length === 0) return;
 
     const values = params.channels.map((ch) => ({
@@ -956,7 +959,7 @@ class ChatOpsChannelBindingModel {
       workspaceName: ch.workspaceName,
     }));
 
-    await db
+    await tx
       .insert(schema.chatopsChannelBindingsTable)
       .values(values)
       .onConflictDoUpdate({
@@ -1031,19 +1034,24 @@ class ChatOpsChannelBindingModel {
    * has bindings stored with different ID formats (UUID aadGroupId vs thread ID).
    * Returns the count of deleted rows.
    */
-  static async deleteStaleChannels(params: {
-    organizationId: string;
-    provider: ChatOpsProviderType;
-    workspaceIds: string[];
-    activeChannelIds: string[];
-  }): Promise<number> {
+  static async deleteStaleChannels(
+    params: {
+      organizationId: string;
+      provider: ChatOpsProviderType;
+      workspaceIds: string[];
+      activeChannelIds: string[];
+      /** Only a complete authoritative snapshot may remove the last channel. */
+      allowEmptySnapshot?: boolean;
+    },
+    tx: Transaction | typeof db = db,
+  ): Promise<number> {
     if (
-      params.activeChannelIds.length === 0 ||
+      (params.activeChannelIds.length === 0 && !params.allowEmptySnapshot) ||
       params.workspaceIds.length === 0
     )
       return 0;
 
-    const deleted = await db
+    const deleted = await tx
       .delete(schema.chatopsChannelBindingsTable)
       .where(
         and(
@@ -1056,10 +1064,12 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.workspaceId,
             params.workspaceIds,
           ),
-          notInArray(
-            schema.chatopsChannelBindingsTable.channelId,
-            params.activeChannelIds,
-          ),
+          params.activeChannelIds.length
+            ? notInArray(
+                schema.chatopsChannelBindingsTable.channelId,
+                params.activeChannelIds,
+              )
+            : undefined,
           // Exclude DM bindings from cleanup — they won't appear in the
           // active channel discovery list but should be preserved.
           eq(schema.chatopsChannelBindingsTable.isDm, false),

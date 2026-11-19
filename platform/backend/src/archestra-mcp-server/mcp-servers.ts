@@ -48,26 +48,32 @@ import {
 } from "@/services/mcp-advanced-settings";
 import {
   assertCatalogCredentialRecovery,
+  enterpriseManagedOverrideRecoveryKeys,
+  enterpriseManagedOverrideSecretValues,
   extractLocalConfigSecrets,
+  moveEnterpriseManagedOverrideSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   ApiError,
   agentOwner,
+  awsIamConfigConflict,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   type LocalConfig,
+  mergedAwsIamSettings,
   PartialUpdateInternalMcpCatalogSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
-import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types/enterprise-managed-credentials";
+import type { EnterpriseManagedCredentialConfig } from "@/types/enterprise-managed-credentials";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
@@ -194,7 +200,7 @@ const CatalogMetadataToolSchema = z
 const McpConfigToolSchema = z
   .object({
     serverType: InsertInternalMcpCatalogSchema.shape.serverType
-      .exclude(["app"])
+      .exclude(["app", "desktop_mcp"])
       .optional()
       .describe("Server type: local, remote, or builtin."),
     serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
@@ -407,7 +413,7 @@ const EditMcpConfigToolArgsSchema = z
 const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   serverType: InsertInternalMcpCatalogSchema.shape.serverType
-    .exclude(["app"])
+    .exclude(["app", "desktop_mcp"])
     .optional()
     .describe(
       "Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.)",
@@ -965,6 +971,14 @@ async function handleEditMcpConfig(
         "App-backed catalog items are managed through the Apps API and cannot be configured here.",
       );
     }
+    // The command of a desktop MCP server runs on the computers of users: a
+    // person changes it in the MCP registry, as the create tool does not make
+    // one either.
+    if (existing.serverType === "desktop_mcp") {
+      return errorResult(
+        "Desktop MCP servers are configured in the MCP registry and cannot be configured here.",
+      );
+    }
 
     try {
       // SPDX-SnippetBegin
@@ -994,6 +1008,7 @@ async function handleEditMcpConfig(
         requested: args.deploymentSpecYaml,
         requestedLocalConfig: {
           envFrom: args.envFrom ?? existing.localConfig?.envFrom,
+          runtimeTier: existing.localConfig?.runtimeTier,
           serviceAccount:
             args.serviceAccount ?? existing.localConfig?.serviceAccount,
         },
@@ -1081,6 +1096,10 @@ async function handleEditMcpConfig(
     // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
+    const awsIamConflict = awsIamConfigConflict(
+      mergedAwsIamSettings({ update: validatedUpdate, current: existing }),
+    );
+    if (awsIamConflict) return errorResult(awsIamConflict);
     await moveCatalogSecretsToBag({
       updateData: validatedUpdate as Record<string, unknown>,
       catalogName: existing.name,
@@ -1092,9 +1111,9 @@ async function handleEditMcpConfig(
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        ...(existing.enterpriseManagedConfig
-          ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
-          : []),
+        ...enterpriseManagedOverrideRecoveryKeys(
+          existing.enterpriseManagedConfig,
+        ),
         // SPDX-SnippetEnd
       ],
     });
@@ -1188,6 +1207,7 @@ async function handleCreateMcpServer(
         environmentId: targetEnvironmentId,
         organizationId,
         userId: context.userId,
+        resource: "mcpRegistry",
       });
     } catch (error) {
       return errorResult(
@@ -1378,6 +1398,15 @@ async function handleDeployMcpServer(
         action: "use",
       });
       // SPDX-SnippetEnd
+    }
+
+    // A desktop MCP server runs on a user's own computer. The user adds it
+    // there themselves, from the MCP registry: an agent does not start a
+    // program on a person's computer.
+    if (catalogItem.serverType === "desktop_mcp") {
+      return errorResult(
+        `This MCP server runs on the user's own computer. The user adds it to their computer from the MCP registry: /mcp/registry?install=${catalogItem.id}`,
+      );
     }
 
     if (catalogItem.requiresAuth || catalogItem.oauthConfig) {
@@ -1777,11 +1806,12 @@ async function discoverLocalMcpServerTools(params: {
     broadcastMcpInstallationStatus(mcpServer.id, "discovering-tools", null);
 
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
+    const toolNameFor = await mintCatalogToolNames({
+      catalogId: catalogItem.id,
+      rawToolNames: discoveredTools.map((tool) => tool.name),
+    });
     const toolsToCreate = discoveredTools.map((tool) => ({
-      name: ToolModel.slugifyName(
-        catalogItem.name || mcpServer.name,
-        tool.name,
-      ),
+      name: toolNameFor(tool.name),
       rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
@@ -1851,8 +1881,12 @@ async function discoverRemoteMcpServerTools(params: {
   try {
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
     if (discoveredTools.length > 0) {
+      const toolNameFor = await mintCatalogToolNames({
+        catalogId: catalogItem.id,
+        rawToolNames: discoveredTools.map((tool) => tool.name),
+      });
       const toolsToCreate = discoveredTools.map((tool) => ({
-        name: ToolModel.slugifyName(catalogItem.name, tool.name),
+        name: toolNameFor(tool.name),
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
@@ -2032,6 +2066,10 @@ async function moveCatalogSecretsToBag(params: {
   const submittedClientSecret = (
     updateData.oauthConfig as { client_secret?: unknown } | null | undefined
   )?.client_secret;
+  const submittedEnterpriseManagedConfig = updateData.enterpriseManagedConfig as
+    | EnterpriseManagedCredentialConfig
+    | null
+    | undefined;
   const clientRecovery = params.existingClientSecretKeys
     ? {
         requiredKeys: params.existingClientSecretKeys,
@@ -2039,6 +2077,13 @@ async function moveCatalogSecretsToBag(params: {
           ...(typeof submittedClientSecret === "string" && submittedClientSecret
             ? { client_secret: submittedClientSecret }
             : {}),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...enterpriseManagedOverrideSecretValues(
+            submittedEnterpriseManagedConfig,
+          ),
+          // SPDX-SnippetEnd
         },
       }
     : undefined;
@@ -2083,6 +2128,22 @@ async function moveCatalogSecretsToBag(params: {
       updateData.clientSecretId = id;
     }
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const clientSecretId =
+    (updateData.clientSecretId as string | undefined) ?? existingClientSecretId;
+  const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+    enterpriseManagedConfig: submittedEnterpriseManagedConfig,
+    clientSecretId,
+    catalogName,
+    recovery: clientRecovery,
+  });
+  if (movedOverrides.clientSecretId !== clientSecretId) {
+    updateData.clientSecretId = movedOverrides.clientSecretId;
+  }
+  // SPDX-SnippetEnd
 }
 
 /**

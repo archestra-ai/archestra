@@ -6,6 +6,7 @@ import {
   ResourcePermissionGrantSchema,
 } from "@archestra/shared";
 import { z } from "zod";
+import { desktopMcpTargetError } from "@/lib/mcp/desktop-mcp";
 
 const SSO_CALLBACK_PATH = "/api/auth/sso/callback";
 
@@ -194,6 +195,10 @@ const enterpriseManagedConfigSchema = z.object({
     .optional(),
   headerName: z.string().optional(),
   responseFieldPath: z.string().optional(),
+  clientIdOverride: z.string().optional(),
+  clientSecretOverride: z.string().optional(),
+  privateKeyPemOverride: z.string().optional(),
+  privateKeyIdOverride: z.string().optional(),
 });
 
 const activeAuthFormSchema = z
@@ -201,7 +206,7 @@ const activeAuthFormSchema = z
     name: z.string().trim().min(1, "Name is required"),
     description: z.string().optional().or(z.literal("")),
     icon: z.string().nullable().optional(),
-    serverType: z.enum(["remote", "local"]),
+    serverType: z.enum(["remote", "local", "desktop_mcp"]),
     multitenant: z.boolean().optional(),
     serverUrl: HttpUrlSchema.optional().or(z.literal("")),
     // Carried from an existing entry so a save keeps it; choosing "None"
@@ -216,6 +221,7 @@ const activeAuthFormSchema = z
       "oauth_client_credentials",
       "enterprise_managed",
       "idp_jwt",
+      "aws_iam",
     ]),
     includeBearerPrefix: z.boolean(),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
@@ -224,7 +230,26 @@ const activeAuthFormSchema = z
     enterpriseManagedConfig: enterpriseManagedConfigSchema
       .nullable()
       .optional(),
+    // AWS IAM (SigV4) sign-in; checked below when it is the chosen method.
+    awsIamConfig: z
+      .object({
+        roleArn: z.string(),
+        region: z.string(),
+        service: z.string(),
+        audience: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
     localConfig: LocalConfigFormSchema.optional(),
+    // What a desktop MCP server tells each computer: the command that starts
+    // it or the URL where it listens (`kind` says which `value` is). With an
+    // empty value the item cannot be added to a computer yet.
+    desktopConfig: z
+      .object({
+        kind: z.enum(["command", "url"]),
+        value: z.string(),
+      })
+      .optional(),
     // Kubernetes Deployment spec YAML (for local servers)
     deploymentSpecYaml: z.string().optional(),
     // Original YAML from API (used to detect if user modified the YAML)
@@ -343,6 +368,36 @@ const activeAuthFormSchema = z
     },
   )
   .superRefine((data, ctx) => {
+    if (data.authMethod !== "aws_iam") return;
+    const aws = data.awsIamConfig;
+    const checks: Array<[keyof NonNullable<typeof aws>, RegExp, string]> = [
+      [
+        "roleArn",
+        /^arn:aws[a-z-]*:iam::\d{12}:role\/[\w+=,.@/-]{1,512}$/,
+        "Enter an IAM role ARN, such as arn:aws:iam::123456789012:role/agents.",
+      ],
+      [
+        "region",
+        /^[a-z]{2}(-[a-z]+)+-\d{1,2}$/,
+        "Enter an AWS region, such as us-east-1.",
+      ],
+      [
+        "service",
+        /^[a-z0-9-]{1,64}$/,
+        "Enter the SigV4 service name, such as bedrock-agentcore.",
+      ],
+    ];
+    for (const [field, pattern, message] of checks) {
+      if (!pattern.test((aws?.[field] ?? "").trim())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message,
+          path: ["awsIamConfig", field],
+        });
+      }
+    }
+  })
+  .superRefine((data, ctx) => {
     if (
       (data.authMethod === "enterprise_managed" ||
         data.authMethod === "idp_jwt") &&
@@ -354,24 +409,44 @@ const activeAuthFormSchema = z
         path: ["enterpriseManagedConfig", "identityProviderId"],
       });
     }
+  })
+  .superRefine((data, ctx) => {
+    if (data.serverType !== "desktop_mcp" || !data.desktopConfig) return;
+    const message = desktopMcpTargetError(data.desktopConfig);
+    if (message) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["desktopConfig", "value"],
+      });
+    }
   });
 
 export const formSchema = z.preprocess(
-  omitInactiveAuthFields,
+  omitInactiveFields,
   activeAuthFormSchema,
 );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
 
 // RHF retains unmounted fields so switching back restores the user's draft.
-// Validate and submit only the selected method's configuration, without
-// mutating those retained values or suppressing errors in shared fields.
-function omitInactiveAuthFields(value: unknown) {
-  if (!value || typeof value !== "object" || !("authMethod" in value)) {
+// Validate and submit only the selected hosting's and method's configuration,
+// without mutating those retained values or suppressing errors in shared
+// fields.
+function omitInactiveFields(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  if ("serverType" in value && value.serverType === "desktop_mcp") {
+    return omitConnectionFields(value);
+  }
+  if (!("authMethod" in value)) {
     return value;
   }
 
   const data = { ...value } as Record<string, unknown>;
+  // Only a desktop MCP server has a command for computers.
+  delete data.desktopConfig;
   if (
     data.authMethod !== "oauth" &&
     data.authMethod !== "oauth_client_credentials"
@@ -396,5 +471,24 @@ function omitInactiveAuthFields(value: unknown) {
   ) {
     delete data.enterpriseManagedConfig;
   }
+  return data;
+}
+
+// A desktop MCP server runs on each user's own computer: the gateway has no
+// server URL for it, no deployment and no authentication. Whatever the form
+// still holds for those, from a hosting the user chose first, is neither
+// validated nor submitted. Its own `desktopConfig` stays.
+function omitConnectionFields(value: object) {
+  const data = { ...value } as Record<string, unknown>;
+  data.serverUrl = "";
+  data.multitenant = false;
+  data.authMethod = "none";
+  data.authHeaderName = "";
+  data.additionalHeaders = [];
+  delete data.oauthConfig;
+  delete data.enterpriseManagedConfig;
+  delete data.localConfig;
+  delete data.deploymentSpecYaml;
+  delete data.originalDeploymentSpecYaml;
   return data;
 }

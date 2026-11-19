@@ -173,16 +173,23 @@ export const FOREIGN_RESUME_LIMIT = 2;
 export const FOREIGN_RESUME_COOLDOWN_MAX_EXPONENT = 5;
 
 /**
- * Whether this deployment offers idle hibernation at all: the feature's beta
- * flag is on and the operator has not hard-disabled it. Everything below this
- * gate — licence, organization toggle, per-server mode — only matters when
- * the deployment offers the feature in the first place.
+ * Whether this deployment offers idle hibernation at all: the operator has
+ * not hard-disabled it. Everything below this gate — licence, organization
+ * toggle, per-server mode — only matters when the deployment offers the
+ * feature in the first place.
  */
 export function isIdleHibernationOffered(): boolean {
-  return (
-    config.orchestrator.mcpIdleHibernation.betaEnabled &&
-    !config.orchestrator.mcpIdleHibernation.hardDisabled
-  );
+  return !config.orchestrator.mcpIdleHibernation.hardDisabled;
+}
+
+/**
+ * Whether this replica could put a server to sleep: the deployment offers
+ * idle hibernation and the enterprise licence is active. Without both, the
+ * organization toggle alone cannot make anything sleep here, so callers may
+ * take their zero-cost paths once the toggle is also known to be off.
+ */
+export function isIdleHibernationLicensedAndOffered(): boolean {
+  return isIdleHibernationOffered() && enterpriseTier.isCoreActive();
 }
 
 /** How long a server must sit unused before the sweep considers it idle. */

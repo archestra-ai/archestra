@@ -7,13 +7,15 @@ import { pathToFileURL } from "node:url";
 const VALID = new Set(["turbopack", "webpack"]);
 
 /**
- * Choose the Next.js dev bundler. Turbopack compiles 2-6x faster, but
- * @next/swc-darwin-arm64 leaks multi-GB non-reclaimable IOAccelerator (Apple
- * GPU) memory under Turbopack on Apple Silicon (vercel/next.js#92055, still
- * open), so macOS arm64 stays on webpack until the upstream native fix ships.
- * Set ARCHESTRA_DEV_BUNDLER=turbopack|webpack to override.
+ * Choose the Next.js dev bundler: Turbopack unless
+ * ARCHESTRA_DEV_BUNDLER=turbopack|webpack says otherwise. With the same six
+ * pages loaded, a Next 16.4 dev server settles at about 1.3 GB under
+ * Turbopack and 8.8 GB under webpack, which also compiles slower. macOS arm64
+ * used to default to webpack for an IOAccelerator memory leak under
+ * Turbopack (vercel/next.js#92055), fixed by Turbopack memory eviction in
+ * Next 16.3.
  */
-export function pickBundler({ override, platform, arch }) {
+export function pickBundler({ override }) {
   if (override) {
     if (!VALID.has(override)) {
       throw new Error(
@@ -22,7 +24,7 @@ export function pickBundler({ override, platform, arch }) {
     }
     return override;
   }
-  return platform === "darwin" && arch === "arm64" ? "webpack" : "turbopack";
+  return "turbopack";
 }
 
 /** Keep each worktree below Next's default of half the machine's RAM.
@@ -36,11 +38,7 @@ export function getDevNodeOptions(nodeOptions = "") {
 function main() {
   let bundler;
   try {
-    bundler = pickBundler({
-      override: process.env.ARCHESTRA_DEV_BUNDLER,
-      platform: process.platform,
-      arch: process.arch,
-    });
+    bundler = pickBundler({ override: process.env.ARCHESTRA_DEV_BUNDLER });
   } catch (err) {
     console.error(err.message);
     process.exit(1);

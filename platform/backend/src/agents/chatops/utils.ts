@@ -232,15 +232,55 @@ export function formatApprovalToolArgs(
 
 /**
  * Fit an OpenAPPA review into one Slack section (3,000 chars) with room for
- * the code fence around it.
+ * the code fence around it. With `escapeText`, the escaped form fits, and the cut
+ * falls between source characters, so no escape sequence is split.
  */
 export function formatApprovalReviewText(
   text: string,
   maxLength = 2800,
+  escapeText: (text: string) => string = (text) => text,
 ): string {
-  return text.length > maxLength
-    ? `${text.slice(0, maxLength)}\n… (truncated)`
-    : text;
+  const escaped = escapeText(text);
+  return escaped.length <= maxLength
+    ? escaped
+    : `${escapedPrefixWithin(text, maxLength, escapeText)}\n… (truncated)`;
+}
+
+/**
+ * The longest prefix of `text` whose escaped form fits `maxLength`, escaped.
+ * The cut falls between source characters and never inside a surrogate pair,
+ * which Telegram rejects as malformed UTF-16.
+ */
+export function escapedPrefixWithin(
+  text: string,
+  maxLength: number,
+  escapeText: (text: string) => string,
+): string {
+  let low = 0;
+  let high = Math.min(text.length, maxLength);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (escapeText(text.slice(0, mid)).length <= maxLength) low = mid;
+    else high = mid - 1;
+  }
+  const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
+  return escapeText(text.slice(0, end));
+}
+
+/**
+ * What approving also accepts, escaped for the surface and sized like a
+ * review text; undefined when nothing.
+ */
+export function formatApprovalAlsoAccepts(
+  lines: string[] | undefined,
+  escapeText?: (text: string) => string,
+): string | undefined {
+  if (!lines?.length) return undefined;
+  return formatApprovalReviewText(
+    ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join("\n"),
+    2800,
+    escapeText,
+  );
 }
 
 /**

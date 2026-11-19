@@ -185,6 +185,47 @@ describe("PATCH /api/organization/integration-settings", () => {
     ).toBe(400);
   });
 
+  test("stores a GitHub Copilot plan turned off and records it in the audit log", async () => {
+    const plans = { personal: { hidden: true } };
+    const response = await patch({
+      modelProviderOverrides: { "github-copilot": { plans } },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().modelProviderOverrides).toEqual({
+      "github-copilot": { plans },
+    });
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "organization",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(1);
+      expect(data[0]).toMatchObject({
+        action: "organization.updated",
+        outcome: "success",
+        before: { modelProviderOverrides: null },
+        after: { modelProviderOverrides: { "github-copilot": { plans } } },
+      });
+    });
+  });
+
+  test.each([
+    { openai: { plans: { personal: { hidden: true } } } },
+    {
+      "github-copilot": {
+        plans: { personal: { hidden: true }, enterprise: { hidden: true } },
+      },
+    },
+  ])("rejects plans that cannot be stored: %j", async (modelProviderOverrides) => {
+    expect((await patch({ modelProviderOverrides })).statusCode).toBe(400);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.modelProviderOverrides,
+    ).toBeNull();
+  });
+
   test("restarts the ChatOps providers when the channel overrides change", async () => {
     await patch({ messagingChannelOverrides: { slack: { hidden: true } } });
 

@@ -1,8 +1,8 @@
 ---
 title: "Account Security"
 description: "Two-factor authentication, session lifetime caps, and CLI account recovery"
-order: 4
-lastUpdated: 2026-10-22
+order: 5
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -41,7 +41,7 @@ Set a maximum session age to require sign-in again even for active users. Changi
 1. Go to **Settings → Auth**.
 2. Under **Maximum session lifetime**, select a duration preset or enter a custom duration.
 
-Once a session exceeds this age from sign-in, Archestra revokes the session and redirects the user to sign in again. Rotating [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) immediately invalidates all active sessions.
+Once a session exceeds this age from sign-in, Archestra revokes the session and redirects the user to sign in again. Rotating [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) immediately invalidates all active sessions; see [Session Secret](/docs/admin/deployment/secret-rotation#session-secret).
 
 ## Reset a Password from the CLI
 

@@ -44,7 +44,9 @@ export function RoleTypeIcon({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{icon}</TooltipTrigger>
-      <TooltipContent>{predefined ? "Predefined" : "Custom"}</TooltipContent>
+      <TooltipContent>
+        {predefined ? "Built-in role" : "Custom role"}
+      </TooltipContent>
     </Tooltip>
   );
 }

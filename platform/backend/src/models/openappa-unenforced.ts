@@ -1,5 +1,5 @@
 import { and, eq, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
@@ -14,13 +14,16 @@ const calls = schema.openappaUnenforcedCallsTable;
  * it turns on. A record never changes, so a second write of it does nothing.
  */
 class OpenAppaUnenforcedModel {
-  static async recordSession(params: {
-    organizationId: string;
-    sessionId: string;
-    parentId: string | undefined;
-    reason?: UnenforcedSessionReason;
-  }): Promise<void> {
-    const insert = db.insert(sessions).values({
+  static async recordSession(
+    params: {
+      organizationId: string;
+      sessionId: string;
+      parentId: string | undefined;
+      reason?: UnenforcedSessionReason;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<void> {
+    const insert = executor.insert(sessions).values({
       organizationId: params.organizationId,
       sessionId: params.sessionId,
       parentId: params.parentId ?? null,
@@ -34,6 +37,39 @@ class OpenAppaUnenforcedModel {
         set: { reason: "superyell" },
       });
     else await insert.onConflictDoNothing();
+  }
+
+  /**
+   * The recorded children of a root, at any depth, whose own client-native
+   * id is `nativeId`.
+   */
+  static async findFamilyMembers(params: {
+    organizationId: string;
+    rootSessionId: string;
+    nativeId: string;
+  }): Promise<
+    Array<{
+      sessionId: string;
+      parentId: string | null;
+      reason: UnenforcedSessionReason;
+    }>
+  > {
+    // A child's own id is all of its id after its parent's and a colon.
+    return db
+      .select({
+        sessionId: sessions.sessionId,
+        parentId: sessions.parentId,
+        reason: sessions.reason,
+      })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.organizationId, params.organizationId),
+          sql`starts_with(${sessions.sessionId}, ${`${params.rootSessionId}:`})`,
+          sql`${sessions.sessionId} = ${sessions.parentId} || ${`:${params.nativeId}`}`,
+        ),
+      )
+      .limit(2);
   }
 
   /** The sessions among `sessionIds` that OpenAPPA leaves alone. */
@@ -63,15 +99,19 @@ class OpenAppaUnenforcedModel {
       );
   }
 
-  static async recordCalls(params: {
-    organizationId: string;
-    sessionId: string;
-    toolCallIds: readonly string[];
-    reason: UnenforcedCallReason;
-    childNativeId?: string;
-  }): Promise<void> {
-    if (params.toolCallIds.length === 0) return;
-    await db
+  /** Returns the ids it recorded now; an id recorded before is left as it is. */
+  static async recordCalls(
+    params: {
+      organizationId: string;
+      sessionId: string;
+      toolCallIds: readonly string[];
+      reason: UnenforcedCallReason;
+      childNativeId?: string;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<string[]> {
+    if (params.toolCallIds.length === 0) return [];
+    const inserted = await executor
       .insert(calls)
       .values(
         [...new Set(params.toolCallIds)].map((toolCallId) => ({
@@ -82,7 +122,9 @@ class OpenAppaUnenforcedModel {
           childNativeId: params.childNativeId ?? null,
         })),
       )
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ toolCallId: calls.toolCallId });
+    return inserted.map((row) => row.toolCallId);
   }
 
   /**

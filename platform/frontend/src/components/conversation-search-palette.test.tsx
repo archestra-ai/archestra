@@ -70,7 +70,11 @@ vi.mock("@/lib/auth/use-is-authenticated", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/limits-access");
+vi.mock("@/lib/openappa-github-sync.query", () => ({
+  useServerRulesAccess: () => ({ scoped: false, files: [] }),
+}));
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
@@ -94,13 +98,10 @@ vi.mock("@/lib/chat/chat.query", () => ({
 }));
 
 let useRealRunsQuery = false;
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: { ...actual.archestraApiSdk, getMyAgentRuns: vi.fn() },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMyAgentRuns: vi.fn(),
+}));
 vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/agent-runtime.query")>();
@@ -240,6 +241,7 @@ import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -250,6 +252,9 @@ describe("ConversationSearchPalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionPageHidden: false },
+    } as ReturnType<typeof useOrganization>);
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -852,6 +857,22 @@ describe("ConversationSearchPalette", () => {
     });
   });
 
+  it("removes the Connect destination when the saved setting hides it", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    const view = render(<ConversationSearchPalette {...defaultProps} />);
+    expect(screen.getByText("Connect")).toBeInTheDocument();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionPageHidden: true },
+    } as ReturnType<typeof useOrganization>);
+    view.rerender(<ConversationSearchPalette {...defaultProps} />);
+    expect(screen.queryByText("Connect")).not.toBeInTheDocument();
+    expect(screen.getByText("MCP Registry")).toBeInTheDocument();
+  });
+
   it("routes Connect to the connection page", () => {
     // The Pages nav group (incl. Connect) renders when there are no conversations.
     mockUseConversations.mockReturnValue({
@@ -908,13 +929,7 @@ describe("ConversationSearchPalette", () => {
     }
   });
 
-  it.each([
-    true,
-    false,
-  ])("offers Auto Routing only while the alpha is enabled: %s", (enabled) => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "autoRoutingEnabled" && enabled,
-    );
+  it("offers Auto Routing", () => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
@@ -924,12 +939,8 @@ describe("ConversationSearchPalette", () => {
     fireEvent.change(screen.getByTestId("command-input"), {
       target: { value: "auto routing" },
     });
-    if (enabled) {
-      fireEvent.click(screen.getByText("Auto Routing"));
-      expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
-    } else {
-      expect(screen.queryByText("Auto Routing")).not.toBeInTheDocument();
-    }
+    fireEvent.click(screen.getByText("Auto Routing"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
   });
 
   it("searches pages by their visible labels and navigates to a match", () => {

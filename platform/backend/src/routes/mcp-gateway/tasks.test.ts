@@ -3,10 +3,11 @@ import { vi } from "vitest";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import { FAILED_QUERY_CLIENT_MESSAGE } from "@/utils/db";
 import { runToolCallMaybeTask } from "./tasks";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 /**
  * The detached continuation runs after the client already has its task handle,

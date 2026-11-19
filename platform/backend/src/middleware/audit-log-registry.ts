@@ -1,13 +1,18 @@
 import config from "@/config";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
+import AgentIdentityBindingModel from "@/models/agent-identity-binding";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import AutoRouterModel from "@/models/auto-router";
+import BlobProviderModel from "@/models/blob-provider";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import CostExportModel from "@/models/cost-export";
+import DesktopDeviceModel from "@/models/desktop-device";
 import DevFeedbackConfigModel from "@/models/dev-feedback-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -45,6 +50,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
@@ -54,49 +60,7 @@ import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
 import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
-
-export type AuditResourceIdSource =
-  | "organizationContext"
-  | "currentUser"
-  | "currentUserPersonalToken";
-
-export type AuditableRouteConfig = {
-  resourceType: string;
-  /**
-   * Name of the route param that identifies the resource for `fetchById` and
-   * `resource_id` (default: `id`). Use `agentId` for `/api/agents/:agentId/...`,
-   * `roleId` for `/api/roles/:roleId`, etc.
-   */
-  resourceIdParam?: string;
-  /**
-   * When set, the audited resource id is not taken from route params.
-   * - `organizationContext`: `request.organizationId` (org settings, bulk org routes).
-   * - `currentUser`: `request.user.id` for personal account-level actions.
-   * - `currentUserPersonalToken`: the caller's personal token row in the current org.
-   */
-  resourceIdSource?: AuditResourceIdSource;
-  fetchById?: (
-    id: string,
-    organizationId: string,
-    routeParams?: Record<string, unknown>,
-  ) => Promise<Record<string, unknown> | null>;
-  /**
-   * Hard-coded action name; wins over actionByMethod and method-derivation.
-   * Use for routes whose HTTP verb does not map to the semantic action
-   * (rotations, syncs, imports, reinstalls, bulk ops).
-   */
-  action?: AuditEventName;
-  /**
-   * Per-method action override; falls through to deriveAction when absent.
-   * Useful when a single route pattern handles multiple verbs with different
-   * semantics.
-   */
-  actionByMethod?: Partial<
-    Record<"POST" | "PUT" | "PATCH" | "DELETE", AuditEventName>
-  >;
-  /** Skip unsuccessful attempts; the route sets `auditSkip` for no-op successes. */
-  onlyWhenChanged?: boolean;
-};
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
 
 /**
  * Return value of `resolveAuditableRouteConfig`.  `viaWalkUp` is true when the
@@ -229,6 +193,35 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
   },
+  // These provider-account routes authenticate outside ordinary API auth;
+  // grok-native-privacy records their audit with the verified proxy identity.
+  "/v1/xai/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
+  },
+  "/v1/xai/:agentId/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
+  },
+  // A user approving or denying the sign-in of a tunnel client (the handler
+  // sets the snapshots), and removing their device.
+  "/api/desktop-devices/sign-in/:id/decision": {
+    resourceType: "desktopDeviceSignIn",
+    action: "desktopDeviceSignIn.updated",
+  },
+  "/api/desktop-devices/:id": {
+    resourceType: "desktopDevice",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
+  },
+  // Start and Stop of one MCP server on the device. The snapshot of the
+  // device holds which of its MCP servers are stopped.
+  "/api/desktop-devices/:id/servers/:catalogId": {
+    resourceType: "desktopDevice",
+    action: "desktopDevice.updated",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
+  },
   // Disconnecting a client: the resource is the user whose client it was;
   // the snapshot names the client.
   "/api/connected-clients/:clientId": {
@@ -258,6 +251,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "organization.updated",
     fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
+  // The handler records which agents took the runtime's settings.
+  "/api/agent-runtime-templates/:id/apply-to-agents": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",
@@ -273,6 +272,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // An agent's identities decide whose consents its tool calls run under.
+  "/api/agents/:id/identity-bindings": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: async (id, orgId) => {
+      const agent = await AgentModel.findIdentityForAudit(id, orgId);
+      return agent
+        ? {
+            ...agent,
+            identityBindings: await AgentIdentityBindingModel.findForAgent(id),
+          }
+        : null;
+    },
+    onlyWhenChanged: true,
+  },
+  // SPDX-SnippetEnd
   "/api/agents/:id/runtime/credentials/:key": {
     resourceType: "agent",
     action: "agent.updated",
@@ -483,6 +501,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.hardReset",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // The arguments a user adds to the command of their own desktop MCP
+  // server. The snapshot holds how many there are and their hash, not the
+  // arguments. A request with the stored arguments updates nothing.
+  "/api/mcp_server/:id/desktop-arguments": {
+    resourceType: "mcpServer",
+    action: "mcpServer.updated",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
   // does NOT filter soft-deleted rows, so `before` captures the deleted install
@@ -548,6 +575,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "serviceAccount.updated",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Trust policies for workload identity federation. `:id` is the account,
+  // so both entries name `credentialId`: the POST, which has none in its
+  // path, then takes the new credential's id from the response body.
+  "/api/service-accounts/:id/federated-credentials": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id/federated-credentials/:credentialId": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  // SPDX-SnippetEnd
 
   // LLM Provider API Keys (REDACTED — secretId and key material excluded)
   "/api/llm-provider-api-keys": {
@@ -706,6 +752,35 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "credential",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
+  // Blob providers (organization object storage destinations)
+  "/api/blob-providers": {
+    resourceType: "blobProvider",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  "/api/blob-providers/:id": {
+    resourceType: "blobProvider",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  "/api/blob-providers/:id/test": {
+    resourceType: "blobProvider",
+    action: "blobProvider.tested",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  // Scheduled cost exports
+  "/api/cost-exports": {
+    resourceType: "costExport",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
+  },
+  "/api/cost-exports/:id": {
+    resourceType: "costExport",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
+  },
+  // A run moves the watermark and last-run fields, so before/after shows it.
+  "/api/cost-exports/:id/run": {
+    resourceType: "costExport",
+    action: "costExport.run",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
   },
   // Stored GitHub personal access tokens
   "/api/github-pats": {
@@ -1082,6 +1157,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "modelPool",
     fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
   },
+  "/api/auto-routing/routers": {
+    resourceType: "autoRouter",
+    fetchById: (id, orgId) => AutoRouterModel.findByIdForAudit(id, orgId),
+  },
+  "/api/auto-routing/routers/:id": {
+    resourceType: "autoRouter",
+    fetchById: (id, orgId) => AutoRouterModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-virtual-keys": {
     resourceType: "virtualApiKey",
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
@@ -1114,23 +1197,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "oauthClient.rotated",
     fetchById: (id, orgId) =>
       ManagedOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/llm-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/llm-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-
-  "/api/mcp-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
   // LLM model catalog (admin) — sync has distinct semantics from a generic update.
@@ -1493,16 +1559,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // OAuth client secret rotation — security-critical.
-  "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
 
   // ===== Bulk routes =====
   //
@@ -1555,6 +1611,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "role.bulk_deleted" },
   },
+  "/api/agent-runs/bulk": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "agentRun.bulk_deleted" },
+  },
+  "/api/agent-runs/bulk/workspace": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "agentRun.bulk_files_deleted" },
+  },
+  "/api/agent-runs/bulk-cancel": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    action: "agentRun.bulk_canceled",
+  },
   "/api/teams/bulk": {
     resourceType: "team",
     resourceIdSource: "organizationContext",
@@ -1577,11 +1648,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
   "/api/oauth-clients/bulk": {
-    resourceType: "oauthClient",
-    resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
-  },
-  "/api/llm-oauth-clients/bulk": {
     resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "oauthClient.bulk_deleted" },

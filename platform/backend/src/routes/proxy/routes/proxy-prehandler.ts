@@ -1,5 +1,9 @@
 import { Readable } from "node:stream";
-import type { SupportedProvider } from "@archestra/shared";
+import * as zlib from "node:zlib";
+import {
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import {
   errorCodes,
   type FastifyReply,
@@ -10,10 +14,16 @@ import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation
 import logger from "@/logging";
 import { LimitValidationService } from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
+import ModelModel from "@/models/model";
 import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import { ThroughputError } from "@/services/llm-throughput";
 import { ApiError } from "@/types";
 import {
@@ -45,6 +55,7 @@ export function createProxyPreHandler(params: {
   apiPrefix: string;
   endpointSuffix: string | readonly string[];
   upstream: string;
+  resolveUpstream?: (request: FastifyRequest) => string;
   providerName: string;
   rewritePrefix?: string;
   skipErrorResponse?: Record<string, unknown>;
@@ -66,7 +77,13 @@ export function createProxyPreHandler(params: {
    */
   logProvider?: SupportedProvider;
 }) {
-  const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  const { apiPrefix, endpointSuffix, upstream, resolveUpstream, providerName } =
+    params;
+  // Provider identity comes from this route's configured namespace, never the
+  // body or caller's credential. Custom compatible models keep that identity.
+  const provider = SupportedProvidersSchema.safeParse(
+    apiPrefix.split("/").at(-1),
+  );
   const beforeCleanBody = params.logProvider
     ? async (request: FastifyRequest, body: unknown) => {
         notePassthroughRequestBody(request, body);
@@ -138,8 +155,13 @@ export function createProxyPreHandler(params: {
       return;
     }
 
+    const resolvedUpstream = resolveUpstream?.(request) ?? upstream;
+    const upstreamPathPrefix = resolveUpstream
+      ? new URL(resolvedUpstream).pathname.replace(/\/+$/, "")
+      : "";
     const pathAfterPrefix = request.url.replace(apiPrefix, "");
     const uuidMatch = pathAfterPrefix.match(UUID_REGEX);
+    const forwardedPath = uuidMatch ? uuidMatch[2] || "" : pathAfterPrefix;
 
     if (uuidMatch) {
       const remainingPath = uuidMatch[2] || "";
@@ -151,8 +173,8 @@ export function createProxyPreHandler(params: {
           method: request.method,
           originalUrl,
           rewrittenUrl: request.raw.url,
-          upstream,
-          finalProxyUrl: `${upstream}${rewritePrefix}${remainingPath}`,
+          upstream: resolvedUpstream,
+          finalProxyUrl: `${resolvedUpstream}${rewritePrefix}${remainingPath}`,
         },
         `${providerName} proxy preHandler: URL rewritten (UUID stripped)`,
       );
@@ -161,16 +183,26 @@ export function createProxyPreHandler(params: {
         {
           method: request.method,
           url: request.url,
-          upstream,
-          finalProxyUrl: `${upstream}${rewritePrefix}${pathAfterPrefix}`,
+          upstream: resolvedUpstream,
+          finalProxyUrl: `${resolvedUpstream}${rewritePrefix}${pathAfterPrefix}`,
         },
         `${providerName} proxy preHandler: proxying request`,
       );
     }
 
     // Strip last: the body hooks (e.g. Claude Code's count observer) still
-    // read X-Archestra-* headers such as the agent id.
-    cleanForwardedBody(request, beforeCleanBody).then(() => {
+    // read X-Archestra-* headers such as the agent id, and match request.url
+    // before any upstream base-path prefix is added for @fastify/http-proxy.
+    cleanForwardedBody(
+      request,
+      beforeCleanBody,
+      provider.success
+        ? { provider: provider.data, baseUrl: resolvedUpstream }
+        : undefined,
+    ).then(() => {
+      if (upstreamPathPrefix) {
+        request.raw.url = `${apiPrefix}${upstreamPathPrefix}${forwardedPath}`;
+      }
       stripArchestraRequestHeaders(request);
       next();
     }, next);
@@ -225,6 +257,7 @@ export function createProxyPreHandler(params: {
         const violation = await LimitValidationService.checkLimitsBeforeRequest(
           {
             unmeteredOperation: true,
+            allowUnattributed: !!identity.serviceAccountId,
             agentId: identity.agent.id,
             agent: identity.agent,
             userId: identity.userId,
@@ -266,15 +299,150 @@ export function createProxyPreHandler(params: {
  *
  * The catch-all hands its preHandler the raw body stream, so a JSON body is
  * read here, within the route's body limit, and put back: byte for byte when
- * nothing in it changed, re-serialized when something did. Compressed and
- * non-JSON bodies are forwarded as they are.
+ * nothing in it changed, re-serialized when something did. Native Ollama
+ * inference validates JSON independently of the content headers, like its
+ * upstream decoder; other opaque bodies are forwarded as they are.
  */
 export async function cleanForwardedBody(
   request: FastifyRequest,
   beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>,
+  availability?: { provider: SupportedProvider; baseUrl?: string },
 ): Promise<void> {
+  const nativeOllama =
+    availability?.provider === "ollama" ||
+    availability?.provider === "ollama-native";
+  const path = request.url.split("?")[0].replace(/\/+$/, "");
+  const metadata =
+    isNonInferenceOperation(request) ||
+    /\/(?:tokenize|detokenize)$/.test(path) ||
+    (nativeOllama &&
+      /\/api\/(?:show|pull|push|create|copy|delete|blobs\/[^/]+)$/.test(path));
+  const validateBody =
+    availability && !metadata
+      ? async (body: unknown) => {
+          // Fastify may already have parsed text/plain into a string, while
+          // the catch-all parser leaves other bodies as raw streams.
+          if (typeof body === "string" || Buffer.isBuffer(body)) {
+            try {
+              body = JSON.parse(body.toString());
+            } catch {
+              if (nativeOllama)
+                throw new ApiError(
+                  400,
+                  "Native Ollama inference requests must contain one valid JSON body.",
+                );
+              return;
+            }
+          }
+          if (!body || typeof body !== "object") return;
+          let model = "model" in body ? body.model : undefined;
+          if (nativeOllama) {
+            // Go accepts case-insensitive field names, but its null/duplicate
+            // handling differs from JSON.parse. Never authorize one model and
+            // forward an ambiguous body that Ollama could decode as another.
+            const fields = Object.entries(body).filter(
+              ([key]) => key.toLowerCase() === "model",
+            );
+            if (
+              fields.length > 1 ||
+              (fields.length === 1 && typeof fields[0][1] !== "string")
+            ) {
+              throw new ApiError(
+                400,
+                "Native Ollama requests must name a single string model.",
+              );
+            }
+            model = fields[0]?.[1];
+          }
+          if (typeof model !== "string") return;
+          const resolved = await resolveFireworksModel({
+            provider: availability.provider,
+            model,
+            baseUrl: availability.baseUrl,
+          });
+          await ModelModel.assertAvailable({
+            provider: availability.provider,
+            modelId: resolved.model,
+            aliases: isFireworksEndpoint(availability.baseUrl)
+              ? fireworksModelAliases(resolved.model)
+              : undefined,
+          });
+        }
+      : undefined;
+  const encoding = request.headers["content-encoding"]?.trim().toLowerCase();
+  // Ollama decompresses zstd on its compatible endpoints. Inspect a bounded
+  // copy, then forward the original bytes and headers unchanged.
+  const zstdBody =
+    nativeOllama &&
+    validateBody &&
+    encoding === "zstd" &&
+    /\/v1\/(?:chat\/completions|completions|embeddings|responses|images\/(?:generations|edits)|messages)$/.test(
+      path,
+    );
+  const encodedBody =
+    zstdBody ||
+    (validateBody && !nativeOllama && encoding && encoding !== "identity");
+  const multipartBody =
+    validateBody &&
+    (!nativeOllama || /\/v1\/audio\/transcriptions$/.test(path)) &&
+    request.headers["content-type"]
+      ?.toLowerCase()
+      .startsWith("multipart/form-data");
+  const decodeBody = async (bytes: Buffer): Promise<Buffer> => {
+    // Decode a bounded inspection copy. HTTP applies stacked encodings in order,
+    // so undo them in reverse; the original request bytes still go upstream.
+    for (const name of (encoding ?? "").split(",").reverse()) {
+      const decoders: Record<
+        string,
+        (
+          input: Buffer,
+          options: { maxOutputLength: number },
+          callback: (error: Error | null, decoded: Buffer) => void,
+        ) => void
+      > = {
+        gzip: zlib.gunzip,
+        deflate: zlib.inflate,
+        br: zlib.brotliDecompress,
+        zstd: zlib.zstdDecompress,
+      };
+      const key = name.trim();
+      const decoder = Object.hasOwn(decoders, key) ? decoders[key] : undefined;
+      if (key === "identity") continue;
+      if (typeof decoder !== "function")
+        throw new ApiError(415, "Unsupported model request content encoding.");
+      try {
+        bytes = await new Promise<Buffer>((resolve, reject) => {
+          decoder(
+            bytes,
+            { maxOutputLength: request.routeOptions.bodyLimit },
+            (error, decoded) => (error ? reject(error) : resolve(decoded)),
+          );
+        });
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ERR_BUFFER_TOO_LARGE"
+        )
+          throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE();
+        throw new ApiError(400, "Invalid compressed model request.");
+      }
+    }
+    return bytes;
+  };
   const body = request.body;
-  if (!(body instanceof Readable) || !isUncompressedJson(request.headers)) {
+  if (!(body instanceof Readable)) {
+    await validateBody?.(
+      encodedBody && (typeof body === "string" || Buffer.isBuffer(body))
+        ? await decodeBody(Buffer.from(body))
+        : body,
+    );
+    return;
+  }
+  // Native endpoints can parse JSON regardless of Content-Type. Inspect those
+  // bytes for availability too; otherwise a different header bypasses Hidden.
+  if (!isUncompressedJson(request.headers) && !validateBody) {
     return;
   }
   const raw = await readBody({
@@ -282,12 +450,58 @@ export async function cleanForwardedBody(
     limit: request.routeOptions.bodyLimit,
     contentLength: request.headers["content-length"],
   });
+  if (multipartBody) {
+    const decoded = encodedBody ? await decodeBody(raw) : raw;
+    let form: FormData;
+    try {
+      form = await new Response(new Uint8Array(decoded), {
+        headers: { "content-type": request.headers["content-type"] ?? "" },
+      }).formData();
+    } catch {
+      throw new ApiError(400, "Invalid multipart model request.");
+    }
+    let model = form.get("model");
+    if (nativeOllama) {
+      // Ollama uses Go's FormValue: query parameters precede multipart fields.
+      const query = request.url.includes("?")
+        ? request.url.slice(request.url.indexOf("?") + 1)
+        : "";
+      // Go discards malformed query pairs; do not authorize a different fallback
+      // model because URLSearchParams tolerates malformed escapes or semicolons.
+      try {
+        if (query.includes(";")) throw new Error("Ambiguous query");
+        decodeURIComponent(query.replace(/\+/g, " "));
+      } catch {
+        throw new ApiError(400, "Invalid multipart model query.");
+      }
+      model = new URLSearchParams(query).get("model") ?? model;
+    } else if (
+      form.getAll("model").length > 1 ||
+      (model !== null && typeof model !== "string")
+    ) {
+      // Providers disagree on first/last duplicate fields. Require an
+      // unambiguous model without altering the file or forwarded form bytes.
+      throw new ApiError(
+        400,
+        "Multipart requests must name a single string model.",
+      );
+    }
+    await validateBody({ model });
+    request.body = Readable.from([raw], { objectMode: false });
+    return;
+  }
+  if (encodedBody) {
+    await validateBody(await decodeBody(raw));
+    request.body = Readable.from([raw], { objectMode: false });
+    return;
+  }
   // @fastify/reply-from pipes a stream upstream as it is, and serializes an
   // object for an application/json request with a fresh content-length.
   request.body =
     (await cleanedJson(
       raw,
       beforeCleanBody && ((body) => beforeCleanBody(request, body)),
+      validateBody,
     )) ?? Readable.from([raw], { objectMode: false });
 }
 
@@ -316,17 +530,24 @@ export function stripArchestraRequestHeaders(request: FastifyRequest): void {
 async function cleanedJson(
   raw: Buffer,
   beforeCleanBody?: (body: unknown) => Promise<void>,
+  validateBody?: (body: unknown) => Promise<void>,
 ): Promise<object | null> {
   const markers = mayHoldAttestationToken(raw);
   const payloads = mayHoldOpenAppaPayload(raw);
-  if (!markers && !payloads && !beforeCleanBody) return null;
+  if (!markers && !payloads && !beforeCleanBody && !validateBody) return null;
   let body: unknown;
   try {
     body = JSON.parse(raw.toString("utf8"));
   } catch {
+    // Native providers can accept a first JSON value and ignore trailing
+    // bytes. The availability validator must reject such ambiguous input.
+    await validateBody?.(raw);
     return null;
   }
   if (typeof body !== "object" || body === null) return null;
+  // Availability is an execution gate, unlike the optional logging observer.
+  // Its errors must reach Fastify and stop forwarding.
+  await validateBody?.(body);
   if (beforeCleanBody) {
     try {
       await beforeCleanBody(body);

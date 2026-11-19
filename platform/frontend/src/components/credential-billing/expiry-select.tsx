@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { CalendarIcon, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";

@@ -2,11 +2,17 @@ import {
   ApiError,
   isAgentTool,
   isBrowserMcpTool,
+  isSkillTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   type ModelSelection,
   SOURCE_HEADER,
   TimeInMs,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type {
   McpUiResourceCsp,
@@ -53,6 +59,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { onAgentToolSurfaceChange } from "@/models/agent-tool-surface";
 import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
@@ -63,6 +70,7 @@ import {
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { drainScopeHeaders } from "@/utils/drain-scope";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
@@ -119,7 +127,12 @@ const loopbackGatewayFetch: FetchLike = (url, init) => {
       new Response(null, { status: 405, statusText: "Method Not Allowed" }),
     );
   }
-  return fetch(url, init);
+  const headers = new Headers(init?.headers);
+  // The transport can outlive the turn that created it.
+  headers.delete("x-archestra-drain-scope");
+  for (const [name, value] of Object.entries(drainScopeHeaders()))
+    headers.set(name, value);
+  return fetch(url, { ...init, headers });
 };
 
 /**
@@ -265,6 +278,7 @@ function getToolCacheKey(params: {
   delegationChain?: string;
   sessionId?: string;
   parentLlm?: ModelSelection;
+  suppressContentLogging?: boolean;
 }): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const {
     agentId,
@@ -273,6 +287,7 @@ function getToolCacheKey(params: {
     delegationChain,
     sessionId,
     parentLlm,
+    suppressContentLogging,
   } = params;
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
@@ -288,6 +303,7 @@ function getToolCacheKey(params: {
   // chat keys both by the conversation id, which leaves its key unchanged.
   if (sessionId && sessionId !== isolationKey)
     parts.push(`session=${sessionId}`);
+  if (suppressContentLogging) parts.push("encrypted");
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -503,6 +519,9 @@ export function clearChatMcpClient(agentId: string): void {
     "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
+
+// The agent model reports tool surface changes without importing this module.
+onAgentToolSurfaceChange(clearChatMcpClient);
 
 /**
  * Close and remove cached MCP client for a specific agent/user/scope.
@@ -964,6 +983,7 @@ export async function getChatMcpTools({
     delegationChain,
     sessionId,
     parentLlm,
+    suppressContentLogging,
   });
   const shouldUseToolCache =
     !oauthExecution && !abortSignal && !appaSubagent && !openappaReviewPause;
@@ -986,7 +1006,10 @@ export async function getChatMcpTools({
       modelAcceptsImageToolResults ?? true;
     cached.context.parentLlm = parentLlm;
     cached.context.runId = runId;
+    cached.context.launchedRunIds = undefined;
     cached.context.agentRuntimeTier = agentRuntimeTier;
+    cached.context.suppressContentLogging = suppressContentLogging;
+    cached.context.encryptedChatAudit = encryptedChatAudit;
     logger.info(
       {
         agentId,
@@ -1063,6 +1086,7 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           serviceAccountId: mcpGwToken.serviceAccountId,
+          oauthClientId: mcpGwToken.oauthClientId,
         });
 
     // Filter out agent skills and app-only tools.
@@ -1074,12 +1098,19 @@ export async function getChatMcpTools({
     const delegatedRun =
       !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
-      if (isAgentTool(tool.name)) return false;
+      if (isAgentTool(tool.name) || isSkillTool(tool.name)) return false;
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
-        delegatedRun &&
-        isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))
-      )
+        suppressContentLogging &&
+        (shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+          shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
+          shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME ||
+          shortName === TOOL_POST_AGENT_RUN_FILE_SHORT_NAME ||
+          shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME)
+      ) {
         return false;
+      }
+      if (delegatedRun && isOpenappaTool(shortName)) return false;
       const uiVisibility = (tool._meta as { ui?: McpUiToolMeta } | undefined)
         ?.ui?.visibility;
       return !(uiVisibility && !uiVisibility.includes("model"));
@@ -1465,6 +1496,7 @@ async function listToolsInProcess(params: {
   agentId: string;
   organizationId: string;
   serviceAccountId: string | undefined;
+  oauthClientId?: string;
 }) {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
@@ -1473,6 +1505,7 @@ async function listToolsInProcess(params: {
     tokenAuth: {
       organizationId: params.organizationId,
       serviceAccountId: params.serviceAccountId,
+      oauthClientId: params.oauthClientId,
     },
   });
   return tools;

@@ -3,7 +3,8 @@ import KeyvPostgres from "@keyv/postgres";
 import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";
 
@@ -17,8 +18,13 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  */
 export const CacheKey = {
   OpenAppaHitlSummary: "openappa-hitl-summary",
+  /** Policy repository pull request results checked, and repositories that refused a check. */
+  OpenAppaPolicyCheck: "openappa-policy-check",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
+  DesktopDeviceSignIn: "desktop-device-sign-in",
+  DesktopDeviceSignInRateLimit: "desktop-device-sign-in-rate-limit",
+  DesktopMcpInstallAttempt: "desktop-mcp-install-attempt",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
   /** Recent scheduled model sync attempt for an LLM provider API key */
@@ -35,10 +41,14 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** Token endpoint requests, before verifying client credentials. */
   OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** Gateway authentication attempts and recent validated-pair exemptions. */
+  McpGatewayRateLimit: "mcp-gateway-rate-limit",
   /** GitHub Actions OIDC token ids already exchanged, until they expire. */
   GitHubActionsTokenJti: "github-actions-token-jti",
   /** GitHub Actions token exchange requests, before verifying the OIDC token. */
   GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
+  /** Workload identity token exchange requests, before verifying the OIDC token. */
+  WorkloadIdentityTokenRateLimit: "workload-identity-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
@@ -61,9 +71,37 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** Original choices behind an ordinary native question, retained for replay. */
+  NativeUserQuestion: "native-user-question",
+  /** Single-card choices and provenance, isolated from older grouped-only decoders. */
+  NativeUserQuestionPresentation: "native-question-presentation",
+  /** The LLM session and user behind an MCP tool call the proxy handed a client, for the gateway that runs it */
+  LlmToolCallSession: "llm-tool-call-session",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
+  OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
+  /** The chat a Cursor subagent's subagents belong to, for the hook steps Cursor sends for them */
+  CursorSubagentRoot: "cursor-subagent-root",
+  /** Offers Guardrails made for calls of Cursor's own tools, whose results a hook cannot withhold */
+  CursorOwnToolOffer: "cursor-own-tool-offer",
+  /** Cursor chats whose model saw a result that Guardrails had to withhold */
+  CursorUnvouchedChat: "cursor-unvouched-chat",
+  /** Calls a Cursor subagent has open, which the end of the main agent's loop must not close */
+  CursorSubagentOpenCall: "cursor-subagent-open-call",
+  /** Cursor chats in which a subagent called a tool lately */
+  CursorSubagentActive: "cursor-subagent-active",
+  /** Guardrails marks a Cursor chat's model was told to show and has not shown yet */
+  CursorOwedMarks: "cursor-owed-marks",
+  /** Cursor chats whose model was already told to show the session mark */
+  CursorSessionMarkAsked: "cursor-session-mark-asked",
+  /** Cursor subagents that were already told to show their marks */
+  CursorSubagentMarkAsked: "cursor-subagent-mark-asked",
+  /** The Cursor chat and call that a web tool's CLI process reports for */
+  CursorWebCall: "cursor-web-call",
+  /** The Cursor chat that owns a disconnect reference, and that chat's exemption */
+  CursorDisconnectChat: "cursor-disconnect-chat",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
@@ -85,12 +123,16 @@ export const CacheKey = {
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** How many results followed a ruling when its remedy continuation was last delivered. */
+  OpenAppaRemedyContinuationDelivered: "openappa-remedy-continuation-delivered",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
+  /** Admission and failure cooldown, not cleared by manual freshness refresh. */
+  ChannelDiscoveryLease: "channel-scan-lease",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
@@ -99,12 +141,10 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** First native conversation to present a verified setup reference */
   ConnectionSetupConversation: "connection-setup-conversation",
-  /** Archestra VAF Add On package proxy rate limiting per IP */
+  /** Archestra VAF Add On package and script rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
   MfilesVafAddOnReleasePin: "mfiles-vaf-add-on-release-pin",
-  /** Latest CI-built add-on artifact for the dev source-ref override */
-  MfilesVafAddOnCiArtifact: "mfiles-vaf-add-on-ci-artifact",
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
@@ -134,6 +174,8 @@ export const CacheKey = {
   TeamsFileSignIn: "teams-file-sign-in",
   /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
   TeamsFileSignInState: "teams-file-sign-in-state",
+  /** Page URL of an MS Teams channel's files folder, learned from a sender's sign-in */
+  TeamsChannelFilesFolder: "teams-channel-files-folder",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",
@@ -190,6 +232,15 @@ export const CacheKey = {
    * or API call, redeemed by whichever one the public content URL reaches.
    */
   AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
+  /**
+   * Short-lived one-time credential grants minted by transfer_credential({ ephemeral: true })
+   * and redeemed by start_agent_run on whichever replica handles the request.
+   */
+  EphemeralCredentialGrant: "ephemeral-credential-grant-v1",
+  /**
+   * Distributed per-caller subagent load-balancer rotation state shared across backend pods.
+   */
+  SubagentLoadBalancer: "subagent-load-balancer-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -482,7 +533,7 @@ class CacheManager {
   /** All participants must use the same scope and this transaction's cache methods. */
   async withLock<T>(
     scope: AllowedCacheKey,
-    callback: (cache: TransactionalCache) => Promise<T>,
+    callback: (cache: TransactionalCache, tx: Transaction) => Promise<T>,
   ): Promise<T> {
     const keyv = this.keyv;
     if (!keyv) throw new Error("CacheManager: Not started");
@@ -490,7 +541,7 @@ class CacheManager {
     if (keyv.opts.store instanceof KeyvPostgres) {
       await keyv.opts.store.query("SELECT 1");
     }
-    return CacheEntryModel.withLock(scope, async (entries) => {
+    return CacheEntryModel.withLock(scope, async (entries, tx) => {
       const decode = async <V>(
         raw: string | undefined,
       ): Promise<V | undefined> => {
@@ -510,27 +561,30 @@ class CacheManager {
         }
         return values;
       };
-      return callback({
-        get: async <V>(key: AllowedCacheKey) =>
-          decode<V>(await entries.get(`keyv:${key}`)),
-        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
-          const lifetime = ttl ?? this.defaultTtl;
-          const payload = await keyv.serializeData({
-            value,
-            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
-          });
-          await entries.set(
-            `keyv:${key}`,
-            typeof payload === "string" ? payload : JSON.stringify(payload),
-          );
-          return value;
+      return callback(
+        {
+          get: async <V>(key: AllowedCacheKey) =>
+            decode<V>(await entries.get(`keyv:${key}`)),
+          set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+            const lifetime = ttl ?? this.defaultTtl;
+            const payload = await keyv.serializeData({
+              value,
+              expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+            });
+            await entries.set(
+              `keyv:${key}`,
+              typeof payload === "string" ? payload : JSON.stringify(payload),
+            );
+            return value;
+          },
+          delete: async (key: AllowedCacheKey) =>
+            (await entries.take([`keyv:${key}`])).length > 0,
+          getAndDelete: async <V>(key: AllowedCacheKey) =>
+            (await take<V>([key]))[0]?.value,
+          getAndDeleteMany: take,
         },
-        delete: async (key: AllowedCacheKey) =>
-          (await entries.take([`keyv:${key}`])).length > 0,
-        getAndDelete: async <V>(key: AllowedCacheKey) =>
-          (await take<V>([key]))[0]?.value,
-        getAndDeleteMany: take,
-      });
+        tx,
+      );
     });
   }
 
@@ -703,8 +757,21 @@ export const cacheManager = new CacheManager();
 // === Internal helpers
 
 function createPostgresStore(): KeyvStoreAdapter {
+  const pgPoolOptions = buildPgConnectionConfig(
+    config.database.url,
+    { max: 10 },
+    {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      entraAuthEnabled: config.database.entraAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    },
+  );
   return new KeyvPostgres({
-    uri: config.database.url,
+    ...pgPoolOptions,
+    uri:
+      config.database.iamAuthEnabled || config.database.entraAuthEnabled
+        ? undefined
+        : config.database.url,
     table: "keyv_cache",
     max: 10,
     /**

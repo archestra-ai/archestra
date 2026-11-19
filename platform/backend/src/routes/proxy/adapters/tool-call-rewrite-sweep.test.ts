@@ -10,6 +10,7 @@
  * throwing anywhere a test would notice.
  */
 
+import type { GenerateContentResponse } from "@google/genai";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { describe, expect, test } from "vitest";
@@ -674,6 +675,25 @@ describe("Gemini formatToolCallsSSE / withRewrittenToolCalls", () => {
 
   test("emits one chunk with a functionCall part per call and no finishReason", () => {
     const adapter = geminiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      candidates: [
+        {
+          index: 0,
+          content: {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  id: "call_0",
+                  name: "gh-developer-agent__pull_request_read",
+                  args: { pullNumber: 7 },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as unknown as GenerateContentResponse);
     const [event] = sseData<GeminiFrame>(
       adapter.formatToolCallsSSE?.(REWRITTEN) ?? [],
     );
@@ -690,7 +710,7 @@ describe("Gemini formatToolCallsSSE / withRewrittenToolCalls", () => {
     expect(event.candidates[0].finishReason).toBeUndefined();
   });
 
-  test("non-streaming: rewrites functionCall parts positionally", () => {
+  test("non-streaming: rewrites functionCall parts by provider identity", () => {
     const adapter = geminiAdapterFactory.createResponseAdapter({
       candidates: [
         {
@@ -700,6 +720,7 @@ describe("Gemini formatToolCallsSSE / withRewrittenToolCalls", () => {
               { text: "On it." },
               {
                 functionCall: {
+                  id: "call_0",
                   name: "gh-developer-agent__pull_request_read",
                   args: { pullNumber: 7 },
                 },
@@ -718,6 +739,7 @@ describe("Gemini formatToolCallsSSE / withRewrittenToolCalls", () => {
     const parts = rewritten.candidates[0].content.parts;
     expect(parts[0]).toEqual({ text: "On it." });
     expect(parts[1].functionCall).toMatchObject({
+      id: "call_0",
       name: "archestra__run_tool",
       args: REWRITTEN_ARGS_OBJECT,
     });

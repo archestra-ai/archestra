@@ -31,12 +31,12 @@ export type IneligibleTier = {
 export type TierEligibility = EligibleTier | IneligibleTier;
 
 /**
- * Whether a Model Router request for `model` on `endpoint` would pass every
+ * Whether a Unified Model API request for `model` on `endpoint` would pass every
  * gate the router and the proxy apply before forwarding it: model resolution
  * through the credential's linked keys, the `use` grant, endpoint support and
  * credential ownership. Reads only, so listing and inference can share it. A
  * null `endpoint` is a platform call on a native provider route, which no
- * Model Router endpoint constrains.
+ * Unified Model API endpoint constrains.
  */
 export async function checkAutoTierEligibility(params: {
   auth: ModelRouterAuth;
@@ -86,33 +86,37 @@ export async function checkAutoTierEligibility(params: {
 }
 
 /**
- * `userId` as an OAuth user of the Model Router, with every key they may use.
- * `preferredApiKeyId`, when the user may use it, is tried first for any model
- * it serves.
+ * `userId` as an OAuth user of the Unified Model API, with every key they may use.
+ * `preferredApiKeyIds`, those the user may use, are tried first, in order, for
+ * any model they serve.
  */
 export async function userModelRouterAuth(params: {
   organizationId: string;
   userId: string;
-  preferredApiKeyId?: string | null;
+  preferredApiKeyIds?: readonly (string | null)[];
 }): Promise<ModelRouterUserOAuthAuth> {
   const mappings = await userProviderKeyMappings(params);
-  const preferred = (mapping: { providerApiKeyId: string }) =>
-    mapping.providerApiKeyId === params.preferredApiKeyId;
+  const rank = (mapping: { providerApiKeyId: string }) => {
+    const index = (params.preferredApiKeyIds ?? []).indexOf(
+      mapping.providerApiKeyId,
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
   return {
     authMethod: "oauth_user",
     organizationId: params.organizationId,
     userId: params.userId,
-    providerApiKeys: [
-      ...mappings.filter(preferred),
-      ...mappings.filter((mapping) => !preferred(mapping)),
-    ],
+    providerApiKeys: mappings
+      .map((mapping, index) => ({ mapping, index }))
+      .sort((a, b) => rank(a.mapping) - rank(b.mapping) || a.index - b.index)
+      .map(({ mapping }) => mapping),
     oauthClient: null,
   };
 }
 
 /**
  * The provider key `userId` would use for `model` on a native provider route,
- * picked as the Model Router picks one for an OAuth user. A per-user
+ * picked as the Unified Model API picks one for an OAuth user. A per-user
  * provider's credential is resolved at request time, so it has no key here;
  * it is found only when the user may use the model and has connected their
  * own account.

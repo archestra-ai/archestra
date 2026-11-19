@@ -2,6 +2,7 @@ import {
   type ArchestraToolShortName,
   buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
+  isLoadBalancedRuntimeRouterTool,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
@@ -10,6 +11,7 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RESTORE_APP_VERSION_SHORT_NAME,
@@ -23,9 +25,13 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MemberModel, TeamModel, UserModel } from "@/models";
+import { AgentModel, MemberModel, TeamModel, UserModel } from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
+import {
+  callerUsesImplicitLoadBalancedRunStarter,
+  resolveCandidateRuntimeSubagentIds,
+} from "@/services/agent-subagent-exclusions";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
@@ -152,6 +158,13 @@ export function quoteUntrusted(value: string): string {
   return JSON.stringify(value).replace(INVISIBLE_CHARACTERS, escapeCodeUnits);
 }
 
+/** @public — canonical instruction text when subagent load balancing is enabled. */
+export const SUBAGENT_LOAD_BALANCING_INSTRUCTION =
+  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any prompt or skill instructions that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — start new runtime tasks immediately in a single `start_agent_run` call with `agent_id` omitted without asking for a runtime (unless the user explicitly requested a specific runtime), and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
+
+const SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION =
+  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any prompt or skill instructions that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — delegate new runtime tasks immediately in a single delegation call without asking for a runtime (unless the user explicitly requested a specific runtime), and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
+
 /**
  * Compose an agent's system prompt: render its base prompt (with Handlebars
  * user context when needed), eagerly list its loadable skills, and append the
@@ -163,10 +176,13 @@ export async function buildAgentSystemPrompt(params: {
   agent: {
     systemPrompt: string | null;
     toolExposureMode: ToolExposureMode;
+    accessAllTools?: boolean;
+    subagentLoadBalancing?: { enabled: boolean } | null;
   };
   mcpTools: Record<string, Tool>;
   organizationId: string;
   userId: string;
+  oauthClientId?: string;
   agentId: string;
   /**
    * Pre-resolved invoking user. The chat path has it in hand; the A2A path
@@ -201,12 +217,15 @@ export async function buildAgentSystemPrompt(params: {
   canAskUser?: boolean;
   /** This run is a fork of the agent, which may not fork or delegate to itself. */
   isFork?: boolean;
+  /** Encrypted chat: runtime launches and delegations are disabled, so omit starter/router instructions. */
+  suppressContentLogging?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
     mcpTools,
     organizationId,
     userId,
+    oauthClientId,
     agentId,
     user,
     hookSessionContext,
@@ -215,6 +234,7 @@ export async function buildAgentSystemPrompt(params: {
     projectFileNames,
     canAskUser = false,
     isFork = false,
+    suppressContentLogging = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -248,6 +268,9 @@ export async function buildAgentSystemPrompt(params: {
           organizationId,
           userId,
           agentId,
+          canSearchCatalog:
+            archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME) in
+            mcpTools,
         })
       : null;
 
@@ -259,6 +282,7 @@ export async function buildAgentSystemPrompt(params: {
   const knowledgeSearchInstruction = await buildKnowledgeSearchInstruction({
     agentId,
     userId,
+    oauthClientId,
     organizationId,
     toolNames: Object.keys(mcpTools),
   });
@@ -293,10 +317,31 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
+  const callerLoadBalancingPrompt =
+    !isFork &&
+    !suppressContentLogging &&
+    !oauthClientId &&
+    agent.subagentLoadBalancing?.enabled === true
+      ? await resolveCallerLoadBalancingInstruction({
+          agentId,
+          userId,
+        })
+      : null;
+  const subagentLoadBalancingInstruction =
+    !isFork && !suppressContentLogging && !oauthClientId
+      ? [
+          callerLoadBalancingPrompt,
+          buildLoadBalancedRouterDelegationInstruction(mcpTools),
+        ]
+          .filter(Boolean)
+          .join("\n\n") || null
+      : null;
+
   return (
     [
       toolLoadingInstructions,
       renderedPrompt,
+      subagentLoadBalancingInstruction,
       isFork ? FORK_RUN_INSTRUCTION : null,
       projectInstructionsPrompt,
       projectFilesPrompt,
@@ -319,10 +364,12 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
   organizationId: string;
   userId?: string;
   agentId?: string;
+  canSearchCatalog: boolean;
 }) {
-  const candidates = await listAccessibleCatalogSkills(params);
-  const policyEvaluator = params.agentId
-    ? await agentActivationSkillPolicyService.getEvaluator(params.agentId)
+  const { canSearchCatalog, ...scope } = params;
+  const candidates = await listAccessibleCatalogSkills(scope);
+  const policyEvaluator = scope.agentId
+    ? await agentActivationSkillPolicyService.getEvaluator(scope.agentId)
     : null;
   const available = policyEvaluator
     ? candidates.filter((skill) =>
@@ -333,8 +380,9 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
       )
     : candidates;
   return buildSkillCatalogPrompt({
-    ...params,
-    catalogSkills: selectEffectiveNativeSkills(available, params.userId),
+    ...scope,
+    catalogSkills: selectEffectiveNativeSkills(available, scope.userId),
+    promptBudget: { canSearchCatalog },
   });
 }
 
@@ -745,8 +793,8 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const runToolName = archestraMcpBranding.getToolName(
     TOOL_RUN_TOOL_SHORT_NAME,
   );
-  // Naming scaffold_app verbatim satisfies run_tool's names-seen-verbatim
-  // gate, so the model can start an app build without a search_tools
+  // Naming scaffold_app verbatim gives the model an exact name to pass to
+  // run_tool, so it can start an app build without a search_tools
   // round-trip. Emitted for every search_and_run_only agent regardless of
   // assignment: an agent that cannot dispatch it gets a clear refusal from
   // run_tool, which costs one turn in a rare configuration — cheaper than
@@ -773,4 +821,43 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.
 
 When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id when needed. If the user did not provide an exact version number, call it with \`tool_name: "${listAppVersionsName}"\` to list the available versions without reading their HTML. Then call it with \`tool_name: "${restoreAppVersionName}"\`, passing \`appId\`, the selected \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
+}
+
+async function resolveCallerLoadBalancingInstruction(params: {
+  agentId: string;
+  userId: string;
+}): Promise<string | null> {
+  const gatewayAgent = await AgentModel.findGatewayAgentById(params.agentId);
+  if (!gatewayAgent) {
+    return null;
+  }
+  const candidateRuntimeSubagentIds = await resolveCandidateRuntimeSubagentIds({
+    callerAgent: gatewayAgent,
+    actorUserId: params.userId,
+  });
+  if (candidateRuntimeSubagentIds.length === 0) {
+    return null;
+  }
+  const hasPooledStarter = await callerUsesImplicitLoadBalancedRunStarter({
+    agent: gatewayAgent,
+    actorUserId: params.userId,
+    candidateRuntimeSubagentIds,
+  });
+  return hasPooledStarter
+    ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
+    : SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION;
+}
+
+function buildLoadBalancedRouterDelegationInstruction(
+  mcpTools: Record<string, Tool>,
+): string | null {
+  const routerToolNames = Object.entries(mcpTools)
+    .filter(
+      ([name, tool]) =>
+        name.startsWith("agent__") && isLoadBalancedRuntimeRouterTool(tool),
+    )
+    .map(([name]) => `\`${name}\``);
+  if (routerToolNames.length === 0) return null;
+  const list = routerToolNames.join(", ");
+  return `Load-balanced runtime router subagent(s) available (${list}): automatic runtime selection and failover are configured on ${routerToolNames.length === 1 ? "that router subagent" : "those router subagents"} and override any prompt or loaded skill instructions that ask the user to choose a runtime manually (such as asking "Claude Code or Codex?") or that dispatch to an individual pooled runtime worker. Unless the user explicitly named a specific runtime, delegate directly to ${list} without asking which runtime to use, and report the winning runtime from the returned \`run.agent_name\` and \`run.agent_id\`.`;
 }

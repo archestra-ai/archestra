@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { plan as fitPlan } from "@archestra/router-rs";
 import {
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   CHAT_API_KEY_ID_HEADER,
+  LLM_PROXY_OAUTH_SCOPE,
   MEMBER_ROLE_NAME,
   PROVIDER_BASE_URL_HEADER,
   type ResourcePermissionGrant,
@@ -20,6 +22,7 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import { internalCallHeader } from "@/clients/internal-call";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -28,9 +31,12 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   ModelPoolModel,
+  OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingDecisionModel from "@/models/routing-decision";
@@ -39,7 +45,11 @@ import RoutingScorerVersionModel from "@/models/routing-scorer-version";
 import { secretManager } from "@/secrets-manager";
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
-import { setOrganizationTrio } from "@/test/auto-routing";
+import {
+  ensureAutoRouter,
+  setAutoRoutingEnabled,
+  setAutoRoutingTiers,
+} from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
 import { ApiError, type Model } from "@/types";
@@ -83,7 +93,6 @@ describe("Model Router auto model", () => {
   let jevCalls: number;
 
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     upstreamModels = [];
     jevCalls = 0;
     server.use(
@@ -196,8 +205,8 @@ describe("Model Router auto model", () => {
           );
         expect(state.tools).toBe(
           ingress === "chat"
-            ? "Available tools: 2\nread_file: Read a repository file.\nparse_sql: Parse a SQL statement."
-            : "Available tools: 2\nread_file: Read a repository file.\nlookup",
+            ? "Available tools: 2\nparse_sql\nread_file"
+            : "Available tools: 2\nlookup\nread_file",
         );
         expect(state.tools).not.toContain("parameters");
       });
@@ -234,6 +243,7 @@ describe("Model Router auto model", () => {
           featuresSchemaVersion: 1,
         });
         expect(decision.features).toEqual({
+          scorerUsage: { inputTokens: 420, outputTokens: 6 },
           signals: {
             "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },
           },
@@ -372,7 +382,7 @@ describe("Model Router auto model", () => {
           makeLlmProviderApiKey,
         });
         await publishPlan(org);
-        const before = await AutoRoutingSettingsModel.find(org.organizationId);
+        const before = await AutoRouterModel.find(org.routerId);
         await ModelModel.update(org.trio[0].id, {
           customPricePerMillionInput: "2.00",
         });
@@ -384,7 +394,7 @@ describe("Model Router auto model", () => {
         expect(await decisions(org.organizationId)).toEqual([
           expect.objectContaining({ reason: "plan_stale", planId: null }),
         ]);
-        const after = await AutoRoutingSettingsModel.find(org.organizationId);
+        const after = await AutoRouterModel.find(org.routerId);
         expect(after?.generation).toBeGreaterThan(before?.generation ?? 0);
       });
 
@@ -429,7 +439,7 @@ describe("Model Router auto model", () => {
       specHash: crypto.randomUUID(),
     });
     await publishPlan(org, (plan) => plan, previous.id);
-    const before = await AutoRoutingSettingsModel.find(org.organizationId);
+    const before = await AutoRouterModel.find(org.routerId);
 
     for (const session of ["s-1", "s-2"]) {
       const response = await send(org, {
@@ -446,9 +456,7 @@ describe("Model Router auto model", () => {
       ["cold_start", null],
       ["cold_start", null],
     ]);
-    expect(
-      await AutoRoutingSettingsModel.find(org.organizationId),
-    ).toMatchObject({
+    expect(await AutoRouterModel.find(org.routerId)).toMatchObject({
       scorerVersionId: (await activeSourceVersion()).id,
       generation: (before?.generation ?? 0) + 1,
     });
@@ -501,6 +509,100 @@ describe("Model Router auto model", () => {
     expect(await decisions(org.organizationId)).toEqual([]);
     expect(upstreamModels).toEqual([]);
   });
+
+  for (const limitSource of ["member", "default"] as const) {
+    test(`service-account auto routing retains its own budget under ${limitSource} user limits`, async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+      makeServiceAccount,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      if (limitSource === "member") {
+        const user = await makeUser();
+        await makeMember(user.id, org.organizationId);
+        await LimitModel.create({
+          entityType: "user",
+          entityId: user.id,
+          limitType: "token_cost",
+          limitValue: 0,
+        });
+      } else {
+        await EnvironmentDefaultUserLimitModel.create({
+          organizationId: org.organizationId,
+          limitValue: 0,
+        });
+      }
+      const account = await makeServiceAccount(org.organizationId);
+      const { value, virtualKey: key } = await VirtualApiKeyModel.create({
+        organizationId: org.organizationId,
+        name: "Auto-routing worker",
+        authorId: serviceAccountUserId(account.id),
+        ...accessGrants("personal"),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: org.providerApiKeyId },
+        ],
+      });
+      await AutoRouterModel.setRoutersForVirtualApiKey(key.id, [org.routerId]);
+
+      for (const { ingress, path } of ENDPOINTS) {
+        const denied = await send(org, {
+          ingress,
+          path,
+          session: `unidentified-${ingress}`,
+        });
+        expect(denied.statusCode, denied.body).toBe(401);
+        expect(denied.json().error.message).toContain("user credential");
+      }
+      expect(jevCalls).toBe(0);
+      expect(upstreamModels).toEqual([]);
+
+      for (const { ingress, path } of ENDPOINTS) {
+        const allowed = await send(
+          { ...org, credential: value },
+          { ingress, path, session: `worker-${ingress}` },
+        );
+        expect(allowed.statusCode, allowed.body).toBe(200);
+      }
+      expect(jevCalls).toBe(2);
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, org.agentId));
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.serviceAccountId).toBe(account.id);
+        expect(row.userId).toBeNull();
+        expect(row.virtualKeyId).toBe(key.id);
+      }
+
+      await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: key.id,
+        limitType: "token_cost",
+        limitValue: 0,
+      });
+      const capped = await send(
+        { ...org, credential: value },
+        { ingress: "chat", path: "chat/completions", session: "capped-worker" },
+      );
+      expect(capped.statusCode, capped.body).toBe(402);
+      expect(capped.json().error.usage_limit.entity_type).toBe("virtual_key");
+      expect(jevCalls).toBe(2);
+      expect(upstreamModels).toHaveLength(2);
+    });
+  }
 
   test("routes to the normal tier without a decision when there is nothing to key on", async ({
     makeOrganization,
@@ -557,6 +659,109 @@ describe("Model Router auto model", () => {
       { sessionId: decision.sessionKey, sessionSource: "auto_routing" },
     ]);
   });
+
+  test("unnamed conversations separate scoring contexts while tool ordering preserves the decision", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const request = (system: string, names: string[]) =>
+      send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: null,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: PROMPT },
+        ],
+        extra: {
+          tools: names.map((name) => ({
+            type: "function",
+            function: { name, parameters: { type: "object", properties: {} } },
+          })),
+        },
+      });
+    for (const response of [
+      await request("Review migrations.", ["read_file", "inspect_schema"]),
+      await request("Review migrations.", ["inspect_schema", "read_file"]),
+      await request("Review security.", ["read_file", "inspect_schema"]),
+      await request("Review migrations.", ["read_file"]),
+    ])
+      expect(response.statusCode, response.body).toBe(200);
+    expect(jevCalls).toBe(3);
+    expect(await decisions(org.organizationId)).toHaveLength(3);
+  });
+
+  for (const { ingress, path } of ENDPOINTS) {
+    test(`${ingress} unnamed conversations keep their decision after later system/developer messages`, async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const opening = [
+        { role: "system", content: "Review migrations." },
+        { role: "user", content: PROMPT },
+      ];
+      const extra = {
+        tools: [
+          ingress === "chat"
+            ? {
+                type: "function",
+                function: {
+                  name: "read_file",
+                  parameters: { type: "object", properties: {} },
+                },
+              }
+            : {
+                type: "function",
+                name: "read_file",
+                parameters: { type: "object", properties: {} },
+              },
+        ],
+      };
+      const first = await send(org, {
+        ingress,
+        path,
+        session: null,
+        messages: opening,
+        extra,
+      });
+      expect(first.statusCode, first.body).toBe(200);
+      const [initial] = await decisions(org.organizationId);
+      const next = await send(org, {
+        ingress,
+        path,
+        session: null,
+        extra,
+        messages: [
+          ...opening,
+          { role: "assistant", content: "Checking the migration." },
+          { role: "system", content: "Compaction note." },
+          { role: "developer", content: "Focus on the new diff." },
+          { role: "user", content: "Continue." },
+        ],
+      });
+      expect(next.statusCode, next.body).toBe(200);
+      expect(jevCalls).toBe(1);
+      expect(await decisions(org.organizationId)).toEqual([initial]);
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+    });
+  }
 
   test("a Responses continuation without a session id is refused before routing", async ({
     makeOrganization,
@@ -627,7 +832,6 @@ describe("Model Router auto model", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.modelPoolsEnabled = true;
     const org = await setupOrganization({
       makeOrganization,
       makeSecret,
@@ -673,17 +877,18 @@ describe("Model Router auto model", () => {
       makeLlmProviderApiKey,
     });
     config.autoRouting.minSessions = 30;
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "10000.00",
     });
     await seedFitHistory({
       organizationId: org.organizationId,
+      routerId: org.routerId,
       modelId: org.trio[2].id,
       scorerVersionId: (await activeSourceVersion()).id,
       sessions: 40,
     });
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
     const response = await send(org, {
       ingress: "chat",
       path: "chat/completions",
@@ -691,10 +896,10 @@ describe("Model Router auto model", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    const plan = await RoutingPlanModel.findActive(org.organizationId);
+    const plan = await RoutingPlanModel.findActive(org.routerId);
     expect(
       await RoutingDecisionModel.find({
-        organizationId: org.organizationId,
+        routerId: org.routerId,
         sessionKey: RoutingSessionKeySchema.parse("fresh-session"),
       }),
     ).toMatchObject({ reason: "planned", planId: plan?.id });
@@ -714,7 +919,7 @@ describe("Model Router auto model", () => {
       ...plan,
       versions: { ...plan.versions, plan_format_version: 999 },
     }));
-    const before = await AutoRoutingSettingsModel.find(org.organizationId);
+    const before = await AutoRouterModel.find(org.routerId);
 
     const response = await send(org, {
       ingress: "chat",
@@ -727,7 +932,7 @@ describe("Model Router auto model", () => {
     expect(await decisions(org.organizationId)).toEqual([
       expect.objectContaining({ reason: "plan_stale", planId: null }),
     ]);
-    const after = await AutoRoutingSettingsModel.find(org.organizationId);
+    const after = await AutoRouterModel.find(org.routerId);
     expect(after?.generation).toBeGreaterThan(before?.generation ?? 0);
   });
 
@@ -863,7 +1068,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(copilotKey.id, [
         copilotModel.id,
       ]);
-      await setOrganizationTrio(org.organizationId, { smart: copilotModel });
+      await setAutoRoutingTiers(org.organizationId, { smart: copilotModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -896,7 +1101,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(nativeKey.id, [
         nativeModel.id,
       ]);
-      await setOrganizationTrio(org.organizationId, { normal: nativeModel });
+      await setAutoRoutingTiers(org.organizationId, { normal: nativeModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -944,6 +1149,215 @@ describe("Model Router auto model", () => {
     });
   });
 
+  describe("several routers", () => {
+    test("auto:<name> routes on the named router's tiers and decides on that router", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const support = await addRouter(org, "auto:support");
+      const credential = await virtualKey(org, {
+        authorId: null,
+        routerIds: [org.routerId, support.router.id],
+      });
+
+      const named = await send(
+        { ...org, credential },
+        {
+          ingress: "chat",
+          path: "chat/completions",
+          session: "shared-session",
+          model: "auto:support",
+        },
+      );
+      const plain = await send(
+        { ...org, credential },
+        {
+          ingress: "chat",
+          path: "chat/completions",
+          session: "shared-session",
+        },
+      );
+
+      expect(named.statusCode, named.body).toBe(200);
+      expect(plain.statusCode, plain.body).toBe(200);
+      expect(upstreamModels).toEqual([
+        support.trio[1].modelId,
+        org.trio[1].modelId,
+      ]);
+      const rows = await decisions(org.organizationId);
+      expect(rows.map((row) => row.routerId).sort()).toEqual(
+        [org.routerId, support.router.id].sort(),
+      );
+    });
+
+    test("a virtual key without the router assigned is refused for it", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await addRouter(org, "auto:support");
+
+      const refused = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+        model: "auto:support",
+      });
+
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect(refused.json().error.message).toContain("auto:support");
+      expect(upstreamModels).toEqual([]);
+      expect(await decisions(org.organizationId)).toEqual([]);
+    });
+
+    test("a virtual key with no provider key routes on a router added to it", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const { value, virtualKey: key } = await VirtualApiKeyModel.create({
+        organizationId: org.organizationId,
+        name: "router-only",
+        authorId: null,
+        ...accessGrants("org"),
+        providerApiKeys: [],
+      });
+      await AutoRouterModel.setRoutersForVirtualApiKey(key.id, [org.routerId]);
+
+      const routed = await send(
+        { ...org, credential: value },
+        { ingress: "chat", path: "chat/completions", session: "s-1" },
+      );
+
+      expect(routed.statusCode, routed.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+    });
+
+    test("an OAuth client calling as the app routes only on the routers added to it", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const support = await addRouter(org, "auto:support");
+      // The client maps no provider key: the router's own keys answer.
+      const { oauthClient } = await LlmOauthClientModel.create({
+        organizationId: org.organizationId,
+        authorId: crypto.randomUUID(),
+        name: "Backend service",
+        providerApiKeys: [],
+        autoRouterIds: [support.router.id],
+      });
+      const credential = `oauth-${crypto.randomUUID()}`;
+      await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: createHash("sha256").update(credential).digest("base64url"),
+        clientId: oauthClient.clientId,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: `llm-proxy:${oauthClient.id}`,
+      });
+      const client = { ...org, credential };
+
+      const routed = await send(client, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+        model: "auto:support",
+      });
+      const refused = await send(client, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-2",
+      });
+
+      expect(routed.statusCode, routed.body).toBe(200);
+      expect(upstreamModels).toEqual([support.trio[1].modelId]);
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect(refused.json().error.message).toContain("OAuth client");
+      expect(
+        (await listedModelIds(client)).filter((id) => id.startsWith("auto")),
+      ).toEqual(["auto:support"]);
+
+      // Deleting the router takes it off the client.
+      await AutoRouterModel.delete(org.organizationId, support.router.id);
+      expect(
+        (await LlmOauthClientModel.findByClientId(oauthClient.clientId))
+          ?.autoRouterIds,
+      ).toEqual([]);
+    });
+
+    test("an unknown router name is refused", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+
+      const refused = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+        model: "auto:nope",
+      });
+
+      expect(refused.statusCode, refused.body).toBe(400);
+      expect(upstreamModels).toEqual([]);
+    });
+
+    test("the model list names only the routers assigned to the key", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const support = await addRouter(org, "auto:support");
+      const onlySupport = await virtualKey(org, {
+        authorId: null,
+        routerIds: [support.router.id],
+      });
+      const both = await virtualKey(org, {
+        authorId: null,
+        routerIds: [org.routerId, support.router.id],
+      });
+      const autoNames = async (credential: string) =>
+        (await listedModelIds({ ...org, credential }))
+          .filter((id) => id === "auto" || id.startsWith("auto:"))
+          .sort();
+
+      expect(await autoNames(org.credential)).toEqual(["auto"]);
+      expect(await autoNames(onlySupport)).toEqual(["auto:support"]);
+      expect(await autoNames(both)).toEqual(["auto", "auto:support"]);
+    });
+  });
+
   describe("listing", () => {
     test("lists auto exactly when inference accepts it", async ({
       makeOrganization,
@@ -964,9 +1378,7 @@ describe("Model Router auto model", () => {
       });
       expect(accepted.statusCode, accepted.body).toBe(200);
 
-      await AutoRoutingSettingsModel.update(org.organizationId, {
-        enabled: false,
-      });
+      await setAutoRoutingEnabled(org.organizationId, false);
       expect(await listsAuto(org)).toBe(false);
       const refused = await send(org, {
         ingress: "chat",
@@ -976,29 +1388,6 @@ describe("Model Router auto model", () => {
       expect(refused.statusCode).toBe(400);
       expect(refused.json().error.message).toContain("not enabled");
     });
-  });
-
-  test("with the feature off, auto is neither listed nor routed", async ({
-    makeOrganization,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await setupOrganization({
-      makeOrganization,
-      makeSecret,
-      makeLlmProviderApiKey,
-    });
-    config.autoRouting.enabled = false;
-
-    const response = await send(org, {
-      ingress: "chat",
-      path: "chat/completions",
-      session: "s-1",
-    });
-
-    expect(response.statusCode).toBe(404);
-    expect(await listsAuto(org)).toBe(false);
-    expect(await decisions(org.organizationId)).toEqual([]);
   });
 
   test("native provider routes refuse auto", async ({
@@ -1023,7 +1412,7 @@ describe("Model Router auto model", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "only available through the Model Router",
+      "only available through the Unified Model API",
     );
     expect(upstreamModels).toEqual([]);
   });
@@ -1039,6 +1428,7 @@ describe("Model Router auto model", () => {
         internal?: boolean;
         /** The key the call names; the organization's shared key by default. */
         callKeyId?: string;
+        baseUrl?: string;
         stream?: boolean;
         extra?: Record<string, unknown>;
       },
@@ -1054,11 +1444,11 @@ describe("Model Router auto model", () => {
           authorization: "Bearer sk-openai",
           [CHAT_API_KEY_ID_HEADER]: params.callKeyId ?? org.providerApiKeyId,
           [USER_ID_HEADER]: params.userId,
-          [PROVIDER_BASE_URL_HEADER]: UPSTREAM,
+          [PROVIDER_BASE_URL_HEADER]: params.baseUrl ?? UPSTREAM,
           "x-archestra-session-id": "chat-1",
           ...(params.routable === false
             ? {}
-            : { [AUTO_ROUTABLE_HEADER]: "true" }),
+            : { [AUTO_ROUTER_ID_HEADER]: org.routerId }),
         },
         payload: {
           // The organization default model, auto routing's normal tier.
@@ -1079,6 +1469,367 @@ describe("Model Router auto model", () => {
       await makeMember(user.id, org.organizationId);
       return user.id;
     }
+
+    test("a call naming a Fireworks alias still routes and checks only the selected tier's budget", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const baseOrg = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const fireworks = "https://api.fireworks.ai/inference/v1";
+      const short = "glm-5p3-flash";
+      const canonical = `accounts/fireworks/models/${short}`;
+      const normal = await createModel("openai", short, {
+        input: "3.00",
+        output: "15.00",
+      });
+      const pinned = await createModel("openai", canonical, {
+        input: "3.00",
+        output: "15.00",
+      });
+      const fast = await createModel(
+        "openai",
+        "accounts/fireworks/models/fast-fixture",
+      );
+      const smart = await createModel(
+        "openai",
+        "accounts/fireworks/models/smart-fixture",
+        { input: "15.00", output: "75.00" },
+      );
+      const org = { ...baseOrg, trio: [fast, normal, smart] as const };
+      await setAutoRoutingTiers(org.organizationId, { fast, normal, smart });
+      const key = await makeLlmProviderApiKey(
+        org.organizationId,
+        (await makeSecret({ secret: { apiKey: "synthetic-routed-fireworks" } }))
+          .id,
+        { provider: "openai", baseUrl: fireworks },
+      );
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        ...org.trio.map((model) => model.id),
+        pinned.id,
+      ]);
+      await db
+        .update(schema.autoRoutingTiersTable)
+        .set({ providerApiKeyId: key.id })
+        .where(eq(schema.autoRoutingTiersTable.routerId, org.routerId));
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [short],
+      });
+      modelsDevClient.clearFetchCache();
+      onTestFinished(() => modelsDevClient.clearFetchCache());
+      const dispatched: string[] = [];
+      server.use(
+        http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+        http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+          const body = (await request.json()) as { model: string };
+          dispatched.push(body.model);
+          return HttpResponse.json(chatCompletion(body.model));
+        }),
+      );
+      const ask = () =>
+        sendPlatformCall(org, {
+          userId,
+          callKeyId: key.id,
+          baseUrl: fireworks,
+          model: short,
+        });
+
+      const response = await ask();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(dispatched).toEqual([smart.modelId]);
+      expect(upstreamModels).toEqual([]);
+      expect(jevCalls).toBe(1);
+      expect(await platformCalls(org.agentId)).toEqual([
+        { model: smart.modelId, providerApiKeyId: key.id },
+      ]);
+      const [decision] = await decisions(org.organizationId);
+      expect(decision).toMatchObject({
+        reason: "planned",
+        tierIndex: 2,
+        modelId: smart.id,
+      });
+      expect(await usage(decision.id)).toHaveLength(1);
+
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [smart.modelId],
+      });
+      const refused = await ask();
+      expect(refused.statusCode, refused.body).toBe(402);
+      expect(refused.json().error).toMatchObject({
+        type: "usage_limit_exceeded",
+        code: "token_cost_limit_exceeded",
+      });
+      expect(dispatched).toEqual([smart.modelId]);
+      expect(await usage(decision.id)).toHaveLength(1);
+    });
+
+    for (const fallback of ["routing-disabled"] as const) {
+      test.for([
+        "none",
+        "budget",
+        "access",
+      ] as const)(`an opaque Fireworks alias respects $0 controls after ${fallback} auto-routing fallback`, async (control, {
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeUser,
+        makeMember,
+      }) => {
+        const org = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const userId = await member(org, makeUser, makeMember);
+        const canonical = "accounts/fireworks/models/glm-5p3-flash";
+        const fireworks = "https://api.fireworks.ai/inference/v1";
+        const model = await createModel("openai", canonical);
+        const key = await makeLlmProviderApiKey(
+          org.organizationId,
+          (await makeSecret({ secret: { apiKey: "synthetic-fireworks" } })).id,
+          { provider: "openai", baseUrl: fireworks },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          model.id,
+        ]);
+        if (fallback === "routing-disabled") {
+          await setAutoRoutingEnabled(org.organizationId, false);
+        }
+        if (control === "budget") {
+          await LimitModel.create({
+            entityType: "organization",
+            entityId: org.organizationId,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: [canonical],
+          });
+        }
+        if (control === "access") await grantOnly(org, model, []);
+        modelsDevClient.clearFetchCache();
+        onTestFinished(() => modelsDevClient.clearFetchCache());
+        const fireworksModels: string[] = [];
+        server.use(
+          http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+          http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+            const body = (await request.json()) as { model: string };
+            fireworksModels.push(body.model);
+            return HttpResponse.json(chatCompletion(canonical));
+          }),
+        );
+
+        // Valid internal proof and a member establish an auto-routing user;
+        // with routing off the call runs on the alias it names.
+        const response = await sendPlatformCall(org, {
+          userId,
+          callKeyId: key.id,
+          baseUrl: fireworks,
+          model: "firerouter/auto",
+        });
+
+        expect(response.statusCode, response.body).toBe(
+          control === "none" ? 200 : 400,
+        );
+        expect(fireworksModels).toEqual(
+          control === "none" ? ["firerouter/auto"] : [],
+        );
+        expect(upstreamModels).toEqual([]);
+        expect(jevCalls).toBe(0);
+        expect(await decisions(org.organizationId)).toEqual([]);
+        if (control === "none") {
+          expect(response.json().model).toBe(canonical);
+          expect(await platformCalls(org.agentId)).toEqual([
+            { model: "firerouter/auto", providerApiKeyId: key.id },
+          ]);
+        } else {
+          expect(response.json().error.message).toContain(
+            "This Fireworks alias does not identify a fixed model",
+          );
+          const rows = await db
+            .select()
+            .from(schema.interactionsTable)
+            .where(eq(schema.interactionsTable.profileId, org.agentId));
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({
+            inputTokens: 0,
+            outputTokens: 0,
+            response: {
+              error: expect.stringContaining(
+                "This Fireworks alias does not identify a fixed model",
+              ),
+            },
+          });
+        }
+      });
+    }
+
+    for (const stream of [false, true]) {
+      test(`an organization-default call reaches a Gemini tier and retains interrupted usage (stream=${stream})`, async ({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeUser,
+        makeMember,
+      }) => {
+        const base = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const gemini = await createModel("gemini", "gemini-3.1-flash-lite");
+        const key = await makeLlmProviderApiKey(
+          base.organizationId,
+          (await makeSecret({ secret: { apiKey: "routed-gemini-key" } })).id,
+          { provider: "gemini", baseUrl: "https://gemini.auto-routing.test" },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          gemini.id,
+        ]);
+        const org = {
+          ...base,
+          trio: [base.trio[0], base.trio[1], gemini] as const,
+        };
+        await setAutoRoutingTiers(org.organizationId, { smart: gemini });
+        await publishPlan(org);
+        config.llm.gemini.vertexAi.enabled = false;
+        let hits = 0;
+        server.use(
+          http.post(
+            `https://gemini.auto-routing.test/v1beta/models/gemini-3.1-flash-lite:${stream ? "streamGenerateContent" : "generateContent"}`,
+            ({ request }) => {
+              hits++;
+              expect(request.headers.get("x-goog-api-key")).toBe(
+                "routed-gemini-key",
+              );
+              const answer = {
+                candidates: [
+                  {
+                    content: {
+                      role: "model",
+                      parts: [{ text: "routed answer" }],
+                    },
+                    ...(stream ? {} : { finishReason: "STOP" }),
+                  },
+                ],
+                usageMetadata: {
+                  promptTokenCount: 10,
+                  candidatesTokenCount: 2,
+                  totalTokenCount: 12,
+                },
+              };
+              return stream
+                ? new HttpResponse(`data: ${JSON.stringify(answer)}\n\n`, {
+                    headers: { "content-type": "text/event-stream" },
+                  })
+                : HttpResponse.json(answer);
+            },
+          ),
+        );
+        const userId = await member(org, makeUser, makeMember);
+        const response = await sendPlatformCall(org, { userId, stream });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("routed answer");
+        if (stream)
+          expect(response.body).not.toContain('"finish_reason":"stop"');
+        const rows = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.profileId, org.agentId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          providerApiKeyId: key.id,
+          model: gemini.modelId,
+          inputTokens: 10,
+          outputTokens: 2,
+        });
+        expect(hits).toBe(1);
+        expect(upstreamModels).toEqual([]);
+        const [decision] = await decisions(org.organizationId);
+        expect(decision).toMatchObject({ tierIndex: 2, modelId: gemini.id });
+      });
+    }
+
+    test.for([
+      false,
+      true,
+    ])("uses the configured tier key with overlapping catalogs (planned=%s)", async (planned, {
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const keys = [];
+      for (const tier of ["fast", "normal", "smart"] as const) {
+        const key = await makeLlmProviderApiKey(
+          org.organizationId,
+          (await makeSecret({ secret: { apiKey: `synthetic-${tier}` } })).id,
+          { provider: "openai", baseUrl: UPSTREAM },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          key.id,
+          org.trio.map((model) => model.id),
+        );
+        await db
+          .update(schema.autoRoutingTiersTable)
+          .set({ providerApiKeyId: key.id })
+          .where(
+            and(
+              eq(schema.autoRoutingTiersTable.routerId, org.routerId),
+              eq(schema.autoRoutingTiersTable.tier, tier),
+            ),
+          );
+        keys.push(key);
+      }
+      if (planned) await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      const authorizations: (string | null)[] = [];
+      server.use(
+        http.post(`${UPSTREAM}/chat/completions`, async ({ request }) => {
+          authorizations.push(request.headers.get("authorization"));
+          const body = (await request.json()) as { model: string };
+          return HttpResponse.json(chatCompletion(body.model));
+        }),
+      );
+      for (let turn = 0; turn < 2; turn++) {
+        const response = await sendPlatformCall(org, {
+          userId,
+          callKeyId: keys[1].id,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const tier = planned ? 2 : 1;
+      expect(authorizations).toEqual(
+        Array(2).fill(`Bearer synthetic-${planned ? "smart" : "normal"}`),
+      );
+      expect(await platformCalls(org.agentId)).toEqual(
+        Array(2).fill({
+          model: org.trio[tier].modelId,
+          providerApiKeyId: keys[tier].id,
+        }),
+      );
+    });
 
     test("an agent inheriting the default runs on the session's routed tier while routing is on", async ({
       makeOrganization,
@@ -1141,7 +1892,7 @@ describe("Model Router auto model", () => {
       expect(state).toMatchObject({
         prompt: PROMPT,
         system_prompt: "Review migration locking.",
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       });
       const [decision] = await decisions(org.organizationId);
       expect(decision).toMatchObject({ tierIndex: 2, modelId: org.trio[2].id });
@@ -1174,9 +1925,7 @@ describe("Model Router auto model", () => {
         makeLlmProviderApiKey,
       });
       await publishPlan(org);
-      await AutoRoutingSettingsModel.update(org.organizationId, {
-        enabled: false,
-      });
+      await setAutoRoutingEnabled(org.organizationId, false);
       const userId = await member(org, makeUser, makeMember);
 
       const response = await sendPlatformCall(org, { userId });
@@ -1187,7 +1936,7 @@ describe("Model Router auto model", () => {
       expect(await decisions(org.organizationId)).toEqual([]);
     });
 
-    test("an agent with its own model, pool or runtime is never routed", async ({
+    test("an Agent Runtime agent is never routed, though marked routable", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -1202,65 +1951,35 @@ describe("Model Router auto model", () => {
       });
       await publishPlan(org);
       const userId = await member(org, makeUser, makeMember);
-      const pool = await ModelPoolModel.create({
+      const runtimeAgent = await makeAgent({
         organizationId: org.organizationId,
-        input: {
-          name: `pool-${crypto.randomUUID().slice(0, 8)}`,
-          members: [
-            {
-              providerApiKeyId: org.providerApiKeyId,
-              modelId: org.trio[1].modelId,
-              priority: 1,
-              weight: 1,
-              enabled: true,
-            },
-          ],
+        agentType: "agent",
+        runtime: {
+          image: "test:local",
+          command: null,
+          inferenceProtocol: "openai_responses",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          environment: null,
+          credentials: null,
+          ttlHours: 24,
+          idleTimeoutMinutes: 5,
         },
       });
-      const agents = await Promise.all([
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          llmApiKeyId: org.providerApiKeyId,
-          modelId: org.trio[1].id,
-        }),
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          modelPoolId: pool.id,
-        }),
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          runtime: {
-            image: "test:local",
-            command: null,
-            inferenceProtocol: "openai_responses",
-            backend: "kubernetes",
-            steerMode: "pipe",
-            privileged: false,
-            environment: null,
-            credentials: null,
-            ttlHours: 24,
-            idleTimeoutMinutes: 5,
-          },
-        }),
-      ]);
 
-      for (const agent of agents) {
-        const response = await sendPlatformCall(org, {
-          userId,
-          agentId: agent.id,
-        });
-        expect(response.statusCode, response.body).toBe(200);
-      }
+      const response = await sendPlatformCall(org, {
+        userId,
+        agentId: runtimeAgent.id,
+      });
 
-      expect(upstreamModels).toEqual(agents.map(() => org.trio[1].modelId));
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
       expect(jevCalls).toBe(0);
       expect(await decisions(org.organizationId)).toEqual([]);
     });
 
-    test("an explicit tier, another model, or a call without the internal proof runs on the model it names", async ({
+    test("a call not marked routable, or without the internal proof, runs on the model it names", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -1281,20 +2000,12 @@ describe("Model Router auto model", () => {
         model: org.trio[0].modelId,
         routable: false,
       });
-      const otherModel = await sendPlatformCall(org, {
-        userId,
-        model: org.trio[2].modelId,
-      });
       // Without the internal proof the header means nothing; the call goes to
       // the provider's own endpoint, which this test does not serve.
       await sendPlatformCall(org, { userId, internal: false });
 
       expect(explicitTier.statusCode, explicitTier.body).toBe(200);
-      expect(otherModel.statusCode, otherModel.body).toBe(200);
-      expect(upstreamModels).toEqual([
-        org.trio[0].modelId,
-        org.trio[2].modelId,
-      ]);
+      expect(upstreamModels).toEqual([org.trio[0].modelId]);
       expect(jevCalls).toBe(0);
       expect(await decisions(org.organizationId)).toEqual([]);
     });
@@ -1496,7 +2207,7 @@ describe("Model Router auto model", () => {
         org.providerApiKeyId,
         [replacement.id],
       );
-      await setOrganizationTrio(org.organizationId, { smart: replacement });
+      await setAutoRoutingTiers(org.organizationId, { smart: replacement });
       await unlink(org, org.trio[2]);
       const replay = await sendPlatformCall(org, { userId });
 
@@ -1593,7 +2304,7 @@ describe("Model Router auto model", () => {
         });
         await publishPlan(org);
         const userId = await member(org, makeUser, makeMember);
-        await setOrganizationTrio(org.organizationId, {
+        await setAutoRoutingTiers(org.organizationId, {
           smart: await createModel(tier, `smart-${crypto.randomUUID()}`),
         });
 
@@ -1690,14 +2401,16 @@ async function setupOrganization(params: {
     providerApiKey.id,
     trio.map((model) => model.id),
   );
-  await setOrganizationTrio(organizationId, {
-    fast: trio[0],
-    normal: trio[1],
-    smart: trio[2],
-  });
-  await AutoRoutingSettingsModel.update(organizationId, { enabled: true });
+  const router = await ensureAutoRouter(organizationId);
+  await setAutoRoutingTiers(
+    organizationId,
+    { fast: trio[0], normal: trio[1], smart: trio[2] },
+    router.id,
+  );
+  await setAutoRoutingEnabled(organizationId, true);
   const base = {
     organizationId,
+    routerId: router.id,
     agentId: agent.id,
     trio,
     providerApiKeyId: providerApiKey.id,
@@ -1709,14 +2422,17 @@ async function setupOrganization(params: {
   };
 }
 
+/** A virtual key with the organization's router assigned, as an admin does. */
 async function virtualKey(
-  org: { organizationId: string; providerApiKeyId: string },
+  org: { organizationId: string; routerId: string; providerApiKeyId: string },
   params: {
     authorId: string | null;
     extraKeys?: { provider: Model["provider"]; providerApiKeyId: string }[];
+    /** The routers assigned to the key; the organization's own by default. */
+    routerIds?: string[];
   },
 ): Promise<string> {
-  const { value } = await VirtualApiKeyModel.create({
+  const { value, virtualKey } = await VirtualApiKeyModel.create({
     organizationId: org.organizationId,
     name: `auto-${crypto.randomUUID().slice(0, 8)}`,
     authorId: params.authorId,
@@ -1726,6 +2442,10 @@ async function virtualKey(
       ...(params.extraKeys ?? []),
     ],
   });
+  await AutoRouterModel.setRoutersForVirtualApiKey(
+    virtualKey.id,
+    params.routerIds ?? [org.routerId],
+  );
   return value;
 }
 
@@ -1736,12 +2456,9 @@ async function publishPlan(
   scorerVersionId?: string,
 ) {
   const scorer = { id: scorerVersionId ?? (await activeSourceVersion()).id };
-  await AutoRoutingSettingsModel.activateScorerVersion(
-    org.organizationId,
-    scorer.id,
-  );
-  const settings = await AutoRoutingSettingsModel.find(org.organizationId);
-  if (!settings) throw new Error("organization has no LLM Proxy");
+  await AutoRouterModel.activateScorerVersion(org.routerId, scorer.id);
+  const settings = await AutoRouterModel.find(org.routerId);
+  if (!settings) throw new Error("auto router does not exist");
   const fingerprint = tiersFingerprint(org.trio);
   const features = {
     tier_needed: [0.4, 0.3, 0.3],
@@ -1770,6 +2487,7 @@ async function publishPlan(
   );
   const published = await RoutingPlanModel.publish({
     organizationId: org.organizationId,
+    routerId: org.routerId,
     trigger: "manual",
     generation: settings.generation,
     inputWatermark: new Date(),
@@ -1884,6 +2602,8 @@ async function send(
     prompt?: string;
     messages?: { role: string; content: string }[];
     extra?: Record<string, unknown>;
+    /** The requested model; `auto` by default. */
+    model?: string;
   },
 ) {
   const app = createApp();
@@ -1899,7 +2619,7 @@ async function send(
       ...(params.session ? { "x-archestra-session-id": params.session } : {}),
     },
     payload: {
-      model: "auto",
+      model: params.model ?? "auto",
       ...(params.ingress === "chat" ? { messages } : { input: messages }),
       ...params.extra,
     },
@@ -1921,6 +2641,10 @@ async function expectRefused(
 }
 
 async function listsAuto(org: Pick<Org, "agentId" | "credential">) {
+  return (await listedModelIds(org)).includes("auto");
+}
+
+async function listedModelIds(org: Pick<Org, "agentId" | "credential">) {
   const app = createApp();
   await app.register(modelRouterProxyRoutes);
   const response = await app.inject({
@@ -1929,9 +2653,37 @@ async function listsAuto(org: Pick<Org, "agentId" | "credential">) {
     headers: { authorization: `Bearer ${org.credential}` },
   });
   expect(response.statusCode, response.body).toBe(200);
-  return (response.json().data as { id: string }[]).some(
-    (model) => model.id === "auto",
+  return (response.json().data as { id: string }[]).map((model) => model.id);
+}
+
+/** A second router of the organization over three models of its own, on the organization's key. */
+async function addRouter(org: Org, name: string) {
+  const router = await ensureAutoRouter(org.organizationId, name);
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const trio = [
+    await createModel("openai", `fast-${suffix}`, {
+      input: "1.00",
+      output: "5.00",
+    }),
+    await createModel("openai", `normal-${suffix}`, {
+      input: "3.00",
+      output: "15.00",
+    }),
+    await createModel("openai", `smart-${suffix}`, {
+      input: "15.00",
+      output: "75.00",
+    }),
+  ] as const satisfies Trio;
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+    org.providerApiKeyId,
+    trio.map((model) => model.id),
   );
+  await setAutoRoutingTiers(
+    org.organizationId,
+    { fast: trio[0], normal: trio[1], smart: trio[2] },
+    router.id,
+  );
+  return { router, trio };
 }
 
 async function decisions(organizationId: string): Promise<RoutingDecision[]> {

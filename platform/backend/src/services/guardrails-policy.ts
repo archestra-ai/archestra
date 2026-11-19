@@ -1,23 +1,40 @@
 import { createHash } from "node:crypto";
 import {
+  ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
+import ipaddr from "ipaddr.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import ToolModel from "@/models/tool";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { coverageVisibility } from "@/openappa/coverage";
 import {
   addedGrants,
   bundledEntry,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { formatHostClientCodingAliases } from "@/openappa/host-tool-rules";
+import { withoutRepositoryIncludes } from "@/openappa/policy-text";
+import {
+  classifyRuleTarget,
+  type RuleTarget,
+  ruleTargetWarning,
+  touchedRuleNames,
+} from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { CURSOR_WEB_SETUP_POLICY_TOOL } from "@/services/cursor-web-setup-tool-name";
+import { DOCS_MCP_TOOL_NAMES } from "@/services/docs-mcp-tool-names";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
+import { SKILL_SANDBOX_TOOL_RESULTS_DIR } from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -166,18 +183,40 @@ export const guardrailsPolicyService = {
    * validation reports its warnings too.
    */
   async validate(
-    content: string,
+    text: string,
     params: {
       organizationId: string;
       previous?: string;
+      /** Whose readable catalogs the added tool rules are checked against; unchecked without one. */
+      userId?: string;
       /** Both documents already resolved, when the caller resolved them itself. */
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
+      /** Repository files the text includes, read from elsewhere than the accepted commit. */
+      files?: ReadonlyMap<string, string>;
     },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    // Repository files the texts include are folded in before anything reads
+    // them, as a recompose folds them; a file that cannot be read refuses the
+    // submitted text, and leaves the previous one compared without its files.
+    const submitted = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: text,
+      files: params.files,
+    });
+    if (submitted.errors.length > 0)
+      return { valid: false, errors: submitted.errors, warnings: [] };
+    const content = submitted.content;
+    const written = params.previous ?? (await this.get(organizationId)).content;
+    const folded = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: written,
+    });
     const previous =
-      params.previous ?? (await this.get(organizationId)).content;
+      folded.errors.length > 0
+        ? withoutRepositoryIncludes(written)
+        : folded.content;
     const resolved =
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
@@ -216,7 +255,48 @@ export const guardrailsPolicyService = {
         warnings.push(...deployed.warnings);
       }
     }
+    if (errors.length === 0 && params.userId)
+      for (const target of await this.touchedRuleTargets({
+        organizationId,
+        userId: params.userId,
+        content,
+        previous,
+      })) {
+        const warning = ruleTargetWarning(target);
+        if (warning) warnings.push(warning);
+      }
     return { valid: errors.length === 0, errors, warnings };
+  },
+
+  /**
+   * What the root rules `content` adds or changes against `previous` point at,
+   * checked against the MCP tools of the catalogs the caller can read, so the
+   * answer never reveals a tool the caller could not otherwise see.
+   */
+  async touchedRuleTargets(params: {
+    organizationId: string;
+    userId: string;
+    content: string;
+    previous: string;
+  }): Promise<RuleTarget[]> {
+    const names = touchedRuleNames(params.content, params.previous);
+    if (names.length === 0) return [];
+    const { visibleCatalogIds } = await coverageVisibility(
+      params.userId,
+      params.organizationId,
+    );
+    const { tools } = await ToolModel.findCoverageInventory(
+      params.organizationId,
+      { includeAppCatalogs: true, catalogIds: visibleCatalogIds },
+    );
+    // Built-in tools exist in code even when a feature flag keeps one unseeded.
+    const inventory = new Set([
+      ...tools.map((tool) => tool.name),
+      ...ARCHESTRA_TOOL_SHORT_NAMES.map((name) =>
+        archestraMcpBranding.getToolName(name),
+      ),
+    ]);
+    return names.map((name) => classifyRuleTarget(name, inventory));
   },
 
   /**
@@ -256,6 +336,7 @@ export const guardrailsPolicyService = {
     });
     const validation = await this.validate(content, {
       organizationId,
+      userId,
       previous: latest.content,
       resolved,
     });
@@ -288,7 +369,7 @@ export const guardrailsPolicyService = {
         );
       }
     }
-    return saved;
+    return { ...saved, warnings: validation.warnings };
   },
 };
 
@@ -327,14 +408,46 @@ function hash(content: string) {
 }
 
 /**
+ * The deployment's statement that its own host is first-party. A frontend URL
+ * that is not HTTP(S), names no host, or names a loopback or unspecified address
+ * names no host the organization runs, so there is none.
+ */
+export function deploymentHint(): string | null {
+  const url = URL.canParse(config.frontendBaseUrl)
+    ? new URL(config.frontendBaseUrl)
+    : null;
+  if (
+    url === null ||
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.hostname === "" ||
+    isLocalHostname(url.hostname)
+  )
+    return null;
+  return `\`${url.host}\` is this organization's own platform deployment, the one these policies run on: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+}
+
+function deploymentHintLine(): string {
+  const hint = deploymentHint();
+  return hint === null ? "" : `hint = ${JSON.stringify(hint)}`;
+}
+
+function isLocalHostname(hostname: string): boolean {
+  const name = hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (!ipaddr.isValid(name)) return false;
+  const range = ipaddr.process(name).range();
+  return range === "loopback" || range === "unspecified";
+}
+
+/**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
  * carry in this deployment, and the bundled `coding` battery over the client
  * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
  * onto Claude Code's tools, and the root maps it onto the other clients'. It
  * reads the organization's members as `internal`, and has the organization's
- * default model label each sandbox command, each shell command the client
- * batteries route to a model, and each tool no rule names.
+ * default model label each sandbox command, each shell command and URL fetch
+ * the client batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
   return `include = [
@@ -352,25 +465,12 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
 # The coding battery's tools under Codex's, OpenCode's, Claude Desktop
-# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
-# names; the proxy also evaluates its Read, Write and Edit \`path\` as
-# \`file_path\`.
-[aliases.tool.${CODING_BATTERY}]
-shell = [
-  { name = "host/archestra/exec_command", args = { command = "cmd" } },
-  { name = "host/archestra/shell", args = { command = "command" } },
-  { name = "host/archestra/bash", args = { command = "command" } },
-  { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
-]
-read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
-search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
-write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
-edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
-fetch_url = [
-  { name = "host/archestra/webfetch", args = { url = "url" } },
-  { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
-  { name = "host/archestra/FetchURL", args = { url = "url" } },
-]
+# Cowork's, Kimi Code's, Copilot CLI's, Grok's and Cursor's spellings. Kimi Code
+# and Cursor share Claude Code's other tool names; the proxy also evaluates
+# their Read, Write, Edit and StrReplace \`path\` and Copilot CLI's \`view\` and
+# \`create\` \`path\` as \`file_path\`, and Copilot CLI's lowercase \`edit\` \`path\`
+# as \`filePath\`.
+${formatHostClientCodingAliases()}
 
 [policy]
 version = 2
@@ -380,6 +480,7 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 
 [policy.deployment]
 context_control = true
+${deploymentHintLine()}
 
 # Lets an agent hand a risky read to a subagent. The subagent must reply in
 # the strict JSON shape the agent asked for, so injected instructions and
@@ -397,7 +498,7 @@ trust = { from = "suspicious", to = "trusted" }
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
-hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. For a command that only lists, reads or changes files in the sandbox, with no network access, leave delta.trust and delta.audience null. That includes ${SKILL_SANDBOX_TOOL_RESULTS_DIR}, the results of this conversation's earlier tool calls, labelled when those calls ran. The exception is a file that visibly holds credentials or secrets."
 ranks = ["suspicious", "trusted"]
 marks = []
 effects = []
@@ -406,15 +507,18 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
-# The client batteries' shell and Monitor annotators, with the batteries' own
-# mandate, asked of the annotator model instead of a local claude process.
+# The client batteries' shell, fetch and Monitor annotators, with the batteries'
+# own mandate, asked of the annotator model instead of a local claude process.
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
-hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.fetch-requirements"
 builtin = "archestra"
 
 [[policy.annotator]]
@@ -430,12 +534,28 @@ ranks = ["suspicious", "trusted"]
 audiences = ["self", "internal"]
 marks = []
 effects = []
-hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
+hint = "Routine requester-local file and shell operations, diagnostics, edits, builds, tests, dependency installs and client setup need no audience or trust requirement when they neither publish data nor destroy anything. A network fetch or an install alone discloses no trajectory data."
 
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.
 [[policy.tool]]
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
+delta = {}
+
+# The documentation servers a fresh instance installs serve public
+# documentation pages. Reading one leaves a session's label as it is, the same
+# way on every call.
+${DOCS_MCP_TOOL_NAMES.map(
+  (name) => `[[policy.tool]]
+name = "${name}"
+delta = {}
+`,
+).join("\n")}
+# Cursor's web search and fetch tools run through Cursor's command-line
+# agent. Their setup tool installs that agent and signs it in; it reads and
+# sends nothing of the session.
+[[policy.tool]]
+name = "host/archestra/${CURSOR_WEB_SETUP_POLICY_TOOL}"
 delta = {}
 
 # Starting a subagent opens a child trajectory under this deployment's context
@@ -457,6 +577,52 @@ delta = {}
 
 [[policy.tool]]
 name = "host/archestra/mcp__ccd_turn__update_plan"
+delta = {}
+
+# Cursor checks its chats through hooks that setup writes to
+# ~/.cursor/hooks.json and ~/.cursor/archestra. A call that changes them needs
+# a person's approval, so an agent cannot turn its own checks off. A command
+# may spell the path with either slash.
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*hooks.json*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*archestra*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+# Cursor's Delete tool has no counterpart in the coding battery, so it is
+# named as Cursor spells it.
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
 delta = {}
 
 [[policy.tool]]

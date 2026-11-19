@@ -222,6 +222,7 @@ export function EditModelDialog({
     availableApiKeys: apiKeys,
   });
   const fallbackPricing = getFallbackPricing(model);
+  const syncedTier = model.syncedLongContextPricing;
   const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
   const nonNegativePriceRule = {
     validate: (v: string) => {
@@ -485,7 +486,7 @@ export function EditModelDialog({
           <div className="space-y-1">
             <span className="text-sm font-medium">Availability</span>
             <p className="text-sm text-muted-foreground">
-              Whether this model is offered anywhere {appName} lists models.
+              Whether this model can be selected or used through {appName}.
             </p>
           </div>
 
@@ -499,8 +500,9 @@ export function EditModelDialog({
                     <FormLabel>Hide this model</FormLabel>
                     <p className="text-sm text-muted-foreground">
                       Hidden models remain synced and editable in this catalog,
-                      but they are excluded anywhere {appName} offers model
-                      selection.
+                      but cannot be selected or used through {appName},
+                      including direct API requests. Show the model to enable it
+                      again.
                     </p>
                   </div>
                   <FormControl>
@@ -601,7 +603,32 @@ export function EditModelDialog({
               <span className="text-sm font-medium">
                 Long-context Pricing ($/M tokens)
               </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="ml-auto"
+                onClick={() => {
+                  for (const name of LONG_CONTEXT_FIELDS) {
+                    form.setValue(name, "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }
+                }}
+              >
+                {syncedTier ? "Use synced tier" : "Clear tier"}
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {syncedTier
+                ? `Provider tier above ${formatThousands(syncedTier.threshold)} prompt tokens. Empty fields use the synced tier; enter all five values to override it.`
+                : "No provider tier synced. Enter all five values to configure a custom tier."}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              The threshold includes input, cache reads and cache writes.
+              Long-context rates apply to the whole request.
+            </p>
             <FormField
               control={form.control}
               name="longContextThreshold"
@@ -610,14 +637,21 @@ export function EditModelDialog({
                 <FormItem>
                   <FormLabel>Above prompt tokens</FormLabel>
                   <FormControl>
-                    <GroupedNumberInput placeholder="Not set" {...field} />
+                    <GroupedNumberInput
+                      placeholder={
+                        syncedTier
+                          ? formatThousands(syncedTier.threshold)
+                          : "Not set"
+                      }
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <div className="grid grid-cols-2 gap-3">
-              {LONG_CONTEXT_PRICE_FIELDS.map(({ name, label }) => (
+              {LONG_CONTEXT_PRICE_FIELDS.map(({ name, label, synced }) => (
                 <FormField
                   key={name}
                   control={form.control}
@@ -627,7 +661,14 @@ export function EditModelDialog({
                     <FormItem>
                       <FormLabel>{label}</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          placeholder={
+                            syncedTier?.[synced] != null
+                              ? formatPricePerMillion(syncedTier[synced])
+                              : "Not reported"
+                          }
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1119,10 +1160,26 @@ function providerLimitPlaceholder(value: number | null): string {
 }
 
 const LONG_CONTEXT_PRICE_FIELDS = [
-  { name: "longContextPricePerMillionInput", label: "Long input" },
-  { name: "longContextPricePerMillionOutput", label: "Long output" },
-  { name: "longContextPricePerMillionCacheRead", label: "Long cache read" },
-  { name: "longContextPricePerMillionCacheWrite", label: "Long cache write" },
+  {
+    name: "longContextPricePerMillionInput",
+    label: "Long input",
+    synced: "pricePerMillionInput",
+  },
+  {
+    name: "longContextPricePerMillionOutput",
+    label: "Long output",
+    synced: "pricePerMillionOutput",
+  },
+  {
+    name: "longContextPricePerMillionCacheRead",
+    label: "Long cache read",
+    synced: "pricePerMillionCacheRead",
+  },
+  {
+    name: "longContextPricePerMillionCacheWrite",
+    label: "Long cache write",
+    synced: "pricePerMillionCacheWrite",
+  },
 ] as const;
 
 const LONG_CONTEXT_FIELDS = [

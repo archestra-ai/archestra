@@ -42,7 +42,12 @@ class CredentialBillingService {
       if (await this.isCostManager(params)) return;
       if (
         params.currentTeamId &&
-        (await TeamModel.isUserTeamAdmin(params.currentTeamId, params.userId))
+        (
+          await TeamModel.getAdministeredTeamIds(
+            params.userId,
+            params.organizationId,
+          )
+        ).includes(params.currentTeamId)
       ) {
         return;
       }
@@ -59,7 +64,15 @@ class CredentialBillingService {
       throw new ApiError(400, "Billing team not found.");
     }
     if (await this.isCostManager(params)) return;
-    if (await TeamModel.isUserTeamAdmin(teamId, params.userId)) return;
+    if (
+      (
+        await TeamModel.getAdministeredTeamIds(
+          params.userId,
+          params.organizationId,
+        )
+      ).includes(teamId)
+    )
+      return;
     throw new ApiError(
       403,
       "You can only bill teams you are an admin of. Ask a cost manager to bill another team.",
@@ -72,6 +85,8 @@ class CredentialBillingService {
     userId: string;
     cap: CredentialSpendCapInput | null | undefined;
     current: CredentialSpendCap | null;
+    /** Computed from current key ownership and team authority by the caller. */
+    canManageTeamKey?: boolean;
   }): Promise<void> {
     const { cap, current } = params;
     if (cap === undefined) return;
@@ -86,6 +101,7 @@ class CredentialBillingService {
     ) {
       return;
     }
+    if (params.canManageTeamKey) return;
     const action = cap ? "update" : "delete";
     if (
       await userHasPermission(

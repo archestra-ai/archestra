@@ -207,7 +207,13 @@ export function CredentialSelect({
    * In display order. Options with a `group` are listed under that heading;
    * the headings appear only when the options fall into more than one group.
    */
-  options: Array<{ id: string; label: string; group?: string }>;
+  options: Array<{
+    id: string;
+    label: string;
+    group?: string;
+    /** A second line in the open list only, such as what the option reaches. */
+    description?: string;
+  }>;
   value: string | undefined;
   onChange: (id: string | null) => void;
   /** Offered when picking nothing is valid. */
@@ -245,7 +251,11 @@ export function CredentialSelect({
               <SelectLabel>{group.heading}</SelectLabel>
             )}
             {group.items.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
+              <SelectItem
+                key={option.id}
+                value={option.id}
+                description={option.description}
+              >
                 {option.label}
               </SelectItem>
             ))}

@@ -14,7 +14,7 @@ import client from "prom-client";
 // SPDX-SnippetEnd
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";

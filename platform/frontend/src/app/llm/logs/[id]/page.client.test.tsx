@@ -37,10 +37,29 @@ vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
   useSessionLineage: vi.fn(() => ({ data: undefined })),
+  useSessionChatErrors: vi.fn(() => ({ data: undefined })),
+  useSessionHandoffs: vi.fn(() => ({ data: undefined })),
+  useHandedOffRecords: vi.fn(() => ({
+    requests: [],
+    toolCalls: [],
+    truncated: false,
+    pending: false,
+  })),
+  useInteractionAutoRouting: vi.fn(() => ({ data: null, isPending: false })),
+  useSessionToolCallAskers: vi.fn(() => new Map()),
   useExportSessionInteractions: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,
   })),
+}));
+
+// No model pools here: rows name no pool member.
+vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
+  useHasPermissions: vi.fn(() => ({ data: false })),
+}));
+vi.mock("@/lib/model-pools.query", () => ({
+  useModelPools: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/mcp/mcp-tool-call.query", () => ({
@@ -705,6 +724,10 @@ function sessionToolCall(
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
+    credentialClientId: null,
+    credentialClientType: "identity_provider",
+    credentialActorClientId: null,
     source: "chat",
     durationMs: 1_500,
     createdAt: "2026-09-19T10:00:09.000Z",

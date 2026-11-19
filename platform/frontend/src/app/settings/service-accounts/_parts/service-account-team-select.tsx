@@ -13,8 +13,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAssignableTeams, useTeam } from "@/lib/teams/team.query";
 
 /**
- * The team a service account acts for. A linked account receives the team's
- * grants and MCP connections. Org team managers can pick any team; anyone else
+ * The team a service account belongs to. It can use what is shared with the
+ * team, including its MCP connections, and gets the roles the team passes down. Org team managers can pick any team; anyone else
  * only the teams they belong to (the API still requires team admin).
  */
 export function ServiceAccountTeamSelect({
@@ -58,8 +58,9 @@ export function ServiceAccountTeamSelect({
         </SelectContent>
       </Select>
       <FieldDescription>
-        Optional. The account acts for this team and gets its grants and MCP
-        connections.
+        Optional. The account can use anything shared with this team, including
+        the team&apos;s MCP connections, and gets the roles the team passes
+        down.
       </FieldDescription>
     </div>
   );

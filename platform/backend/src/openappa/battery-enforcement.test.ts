@@ -16,9 +16,13 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import ToolModel from "@/models/tool";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import memberRoutes from "@/routes/member";
 import {
   deleteRuntimeCredentialConnection,
@@ -408,12 +412,46 @@ requires = { audience = { contains = ["self"] } }
     expect(composed.lastError).toBeNull();
 
     const probe = "host/archestra/publish_probe {}\nexpect allow\n";
+    const grok = new AppaGrokAdapter();
+    const grokCall = (name: string, args: Record<string, unknown>) =>
+      `host/archestra/${grok.normalizeLocalToolName(name)} {\n${Object.entries(
+        args,
+      )
+        .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
+        .join("")}}\nexpect allow\n`;
     const scenarios = {
       "probe-alone": probe,
       // Claude Code's Read, under the battery's credential rule.
       "read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n${probe}`,
       "note-after-read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\nhost/archestra/note_to_self {}\nexpect allow\n`,
       "read-readme": `host/archestra/Read {\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      "grok-read-env": `host/archestra/read_file {\n  target_file: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      "grok-read-readme": `host/archestra/read_file {\n  target_file: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      "grok-shell-credentials": `${grokCall("run_terminal_command", { command: "cat ~/.aws/credentials", description: "Read synthetic credentials" })}${probe}`,
+      "grok-shell-push": grokCall("run_terminal_command", {
+        command: "git push origin main",
+        description: "Push synthetic repository",
+      }),
+      "grok-write-protected": grokCall("write", {
+        file_path: "/repo/.mcp.json",
+        content: "{}",
+      }),
+      "grok-write-ordinary": grokCall("write", {
+        file_path: "/repo/note.txt",
+        content: "synthetic",
+      }),
+      "grok-edit-protected": grokCall("search_replace", {
+        file_path: "/repo/.mcp.json",
+        old_string: "old",
+        new_string: "new",
+      }),
+      "grok-edit-ordinary": grokCall("search_replace", {
+        file_path: "/repo/note.txt",
+        old_string: "old",
+        new_string: "new",
+      }),
+      "grok-grep-credentials": `${grokCall("grep", { pattern: "synthetic", path: "/repo/.env" })}${probe}`,
+      "grok-grep-ordinary": `${grokCall("grep", { pattern: "synthetic", path: "/repo/src" })}${probe}`,
       // Codex's shell spells the command `cmd`.
       "codex-credentials": `host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
       "codex-git-push": `host/archestra/exec_command {\n  cmd: "git push origin main"\n}\nexpect allow\n`,
@@ -445,7 +483,30 @@ requires = { audience = { contains = ["self"] } }
       // named like the battery's host keeps its own identity.
       "mcp-named-like-the-host": `mcp/claude-code/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n`,
     };
-    const dispatched = await replay({ organizationId, scenarios });
+    // A replay takes at most 32 scenario files, so Cursor's run on their own.
+    const cursorScenarios = {
+      // Cursor's shell is Shell; the proxy and its hook copy \`command\` to \`cmd\`.
+      "cursor-credentials": `host/archestra/Shell {\n  command: "cat ~/.aws/credentials"\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "cursor-git-push": `host/archestra/Shell {\n  command: "git push origin main"\n  cmd: "git push origin main"\n}\nexpect allow\n`,
+      // Cursor's edit tool is StrReplace; its \`path\` gets a \`file_path\` copy.
+      "cursor-edit-claude-settings": `host/archestra/StrReplace {\n  path: "/home/me/.claude/settings.json"\n  file_path: "/home/me/.claude/settings.json"\n}\nexpect allow\n`,
+      "cursor-edit-readme": `host/archestra/StrReplace {\n  path: "/repo/README.md"\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      // Cursor's Guardrails hooks: an agent cannot change them on its own.
+      "cursor-edit-hooks": `host/archestra/StrReplace {\n  path: "/home/me/.cursor/hooks.json"\n  file_path: "/home/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-edit-hooks-windows": `host/archestra/StrReplace {\n  path: "C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n  file_path: "C:/Users/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-write-hook-helper": `host/archestra/Write {\n  path: "C:\\\\Users\\\\me\\\\.cursor\\\\archestra\\\\guardrails-hook.mjs"\n  file_path: "C:/Users/me/.cursor/archestra/guardrails-hook.mjs"\n}\nexpect allow\n`,
+      "cursor-remove-hooks": `host/archestra/Shell {\n  command: "rm ~/.cursor/hooks.json"\n  cmd: "rm ~/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-remove-hooks-windows": `host/archestra/Shell {\n  command: "Remove-Item C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n  cmd: "Remove-Item C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n}\nexpect allow\n`,
+      // Cursor's hooks report Write and Delete with \`file_path\`; the hook
+      // host spells a Windows path with forward slashes.
+      "cursor-hook-write-hooks": `host/archestra/Write {\n  file_path: "C:/Users/me/.cursor/hooks.json"\n  content: "{}"\n}\nexpect allow\n`,
+      "cursor-delete-hooks": `host/archestra/Delete {\n  file_path: "C:/Users/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-delete-hook-helper": `host/archestra/Delete {\n  file_path: "/home/me/.cursor/archestra/guardrails.json"\n}\nexpect allow\n`,
+    };
+    const dispatched = {
+      ...(await replay({ organizationId, scenarios })),
+      ...(await replay({ organizationId, scenarios: cursorScenarios })),
+    };
 
     // A session narrowed to its requester sends the probe to review.
     expect(
@@ -461,23 +522,225 @@ requires = { audience = { contains = ["self"] } }
       "read-env": ["allow", "authority human-approval"],
       "note-after-read-env": ["allow", "allow"],
       "read-readme": ["allow", "allow"],
+      "grok-read-env": ["allow", "authority human-approval"],
+      "grok-read-readme": ["allow", "allow"],
+      "grok-shell-credentials": ["allow", "authority human-approval"],
+      "grok-shell-push": ["claude-code.bash-repository-requirements"],
+      "grok-write-protected": ["authority human-approval"],
+      "grok-write-ordinary": ["allow"],
+      "grok-edit-protected": ["authority human-approval"],
+      "grok-edit-ordinary": ["allow"],
+      "grok-grep-credentials": ["allow", "authority human-approval"],
+      "grok-grep-ordinary": ["allow", "allow"],
       "codex-credentials": ["allow", "authority human-approval"],
       "codex-git-push": ["claude-code.bash-repository-requirements"],
       "opencode-read-env": ["allow", "authority human-approval"],
       "kimi-read-env": ["allow", "authority human-approval"],
       "kimi-read-env-windows": ["allow", "authority human-approval"],
       "kimi-read-path-only": ["allow", "allow"],
-      "kimi-fetch": ["allow", "allow"],
-      "claude-fetch": ["allow", "allow"],
+      // A fetch outside the documentation hosts is labeled per call.
+      "kimi-fetch": ["claude-code.fetch-requirements"],
+      "claude-fetch": ["claude-code.fetch-requirements"],
       "git-push": ["claude-code.bash-repository-requirements"],
       "cowork-credentials": ["allow", "authority human-approval"],
       "cowork-git-push": ["claude-code.bash-repository-requirements"],
       "cowork-fetch-docs": ["allow", "allow"],
+      "cursor-credentials": ["allow", "authority human-approval"],
+      "cursor-git-push": ["claude-code.bash-repository-requirements"],
+      "cursor-edit-claude-settings": ["authority human-approval"],
+      "cursor-edit-readme": ["allow", "allow"],
+      "cursor-edit-hooks": ["authority human-approval"],
+      "cursor-edit-hooks-windows": ["authority human-approval"],
+      "cursor-write-hook-helper": ["authority human-approval"],
+      "cursor-remove-hooks": ["authority human-approval"],
+      "cursor-remove-hooks-windows": ["authority human-approval"],
+      "cursor-hook-write-hooks": ["authority human-approval"],
+      "cursor-delete-hooks": ["authority human-approval"],
+      "cursor-delete-hook-helper": ["authority human-approval"],
       "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "spawn-after-read-env": ["allow", "allow", "allow"],
       workflow: [UNDECLARED_TOOL_ANNOTATOR],
       "unruled-mcp-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "mcp-named-like-the-host": [UNDECLARED_TOOL_ANNOTATOR],
+    });
+  });
+
+  test("an earlier saved policy revision governs newer client built-ins after startup recompile without rewriting organization.appa.toml", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const admin = await makeAdmin();
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    // Simulate an organization that edited and saved its policy when only the
+    // earliest Codex / OpenCode `[aliases.tool.coding]` targets existed.
+    const legacyCodingTable = `[aliases.tool.coding]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]`;
+
+    const savedLegacyPolicy = `${initialPolicy().replace(
+      /\[aliases\.tool\.coding\][\s\S]*?(?=\n\[policy\])/,
+      `${legacyCodingTable}\n`,
+    )}
+[[policy.tool]]
+name = "host/archestra/publish_probe"
+delta = {}
+requires = { audience = { contains = ["public"] } }
+
+[[policy.tool]]
+name = "host/archestra/trusted_sink"
+delta = {}
+requires = { trust = "trusted" }
+
+[[policy.tool]]
+name = "host/archestra/read_file(target_file:/repo/forbidden.txt)"
+delta = {}
+requires = { attention = ["blocked"] }
+`;
+    expect(savedLegacyPolicy).not.toContain("host/archestra/view");
+    expect(savedLegacyPolicy).not.toContain("host/archestra/create");
+    expect(savedLegacyPolicy).not.toContain("host/archestra/web_fetch");
+
+    await declareRoot({
+      organizationId,
+      userId: admin.id,
+      content: savedLegacyPolicy,
+    });
+    const first = await openappaBatteriesService.recompile(organizationId);
+    expect(first.lastError).toBeNull();
+
+    // Seed an older composition version fingerprint and verify startup recompile
+    // refreshes the effective policy while leaving organization.appa.toml untouched.
+    const existing = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(existing).not.toBeNull();
+    if (!existing) throw new Error("expected stored effective policy");
+    await OpenAppaEffectivePolicyModel.save({
+      organizationId,
+      expected: existing,
+      now: new Date(),
+      values: {
+        content: existing.content,
+        contentHash: existing.contentHash,
+        rootRevision: existing.rootRevision,
+        installFingerprint: existing.installFingerprint.replace(
+          /^v\d+:/,
+          "v13:",
+        ),
+        served: existing.served,
+        error: null,
+      },
+    });
+
+    await recompileAllOnStart();
+    const afterStart = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(afterStart?.installFingerprint.startsWith("v14:")).toBe(true);
+    expect(
+      (await GuardrailsPolicyModel.findLatest(organizationId))?.content,
+    ).toBe(savedLegacyPolicy);
+
+    const probe = "host/archestra/publish_probe {}\nexpect allow\n";
+    const trustedSink = "host/archestra/trusted_sink {}\nexpect allow\n";
+    const grok = new AppaGrokAdapter();
+    const call = (tool: string, args: Record<string, unknown>) =>
+      `${tool} {\n${Object.entries(args)
+        .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
+        .join("")}}\nexpect allow\n`;
+    const copilotCall = (
+      tool: "view" | "create" | "edit",
+      args: Record<string, unknown>,
+    ) =>
+      call(
+        `host/archestra/${tool}`,
+        normalizeToolArgumentsForPolicy(tool, args) as Record<string, unknown>,
+      );
+
+    const scenarios = {
+      "grok-read-env": `${call("host/archestra/read_file", { target_file: "/repo/.env" })}${probe}`,
+      "grok-read-readme": `${call("host/archestra/read_file", { target_file: "/repo/README.md" })}${probe}`,
+      "grok-read-explicit-root-deny": call("host/archestra/read_file", {
+        target_file: "/repo/forbidden.txt",
+      }),
+      "grok-web-search": `${call(`host/archestra/${grok.normalizeLocalToolName("web_search")}`, { query: "archestra guardrails" })}${trustedSink}`,
+      "grok-list-dir": `${call(`host/archestra/${grok.normalizeLocalToolName("list_dir")}`, { path: "/repo" })}${probe}`,
+      "grok-todo-write": call(
+        `host/archestra/${grok.normalizeLocalToolName("todo_write")}`,
+        { todos: [] },
+      ),
+      "copilot-view-env": `${copilotCall("view", { path: "/repo/.env" })}${probe}`,
+      "copilot-view-env-windows": `${copilotCall("view", { path: "C:\\repo\\.env" })}${probe}`,
+      "copilot-view-readme": `${copilotCall("view", { path: "/repo/README.md" })}${probe}`,
+      "copilot-create-protected": copilotCall("create", {
+        path: "/repo/.mcp.json",
+        file_text: "{}",
+      }),
+      "copilot-create-protected-windows": copilotCall("create", {
+        path: "C:\\repo\\.mcp.json",
+        file_text: "{}",
+      }),
+      "copilot-create-ordinary": copilotCall("create", {
+        path: "/repo/note.txt",
+        file_text: "hello",
+      }),
+      "copilot-edit-protected": copilotCall("edit", {
+        path: "/repo/.mcp.json",
+        old_str: "old",
+        new_str: "new",
+      }),
+      "copilot-edit-ordinary": copilotCall("edit", {
+        path: "/repo/note.txt",
+        old_str: "old",
+        new_str: "new",
+      }),
+      "copilot-web-fetch-docs": `${call("host/archestra/web_fetch", { url: "https://archestra.ai/docs" })}${probe}`,
+      "copilot-web-fetch-external": call("host/archestra/web_fetch", {
+        url: "https://example.com/",
+      }),
+      "cowork-bash-credentials": `${call("host/archestra/mcp__workspace__bash", { command: "cat ~/.aws/credentials" })}${probe}`,
+      "kimi-fetch": call("host/archestra/FetchURL", {
+        url: "https://example.com/",
+      }),
+    };
+
+    const dispatched = await replay({ organizationId, scenarios });
+    expect(
+      Object.fromEntries(
+        Object.entries(dispatched).map(([path, file]) => [
+          path,
+          file.steps.map(stepOutcome),
+        ]),
+      ),
+      JSON.stringify(dispatched, null, 1),
+    ).toEqual({
+      "grok-read-env": ["allow", "authority human-approval"],
+      "grok-read-readme": ["allow", "allow"],
+      "grok-read-explicit-root-deny": ["deny"],
+      "grok-web-search": ["allow", "authority human-approval"],
+      "grok-list-dir": ["allow", "allow"],
+      "grok-todo-write": ["allow"],
+      "copilot-view-env": ["allow", "authority human-approval"],
+      "copilot-view-env-windows": ["allow", "authority human-approval"],
+      "copilot-view-readme": ["allow", "allow"],
+      "copilot-create-protected": ["authority human-approval"],
+      "copilot-create-protected-windows": ["authority human-approval"],
+      "copilot-create-ordinary": ["allow"],
+      "copilot-edit-protected": ["authority human-approval"],
+      "copilot-edit-ordinary": ["allow"],
+      "copilot-web-fetch-docs": ["allow", "allow"],
+      "copilot-web-fetch-external": ["claude-code.fetch-requirements"],
+      "cowork-bash-credentials": ["allow", "authority human-approval"],
+      "kimi-fetch": ["claude-code.fetch-requirements"],
     });
   });
 });

@@ -1,16 +1,15 @@
 import type {
   GitHubActionsAccess,
   IncomingEmailSecurityMode,
+  SubagentLoadBalancingConfig,
 } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   check,
   index,
   integer,
   jsonb,
-  numeric,
   text,
   timestamp,
   uniqueIndex,
@@ -25,12 +24,13 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
+import type { NetworkPolicy } from "@/types/environment";
+import autoRoutersTable from "./auto-router";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import modelPoolsTable from "./model-pool";
-import routingScorerVersionsTable from "./routing-scorer-version";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -118,33 +118,27 @@ const agentsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
-     * Auto routing (the org's `llm_proxy` row only). Server-managed: written
-     * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
+     * Runs on this auto router: each session goes to its fast, normal or
+     * smart tier. `llmApiKeyId`, `modelId` and `modelPoolId` are then null.
+     * Never set on Agent Runtime agents. ON DELETE SET NULL.
      */
-    autoRoutingEnabled: boolean("auto_routing_enabled")
-      .notNull()
-      .default(false),
-    autoRoutingBudgetUsdPerDay: numeric("auto_routing_budget_usd_per_day", {
-      precision: 12,
-      scale: 2,
+    autoRouterId: uuid("auto_router_id").references(() => autoRoutersTable.id, {
+      onDelete: "set null",
     }),
-    autoRoutingScorerVersionId: uuid(
-      "auto_routing_scorer_version_id",
-    ).references(() => routingScorerVersionsTable.id),
-    autoRoutingGeneration: bigint("auto_routing_generation", { mode: "number" })
-      .notNull()
-      .default(0),
-    autoRoutingPlannedGeneration: bigint("auto_routing_planned_generation", {
-      mode: "number",
-    })
-      .notNull()
-      .default(0),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
     ),
+
+    /**
+     * @deprecated Replaced by `agent_identity_bindings`, which ties the
+     * identity to an identity provider. Migration 0641 copied its values
+     * there. Nothing reads or writes it; kept because columns are never
+     * dropped.
+     */
+    entraAgentIdentityId: text("entra_agent_identity_id"),
 
     /**
      * Optional Environment whose runtime + egress NetworkPolicy this agent's
@@ -163,6 +157,14 @@ const agentsTable = softDeletablePgTable(
       () => environmentsTable.id,
       { onDelete: "set null" },
     ),
+
+    /**
+     * Optional egress policy for this agent's own runtimes (Agent Runtime pods,
+     * their warm pools, and its Code Sandbox engine). Null inherits the
+     * environment's policy, then the organization default. MCP servers keep
+     * following their environment.
+     */
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
 
     /**
      * Optional dedicated runtime for durable and delegated work. Invocation
@@ -259,6 +261,15 @@ const agentsTable = softDeletablePgTable(
     accessAllSubagents: boolean("access_all_subagents")
       .notNull()
       .default(false),
+
+    /**
+     * MCP gateways: how incoming requests are load-balanced across the
+     * subagents assigned to the gateway, including algorithm, per-subagent
+     * weights, and retry/fallback policy for failed subagent requests.
+     */
+    subagentLoadBalancing: jsonb(
+      "subagent_load_balancing",
+    ).$type<SubagentLoadBalancingConfig>(),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

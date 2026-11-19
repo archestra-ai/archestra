@@ -18,6 +18,7 @@ export { default as AgentExcludedConnectorModel } from "./agent-excluded-connect
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
+export { default as AgentIdentityBindingModel } from "./agent-identity-binding";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentPinModel } from "./agent-pin";
@@ -76,6 +77,7 @@ export { default as EnvironmentDefaultUserLimitModel } from "./environment-defau
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
 export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
+export { default as GithubAppAccountModel } from "./github-app-account";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InstanceUsageModel } from "./instance-usage";
@@ -97,10 +99,8 @@ export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connect
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
-export {
-  default as LlmProviderApiKeyModelLinkModel,
-  selectionKey,
-} from "./llm-provider-api-key-model";
+export { default as LlmProviderApiKeyModelLinkModel } from "./llm-provider-api-key-model";
+export { default as LlmUsageRollupModel } from "./llm-usage-rollup";
 export { default as ManagedOauthClientModel } from "./managed-oauth-client";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";
@@ -171,6 +171,7 @@ export { default as SkillTeamModel } from "./skill-team";
 export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillUserModel } from "./skill-user";
 export { default as SkillVersionModel } from "./skill-version";
+export { default as SpiffeSigningKeyModel } from "./spiffe-signing-key";
 export { default as SreRuntimeModel } from "./sre-runtime";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
@@ -179,6 +180,7 @@ export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolObservationModel } from "./tool-observation";
+export { default as ToolSearchTextModel } from "./tool-search-text";
 export { default as UsageStatisticsModel } from "./usage-statistics";
 export { default as UserModel } from "./user";
 export { default as UserCredentialModel } from "./user-credential";

@@ -82,9 +82,11 @@ export async function createAndLinkRunConversation(params: {
     agent: {
       llmApiKeyId: agent.llmApiKeyId ?? null,
       modelId: agent.modelId ?? null,
+      autoRouterId: agent.autoRouterId,
     },
     organizationId,
     userId: ownerUserId,
+    allowAutoModel: agent.runtime === null,
     // A scheduled run is not the owner driving the /chat model selector, so it
     // seeds from the agent's own configuration, not the owner's chat default.
   });
@@ -96,6 +98,7 @@ export async function createAndLinkRunConversation(params: {
     title: buildRunConversationSeedTitle(trigger.messageTemplate),
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
+    autoRouterId: llmSelection.autoRouterId ?? null,
     artifact: run.artifact ?? undefined,
     projectId: trigger.projectId ?? null,
     origin: "schedule_trigger",

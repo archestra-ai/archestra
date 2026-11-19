@@ -1,27 +1,16 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
+import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-const { getSessionMock, hasPermissionMock, verifyApiKeyMock } = vi.hoisted(
-  () => ({
-    getSessionMock: vi.fn(),
-    hasPermissionMock: vi.fn(),
-    verifyApiKeyMock: vi.fn(),
-  }),
-);
+vi.mock("@/auth/better-auth");
 
-vi.mock("@/auth/better-auth", () => ({
-  auth: {
-    api: {
-      getSession: getSessionMock,
-      hasPermission: hasPermissionMock,
-      verifyApiKey: verifyApiKeyMock,
-    },
-  },
-}));
+const getSessionMock = vi.mocked(auth.api.getSession);
+const hasPermissionMock = vi.mocked(auth.api.hasPermission);
+const verifyApiKeyMock = vi.mocked(auth.api.verifyApiKey);
 
 describe("API key route authorization", () => {
   let app: FastifyInstanceWithZod;
@@ -30,7 +19,9 @@ describe("API key route authorization", () => {
     vi.clearAllMocks();
 
     app = createFastifyInstance();
-    const { fastifyAuthPlugin } = await import("@/auth");
+    const { authPlugin: fastifyAuthPlugin } = await import(
+      "@/auth/fastify-plugin"
+    );
     const { default: apiKeyRoutes } = await import("./api-key");
     await app.register(fastifyAuthPlugin);
     await app.register(apiKeyRoutes);
@@ -69,6 +60,24 @@ describe("API key route authorization", () => {
         id: "route-key-1",
         referenceId: user.id,
         metadata: null,
+        configId: "default",
+        name: "CLI Key",
+        start: null,
+        prefix: null,
+        enabled: true,
+        refillInterval: null,
+        refillAmount: null,
+        lastRefillAt: null,
+        rateLimitEnabled: false,
+        rateLimitTimeWindow: null,
+        rateLimitMax: null,
+        requestCount: 0,
+        remaining: null,
+        lastRequest: null,
+        expiresAt: null,
+        createdAt: new Date("2026-03-15T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-15T00:00:00.000Z"),
+        permissions: null,
       },
     });
 
@@ -116,6 +125,24 @@ describe("API key route authorization", () => {
         id: "route-key-2",
         referenceId: user.id,
         metadata: null,
+        configId: "default",
+        name: "CLI Key",
+        start: null,
+        prefix: null,
+        enabled: true,
+        refillInterval: null,
+        refillAmount: null,
+        lastRefillAt: null,
+        rateLimitEnabled: false,
+        rateLimitTimeWindow: null,
+        rateLimitMax: null,
+        requestCount: 0,
+        remaining: null,
+        lastRequest: null,
+        expiresAt: null,
+        createdAt: new Date("2026-03-15T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-15T00:00:00.000Z"),
+        permissions: null,
       },
     });
 

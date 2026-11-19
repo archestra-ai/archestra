@@ -1,4 +1,8 @@
-import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
+import {
+  AGENT_CATALOG_IDS,
+  archestraApiClient,
+  getAgentCatalogImages,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -60,7 +64,25 @@ const server = setupServer(
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),
   ),
+  http.get("http://localhost:9000/api/agent-runtime-templates/built-ins", () =>
+    HttpResponse.json([]),
+  ),
+  http.get("http://localhost:9000/api/agent-runtime-templates/access", () =>
+    HttpResponse.json(runtimeAccess(true)),
+  ),
 );
+const CUSTOM_RUNTIME_ID = "00000000-0000-4000-8000-000000000001";
+/** Every built-in runtime and the custom one these tests use. */
+function runtimeAccess(canUse: boolean) {
+  return {
+    runtimes: [...AGENT_CATALOG_IDS, CUSTOM_RUNTIME_ID].map((id) => ({
+      id,
+      canUse,
+      canConfigure: canUse,
+    })),
+    canConfigureAny: canUse,
+  };
+}
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
@@ -90,6 +112,49 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
+  it("starts a maintained runtime from the administrator's settings", async () => {
+    let served = false;
+    server.use(
+      http.get(
+        "http://localhost:9000/api/agent-runtime-templates/built-ins",
+        () => {
+          served = true;
+          return HttpResponse.json([
+            { id: "codex", settings: { ttlHours: 6 } },
+          ]);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    await renderPicker("claude-code");
+    await waitFor(() => expect(served).toBe(true));
+    await user.click(screen.getByRole("radio", { name: "Codex" }));
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-codex"],
+      ttlHours: 6,
+    });
+  });
+
+  it("shows a runtime's limits read-only to someone who can't configure it, and keeps its ports editable", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentRuntimePicker
+        selectedId="codex"
+        value={runtimeFor("codex")}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        modelBlock={<div>Model settings content</div>}
+        modelSummary="summary"
+        readOnlyBy="Codex"
+      />,
+      { wrapper: QueryWrapper },
+    );
+    expect(await screen.findByText("Set by the Codex runtime")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Limits/ }));
+    expect(screen.getByLabelText(/Maximum duration/)).toBeDisabled();
+    expect(screen.getByLabelText("Ports to forward")).toBeEnabled();
+  });
+
   it("keeps a custom template's icon in its summary and editing choices", async () => {
     const id = "00000000-0000-4000-8000-000000000001";
     const runtime = {
@@ -481,12 +546,8 @@ describe("custom runtime catalog permission integration", () => {
   it.each([
     false,
     true,
-  ])("gates custom template selection on Configure runtime (%s)", async (allowed) => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: allowed,
-      isPending: false,
-    } as ReturnType<typeof useHasPermissions>);
-    const id = "00000000-0000-4000-8000-000000000001";
+  ])("offers a custom template only to people who may use it (%s)", async (allowed) => {
+    const id = CUSTOM_RUNTIME_ID;
     const runtime = {
       ...defaultAgentRuntime(),
       image: "registry.example.com/team-agent:v2",
@@ -502,10 +563,15 @@ describe("custom runtime catalog permission integration", () => {
       image: runtime.image,
     };
     let resolutions = 0;
+    let catalogReads = 0;
     server.use(
-      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
-        HttpResponse.json([summary]),
+      http.get("http://localhost:9000/api/agent-runtime-templates/access", () =>
+        HttpResponse.json(runtimeAccess(allowed)),
       ),
+      http.get("http://localhost:9000/api/agent-runtime-templates", () => {
+        catalogReads++;
+        return HttpResponse.json([summary]);
+      }),
       http.get(
         `http://localhost:9000/api/agent-runtime-templates/${id}`,
         () => {
@@ -526,11 +592,11 @@ describe("custom runtime catalog permission integration", () => {
       />,
       { wrapper: QueryWrapper },
     );
-    const choice = await screen.findByRole("button", {
-      name: /Team workspace/,
-    });
     const user = userEvent.setup();
     if (allowed) {
+      const choice = await screen.findByRole("button", {
+        name: /Team workspace/,
+      });
       expect(choice).toBeEnabled();
       await user.click(choice);
       await waitFor(() =>
@@ -543,15 +609,17 @@ describe("custom runtime catalog permission integration", () => {
       );
       expect(resolutions).toBe(1);
     } else {
-      expect(choice).toBeDisabled();
-      expect(choice).toHaveAccessibleDescription(
-        "Requires Configure runtime permission.",
-      );
-      await user.click(choice);
+      await waitFor(() => expect(catalogReads).toBeGreaterThan(0));
+      expect(
+        screen.queryByRole("button", { name: /Team workspace/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Custom image/ }),
+      ).not.toBeInTheDocument();
       expect(resolutions).toBe(0);
       expect(onSelect).not.toHaveBeenCalled();
       expect(
-        screen.getByRole("button", { name: /New Test Platform agent/ }),
+        screen.getByRole("button", { name: /^Test Platform Built into/ }),
       ).toBeEnabled();
     }
   });

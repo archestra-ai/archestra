@@ -12,6 +12,7 @@ import type {
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
@@ -283,6 +284,102 @@ describe("runtime workspace child anchor", () => {
         `${CALLER}|${childSessionId(WORKSPACE, "a1")}`,
         `${CALLER}|${childSessionId(WORKSPACE, "a2")}`,
       ]);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
+  test("spawns and binds a Grok child under the runtime workspace", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map(() => ({ kind: "allow" as const })),
+      );
+    try {
+      const parentGrokId = "00000000-0000-4000-8000-000000000001";
+      const childGrokId = "00000000-0000-4000-8000-000000000002";
+      const grokHeaders = {
+        "user-agent": "grok-shell/1.0.70 (linux; x86_64)",
+        "x-grok-client-identifier": "grok-shell",
+        "x-grok-client-mode": "interactive",
+        "x-appa-session-id": WORKSPACE,
+      };
+      const parentBody = {
+        messages: [{ role: "user", content: "delegate a check" }],
+        tools: [
+          { type: "function", function: { name: "spawn_subagent" } },
+          {
+            type: "function",
+            function: { name: "archestra__execute_remedy_plan" },
+          },
+          {
+            type: "function",
+            function: { name: "archestra__get_remedy_plans" },
+          },
+        ],
+      };
+      const parent = childRequest({
+        headers: { ...grokHeaders, "x-grok-session-id": parentGrokId },
+        interactionType: "openai:chatCompletions",
+        body: parentBody,
+      });
+      const parentTrusted = parent.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      parentTrusted.runtimeSessionId = `${CALLER}|${WORKSPACE}`;
+      parentTrusted.agentRuntimeRun = true;
+
+      await plugin.onSessionInit(parent);
+
+      const spawned = await plugin.onToolCalls({
+        ...parent,
+        canRewriteToolCalls: true,
+        toolCalls: [
+          {
+            id: "spawn-1",
+            name: "spawn_subagent",
+            arguments: { prompt: "inspect the workspace" },
+          },
+        ],
+      });
+      if (spawned?.decision !== "allow")
+        throw new Error("expected allowed Grok spawn");
+      const spawnArgs = spawned.toolCalls[0]?.arguments as { prompt: string };
+      expect(spawnArgs.prompt).toContain("appa3-");
+
+      const childBody = {
+        messages: [{ role: "user", content: spawnArgs.prompt }],
+        tools: [
+          { type: "function", function: { name: "run_terminal_command" } },
+        ],
+      };
+      const child = childRequest({
+        headers: { ...grokHeaders, "x-grok-session-id": childGrokId },
+        interactionType: "openai:chatCompletions",
+        body: childBody,
+      });
+      const childTrusted = child.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      childTrusted.runtimeSessionId = `${CALLER}|${WORKSPACE}`;
+      childTrusted.agentRuntimeRun = true;
+
+      await plugin.onSessionInit(child);
+      await plugin.onToolCalls({
+        ...child,
+        toolCalls: [
+          {
+            id: "child-cmd",
+            name: "run_terminal_command",
+            arguments: { command: "pwd" },
+          },
+        ],
+      });
+      expect(evaluate.mock.calls.at(-1)?.[0]).toMatchObject({
+        session_id: `${CALLER}|${childSessionId(WORKSPACE, childGrokId)}`,
+        parent_id: `${CALLER}|${WORKSPACE}`,
+      });
     } finally {
       evaluate.mockRestore();
     }

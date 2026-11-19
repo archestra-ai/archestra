@@ -1,9 +1,6 @@
 import { and, desc, eq, max, ne, notInArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import {
-  lockRoutingPlan,
-  organizationLlmProxy,
-} from "@/models/auto-routing-settings";
+import { lockRoutingPlan } from "@/models/auto-router";
 import {
   type RoutingFit,
   type RoutingFitOutcome,
@@ -16,59 +13,49 @@ import {
 } from "@/types/auto-routing";
 
 const plans = schema.routingPlansTable;
-const agents = schema.agentsTable;
+const routers = schema.autoRoutersTable;
 const scorerVersions = schema.routingScorerVersionsTable;
 const decisions = schema.routingDecisionsTable;
 
 class RoutingPlanModel {
-  static async findActive(organizationId: string): Promise<RoutingPlan | null> {
+  static async findActive(routerId: string): Promise<RoutingPlan | null> {
     const [row] = await db
       .select()
       .from(plans)
-      .where(
-        and(
-          eq(plans.organizationId, organizationId),
-          eq(plans.status, "active"),
-        ),
-      );
+      .where(and(eq(plans.routerId, routerId), eq(plans.status, "active")));
     return row ? SelectRoutingPlanSchema.parse(row) : null;
   }
 
-  /** The organization's fit outcomes, newest first. */
+  /** The router's fit outcomes, newest first. */
   static async findHistory(
-    organizationId: string,
+    routerId: string,
     limit: number,
   ): Promise<RoutingPlanRecord[]> {
     const rows = await planRecords()
-      .where(eq(plans.organizationId, organizationId))
+      .where(eq(plans.routerId, routerId))
       .orderBy(desc(plans.createdAt), desc(plans.id))
       .limit(limit);
     return rows.map((row) => RoutingPlanRecordSchema.parse(row));
   }
 
   static async findRecord(
-    organizationId: string,
+    routerId: string,
     id: string,
   ): Promise<RoutingPlanRecord | null> {
     const [row] = await planRecords().where(
-      and(eq(plans.organizationId, organizationId), eq(plans.id, id)),
+      and(eq(plans.routerId, routerId), eq(plans.id, id)),
     );
     return row ? RoutingPlanRecordSchema.parse(row) : null;
   }
 
   /** The newest fit outcome that was not rejected at publication. */
   static async findLatestOutcome(
-    organizationId: string,
+    routerId: string,
   ): Promise<RoutingPlan | null> {
     const [row] = await db
       .select()
       .from(plans)
-      .where(
-        and(
-          eq(plans.organizationId, organizationId),
-          ne(plans.status, "rejected"),
-        ),
-      )
+      .where(and(eq(plans.routerId, routerId), ne(plans.status, "rejected")))
       .orderBy(desc(plans.createdAt), desc(plans.id))
       .limit(1);
     return row ? SelectRoutingPlanSchema.parse(row) : null;
@@ -77,7 +64,7 @@ class RoutingPlanModel {
   /**
    * Records a fit's outcome under the routing-plan lock. The fit loses — and is
    * recorded as rejected — when settings changed since it read them, it was
-   * fitted for another scorer version than the organization's, or a fit over
+   * fitted for another scorer version than the router's, or a fit over
    * newer usage was already accepted. An `active` outcome supersedes the serving
    * plan and a `cold_start` retires it; a failure or rejection leaves it serving. A
    * recorded outcome, failures included, marks its generation planned so a failing
@@ -85,22 +72,19 @@ class RoutingPlanModel {
    */
   static async publish(fit: RoutingFit): Promise<RoutingPublishResult> {
     return withDbTransaction(async (tx) => {
-      await lockRoutingPlan(tx, fit.organizationId);
+      await lockRoutingPlan(tx, fit.routerId);
       const [settings] = await tx
         .select({
-          generation: agents.autoRoutingGeneration,
-          scorerVersionId: agents.autoRoutingScorerVersionId,
+          generation: routers.generation,
+          scorerVersionId: routers.scorerVersionId,
         })
-        .from(agents)
-        .where(organizationLlmProxy(fit.organizationId));
+        .from(routers)
+        .where(eq(routers.id, fit.routerId));
       const [active] = await tx
         .select({ id: plans.id })
         .from(plans)
         .where(
-          and(
-            eq(plans.organizationId, fit.organizationId),
-            eq(plans.status, "active"),
-          ),
+          and(eq(plans.routerId, fit.routerId), eq(plans.status, "active")),
         );
       // A cold start retires the serving plan but still fences older fits.
       const [accepted] = await tx
@@ -108,7 +92,7 @@ class RoutingPlanModel {
         .from(plans)
         .where(
           and(
-            eq(plans.organizationId, fit.organizationId),
+            eq(plans.routerId, fit.routerId),
             notInArray(plans.status, ["failed", "rejected"]),
           ),
         );
@@ -140,6 +124,7 @@ class RoutingPlanModel {
         .insert(plans)
         .values({
           organizationId: fit.organizationId,
+          routerId: fit.routerId,
           trigger: fit.trigger,
           generation: fit.generation,
           inputWatermark: fit.inputWatermark,
@@ -161,11 +146,11 @@ class RoutingPlanModel {
       const plan = SelectRoutingPlanSchema.parse(row);
       if (rejection) return { kind: "rejected", reason: rejection, plan };
       await tx
-        .update(agents)
+        .update(routers)
         .set({
-          autoRoutingPlannedGeneration: sql`greatest(${agents.autoRoutingPlannedGeneration}, ${fit.generation})`,
+          plannedGeneration: sql`greatest(${routers.plannedGeneration}, ${fit.generation})`,
         })
-        .where(organizationLlmProxy(fit.organizationId));
+        .where(eq(routers.id, fit.routerId));
       return { kind: "recorded", plan };
     });
   }
@@ -222,7 +207,6 @@ function planRecords() {
       decisionCount: sql<number>`(
         select count(*) from ${decisions}
         where ${decisions.planId} = ${plans.id}
-          and ${decisions.organizationId} = ${plans.organizationId}
       )`.mapWith(Number),
     })
     .from(plans)

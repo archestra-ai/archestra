@@ -17,9 +17,9 @@ export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
 } as const;
 
 const POLICY_LAUNCH_PROMPTS = {
-  /** Validations page: same request as the overview's validate prompt. */
+  /** New validation: same request as the overview's validate prompt. */
   writeValidations: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validatePolicy.prompt,
-  /** Validations page: explain what the saved checks protect. */
+  /** Explain what the saved validations protect. */
   explainValidations: "Explain my OpenAPPA validations.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
@@ -42,6 +42,9 @@ const TARGET_LAUNCH_PROMPTS = {
   /** Servers and gateways row: a coverage review scoped to one target. */
   reviewCoverage: (subject: string) =>
     `Review how my OpenAPPA policy governs ${subject}.`,
+  /** A server's page, for its editors: its own rules file, by pull request. */
+  editServerRules: (subject: string) =>
+    `Help me change the Guardrails rules of ${subject}: its own rules file in the policy repository.`,
 } as const;
 
 export type OpenAppaLaunchPromptKey =

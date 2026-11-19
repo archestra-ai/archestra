@@ -1,8 +1,8 @@
 ---
 title: Production
-description: Prepare database recovery, public access, and cluster capacity before serving traffic
+description: Prepare database recovery, public access, cluster security, and capacity before serving traffic
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-15
 ---
 
 Before sending production traffic through Archestra, make sure you can restore its database and keys, reach its public endpoints, and run its workloads safely.
@@ -13,6 +13,7 @@ Test an exact release in staging before applying it to production.
 
 - Read the release's migration and compatibility notes before a [Helm upgrade](/docs/admin/deployment/helm#upgrade).
 - Use [PostgreSQL](/docs/admin/deployment/database) with backups and availability suited to your recovery requirements. The chart's bundled database has one replica.
+- [Connect it](/docs/admin/deployment/database#connect-a-database) over a private network, with your cloud's identity instead of a password where your cloud supports it.
 - Back up PostgreSQL together with authentication, credential-encryption, and [content-encryption keys](/docs/admin/content-encryption). Test restoring them together; losing an encryption key can make saved data unreadable.
 
 ## Public Access
@@ -23,41 +24,33 @@ Configure [Networking](/docs/admin/deployment/networking#public-urls-and-ingress
 - Test a streaming model request and an MCP tool call through the public endpoint. Set proxy timeouts for long responses.
 - For MCP Apps that need persistent browser storage, configure a [sandbox domain](/docs/admin/deployment/networking#mcp-apps-sandbox).
 
+## Cluster Security
+
+Archestra runs code other people wrote: MCP servers, agent runs, and sandboxed commands. Keep that code away from the platform's keys, and keep everything except the ingress private.
+
+- **Workload namespace:** set `archestra.orchestrator.kubernetes.namespace` to a namespace of its own. MCP servers, Agent Runtime sessions and warm pools, and the [code sandbox](/docs/admin/deployment/networking#code-sandbox-requirements) engines run there, unless an [environment](/docs/admin/environments) names another namespace. To keep Agent Runtime apart from MCP servers, also set `archestra.orchestrator.kubernetes.agentRuntimeNamespace`, and for the code sandbox engines, `archestra.orchestrator.kubernetes.daggerRuntimeNamespace`. Kubernetes lets a pod use only the Secrets, ServiceAccounts, and volume claims of its own namespace, so this code cannot reach the platform's keys or act as its ServiceAccount.
+  - Create the namespace before you install: the chart does not create it. Code sandbox engines run privileged, so with the code sandbox on, give them their own namespace with [`ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE) and set only that namespace's Pod Security Admission level to `privileged`. The MCP namespace can then enforce `baseline`. Without it, leave the MCP namespace at `privileged`.
+  - Engines accept no inbound connections: the platform reaches them through the Kubernetes API, and each engine namespace gets a policy that denies all ingress to them.
+  - The chart creates Roles, RoleBindings, ServiceAccounts, and the network policy probe there. The identity that runs `helm upgrade` needs those rights in that namespace, plus `escalate` on each chart Role that grants a permission it does not hold itself, such as `pods/log` in the read-only Role for Kubernetes MCP servers. With the SRE agent on, the chart also adds a copy of that Role to the release namespace.
+  - When you change it on a running install, the platform recreates MCP servers, warm pools, and sandbox engines in the new namespace at startup. Add the old namespace to `archestra.orchestrator.kubernetes.rbac.retiredNamespaces` in the same upgrade rather than just dropping it. The platform then removes the old copies and their disks, lets Agent Runtime sessions still running there finish, removes what remains, and logs when the namespace is clean. Then remove it from the list. If you drop the old namespace without listing it, its running sessions stop, and engines and warm pools stay behind until you delete them by hand. See [`ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES).
+- **Agent Runtime:** set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME) to a sandboxing RuntimeClass such as gVisor, so a run does not share the node's kernel. [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime) covers each cloud. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker: privileged runs ignore the RuntimeClass. Put runtime pods on their own tainted node pool with [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR), which adds the matching toleration. See [Privileged Containers](/docs/agents/runtime/setup#privileged-containers).
+- **Secrets outside the chart:** keep the platform keys in your secret manager and sync them into a Kubernetes Secret, for example with External Secrets or the Secrets Store CSI driver. Point `archestra.authSecret.existingSecretName` and `archestra.envFromSecrets` at it. Argo CD and other tools that render with `helm template` [need `existingSecretName`](/docs/admin/deployment/helm#install). To keep saved credentials out of PostgreSQL, use [Vault](/docs/admin/deployment/secret-storage#hashicorp-vault). To replace a key, follow [Secret Rotation](/docs/admin/deployment/secret-rotation).
+- **Cloud access:** give pods cloud permissions through workload identity, such as GKE Workload Identity, EKS IRSA, or AKS Workload Identity, instead of static keys. Grant only the roles Archestra uses. [Connect a Database](/docs/admin/deployment/database#connect-a-database) shows it for each cloud's PostgreSQL.
+- **Private by default:** expose only the ingress. Keep the cluster's control plane and the [database](/docs/admin/deployment/database#connect-a-database) on private networks. Set [`ARCHESTRA_METRICS_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_SECRET) and keep the metrics port, 9050, off the ingress. Put SSO, an identity-aware proxy, or a VPN in front of non-production instances. Microsoft Teams, Outlook email, and Slack or Jira webhooks also need a few [public webhook endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
+- **Egress:** verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
+- **Release images:** a released chart pins every image to its digest, and every release image carries signed build provenance and an SBOM in its registry. [Verify them](/docs/admin/deployment/verify-releases) before you deploy, or let the cluster admit no other Archestra image.
+- **Audit trail:** export Archestra's [audit log](/docs/admin/observability/audit-logs) over OTLP with [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED), and send your cluster's Kubernetes audit log to the same SIEM.
+- **Deploy access:** with the default values, the chart creates nothing outside its namespaces. The CI identity that runs `helm upgrade` needs write access only to the release namespace, the MCP server namespace, and any environment namespaces you list. Do not give people cluster-admin for day-to-day work.
+
 ## Cluster Capacity
 
-For a team of about 100 users, use the [web HPA](/docs/admin/deployment/helm#scale-web-and-worker-pods) with the following minimum allocation for LLM Proxy and MCP Gateway traffic and light background processing. Validate it against simultaneous requests, payloads, and background work in staging before serving production traffic.
+Size the web pods, workers, and database for your organization with [Sizing and High Availability](/docs/admin/deployment/scaling), which also sets them up to survive a lost node or zone. Validate the size against realistic requests, payloads, and background work in staging before serving production traffic.
 
-| Component | Starting Replicas | CPU per Replica | Memory per Replica |
-| --- | ---: | ---: | --- |
-| Web | 2 minimum, with HPA | 2 vCPU request | 2 GiB request, 3 GiB limit |
-| Worker | 1, set manually | 2 vCPU request | 1 GiB request, 2 GiB limit |
-| External PostgreSQL | Managed separately | 2 vCPU | 8 GiB |
-
-At the minimum replica counts, application pods request **6 vCPU and 5 GiB** in total, excluding PostgreSQL, cluster services, and MCP or agent workloads. At five web replicas, steady-state requests reach 12 vCPU and 11 GiB; leave additional capacity for rollout overlap and node failures. The pod resource sizes above match chart defaults; configure the web HPA, worker replica count, and database budget explicitly:
-
-```yaml
-archestra:
-  horizontalPodAutoscaler:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 5
-  worker:
-    replicaCount: 1
-  database:
-    connectionBudget: 200
-```
-
-For this budget, configure PostgreSQL with at least 250 available connections, reserving 50 for migrations, monitoring, and other clients. [Connection Capacity](/docs/admin/deployment/database#connection-capacity) explains how rollout overlap and autoscaling change the budget.
-
-The [benchmarks](/docs/admin/performance-benchmarks#llm-proxy-results) measured 50 concurrent requests with mock providers on a different allocation: 4 CPUs and 8 GiB for each proxy. They are a throughput reference, not a measured capacity guarantee for this starting configuration.
-
-- Adjust HPA bounds as web traffic grows; increase workers when background jobs fall behind.
 - Reserve separate capacity for the [code sandbox](/docs/admin/deployment/networking#code-sandbox-requirements).
-- Verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
 
 ### MCP Servers
 
-Budget extra capacity for self-hosted MCP server pods, beyond the web and worker allocation above.
+Budget extra capacity for self-hosted MCP server pods, beyond the web and worker pods.
 
 - **Resources:** set resource defaults under `archestra.orchestrator.mcpServerResources`. For per-server changes, see [Self-Hosted Servers](/docs/mcp/servers/self-hosted#change-how-it-runs).
 - **Placement:** MCP server pods inherit the platform pod's node selector and tolerations; `archestra.nodeSelector` and `archestra.tolerations` set shared placement defaults. There is no separate MCP-only node-pool setting in Helm, and inherited selectors still apply to custom server YAML.
@@ -65,7 +58,7 @@ Budget extra capacity for self-hosted MCP server pods, beyond the web and worker
 
 ### Agent Runtime
 
-Size runtime capacity separately from the web and worker allocation above. Follow [Runtime Setup](/docs/agents/runtime/setup) for the Agent Sandbox controller, storage, and node placement.
+Size runtime capacity separately from the web and worker pods. Follow [Runtime Setup](/docs/agents/runtime/setup) for the Agent Sandbox controller, storage, and node placement.
 
 Use [node autoscaling](https://kubernetes.io/docs/concepts/cluster-administration/node-autoscaling/) on the runtime node pool so the cluster can add capacity as runs create pods. Account for each run's configured CPU, memory, and persistent volume, plus [warm-pool spares](/docs/agents/runtime/setup#warm-pools). The web HPA does not scale runtime pods or cluster nodes.
 

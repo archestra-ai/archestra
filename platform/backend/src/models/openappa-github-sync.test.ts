@@ -76,6 +76,20 @@ describe("OpenAppaGithubSyncModel.findDue", () => {
     expect(await due()).toContain(organizationId);
   });
 
+  test("a five-minute schedule is due five minutes after the last check", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      ...source,
+      interval: "5m",
+    });
+    await checkedAgo(organizationId, 4);
+    expect(await due()).not.toContain(organizationId);
+    await checkedAgo(organizationId, 6);
+    expect(await due()).toContain(organizationId);
+  });
+
   test("a connected source keeps its interval once the setup pull request is gone", async ({
     makeOrganization,
   }) => {

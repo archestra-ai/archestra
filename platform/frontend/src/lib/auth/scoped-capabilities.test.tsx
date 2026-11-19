@@ -22,16 +22,11 @@ import {
 // MCP gateway read, a read grant on one gateway.
 
 vi.mock("@/lib/clients/auth/auth-client");
-vi.mock("@archestra/shared", async () => {
-  const actual = await vi.importActual("@archestra/shared");
-  return {
-    ...actual,
-    archestraApiSdk: {
-      getUserPermissions: vi.fn(),
-      getScopedCapabilities: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getUserPermissions: vi.fn(),
+  getScopedCapabilities: vi.fn(),
+}));
 
 const grant = {
   organizationId: "org-1",

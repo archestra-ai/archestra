@@ -6,7 +6,7 @@ import {
   type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";

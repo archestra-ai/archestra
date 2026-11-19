@@ -362,7 +362,7 @@ describe("PATCH /api/organization/default-environment", () => {
     );
     expect(
       mcpServerRuntimeManager.reinstallSharedDeployment,
-    ).toHaveBeenCalledWith(sharedCatalog.id);
+    ).toHaveBeenCalledWith(sharedCatalog.id, { awaitReady: false });
   });
 
   test("reconciles default-environment MCP deployments when the namespace changes", async ({
@@ -422,7 +422,7 @@ describe("PATCH /api/organization/default-environment", () => {
     );
     expect(
       mcpServerRuntimeManager.reinstallSharedDeployment,
-    ).toHaveBeenCalledWith(sharedCatalog.id);
+    ).toHaveBeenCalledWith(sharedCatalog.id, { awaitReady: false });
   });
 
   test("tears down the old-namespace default engine on a namespace change, but not on a policy-only change", async ({

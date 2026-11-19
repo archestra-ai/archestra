@@ -70,6 +70,15 @@ def public_message(message: str) -> str:
     return message or "Codex could not complete the request. Check the configured provider credential and retry."
 
 
+# OpenAI's safety systems refused the turn. The same request, worded the same
+# way, is refused again, so a retry needs a change rather than patience.
+SAFETY_BLOCK = "misalignment_policy_violation"
+SAFETY_BLOCK_ADVICE = (
+    " OpenAI stopped this Codex turn, so sending the same request again is likely"
+    " to be stopped too. Reword the request, or run it with a different agent."
+)
+
+
 def atomic_write(path: Path, value: str) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(value)
@@ -140,7 +149,10 @@ class FailureWatch:
                         self.finished = True
                     if isinstance(error, dict) and isinstance(error.get("message"), str):
                         if self.one_shot:
-                            publish_failure(self.runtime, error["message"])
+                            if error.get("codex_error_info") == SAFETY_BLOCK:
+                                publish_failure(self.runtime, error["message"] + SAFETY_BLOCK_ADVICE, "codex_safety_blocked")
+                            else:
+                                publish_failure(self.runtime, error["message"])
                         else:
                             subprocess.run(
                                 [os.environ.get("ARCHESTRA_AGENT_ATTENTION_COMMAND", "archestra-agent-attention"),

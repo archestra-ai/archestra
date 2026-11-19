@@ -9,7 +9,7 @@ import {
 } from "@/types/chatops-ms-teams-user-connection";
 
 /**
- * Teams users who signed in to the bot so it can read their group-chat files.
+ * Teams users who signed in to the bot so it can read the files they share.
  * Tokens only ever live in the secrets manager; a row carries the reference.
  */
 class ChatOpsMsTeamsUserConnectionModel {

@@ -92,9 +92,11 @@ import {
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
+  desktopAddPromptCopy,
   hasToolPartsWithAuthErrors,
-  isAuthInstructionText,
+  isInstallAuthAction,
   isInstallAuthResolved,
+  isNoDeviceError,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
   type ToolAuthState,
@@ -137,6 +139,7 @@ import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import { NoDeviceToolCard } from "./no-device-tool-card";
 import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
@@ -146,6 +149,7 @@ import {
   RemedyGuardrailsSteps,
 } from "./openappa-remedy-chain-card";
 import type { RemedyChain } from "./openappa-remedy-chains";
+import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -401,6 +405,14 @@ export function ChatMessages({
         ]),
       ),
     [messages, getToolShortName],
+  );
+  const policyDiffCollector = useMemo(
+    () => new PolicyDiffReferenceCollector(),
+    [],
+  );
+  const policyDiffReferences = useMemo(
+    () => policyDiffCollector.collect(messages, getToolShortName),
+    [messages, getToolShortName, policyDiffCollector],
   );
   const groupedAskUserToolCallIds = useMemo(
     () =>
@@ -967,32 +979,29 @@ export function ChatMessages({
                             return null;
                           }
 
-                          const assistantAuthState =
-                            resolveAssistantTextAuthState(part.text);
-
                           // Use editable component for assistant messages
                           if (message.role === "assistant") {
-                            if (
-                              hasMessageAuthToolError(message) &&
-                              isAuthInstructionText(part.text)
-                            ) {
-                              return null;
-                            }
-
-                            const authToolPart = renderAssistantAuthPart({
-                              toolName: "authentication",
-                              authState: assistantAuthState,
-                              connectedCatalogIds:
-                                orchestrator.connectedCatalogIds,
-                              onInstallMcp:
-                                orchestrator.triggerInstallByCatalogId,
-                              onReauthMcp:
-                                orchestrator.triggerReauthByCatalogIdAndServerId,
-                            });
+                            // A failed tool call in this message already shows
+                            // the auth card. What the model then writes about
+                            // it is its answer, so it stays as text: only a
+                            // message with no such card turns auth text into one.
+                            const authToolPart = hasMessageAuthToolError(
+                              message,
+                            )
+                              ? null
+                              : renderAssistantAuthPart({
+                                  toolName: "authentication",
+                                  authState: resolveAssistantTextAuthState(
+                                    part.text,
+                                  ),
+                                  connectedCatalogIds:
+                                    orchestrator.connectedCatalogIds,
+                                  onInstallMcp:
+                                    orchestrator.triggerInstallByCatalogId,
+                                  onReauthMcp:
+                                    orchestrator.triggerReauthByCatalogIdAndServerId,
+                                });
                             if (authToolPart) {
-                              if (hasMessageAuthToolError(message)) {
-                                return null;
-                              }
                               return (
                                 <Fragment key={partKey}>
                                   {authToolPart}
@@ -1106,6 +1115,9 @@ export function ChatMessages({
                                         partIndex={i}
                                         partKey={partKey}
                                         text={parsedPart.text}
+                                        policyDiffReferences={policyDiffReferences
+                                          .get(message.id)
+                                          ?.get(i)}
                                         isEditing={editingPartKey === partKey}
                                         showActions={
                                           showActions && isLastParsedTextPart
@@ -1146,6 +1158,9 @@ export function ChatMessages({
                                   partIndex={i}
                                   partKey={partKey}
                                   text={part.text}
+                                  policyDiffReferences={policyDiffReferences
+                                    .get(message.id)
+                                    ?.get(i)}
                                   isEditing={editingPartKey === partKey}
                                   showActions={showActions}
                                   citationParts={citationParts}
@@ -2044,13 +2059,16 @@ const MessageTool = memo(
       rawOutput,
     });
 
-    const authToolBody = renderToolAuthPart({
-      toolName,
-      authState: toolAuthState,
-      connectedCatalogIds,
-      onInstallMcp,
-      onReauthMcp,
-    });
+    const authToolBody =
+      renderToolAuthPart({
+        toolName,
+        authState: toolAuthState,
+        connectedCatalogIds,
+        onInstallMcp,
+        onReauthMcp,
+      }) ??
+      // A desktop MCP tool with no device to run on: offer the MCP bridge.
+      (isNoDeviceError({ errorText, rawOutput }) ? <NoDeviceToolCard /> : null);
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
       return (
@@ -2129,7 +2147,10 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${displayToolName}`}
-          title={getToolCardTitle(displayToolName)}
+          title={getToolCardTitle(
+            displayToolName,
+            getToolShortName(displayToolName),
+          )}
           state={getHeaderState({
             state: part.state || "input-available",
             toolResultPart,
@@ -2511,6 +2532,15 @@ function authCardProps(params: {
     authState?.kind === "auth-required" &&
     isInstallAuthResolved({ authState, connectedCatalogIds })
   ) {
+    if (authState.action === "add_desktop_mcp_server") {
+      return {
+        ...desktopAddPromptCopy({
+          catalogName: authState.catalogName,
+          resolved: true,
+        }),
+        variant: "success",
+      };
+    }
     return {
       title: "Authentication successful",
       description: <>Connected to &ldquo;{authState.catalogName}&rdquo;.</>,
@@ -2553,6 +2583,19 @@ function authCardProps(params: {
         ),
       };
     case "auth-required": {
+      // A desktop MCP server has no credentials: the user adds it to their
+      // computer, in the registry's dialog for that.
+      if (authState.action === "add_desktop_mcp_server") {
+        return {
+          ...desktopAddPromptCopy({
+            catalogName: authState.catalogName,
+            resolved: false,
+          }),
+          buttonUrl: authState.actionUrl,
+          onAction: onInstall,
+          openInNewTab: true,
+        };
+      }
       const isIdentityProviderConnect =
         authState.action === "connect_identity_provider";
       const providerName = authState.providerId ?? "identity provider";
@@ -2600,9 +2643,7 @@ function resolveAuthActions(params: {
     const { catalogId } = authState;
     return {
       onInstall:
-        authState.action === "install_mcp_credentials" &&
-        onInstallMcp &&
-        catalogId
+        isInstallAuthAction(authState.action) && onInstallMcp && catalogId
           ? () => onInstallMcp(catalogId)
           : undefined,
     };

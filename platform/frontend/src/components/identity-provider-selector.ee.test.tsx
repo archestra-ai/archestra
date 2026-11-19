@@ -26,7 +26,7 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
 vi.mock("@/lib/config/config.query");
 
 // Mock identity provider icons to avoid Next.js Image issues
-vi.mock("./identity-provider-icons.ee", () => ({
+vi.mock("./identity-provider-icons", () => ({
   IdentityProviderIcon: () => <span data-testid="idp-icon" />,
 }));
 

@@ -23,6 +23,22 @@ describe("Slack slash commands", () => {
     });
   });
 
+  test.each([
+    ["a".repeat(18), "a".repeat(18)],
+    ["a".repeat(19), "a".repeat(18)],
+    ["Archestra Engineering", "archestra-engineer"],
+    ["abcdefghijklmnopq remainder", "abcdefghijklmnopq"],
+    ["!!!", "archestra"],
+  ])("bounds commands for %s while preserving routing", (appName, prefix) => {
+    const commands = buildSlackSlashCommands(appName);
+    expect(commands.SELECT_AGENT).toBe(`/${prefix}-select-agent`);
+    for (const [action, command] of Object.entries(commands)) {
+      expect(command.length).toBeLessThanOrEqual(32);
+      expect(getSlackSlashCommandAction(command)).toBe(action);
+      expect(buildSlackSlashCommandsForCommand(command)).toEqual(commands);
+    }
+  });
+
   test("detects command actions from any app-name prefix", () => {
     expect(getSlackSlashCommandAction("/archestra-staging-select-agent")).toBe(
       "SELECT_AGENT",

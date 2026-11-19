@@ -18,7 +18,7 @@ const SHORT_QUESTION = "Approve the send_report call?";
  */
 function review(note: string): AskUserArguments {
   return {
-    question: `[OpenAPPA] Approve this call?\nsend_report {"note":"${note}"}`,
+    question: `Approve this call?\nsend_report {"note":"${note}"}`,
     shortQuestion: SHORT_QUESTION,
     callPreview: `**send\\_report call**\n\n\`\`\`yaml\nnote: ${note}\n\`\`\``,
     header: "Approval",

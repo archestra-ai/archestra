@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   A2AMessage,
@@ -199,29 +199,21 @@ class A2AMessageModel {
       return new Map();
     }
 
-    const rows = await db
-      .selectDistinctOn([schema.a2aMessagesTable.taskId], {
-        taskId: schema.a2aMessagesTable.taskId,
-        parts: schema.a2aMessagesTable.parts,
-      })
-      .from(schema.a2aMessagesTable)
-      .where(
-        and(
-          inArray(schema.a2aMessagesTable.taskId, taskIds),
-          eq(schema.a2aMessagesTable.role, "ROLE_USER"),
-        ),
-      )
-      .orderBy(
-        schema.a2aMessagesTable.taskId,
-        schema.a2aMessagesTable.createdAt,
-        schema.a2aMessagesTable.id,
-      );
-
-    return new Map(
-      rows.flatMap(({ taskId, parts }) =>
-        taskId === null ? [] : [[taskId, parts] as const],
-      ),
-    );
+    // Probe the task/created-at index and stop at the first user message for
+    // each task. DISTINCT ON visits and sorts all matching rows first, even
+    // though the listing only consumes one of them.
+    const rows = await db.execute<{ task_id: string; parts: unknown[] }>(sql`
+      SELECT first_message.task_id, first_message.parts
+      FROM unnest(${sql.param([...new Set(taskIds)])}::uuid[]) AS requested(task_id)
+      CROSS JOIN LATERAL (
+        SELECT message.task_id, message.parts
+        FROM a2a_message message
+        WHERE message.task_id = requested.task_id AND message.role = 'ROLE_USER'
+        ORDER BY message.created_at, message.id
+        LIMIT 1
+      ) first_message
+    `);
+    return new Map(rows.rows.map((row) => [row.task_id, row.parts]));
   }
 
   static async delete(id: string): Promise<void> {

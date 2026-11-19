@@ -371,6 +371,47 @@ describe("outbound OAuth integration", () => {
     expect(lookup).toHaveBeenCalledTimes(2);
   });
 
+  test("origin metadata root discovery rejects redirects to denied hosts", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const paths: string[] = [];
+    const base = await serve((req, res) => {
+      paths.push(req.url ?? "");
+      if (req.url === "/.well-known/oauth-protected-resource/mcp") {
+        res.end(JSON.stringify({ resource: base }));
+      } else {
+        res.writeHead(302, {
+          Location: `${base.replace("127.0.0.1", "denied.example")}/canary`,
+        });
+        res.end();
+      }
+    });
+    const env = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "restricted-root-discovery",
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: ["127.0.0.0/8"],
+      },
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      environmentId: env.id,
+      serverType: "local",
+    });
+    await expect(
+      discoverOAuthEndpoints(oauth(`${base}/mcp`), {
+        fetchFn: createMcpOAuthFetch({ catalog }),
+      }),
+    ).rejects.toBeInstanceOf(McpOAuthOutboundError);
+    expect(paths).toEqual([
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/oauth-protected-resource",
+    ]);
+  });
+
   test("ordinary token transport failure remains transient and retains valid stored tokens", async ({
     makeInternalMcpCatalog,
   }) => {

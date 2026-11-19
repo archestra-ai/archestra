@@ -11,9 +11,11 @@ import {
   AgentWorkspaceModel,
   ServiceAccountModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { INTERRUPT_AUDIT_WINDOW_MS } from "@/services/agent-runtime/terminal-audit";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import websocketService from "@/websocket";
+import websocketService, { WebSocketService } from "@/websocket";
 
 const service = websocketService as unknown as {
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
@@ -163,10 +165,21 @@ describe("websocket Agent run attach ownership", () => {
     });
     runId = task.id;
     context.userId = serviceAccountUserId(account.id);
+    const create = vi.spyOn(AuditLogModel, "create");
     const attachment = await startAttach();
     attachment.resolve();
     await attachment.done;
     expect(messages().at(-1)?.type).toBe("agent_run_attach_started");
+    // The audit row names the account, not a missing person.
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      action: "agentRun.terminal_attached",
+      actorType: "service_account",
+      actorId: null,
+      actorName: account.name,
+      after: { serviceAccountId: account.id },
+    });
+    await create.mock.results[0].value;
   });
 
   test("only a manager of the owning service account with Agent use access may attach", async ({
@@ -407,5 +420,125 @@ describe("websocket Agent run attach ownership", () => {
     old.socket.emit("close");
     expect(send).not.toHaveBeenCalled();
     expect(current.socket.close).not.toHaveBeenCalled();
+  });
+  test("records who attached, each interrupt burst they sent, and the detach", async () => {
+    const create = vi.spyOn(AuditLogModel, "create");
+    const context = service.clientContexts.get(ws);
+    assert(context);
+    const attempt = await startAttach();
+    attempt.resolve();
+    await attempt.done;
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      action: "agentRun.terminal_attached",
+      actorType: "user",
+      actorId: context.userId,
+      organizationId: context.organizationId,
+      resourceType: "agentRun",
+      resourceId: runId,
+      after: { runId, taskId: runId, podName: "agent-run-pod" },
+    });
+
+    // Ordinary typing is not an event.
+    await service.handleMessage(
+      { type: "agent_run_attach_input", payload: { runId, data: "ls\r" } },
+      ws,
+    );
+    await vi.waitFor(() => expect(attempt.input).toEqual(["ls\r"]));
+    expect(create).toHaveBeenCalledOnce();
+
+    // Ctrl+C is: it stops the agent's turn. A burst is one row.
+    // The last message carries two, as a fast double press can.
+    for (const data of ["\x03", "\x03", "y\x03\x03"]) {
+      await service.handleMessage(
+        { type: "agent_run_attach_input", payload: { runId, data } },
+        ws,
+      );
+    }
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][0]).toMatchObject({
+      action: "agentRun.terminal_interrupted",
+      actorId: context.userId,
+      resourceId: runId,
+    });
+    await vi.waitFor(() =>
+      expect(attempt.input).toEqual(["ls\r", "\x03", "\x03", "y\x03\x03"]),
+    );
+
+    // Once the window has passed, the next Ctrl+C is a new event.
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockImplementation(
+      () => realNow() + INTERRUPT_AUDIT_WINDOW_MS + 1_000,
+    );
+    await service.handleMessage(
+      { type: "agent_run_attach_input", payload: { runId, data: "\x03" } },
+      ws,
+    );
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(3));
+    expect(create.mock.calls[2][0]).toMatchObject({
+      action: "agentRun.terminal_interrupted",
+    });
+
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      ws,
+    );
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(4));
+    expect(create.mock.calls[3][0]).toMatchObject({
+      action: "agentRun.terminal_detached",
+      actorId: context.userId,
+      resourceId: runId,
+      after: { durationSeconds: expect.any(Number), interruptCount: 5 },
+    });
+    // The rows were written, not only attempted.
+    for (const call of create.mock.results) await call.value;
+  });
+
+  test("records nothing for an attach that never became live", async () => {
+    const create = vi.spyOn(AuditLogModel, "create");
+    const attempt = await startAttach();
+    attempt.reject(new Error("pod is gone"));
+    await attempt.done;
+    expect(messages().at(-1)).toMatchObject({
+      type: "agent_run_attach_error",
+      payload: { runId, error: "pod is gone" },
+    });
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      ws,
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("ends live terminals at shutdown so their detach rows are written", async () => {
+    const context = service.clientContexts.get(ws);
+    assert(context);
+    // A replica of its own, so stopping it leaves the shared service alone.
+    const replica = new WebSocketService();
+    const internals = replica as unknown as typeof service & {
+      stop: () => void;
+    };
+    const replicaWs = { readyState: WS.OPEN, send: vi.fn() } as unknown as WS;
+    internals.clientContexts.set(replicaWs, { ...context });
+    const create = vi.spyOn(AuditLogModel, "create");
+    const index = pending.length;
+    const done = internals.handleMessage(
+      { type: "subscribe_agent_run_attach", payload: { runId } },
+      replicaWs,
+    );
+    await vi.waitFor(() => expect(pending).toHaveLength(index + 1));
+    pending[index].resolve();
+    await done;
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+
+    internals.stop();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][0]).toMatchObject({
+      action: "agentRun.terminal_detached",
+      actorId: context.userId,
+      resourceId: runId,
+    });
+    expect(pending[index].socket.close).toHaveBeenCalled();
+    for (const call of create.mock.results) await call.value;
   });
 });

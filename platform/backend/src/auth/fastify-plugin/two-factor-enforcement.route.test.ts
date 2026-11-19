@@ -4,7 +4,7 @@ import { vi } from "vitest";
 // better-auth's session-cookie lookup is the boundary stubbed here. Everything
 // else — the Authnz middleware, permission checks, OrganizationModel,
 // SessionModel — runs for real against PGlite.
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";

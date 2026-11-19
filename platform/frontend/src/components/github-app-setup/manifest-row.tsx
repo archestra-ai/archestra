@@ -22,10 +22,11 @@ export function ManifestRow({
   action,
   inlineAction = false,
   error,
+  done: finished,
 }: {
   index: number;
-  title: string;
-  hint: string;
+  title: React.ReactNode;
+  hint: React.ReactNode;
   /**
    * Takes the hint's place while this step's last attempt failed, in the
    * hint's own lines (clamped, whole in its tooltip), so nothing moves. A
@@ -39,8 +40,10 @@ export function ManifestRow({
   action: React.ReactNode;
   /** Short actions sit beside the text; wide ones (a form) go underneath. */
   inlineAction?: boolean;
+  /** Done without a result to show: the step's own styling says so. */
+  done?: boolean;
 }) {
-  const done = !!result;
+  const done = finished ?? !!result;
   // While GitHub is waiting the action keeps its place, hidden, so the text
   // beside it keeps its width.
   const showAction = !(done || locked);
@@ -55,7 +58,8 @@ export function ManifestRow({
     >
       <span
         className={cn(
-          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
+          // Centred on the title's first line, as the action is.
+          "-mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
           done &&
             "border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/50 dark:text-emerald-400",
         )}
@@ -65,9 +69,11 @@ export function ManifestRow({
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-sm font-medium">{title}</p>
         {done ? (
-          <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
-            {result}
-          </div>
+          result ? (
+            <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
+              {result}
+            </div>
+          ) : null
         ) : (
           // The hint holds its lines; waiting or an error is laid over them.
           <div className="relative">
@@ -142,7 +148,7 @@ export function ManifestRow({
       {showAction && inlineAction ? (
         <div
           className={cn(
-            "flex shrink-0 items-center gap-2 self-center",
+            "-mt-1.5 flex shrink-0 items-center gap-2 self-start",
             waiting && "invisible",
           )}
           inert={waiting}

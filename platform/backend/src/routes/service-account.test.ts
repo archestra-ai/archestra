@@ -153,6 +153,102 @@ describe("service account routes", () => {
     expect(invalid.statusCode).toBe(400);
   });
 
+  test("persists and audits a description, and a blank one clears it", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Nightly sync",
+        role: MEMBER_ROLE_NAME,
+        description: "  Copies tickets into the knowledge base every night  ",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().id;
+    expect(created.json().description).toBe(
+      "Copies tickets into the knowledge base every night",
+    );
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((item: { id: string }) => item.id === id).description,
+    ).toBe("Copies tickets into the knowledge base every night");
+
+    // Editing another field leaves it alone; a blank value clears it.
+    await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${id}`,
+      payload: { name: "Nightly ticket sync" },
+    });
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${id}`,
+      payload: { description: "   " },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().description).toBeNull();
+
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: expect.objectContaining({
+            description: "Copies tickets into the knowledge base every night",
+          }),
+          after: expect.objectContaining({ description: null }),
+        }),
+      ]),
+    );
+  });
+
+  test("assigns fixed roles a caller holds and refuses ones carrying permissions they lack", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // The caller holds no basic role: only fixed ones, composed. Granting
+    // reads their permissions through the same resolution a request does.
+    const composer = await makeUser();
+    await makeMember(composer.id, organizationId, {
+      role: "fixed:service-accounts:writer,fixed:agents:reader",
+    });
+    user = composer;
+
+    const granted = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Agent lister",
+        role: "fixed:agents:reader,fixed:service-accounts:reader",
+      },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+    expect(granted.json().role).toBe(
+      "fixed:agents:reader,fixed:service-accounts:reader",
+    );
+
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "User manager", role: "fixed:users:writer" },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.message).toContain("member:create");
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Typo", role: "fixed:agents:readr" },
+    });
+    expect(unknown.statusCode).toBe(400);
+  });
+
   test("a custom access-policy editor can create an account with a role sharing items they cannot manage", async ({
     makeCustomRole,
     makeAgent,
@@ -541,7 +637,9 @@ describe("service account API authentication", () => {
 
   beforeEach(async () => {
     app = createFastifyInstance();
-    const { fastifyAuthPlugin } = await import("@/auth");
+    const { authPlugin: fastifyAuthPlugin } = await import(
+      "@/auth/fastify-plugin"
+    );
     const { default: serviceAccountRoutes } = await import("./service-account");
     await app.register(fastifyAuthPlugin);
     registerAuditLogHook(app);
@@ -597,6 +695,41 @@ describe("service account API authentication", () => {
         name: "Read-only automation",
       },
     ]);
+  });
+
+  test("authorizes a token from the fixed roles on its account", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const tokenFor = async (role: string) => {
+      const account = await ServiceAccountModel.create({
+        organizationId: organization.id,
+        name: role,
+        role,
+        createdBy: null,
+      });
+      const token = await ServiceAccountModel.createToken({
+        serviceAccountId: account.id,
+        organizationId: organization.id,
+        name: "Route token",
+      });
+      return token.token;
+    };
+    const labelKeys = async (role: string) =>
+      app.inject({
+        method: "GET",
+        url: "/api/service-accounts/labels/keys",
+        headers: { authorization: await tokenFor(role) },
+      });
+
+    expect((await labelKeys("fixed:service-accounts:reader")).statusCode).toBe(
+      200,
+    );
+    expect(
+      (await labelKeys("fixed:agents:reader,fixed:service-accounts:reader"))
+        .statusCode,
+    ).toBe(200);
+    expect((await labelKeys("fixed:agents:reader")).statusCode).toBe(403);
   });
 
   test("reuses service account token verification during request authentication", async ({
@@ -867,6 +1000,75 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
     });
     expect(stored?.userId).toBe(`service-account:${serviceAccount.id}`);
+  });
+
+  test("scopes agent and credential cost breakdowns to a service account's own usage without member:read", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const role = await makeCustomRole(organization.id, {
+      permission: { llmCost: ["read"] },
+    });
+    const account = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Cost automation",
+      role: role.role,
+      createdBy: null,
+    });
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: organization.id,
+      name: "Cost token",
+    });
+    // The account's own proxy traffic carries no user, only the account.
+    await makeInteraction(proxy.id, {
+      serviceAccountId: account.id,
+      model: "example",
+      cost: "3",
+    });
+    await makeInteraction(proxy.id, {
+      userId: user.id,
+      model: "example",
+      cost: "5",
+    });
+
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+    const get = async (url: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: { authorization: token },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+
+    const [agents, proxyUsage, byAgent] = await Promise.all([
+      get("/api/statistics/agents?timeframe=24h"),
+      get("/api/statistics/llm-proxy?timeframe=24h"),
+      get(
+        "/api/statistics/model-usage?timeframe=24h&model=example&groupBy=agent",
+      ),
+    ]);
+    expect(agents.map((row: { cost: number }) => row.cost)).toEqual([3]);
+    expect(proxyUsage.totals.billedCost).toBe(3);
+    expect(
+      byAgent.data.map((row: { billedCost: number }) => row.billedCost),
+    ).toEqual([3]);
+    const byCredential = await get(
+      "/api/statistics/llm-usage?timeframe=24h&groupBy=credentialId",
+    );
+    expect(byCredential.totals.billedCost).toBe(3);
   });
 
   test("applies cost and log scopes to service account tokens", async ({

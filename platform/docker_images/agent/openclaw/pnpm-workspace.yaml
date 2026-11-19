@@ -1,12 +1,5 @@
 ignoreScripts: true
 minimumReleaseAge: 10080
-minimumReleaseAgeExclude:
-  - "@modelcontextprotocol/sdk"
-  - body-parser
-  - brace-expansion
-  - tar
-  - undici
-  - zod
 overrides:
   # npm bundles its own dependencies, which pnpm's transitive overrides cannot replace.
   # This patch release carries the fixed brace-expansion bundle.

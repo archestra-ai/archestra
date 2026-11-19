@@ -1,0 +1,90 @@
+suite: pod security hardening
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+tests:
+  - it: runs web pods under the runtime's default seccomp profile without privilege escalation
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "setup-postgres-extensions")].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: hardens worker pods and their init containers the same way
+    template: archestra-worker.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-migrations")].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: hardens the migration pod the same way
+    template: migration-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: applies an operator's stricter container context to the app and init containers
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: ["ALL"]
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "vault-secrets")].securityContext.capabilities.drop
+          value: ["ALL"]
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].securityContext.capabilities.drop
+          value: ["ALL"]
+
+  - it: keeps the Cloud SQL Auth Proxy sidecar's own non-root context
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://app@127.0.0.1:5432/archestra
+      archestra.database.cloudSqlProxy.enabled: true
+      archestra.database.cloudSqlProxy.instanceConnectionName: project:region:instance
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "cloud-sql-proxy")].securityContext.runAsNonRoot
+          value: true
+
+  - it: leaves pod and container contexts unset when an operator clears them
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.podSecurityContext: null
+      archestra.containerSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext

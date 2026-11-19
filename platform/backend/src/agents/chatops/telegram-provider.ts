@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -21,12 +20,17 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
+import { trackBackgroundWork } from "@/utils/background-work";
+import { withDrainScope } from "@/utils/drain-scope";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "./constants";
 import {
   errorMessage,
+  escapedPrefixWithin,
+  formatApprovalAlsoAccepts,
   formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -84,7 +88,12 @@ class TelegramProvider implements ChatOpsProvider {
       return;
     }
 
-    const me = await this.callApi<TelegramUser>("getMe");
+    // Own cancellation before the first request: shutdown can happen while
+    // authentication or webhook removal is still in flight.
+    this.pollAbort = new AbortController();
+    const { signal } = this.pollAbort;
+    const me = await this.callApi<TelegramUser>("getMe", undefined, signal);
+    signal.throwIfAborted();
     this.botId = me.id;
     this.botUsername = me.username ?? null;
     logger.info(
@@ -94,24 +103,35 @@ class TelegramProvider implements ChatOpsProvider {
 
     // Long polling and webhooks are mutually exclusive in the Bot API; drop
     // any webhook a previous deployment may have registered.
-    await this.callApi("deleteWebhook", { drop_pending_updates: false });
-
-    this.pollAbort = new AbortController();
-    this.pollDone = this.runPollingLoop(this.pollAbort.signal).catch(
-      (error) => {
-        logger.error(
-          { error: errorMessage(error) },
-          "[TelegramProvider] Polling loop terminated unexpectedly",
-        );
-      },
+    await this.callApi(
+      "deleteWebhook",
+      { drop_pending_updates: false },
+      signal,
     );
+    signal.throwIfAborted();
+
+    this.pollDone = this.runPollingLoop(signal).catch((error) => {
+      logger.error(
+        { error: errorMessage(error) },
+        "[TelegramProvider] Polling loop terminated unexpectedly",
+      );
+    });
   }
 
-  async cleanup(): Promise<void> {
+  async beginShutdown(): Promise<void> {
     this.pollAbort?.abort();
     await this.pollDone?.catch(() => {});
     this.pollAbort = null;
     this.pollDone = null;
+  }
+
+  async cleanup(): Promise<void> {
+    await this.beginShutdown();
+    this.finishCleanup();
+  }
+
+  /** Release reply resources synchronously after intake has stopped. */
+  finishCleanup(): void {
     this.eventHandler = null;
     this.botId = null;
     this.botUsername = null;
@@ -283,7 +303,11 @@ class TelegramProvider implements ChatOpsProvider {
       ? markdownToTelegramHtml(
           `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``,
         )
-      : approvalRequestHtml(options.toolName, options.toolArgs);
+      : approvalRequestHtml(
+          options.toolName,
+          options.toolArgs,
+          formatApprovalAlsoAccepts(options.alsoAccepts, escapeHtml),
+        );
 
     const metadata = options.originalMessage.metadata ?? {};
     await this.callApi("sendMessage", {
@@ -515,18 +539,22 @@ class TelegramProvider implements ChatOpsProvider {
           signal,
         );
         for (const update of updates) {
+          if (signal.aborted) break;
           offset = Math.max(offset, update.update_id + 1);
           // Fire-and-forget, like the webhook providers: a long agent run
           // must not block the poll loop, or a follow-up message could never
           // supersede the run in flight and every chat would wait on every
           // other chat's turn. Trade-off: the next getUpdates acknowledges
           // these updates while their handlers may still be running.
-          void this.handleUpdate(update).catch((error) => {
-            logger.error(
-              { error: errorMessage(error), updateId: update.update_id },
-              "[TelegramProvider] Failed to handle update",
-            );
-          });
+          const work = withDrainScope(() => this.handleUpdate(update)).catch(
+            (error) => {
+              logger.error(
+                { error: errorMessage(error), updateId: update.update_id },
+                "[TelegramProvider] Failed to handle update",
+              );
+            },
+          );
+          trackBackgroundWork(work);
         }
       } catch (error) {
         if (signal.aborted) break;
@@ -1121,8 +1149,10 @@ export function markdownToTelegramHtml(markdown: string): string {
 function approvalRequestHtml(
   toolName: string,
   args: Record<string, unknown> | undefined,
+  /** Already escaped. */
+  alsoAccepts: string | undefined,
 ): string {
-  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.`;
+  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${alsoAccepts}` : ""}`;
   const entries = Object.entries(args ?? {});
   if (entries.length === 0) return header;
 
@@ -1169,17 +1199,7 @@ function argValueText(value: unknown): string {
 function escapeHtmlWithin(text: string, maxLength: number): string {
   const escaped = escapeHtml(text);
   if (escaped.length <= maxLength) return escaped;
-  // Longest prefix whose escaped form leaves room for the "…".
-  let low = 0;
-  let high = Math.min(text.length, maxLength - 1);
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    if (escapeHtml(text.slice(0, mid)).length <= maxLength - 1) low = mid;
-    else high = mid - 1;
-  }
-  // Never split a surrogate pair: Telegram rejects malformed UTF-16.
-  const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
-  return `${escapeHtml(text.slice(0, end))}…`;
+  return `${escapedPrefixWithin(text, maxLength - 1, escapeHtml)}…`;
 }
 
 function escapeHtml(text: string): string {

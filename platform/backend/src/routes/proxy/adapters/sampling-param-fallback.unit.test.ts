@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
-import { detectRejectedSamplingParams } from "./sampling-param-fallback";
+import { describe, expect, test, vi } from "vitest";
+import {
+  detectRejectedSamplingParams,
+  withSamplingParamFallback,
+} from "./sampling-param-fallback";
 
 describe("detectRejectedSamplingParams", () => {
   test("returns [] for non-object or non-rejection errors", () => {
@@ -14,6 +17,18 @@ describe("detectRejectedSamplingParams", () => {
       detectRejectedSamplingParams(
         new Error("`temperature` is deprecated for this model."),
       ),
+    ).toEqual(["temperature"]);
+  });
+
+  test.each([
+    "message",
+    "responseBody",
+  ])("detects Bedrock's temperature rejection from %s", (field) => {
+    expect(
+      detectRejectedSamplingParams({
+        [field]:
+          "This model doesn't support the temperature field. Remove temperature and try again.",
+      }),
     ).toEqual(["temperature"]);
   });
 
@@ -39,5 +54,50 @@ describe("detectRejectedSamplingParams", () => {
     expect(
       detectRejectedSamplingParams(new Error("temperature must be <= 1")),
     ).toEqual([]);
+  });
+});
+
+describe("withSamplingParamFallback", () => {
+  const rejection = new Error(
+    "This model doesn't support the temperature field. Remove temperature and try again.",
+  );
+
+  function strip(input: { temperature?: number; maxTokens: number }) {
+    if (input.temperature === undefined) return null;
+    const { temperature: _temperature, ...rest } = input;
+    return rest;
+  }
+
+  test("retries once without the rejected parameter and preserves the input", async () => {
+    const input = { temperature: 0, maxTokens: 100 };
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(rejection)
+      .mockResolvedValue("summary");
+    await expect(
+      withSamplingParamFallback({ input, run, strip }),
+    ).resolves.toBe("summary");
+    expect(run.mock.calls).toEqual([[input], [{ maxTokens: 100 }]]);
+    expect(input).toEqual({ temperature: 0, maxTokens: 100 });
+  });
+
+  test("does not repeat a rejected retry", async () => {
+    const run = vi.fn().mockRejectedValue(rejection);
+    await expect(
+      withSamplingParamFallback({
+        input: { temperature: 0, maxTokens: 100 },
+        run,
+        strip,
+      }),
+    ).rejects.toBe(rejection);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not retry when the rejected parameter is absent", async () => {
+    const run = vi.fn().mockRejectedValue(rejection);
+    await expect(
+      withSamplingParamFallback({ input: { maxTokens: 100 }, run, strip }),
+    ).rejects.toBe(rejection);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

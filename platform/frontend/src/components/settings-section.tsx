@@ -52,6 +52,7 @@ export function SettingsSection({
   children,
   className,
   contentClassName,
+  stickyLabel = false,
   ...rest
 }: {
   /**
@@ -68,6 +69,11 @@ export function SettingsSection({
   children: ReactNode;
   className?: string;
   contentClassName?: string;
+  /**
+   * Keep the label in view while a long section scrolls, so a description
+   * the reader may want to re-read stays beside the controls it explains.
+   */
+  stickyLabel?: boolean;
 } & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
   // Nothing to put in the label column — the surface names this section
   // elsewhere — so the controls take the whole width rather than sitting
@@ -87,7 +93,14 @@ export function SettingsSection({
       {...rest}
     >
       {hasLabel && (
-        <div className="space-y-1.5">
+        <div
+          className={cn(
+            "space-y-1.5",
+            stickyLabel &&
+              !stacked &&
+              "md:sticky md:top-[calc(var(--page-header-height,0px)+1.5rem)] md:self-start",
+          )}
+        >
           {/* `h3` throughout: these sit under the page's `h1`, and every
               section of a panel is a peer of every other. */}
           {title && (

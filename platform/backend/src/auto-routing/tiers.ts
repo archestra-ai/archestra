@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { ModelModel } from "@/models";
 import type { Model } from "@/types";
-import type { AutoRoutingSettings, RouterDocument } from "@/types/auto-routing";
+import type { AutoRouter, RouterDocument } from "@/types/auto-routing";
 
 export const TIER_NAMES = ["fast", "normal", "smart"] as const;
 type TierName = (typeof TIER_NAMES)[number];
@@ -22,7 +22,7 @@ export type RouterTierSet = {
 
 /** The configured (fast, normal, smart) models, or why there is no trio. */
 export async function loadTrio(
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<{ kind: "ok"; trio: Trio } | { kind: "missing"; tier: TierName }> {
   const ids = [
     settings.fastModelId,
@@ -47,15 +47,16 @@ export async function loadTrio(
  * at one threshold, so unequal non-null thresholds cannot be represented.
  */
 export function sharedLongContextThreshold(
-  models: readonly Pick<Model, "longContextThreshold">[],
+  models: readonly Parameters<typeof ModelModel.getLongContextThreshold>[0][],
 ):
   | { kind: "ok"; threshold: number | null }
   | { kind: "mismatched"; thresholds: number[] } {
   const thresholds = [
     ...new Set(
-      models.flatMap((model) =>
-        model.longContextThreshold === null ? [] : [model.longContextThreshold],
-      ),
+      models.flatMap((model) => {
+        const threshold = ModelModel.getLongContextThreshold(model);
+        return threshold === null ? [] : [threshold];
+      }),
     ),
   ];
   switch (thresholds.length) {
@@ -87,14 +88,14 @@ export function tiersFingerprint(trio: Trio): RouterTierSet {
   if (shared.kind === "mismatched")
     throw new TierThresholdMismatchError(shared.thresholds);
   return {
-    tiers: trio.map((model) => ({
-      model_id: model.id,
-      short: prices(model),
-      long:
-        model.longContextThreshold === null
-          ? null
-          : prices(model, model.longContextThreshold + 1),
-    })),
+    tiers: trio.map((model) => {
+      const threshold = ModelModel.getLongContextThreshold(model);
+      return {
+        model_id: model.id,
+        short: prices(model),
+        long: threshold === null ? null : prices(model, threshold + 1),
+      };
+    }),
     long_context_threshold: shared.threshold,
   };
 }
@@ -110,14 +111,15 @@ export function fingerprintMatches(
   );
 }
 
-type RouterTokenPrices = {
+export type RouterTokenPrices = {
   input: number;
   cache_read: number;
   cache_write: number;
   output: number;
 };
 
-function prices(model: Model, promptTokens?: number): RouterTokenPrices {
+/** USD per million tokens of `model`, at the long-context rate when `promptTokens` passes its threshold. */
+export function prices(model: Model, promptTokens?: number): RouterTokenPrices {
   const pricing = ModelModel.getEffectivePricing(
     model,
     undefined,

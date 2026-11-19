@@ -1,4 +1,5 @@
 import { request as httpRequest } from "node:http";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
@@ -36,13 +37,17 @@ describe("incoming request disconnects", () => {
       const error = await captured;
       expect(error).toHaveProperty("code", "ECONNRESET");
       expect(classifyErrorForTracking(error)).toEqual({ report: false });
-      // A separate connection failure is still an availability incident,
-      // even when it carries the same errno as the aborted HTTP request.
+      // A separate database connection failure is still an availability
+      // incident, even when it carries the same errno as the aborted request.
       expect(
         classifyErrorForTracking(
-          Object.assign(new Error("database connection reset"), {
-            code: "ECONNRESET",
-          }),
+          new DrizzleQueryError(
+            "select 1",
+            [],
+            Object.assign(new Error("database connection reset"), {
+              code: "ECONNRESET",
+            }),
+          ),
         ),
       ).toMatchObject({
         report: true,

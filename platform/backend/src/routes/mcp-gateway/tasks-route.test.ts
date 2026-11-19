@@ -15,12 +15,14 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { McpGatewayTaskModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 const TOOL_NAME = "tracker__slow_report";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -138,6 +140,8 @@ describe("MCP Gateway - Tasks extension", () => {
         authorization: `Bearer ${params.token}`,
         "mcp-protocol-version": "2026-07-28",
         "mcp-method": params.method,
+        // The extension names the task in `Mcp-Name` on each task method.
+        "mcp-name": params.taskId,
       },
       payload: {
         jsonrpc: "2.0",
@@ -155,7 +159,7 @@ describe("MCP Gateway - Tasks extension", () => {
   }): Promise<Record<string, unknown>> {
     for (let attempt = 0; attempt < 40; attempt++) {
       const response = await taskMethod({ ...params, method: "tasks/get" });
-      const task = response.json().result.task as Record<string, unknown>;
+      const task = response.json().result as Record<string, unknown>;
       if (task.status !== "working") return task;
       await sleep(25);
     }
@@ -189,16 +193,21 @@ describe("MCP Gateway - Tasks extension", () => {
     expect(response.statusCode).toBe(200);
     const { result } = response.json();
     expect(result.resultType).toBe("task");
-    expect(result.task).toMatchObject({
+    // The fields of the task are on the result itself, not under `task`.
+    expect(result).toMatchObject({
+      taskId: expect.any(String),
       status: "working",
       pollIntervalMs: expect.any(Number),
       ttlMs: expect.any(Number),
+      createdAt: expect.any(String),
+      lastUpdatedAt: expect.any(String),
     });
+    expect(result.task).toBeUndefined();
 
     const task = await pollUntilTerminal({
       agentId: agent.id,
       token: token.value,
-      taskId: result.task.taskId,
+      taskId: result.taskId,
     });
 
     expect(task.status).toBe("completed");
@@ -313,7 +322,7 @@ describe("MCP Gateway - Tasks extension", () => {
       agentId: agent.id,
       token: token.value,
       method: "tasks/cancel",
-      taskId: result.task.taskId,
+      taskId: result.taskId,
     });
     // Acknowledged with an empty result, per the extension.
     expect(cancel.json().result).toMatchObject({ resultType: "complete" });
@@ -322,9 +331,9 @@ describe("MCP Gateway - Tasks extension", () => {
       agentId: agent.id,
       token: token.value,
       method: "tasks/get",
-      taskId: result.task.taskId,
+      taskId: result.taskId,
     });
-    expect(after.json().result.task.status).toBe("cancelled");
+    expect(after.json().result.status).toBe("cancelled");
     // Same-replica cancellation reaches the upstream call itself.
     expect(captured.signal?.aborted).toBe(true);
   });
@@ -364,7 +373,7 @@ describe("MCP Gateway - Tasks extension", () => {
       agentId: agent.id,
       token: otherToken.value,
       method: "tasks/get",
-      taskId: result.task.taskId,
+      taskId: result.taskId,
     });
     expect(response.json().error).toMatchObject({ code: -32602 });
     expect(response.json().error.message).toContain("Unknown task");
@@ -455,7 +464,7 @@ describe("MCP Gateway - Tasks extension", () => {
     const task = await pollUntilTerminal({
       agentId: agent.id,
       token: token.value,
-      taskId: result.task.taskId,
+      taskId: result.taskId,
     });
 
     expect(task.status).toBe("failed");

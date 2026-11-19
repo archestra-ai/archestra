@@ -6,10 +6,9 @@ import {
   A2AProtocolRole,
   type A2AProtocolTask,
 } from "@/agents/a2a/a2a-protocol";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { A2ATaskModel } from "@/models";
 import type { A2ATask } from "@/types";
-import { persistAgentRunInputs } from "./input-files";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 
 /**
  * Launch one durable Agent task and return its handle before the work settles.
@@ -45,15 +44,6 @@ export async function startDetachedAgentTask(params: {
     taskRun: { createTask: true, detached: true },
     onDetachedTaskRun: async ({ taskId }) => {
       await params.onTaskCreated?.(taskId);
-      if (params.attachments && params.attachments.length > 0) {
-        await persistAgentRunInputs({
-          taskId,
-          organizationId: params.actor.organizationId,
-          uploadedByUserId:
-            params.actor.kind === "user" ? params.actor.id : null,
-          attachments: params.attachments,
-        });
-      }
     },
   });
   if (!response.task) {

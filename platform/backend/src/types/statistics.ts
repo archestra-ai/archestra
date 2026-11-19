@@ -55,6 +55,12 @@ export const ProxyCostQuerySchema = z.object({
     .describe(
       "Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.",
     ),
+  includeGroupTimeSeries: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Also return a time series on every returned group: each method, credential, provider key, model pool and label value on the current page.",
+    ),
 });
 
 export const ProxyCostTotalsSchema = z.object({
@@ -73,14 +79,23 @@ export const ProxyCostTotalsSchema = z.object({
     ),
 });
 
+const ProxyCostTimeSeriesSchema = z.array(
+  ProxyCostTotalsSchema.extend({ timestamp: z.string() }),
+);
+
+/** A group's totals, plus its time series when includeGroupTimeSeries is set. */
+const ProxyCostGroupSchema = ProxyCostTotalsSchema.extend({
+  timeSeries: ProxyCostTimeSeriesSchema.optional(),
+});
+
 export const ProxyCostStatisticsSchema = z.object({
   totals: ProxyCostTotalsSchema,
-  timeSeries: z.array(ProxyCostTotalsSchema.extend({ timestamp: z.string() })),
+  timeSeries: ProxyCostTimeSeriesSchema,
   methods: z.array(
-    ProxyCostTotalsSchema.extend({ authMethod: InteractionAuthMethodSchema }),
+    ProxyCostGroupSchema.extend({ authMethod: InteractionAuthMethodSchema }),
   ),
   credentials: z.array(
-    ProxyCostTotalsSchema.extend({
+    ProxyCostGroupSchema.extend({
       authMethod: InteractionAuthMethodSchema,
       credentialId: z.string().nullable(),
       credentialName: z.string().nullable(),
@@ -93,7 +108,7 @@ export const ProxyCostStatisticsSchema = z.object({
   }),
   providerKeys: z
     .array(
-      ProxyCostTotalsSchema.extend({
+      ProxyCostGroupSchema.extend({
         providerApiKeyId: z.string().nullable(),
         providerApiKeyName: z.string().nullable(),
         provider: z.string().nullable(),
@@ -102,7 +117,7 @@ export const ProxyCostStatisticsSchema = z.object({
     .optional(),
   modelPools: z
     .array(
-      ProxyCostTotalsSchema.extend({
+      ProxyCostGroupSchema.extend({
         modelPoolId: z.string().nullable(),
         modelPoolName: z.string().nullable(),
       }),
@@ -113,7 +128,7 @@ export const ProxyCostStatisticsSchema = z.object({
     .object({
       key: z.string(),
       groups: z.array(
-        ProxyCostTotalsSchema.extend({ value: z.string().nullable() }),
+        ProxyCostGroupSchema.extend({ value: z.string().nullable() }),
       ),
       pagination: z.object({
         limit: z.number(),

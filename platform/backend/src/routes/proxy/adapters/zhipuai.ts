@@ -6,6 +6,7 @@ import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { zhipuaiUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -25,6 +26,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { upstreamHttpError } from "./upstream-http-error";
 
@@ -535,7 +537,7 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
     if (!this.response.usage) {
       return { inputTokens: 0, outputTokens: 0 };
     }
-    const { input, output } = getUsageTokens(this.response.usage);
+    const { input, output } = zhipuaiUsageTokens(this.response.usage);
     return { inputTokens: input, outputTokens: output };
   }
 
@@ -944,17 +946,6 @@ class ZhipuaiStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: Zhipuai.Types.Usage) {
-  return {
-    input: usage.prompt_tokens,
-    output: usage.completion_tokens,
-  };
-}
-
 export const zhipuaiAdapterFactory: LLMProvider<
   ZhipuaiRequest,
   ZhipuaiResponse,
@@ -999,7 +990,11 @@ export const zhipuaiAdapterFactory: LLMProvider<
       ? metrics.llm.getObservableFetch("zhipuai", options.agent, options.source)
       : undefined;
 
-    return new ZhipuaiClient(apiKey, options.baseUrl, customFetch);
+    return new ZhipuaiClient(
+      apiKey,
+      options.baseUrl,
+      fetchWithAbortSignal(customFetch, options.abortSignal),
+    );
   },
 
   async execute(

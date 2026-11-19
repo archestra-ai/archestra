@@ -463,6 +463,51 @@ describe("openaiToConverse — tools + tool_choice", () => {
   });
 });
 
+describe("openaiToConverse — response_format", () => {
+  const schema = {
+    type: "object",
+    properties: { status: { type: "string", enum: ["ready"] } },
+    required: ["status"],
+    additionalProperties: false,
+  };
+
+  test("json_schema becomes the Converse structured output constraint", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "status_result",
+            description: "The service status",
+            strict: true,
+            schema,
+          },
+        },
+      }),
+    );
+    const jsonSchema =
+      converseBody.outputConfig?.textFormat?.structure.jsonSchema;
+    expect(converseBody.outputConfig?.textFormat?.type).toBe("json_schema");
+    expect(jsonSchema?.name).toBe("status_result");
+    expect(jsonSchema?.description).toBe("The service status");
+    // Converse takes the schema as a string; every keyword must survive.
+    expect(JSON.parse(jsonSchema?.schema ?? "")).toEqual(schema);
+  });
+
+  test.each([
+    { type: "json_object" as const },
+    { type: "text" as const },
+    // A format that names no schema has nothing for Converse to enforce.
+    { type: "json_schema" as const, json_schema: { name: "status_result" } },
+  ])("$type without a schema is accepted and sets no constraint", (response_format) => {
+    const { converseBody } = openaiToConverse(req({ response_format }));
+    expect(converseBody.outputConfig).toBeUndefined();
+    expect(converseBody.messages).toEqual([
+      { role: "user", content: [{ text: "hello" }] },
+    ]);
+  });
+});
+
 describe("openaiToConverse — inference config", () => {
   test("maps temperature, top_p, max_tokens, stop to inferenceConfig", () => {
     const { converseBody } = openaiToConverse(
@@ -501,6 +546,19 @@ describe("openaiToConverse — inference config", () => {
   test("inferenceConfig is undefined when no sampling params are provided", () => {
     const { converseBody } = openaiToConverse(req());
     expect(converseBody.inferenceConfig).toBeUndefined();
+  });
+
+  test.each([
+    [undefined, 32, 32],
+    [64, 32, 32],
+    [64, null, 64],
+    [64, undefined, 64],
+  ])("maps max_tokens %s and max_completion_tokens %s to maxTokens %s", (max_tokens, max_completion_tokens, expected) => {
+    const { converseBody } = openaiToConverse(
+      // biome-ignore lint/suspicious/noExplicitAny: extension params, same as the cases above
+      req({ max_tokens, max_completion_tokens } as any),
+    );
+    expect(converseBody.inferenceConfig?.maxTokens).toBe(expected);
   });
 });
 
@@ -679,6 +737,7 @@ describe("converseResponseToOpenai — finish_reason mapping", () => {
     ["stop_sequence", "stop"],
     ["tool_use", "tool_calls"],
     ["max_tokens", "length"],
+    ["model_context_window_exceeded", "length"],
     ["guardrail_intervened", "content_filter"],
     ["content_filtered", "content_filter"],
   ] as const)("%s → %s", (stopReason, expected) => {
@@ -703,5 +762,142 @@ describe("converseResponseToOpenai — usage", () => {
       completion_tokens: 15,
       total_tokens: 57,
     });
+  });
+});
+
+describe("Bedrock reasoning translation", () => {
+  test.each([
+    "amazon.nova-2-lite-v1:0",
+    "eu.amazon.nova-2-lite-v1:0",
+    "global.amazon.nova-2-lite-v1:0",
+  ])("maps the verified Nova dialect for %s", (model) => {
+    expect(
+      openaiToConverse(
+        req({ model, reasoning_effort: "medium", max_completion_tokens: 400 }),
+      ).converseBody,
+    ).toMatchObject({
+      inferenceConfig: { maxTokens: 400 },
+      additionalModelRequestFields: {
+        reasoningConfig: { type: "enabled", maxReasoningEffort: "medium" },
+      },
+    });
+  });
+
+  test("rejects Claude reasoning until signed tool history can be replayed", () => {
+    expect(() =>
+      openaiToConverse(
+        req({
+          model: "us.anthropic.claude-sonnet-4-6",
+          reasoning_effort: "medium",
+        }),
+      ),
+    ).toThrow("native Converse endpoint");
+  });
+
+  test.each([
+    undefined,
+    null,
+    "none" as const,
+  ])("leaves default reasoning unchanged (%s)", (reasoning_effort) => {
+    expect(
+      openaiToConverse(
+        req({ model: "eu.amazon.nova-2-lite-v1:0", reasoning_effort }),
+      ).converseBody.additionalModelRequestFields,
+    ).toBeUndefined();
+  });
+
+  test.each([
+    "anthropic.claude-sonnet-4-5",
+    "openai.gpt-oss-20b-1:0",
+  ])("accepts explicitly disabled reasoning for %s", (model) => {
+    expect(
+      openaiToConverse(req({ model, reasoning_effort: "none" })).converseBody
+        .additionalModelRequestFields,
+    ).toBeUndefined();
+  });
+
+  test.each([
+    "global.openai.gpt-6-luna",
+    "openai.gpt-oss-20b-1:0",
+    "anthropic.claude-sonnet-4-5",
+    "amazon.nova-lite-v1:0",
+    "custom-model",
+  ])("rejects an unverified reasoning dialect: %s", (model) => {
+    expect(() =>
+      openaiToConverse(req({ model, reasoning_effort: "medium" })),
+    ).toThrow("reasoning_effort is not supported");
+  });
+
+  test.each([
+    "minimal",
+    "xhigh",
+    "max",
+  ] as const)("rejects unsupported effort %s instead of dropping it", (reasoning_effort) => {
+    expect(() =>
+      openaiToConverse(
+        req({ model: "eu.amazon.nova-2-lite-v1:0", reasoning_effort }),
+      ),
+    ).toThrow("must be low, medium, or high");
+  });
+
+  test.each([
+    { max_tokens: 400 },
+    { max_completion_tokens: 400 },
+    { temperature: 0 },
+    { top_p: 0.5 },
+  ])("rejects Nova high with incompatible explicit parameter %j", (override) => {
+    expect(() =>
+      openaiToConverse(
+        req({
+          model: "eu.amazon.nova-2-lite-v1:0",
+          reasoning_effort: "high",
+          ...override,
+        }),
+      ),
+    ).toThrow("Nova high reasoning requires");
+  });
+
+  test("allows Nova high without conflicting inference parameters", () => {
+    expect(
+      openaiToConverse(
+        req({ model: "eu.amazon.nova-2-lite-v1:0", reasoning_effort: "high" }),
+      ).converseBody,
+    ).toMatchObject({
+      additionalModelRequestFields: {
+        reasoningConfig: { type: "enabled", maxReasoningEffort: "high" },
+      },
+    });
+  });
+
+  test("returns reasoning separately from answer and tool calls without exposing signatures or redacted bytes", () => {
+    const output = converseResponseToOpenai(
+      bedrockResp({
+        output: {
+          message: {
+            role: "assistant",
+            content: [
+              {
+                reasoningContent: {
+                  reasoningText: {
+                    text: "[REDACTED]",
+                    signature: "opaque-signature",
+                  },
+                },
+              },
+              { reasoningContent: { redactedContent: "opaque-bytes" } },
+              { text: "42" },
+              { toolUse: { toolUseId: "call-1", name: "lookup", input: {} } },
+            ],
+          },
+        },
+      }),
+      ctx,
+    );
+    expect(output.choices[0].message).toMatchObject({
+      content: "42",
+      reasoning_content: "[REDACTED]",
+      tool_calls: [{ id: "call-1" }],
+    });
+    expect(JSON.stringify(output)).not.toContain("opaque-");
   });
 });

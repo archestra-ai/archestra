@@ -4,7 +4,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import InteractionModel from "@/models/interaction";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
 describe("GitHub Copilot credential source in the logs", () => {
@@ -26,6 +26,7 @@ describe("GitHub Copilot credential source in the logs", () => {
 
   afterEach(async () => {
     await app.close();
+    vi.unstubAllGlobals();
   });
 
   test("names the organization subscription or the personal sign-in", async ({
@@ -33,6 +34,14 @@ describe("GitHub Copilot credential source in the logs", () => {
     makeSecret,
   }) => {
     const agent = await makeAgent({ organizationId });
+    // The plan's App credential is gone, so GitHub is asked anonymously, as
+    // for a public organization.
+    const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) =>
+      String(input) === "https://api.github.com/orgs/my-org"
+        ? Response.json({ login: "my-org", name: "My Org" })
+        : new Response(null, { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
     // A plan key stores a reference to its GitHub App credential.
     const appValue = encodeGithubAppReference({
       ref: { organizationId, credentialId: randomUUID() },
@@ -88,7 +97,11 @@ describe("GitHub Copilot credential source in the logs", () => {
     expect(orgDetail.json().copilotCredentialSource).toEqual({
       kind: "organization",
       organization: "my-org",
+      organizationName: "My Org",
     });
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has("Authorization"),
+    ).toBe(false);
     const personalDetail = await app.inject({
       method: "GET",
       url: `/api/interactions/${personalRow.id}`,
@@ -110,7 +123,11 @@ describe("GitHub Copilot credential source in the logs", () => {
       ).map((row) => [row.sessionId, row.copilotCredentialSources]),
     );
     expect(bySession["org-session"]).toEqual([
-      { kind: "organization", organization: "my-org" },
+      {
+        kind: "organization",
+        organization: "my-org",
+        organizationName: "My Org",
+      },
     ]);
     expect(bySession["personal-session"]).toEqual([{ kind: "personal" }]);
   });

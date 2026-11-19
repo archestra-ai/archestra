@@ -2,19 +2,16 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
-ARG NODE_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
-ARG DAGGER_VERSION=v0.21.9
-ARG DAGGER_COMMIT=f2aefc20cf41b5ed7922df7244e0f10ddc6031f7
+ARG DAGGER_VERSION=v0.21.11
+ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261
 
-FROM ${GOLANG_IMAGE} AS go-builder-base
+FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
@@ -37,7 +34,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
     cd / && rm -rf /kind
 
@@ -59,19 +57,21 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
-    # x/net@v0.60.0 requires x/sys >= v0.48.0 and x/term >= v0.46.0.
-    go get golang.org/x/sys@v0.48.0 && \
-    go get golang.org/x/term@v0.46.0 && \
+    # x/net@v0.62.0 requires x/sys >= v0.49.0 and x/term >= v0.47.0.
+    go get golang.org/x/sys@v0.49.0 && \
+    go get golang.org/x/term@v0.47.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
-    # transitively pull older x/net and grpc versions and would otherwise override these requirements.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
-    go get golang.org/x/net@v0.60.0 google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
+    # Keep all three security floors in the LAST `go get` before `go mod vendor`:
+    # earlier OTel/x/sys and go-archive updates can pull older x/net, grpc, and compress versions.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -89,7 +89,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    # dagger v0.21.9's vendored Go SDK requires go >= 1.26.1; align the module directive.
+    # dagger v0.21.11's vendored Go SDK requires go >= 1.26.1; align the module directive.
     go mod edit -go=1.26.1 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
@@ -104,16 +104,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
-    # Keep >= 0.57.0 to satisfy x/net@v0.60.0 without downgrading it.
-    go get golang.org/x/crypto@v0.57.0 && \
+    # Keep >= 0.58.0 to satisfy x/net@v0.62.0 without downgrading it.
+    go get golang.org/x/crypto@v0.58.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
-    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    # Keep the patched x/mod floor when updating transitive dependencies.
     go get golang.org/x/mod@v0.41.0 && \
     # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
     # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
@@ -126,9 +127,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
-    # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
+    # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
+    # dependency updates can otherwise downgrade the explicit requirements.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -152,11 +154,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
-    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    # Keep the patched x/mod floor when updating transitive dependencies.
     go get golang.org/x/mod@v0.41.0 && \
+    # Keep the patched x/net after all transitive dependency updates.
+    go get golang.org/x/net@v0.62.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl && \
@@ -167,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM ${NODE_IMAGE} AS dagger-engine-image
+FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -182,7 +187,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # framework-neutral IL (net472 assemblies zipped into a .mfappx), so the
 # stage always runs on the build platform — never under target-arch
 # emulation — and the same bytes land in every target arch.
-FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:4f4992f8f302150e4adb5e78c324731e968493a30c0638985ba29cb42a858cd6 AS vaf-add-on-builder
 WORKDIR /src
 COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
@@ -198,7 +203,90 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     cp "${versioned}" /out/; \
     cp "${versioned}" /out/archestra-m-files-vaf-add-on.mfappx
 
-FROM ${NODE_IMAGE} AS base
+# <----- Archestra CLI release binaries ----->
+# `archestra` is the program users run on their own computers. The backend
+# serves its binaries from /app/archestra-cli: one file per system and CPU,
+# plus manifest.json with their version.
+# This stage downloads the binaries instead of compiling them, because the
+# macOS and Windows binaries cannot be built in a Linux image.
+# .github/workflows/build-archestra-cli.yml builds all six on their own
+# systems and publishes them as the release archestra-cli-v<version>.
+# archestra-cli/release.lock.json pins that release: its URL and the SHA-256
+# of each file. A failed download or a checksum mismatch fails the build.
+# With an empty lock (no release pinned) /out stays empty: the image holds no
+# program and the backend answers "not found" for its downloads.
+# Only the lock file is copied, so this stage re-runs only when the lock
+# changes. The bytes are the same for every target architecture, so the stage
+# runs on the build platform, never under emulation.
+# The script uses paths relative to / so that
+# .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
+# of its own.
+FROM --platform=$BUILDPLATFORM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS archestra-cli-release
+WORKDIR /
+COPY archestra-cli/release.lock.json ./release.lock.json
+RUN <<'ARCHESTRA_CLI_RELEASE'
+set -eu
+mkdir out
+# node checks the lock and prints the version, the release URL, and then one
+# "<sha256>  <name>" line per file, the format that `sha256sum -c` reads.
+# Names and checksums are matched in full before any of them reaches a path.
+plan="$(node -e '
+const lock = JSON.parse(require("node:fs").readFileSync("release.lock.json", "utf8"));
+const fail = (message) => {
+  console.error("release.lock.json: " + message);
+  process.exit(1);
+};
+const files = lock.files;
+if (files === null || typeof files !== "object" || Array.isArray(files)) fail("files must be an object");
+const names = Object.keys(files).sort();
+if (lock.version === null && lock.url === null && names.length === 0) process.exit(0);
+if (typeof lock.version !== "string" || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(lock.version)) {
+  fail("version must look like 1.2.3");
+}
+if (typeof lock.url !== "string" || !/^https:\/\/[^\s\/][^\s]*[^\s\/]$/.test(lock.url)) {
+  fail("url must be an https URL with no slash at the end");
+}
+if (names.length === 0) fail("a pinned version needs files");
+for (const name of names) {
+  if (!/^archestra-(darwin|linux)-(arm64|x86_64)$|^archestra-windows-(arm64|x86_64)\.exe$/.test(name)) {
+    fail("unexpected file name: " + name);
+  }
+  if (typeof files[name] !== "string" || !/^[0-9a-f]{64}$/.test(files[name])) {
+    fail("the checksum of " + name + " must be 64 lowercase hex characters");
+  }
+}
+console.log(lock.version);
+console.log(lock.url);
+for (const name of names) console.log(files[name] + "  " + name);
+')"
+if [ -z "$plan" ]; then
+  echo "release.lock.json pins no release: this image holds no archestra program"
+  exit 0
+fi
+version="$(printf '%s\n' "$plan" | sed -n 1p)"
+url="$(printf '%s\n' "$plan" | sed -n 2p)"
+sums="$(mktemp)"
+printf '%s\n' "$plan" | sed 1,2d > "$sums"
+cd out
+# BusyBox wget has a read timeout (-T) and no retry option, so retry here.
+while read -r _ name; do
+  attempt=1
+  until wget -q -T 60 -O "$name" "$url/$name"; do
+    if [ "$attempt" -ge 3 ]; then
+      echo "ERROR: could not download $url/$name" >&2
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 5
+  done
+done < "$sums"
+sha256sum -c "$sums"
+chmod 0755 archestra-*
+rm "$sums"
+printf '{ "version": "%s" }\n' "$version" > manifest.json
+ARCHESTRA_CLI_RELEASE
+
+FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -260,7 +348,7 @@ ENV OPENSSL_NO_VENDOR=1
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
-COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
+COPY archestra-rs/vendor/dagger-sdk-0.21.11 ./archestra-rs/vendor/dagger-sdk-0.21.11
 COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
 COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
@@ -300,7 +388,7 @@ COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/opena
 COPY --from=deps /app/archestra-rs/router-rs/node_modules ./archestra-rs/router-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
-COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
+COPY archestra-rs/vendor/dagger-sdk-0.21.11 ./archestra-rs/vendor/dagger-sdk-0.21.11
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
@@ -327,6 +415,9 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
          --filter @archestra/openappa-rs \
          --filter @archestra/router-rs build
 
+# The constrained frontend build uses the dev-lite Bash entrypoint.
+RUN apk add --no-cache bash
+
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
 # VERSION even when the Rust workspace is unchanged.
@@ -336,6 +427,9 @@ COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY turbo.json ./
+COPY vitest.resources.ts ./
+COPY Tiltfile .env.example ./
+COPY scripts ./scripts
 COPY patches ./patches
 COPY backend ./backend
 COPY frontend ./frontend
@@ -363,9 +457,6 @@ FROM builder-base AS builder
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
-# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-#
 # SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 # SENTRY_URL points to the EU region where the archestra org is hosted
 #
@@ -376,8 +467,6 @@ FROM builder-base AS builder
 # backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
-    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
-    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
     pnpm exec turbo build --filter=@backend --filter=@frontend \
@@ -407,6 +496,15 @@ RUN --mount=type=cache,target=/app/.turbo \
 # (frontend/.next/standalone), which we copy directly below.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm deploy --filter=@backend --prod --legacy /prod/backend
+
+# Trim the deployed tree to what the server loads: drop the optional peers
+# pnpm resolved for better-auth and drizzle-orm (Next.js with its SWC binary,
+# Vitest with msw/vite/TypeScript, PGlite), plus every third-party source map
+# and type declaration. The server keeps its own dist/*.map for
+# --enable-source-maps. About 700 MB of the 1.4 GB tree; the script fails the
+# build if the bundle ever imports a package it removes.
+COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
+RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 
 # <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
 # `unified-slim` is the complete, runnable platform image minus the ~352MB
@@ -442,7 +540,9 @@ ENV ARCHESTRA_VERSION=${VERSION}
 # by DEFAULT_INTERNAL_API_BASE_URL in shared/consts.ts instead.
 ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://127.0.0.1:9000"
 ENV ARCHESTRA_API_BASE_URL=""
-ENV ARCHESTRA_ANALYTICS="enabled"
+# Empty, so analytics follows its default: on in this production image, off
+# when ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED is "true". Operators override it.
+ENV ARCHESTRA_ANALYTICS=""
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
@@ -483,20 +583,24 @@ RUN apk --no-cache upgrade && \
     # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
     # so the explicit floors both guarantee the fixed version and bust the cache.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
-    # Install PostgreSQL 17, pgvector, supervisord, and git.
+    # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
+    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
+    # Install PostgreSQL 18 with its contrib modules, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
     #
+    # PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
+    # pg_trgm, which migrations 0116/0378 use for the conversation and user
+    # search indexes (they skip the indexes when the extension is missing).
+    #
     # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
     # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-    # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
-    # because postgresql-pgvector depends on postgresql18, so that major lands in the image
-    # alongside 17 and is scanned too. (postgresql18 in fact owns the /usr/bin/postgres symlink,
-    # so it is the major supervisor actually starts.) Same stale-layer hazard as the curl pin: the bare
-    # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
-    # fixed versions and bust the cache.
-    apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \
-        "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
+    # CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
+    # pin: the bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
+    # guarantee the fixed versions and bust the cache.
+    apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
+        postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
@@ -549,9 +653,9 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
 # supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
 # before python3 is installed and cannot lift it.
-# CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
-# transitively with python3 here, so it needs the same explicit floor.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
+# Expat 2.10.0-r0 fixes the high-severity XML parser advisories. It arrives
+# transitively with python3, so require the patched version explicitly.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.10.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
@@ -597,6 +701,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
+COPY docker/scripts/start-backend.sh /app/start-backend.sh
 # slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
 # mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
 # Real deployments provision engines in code instead — the quickstart runs this one
@@ -640,6 +745,12 @@ RUN chmod +x /app/backend/scripts/start-production.sh
 # the ungated static frontend/public tree.
 COPY --from=vaf-add-on-builder /out/ ./mfiles-vaf-add-on/
 
+# The released binaries of the archestra program and manifest.json with their
+# version, as pinned by archestra-cli/release.lock.json (the
+# archestra-cli-release stage above). The backend serves them to the users'
+# computers from this directory. It is empty while the lock pins no release.
+COPY --from=archestra-cli-release /out/ ./archestra-cli/
+
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
@@ -656,7 +767,7 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /app/docker-banner.sh
+RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
 EXPOSE 5432 9000 9050 3000

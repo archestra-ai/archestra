@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,9 +23,11 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 
 ## Call as the App
 
-Each application owns its A2A tasks and retained runtime workspaces. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
+Each application owns its in-process A2A tasks. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
 
-Select **Service account (optional)** under **Advanced** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks and runtime workspaces belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them. Use the account's API key on the platform API to manage its runs and delete its own retained workspaces.
+Select **Service account (optional)** under **Advanced** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them.
+
+Client-credentials OAuth tokens cannot start or continue dedicated Agent Runtime runs or use Agent Runtime tools, including when the client is bound to a service account. Use an in-process agent, or authenticate with the service account's API key for runtime access, subject to its permissions. This restriction does not apply to authorization-code tokens acting for a signed-in person.
 
 The client's allowed agents and gateways still limit OAuth access, and the service account must also have permission to use each resource. Disabling the account stops its OAuth requests; changing the binding revokes issued OAuth tokens. In the edit dialog, the selector is under **Access**.
 
@@ -33,7 +35,7 @@ For LLM Proxy access, enable **LLM Proxy** on the same client and select provide
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
-For [knowledge search](/docs/knowledge#permissions), an app without a service-account binding can search assigned sources published to everyone. A bound app uses the service account’s knowledge permissions. This applies to both MCP and A2A.
+For [knowledge search](/docs/knowledge#permissions), an app without a service-account binding can search assigned sources shared with everyone or granted to that OAuth client (including files and connectors in a Knowledge Base granted to the client). On connectors with **Sync permissions from the source** on, document access follows the user who created the OAuth client. A bound app uses the service account’s knowledge permissions. This applies to both MCP and A2A.
 
 1. Create an OAuth client. Under **What can it access?**, select **MCP Gateway** for tools, **A2A** for agent calls, or both. Pick **As itself**. On **Access**, select the gateways and agents it may reach and optionally open **Advanced** to select a service account.
 2. Save the client ID and secret in your secret store. The secret shows only once.
@@ -71,7 +73,7 @@ Ask for only the enabled capabilities each token needs:
 | --- | --- |
 | `mcp` | MCP Gateway |
 | `a2a` | Agent A2A endpoints |
-| `llm:proxy` | LLM Proxy and Model Router |
+| `llm:proxy` | LLM Proxy and Unified Model API |
 
 For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each requested scope must be enabled on the client. Omitting `scope` in a client credentials request grants all its configured capabilities. A token cannot gain a capability added after it was issued; request a new token. Removing a capability or disabling the client blocks its use immediately.
 

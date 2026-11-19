@@ -40,6 +40,11 @@ import { getActiveSessionId } from "@/observability/request-context";
 
 let _instance: pino.Logger | null = null;
 
+function getInstance(): pino.Logger {
+  if (!_instance) _instance = createDefaultLogger();
+  return _instance;
+}
+
 function createDefaultLogger(): pino.Logger {
   // Write raw JSON to stdout via an async, buffered destination so log writes
   // don't block the event loop when the container log pipe is backpressured.
@@ -64,13 +69,35 @@ function createDefaultLogger(): pino.Logger {
   });
 }
 
+/**
+ * A property defined on the proxy itself wins over the instance's. That is
+ * what `vi.spyOn(logger, "warn")` creates, so tests can spy on the real
+ * logger (see `spyOnLogger` in `@/test/logging`) instead of mocking the
+ * module, which would make their files run isolated.
+ */
 const logger: pino.Logger = new Proxy({} as pino.Logger, {
-  get(_, prop) {
-    if (!_instance) _instance = createDefaultLogger();
-    const value = (_instance as unknown as Record<string | symbol, unknown>)[
-      prop
-    ];
+  get(target, prop) {
+    if (Object.hasOwn(target, prop)) {
+      return (target as unknown as Record<string | symbol, unknown>)[prop];
+    }
+    const value = (
+      getInstance() as unknown as Record<string | symbol, unknown>
+    )[prop];
     return typeof value === "function" ? value.bind(_instance) : value;
+  },
+  getOwnPropertyDescriptor(target, prop) {
+    const own = Reflect.getOwnPropertyDescriptor(target, prop);
+    if (own) return own;
+    const value = (
+      getInstance() as unknown as Record<string | symbol, unknown>
+    )[prop];
+    if (typeof value !== "function") return undefined;
+    return {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: value.bind(_instance),
+    };
   },
 });
 

@@ -6,6 +6,7 @@ import {
   PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
 import {
+  keepPreviousData,
   QueryClientContext,
   useMutation,
   useQuery,
@@ -18,12 +19,16 @@ import { toast } from "sonner";
 import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  flushPersistedQueryCache,
+  PERSISTED_QUERY_META,
+} from "@/lib/query-persistence";
 import { isDocumentSeedFresh } from "@/lib/shell-deferral";
 import { environmentKeys } from "./environment.query";
 import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import {
   getApiErrorInternalCode,
+  getApiErrorMessage,
   handleApiError,
   throwOnApiError,
   toApiError,
@@ -63,8 +68,18 @@ export function useAppearanceSettings(enabled = true) {
  * Query key factory for organization-related queries
  */
 export const organizationKeys = {
+  mcpRuntimeTiers: () =>
+    [...organizationKeys.all, "mcp-runtime-tiers"] as const,
   agentRuntimeTiers: () =>
     [...organizationKeys.all, "agent-runtime-tiers"] as const,
+  defaultModelRuntimeDependents: (modelId?: string | null) =>
+    modelId === undefined
+      ? ([...organizationKeys.all, "default-model-runtime-dependents"] as const)
+      : ([
+          ...organizationKeys.all,
+          "default-model-runtime-dependents",
+          modelId,
+        ] as const),
   all: ["organization"] as const,
   invitations: () => [...organizationKeys.all, "invitations"] as const,
   invitation: (id: string) => [...organizationKeys.invitations(), id] as const,
@@ -591,6 +606,31 @@ export function useAgentRuntimeTiers(enabled = true) {
 }
 
 /**
+ * Agent Runtime agents with no model of their own: they run on the
+ * organization's default model, so a new default must suit their runtimes.
+ */
+export function useDefaultModelRuntimeDependents(params: {
+  /** The candidate default (models.id), to count blockers the viewer can't read. */
+  modelId: string | null;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: organizationKeys.defaultModelRuntimeDependents(params.modelId),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getDefaultModelRuntimeDependents({
+          query: params.modelId ? { modelId: params.modelId } : undefined,
+        });
+      throwOnApiError(error);
+      return data ?? { agents: [], hiddenBlockingCount: 0 };
+    },
+    // Keep the agents on screen while the next candidate's count loads.
+    placeholderData: keepPreviousData,
+    enabled: params.enabled ?? true,
+  });
+}
+
+/**
  * Update agent settings (default model, default agent)
  */
 export function useUpdateAgentSettings(
@@ -606,7 +646,12 @@ export function useUpdateAgentSettings(
         await archestraApiSdk.updateAgentSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
+        // The server says why (e.g. which agents block a default model), so
+        // show its reason instead of only the generic message.
+        const reason = getApiErrorMessage(error);
+        toast.error(onErrorMessage, {
+          description: reason === "API request failed" ? undefined : reason,
+        });
         return null;
       }
 
@@ -622,6 +667,9 @@ export function useUpdateAgentSettings(
       // removes tiers refetches them, and the form rebuilds from the saved list.
       queryClient.invalidateQueries({
         queryKey: organizationKeys.agentRuntimeTiers(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.defaultModelRuntimeDependents(),
       });
       toast.success(onSuccessMessage);
     },
@@ -684,6 +732,8 @@ export function useUpdateConnectionSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      // A refresh immediately after Save must not restore the old visibility.
+      flushPersistedQueryCache(queryClient);
       toast.success(onSuccessMessage);
     },
   });
@@ -1033,6 +1083,43 @@ export function useDeletePendingSignupMember() {
         queryKey: organizationKeys.memberSignupStatus(),
       });
       toast.success("Pending member removed");
+    },
+  });
+}
+
+/** MCP tiers are independent from Agent Runtime tiers. */
+export function useMcpRuntimeTiers(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.mcpRuntimeTiers(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMcpRuntimeTiers();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+export function useSaveMcpRuntimeTiers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.UpdateMcpRuntimeTiersData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.updateMcpRuntimeTiers({
+        body,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.mcpRuntimeTiers(),
+      });
+      // Renames update catalog selections; size changes mark installations for reinstall.
+      for (const key of ["mcp-catalog", "mcp-servers", "mcp-registry"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      toast.success("MCP runtime tiers saved");
     },
   });
 }

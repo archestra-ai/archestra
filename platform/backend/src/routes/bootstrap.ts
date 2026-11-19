@@ -144,7 +144,7 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        ResourcePermissions.resolveAll({
+        ResourcePermissions.resolveUiCapabilities({
           userId: user.id,
           organizationId,
         }).then(withoutWildcardCoveredGrants),

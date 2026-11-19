@@ -156,6 +156,18 @@ describe("access-control", () => {
       });
     });
 
+    test("the roles pages take the ac action their API calls need", () => {
+      expect(requiredPagePermissionsMap["/settings/roles/new"]).toEqual({
+        ac: ["create"],
+      });
+      expect(requiredPagePermissionsMap["/settings/roles/[id]"]).toEqual({
+        ac: ["read"],
+      });
+      expect(requiredPagePermissionsMap["/settings/roles/[id]/edit"]).toEqual({
+        ac: ["update"],
+      });
+    });
+
     test("connecting an external agent takes the same permission as creating a local one", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,
@@ -426,18 +438,25 @@ describe("own-vs-all log split (Read and Admin role actions)", () => {
     expect(memberPermissions.log).toEqual([]);
     expect(memberPermissions.auditLog).toEqual([]);
   });
+
+  test("yells have their own resource, apart from log", () => {
+    expect(allAvailableActions.guardrailsYell).toEqual(["read", "admin"]);
+    expect(editorPermissions.guardrailsYell).toEqual(["read"]);
+    expect(memberPermissions.guardrailsYell).toEqual([]);
+    expect(permissionDescriptions["log:admin"]).not.toMatch(/yell/);
+  });
 });
 
 describe("platform_admin predefined role", () => {
-  test("withholds impersonation, organization-wide diagnostics, and the SRE agent", () => {
+  test("withholds impersonation and organization-wide diagnostics", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
+    expect(p.guardrailsYell).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    expect(p.sre).toEqual([]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "member", "sre"].includes(resource)) {
+      if (["log", "auditLog", "guardrailsYell", "member"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -451,7 +470,7 @@ describe("platform_admin predefined role", () => {
         "member:impersonate",
         "log:admin",
         "auditLog:admin",
-        "sre:read",
+        "guardrailsYell:admin",
       ]),
     );
     // …while granting its own role or member stays possible.

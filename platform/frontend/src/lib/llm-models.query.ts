@@ -19,7 +19,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   getLlmModels,
@@ -27,6 +27,7 @@ const {
   getLlmModelIdsByKey,
   getLlmModelOptions,
   updateModel,
+  deleteModel,
   syncLlmModels,
   bulkUpdateModels,
 } = archestraApiSdk;
@@ -256,6 +257,25 @@ export function useBulkUpdateModelVisibility() {
         return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+    },
+  });
+}
+
+export function useDeleteModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await deleteModel({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Model deleted");
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
     },

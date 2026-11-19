@@ -7,7 +7,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmOauthClientModel,
@@ -15,19 +14,14 @@ import {
   OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { beforeEach, expect, test } from "@/test";
+import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicProxyRoutes from "./anthropic";
 
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
-
 // Claude Code asks for a pool's name on Anthropic's wire; the pool's only
 // member is Z.ai on the OpenAI wire. The credential maps no Anthropic key:
-// mapping the member's key (as a Connect key does) or a grant lets it in.
+// the pool added to the virtual key, or granted to the OAuth client, lets it in.
 // Only the HTTP upstream is mocked.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
@@ -35,9 +29,8 @@ setupTestCacheManager();
 const zaiOrigin = "https://zai.example.test/api/paas/v4";
 
 for (const [stream, access] of [
-  [false, "member key"],
-  [true, "member key"],
   [false, "grant"],
+  [true, "grant"],
   [false, "OAuth client grant"],
 ] as const) {
   test(`answers an Anthropic request from a Z.ai member (stream: ${stream}, via ${access})`, async ({
@@ -57,10 +50,7 @@ for (const [stream, access] of [
     const { value, virtualKey } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "Claude Code",
-      providerApiKeys:
-        access === "grant"
-          ? [{ provider: "openai", providerApiKeyId: openai.id }]
-          : [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
     });
     const pool = await ModelPoolModel.create({
       organizationId: org.id,

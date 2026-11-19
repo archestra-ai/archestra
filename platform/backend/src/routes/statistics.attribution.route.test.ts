@@ -1,9 +1,14 @@
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import statisticsRoutes from "./statistics";
 
 describe("proxy label cost attribution", () => {
   const ctx = useRouteTestApp(statisticsRoutes);
+  // Organization-wide proxy usage needs member:read; without it the route
+  // reports only the caller's own usage.
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  });
   test("does not discover labels captured only outside the selected time range", async ({
     makeAgent,
     makeInteraction,

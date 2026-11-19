@@ -73,6 +73,13 @@ const mcpServerTable = softDeletablePgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default({}),
+    /**
+     * The arguments that the owner of a desktop MCP installation added to
+     * the command of its catalog item. The MCP bridge on the owner's device
+     * puts them after the arguments of that command. Null: none. Only a
+     * `desktop_mcp` installation of a catalog item with a command has them.
+     */
+    desktopArguments: jsonb("desktop_arguments").$type<string[]>(),
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,
       { onDelete: "set null" },

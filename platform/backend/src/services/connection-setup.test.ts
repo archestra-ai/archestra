@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
-import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import type { AnthropicCreditVerdict } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
 import { probeAnthropicCredit } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
 import {
@@ -261,6 +265,84 @@ describe("ensureConnectionVirtualKey", () => {
         providerApiKeyId: ownKey.id,
       }),
     ]);
+  });
+
+  test("per-user provider: refuses a GitHub Copilot account whose own plan is turned off", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const planValue = encodeGithubAppReference({
+      ref: { organizationId: org.id, credentialId: randomUUID() },
+      installationId: "2",
+      organization: "acme",
+      githubUrl: "https://github.com",
+    });
+    const planKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: planValue } })).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        apiKeyValue: planValue,
+        initialPermissionGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    const connect = (selectedProviderKeyId?: string) =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+        clientId: "copilot-cli",
+        selectedProviderKeyId,
+      });
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { enterprise: { hidden: true } } },
+      },
+    });
+    await expect(connect(planKey.id)).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("enterprise plans are turned off"),
+    });
+    // The personal switch is still on: the user's own sign-in binds.
+    await expect(connect()).resolves.toMatchObject({
+      virtualApiKeyId: expect.any(String),
+    });
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { personal: { hidden: true } } },
+      },
+    });
+    await expect(connect()).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("personal subscriptions are turned off"),
+    });
+    await expect(connect(planKey.id)).resolves.toMatchObject({
+      virtualApiKeyId: expect.any(String),
+    });
   });
 
   test("per-user provider: binds the picked organization plan when the key includes future providers", async ({

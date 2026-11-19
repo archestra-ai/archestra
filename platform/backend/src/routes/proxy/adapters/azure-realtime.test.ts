@@ -35,6 +35,56 @@ async function upstream(
 }
 
 describe("Azure native realtime media turns", () => {
+  test.each([
+    false,
+    true,
+  ])("rejects structured output before opening a realtime connection (stream: %s)", async (stream) => {
+    let connections = 0;
+    const baseUrl = await upstream((socket) => {
+      connections++;
+      socket.send(JSON.stringify({ type: "session.created" }));
+      socket.on("message", (raw) => {
+        const event = JSON.parse(raw.toString());
+        if (event.type === "session.update")
+          socket.send(JSON.stringify({ type: "session.updated" }));
+        if (event.type === "response.create")
+          socket.send(
+            JSON.stringify({
+              type: "response.done",
+              response: { status: "completed" },
+            }),
+          );
+      });
+    });
+    const client = azureRealtimeAdapterFactory.createClient("synthetic-key", {
+      baseUrl,
+      source: "api",
+    });
+    const request = {
+      model: "gpt-realtime-2.1",
+      messages: [{ role: "user" as const, content: "Reply OK." }],
+      response_format: {
+        type: "json_schema" as const,
+        json_schema: {
+          name: "status_result",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: { status: { type: "string" } },
+            required: ["status"],
+            additionalProperties: false,
+          },
+        },
+      },
+    };
+    await expect(
+      stream
+        ? azureRealtimeAdapterFactory.executeStream(client, request)
+        : azureRealtimeAdapterFactory.execute(client, request),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(connections).toBe(0);
+  });
+
   test("uses the realtime protocol and returns WAV speech with usage", async () => {
     const events: Record<string, unknown>[] = [];
     const baseUrl = await upstream((socket, url, key) => {

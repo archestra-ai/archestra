@@ -14,6 +14,7 @@ import config from "@/config";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import type { CreateClientOptions, LLMProvider } from "@/types";
 import { ApiError, type Azure } from "@/types";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import { azureAdapterFactory } from "./azure";
 
 type TurnRequest = z.infer<typeof Azure.API.RealtimeTurnRequestSchema>;
@@ -74,6 +75,7 @@ async function runTurn(
   client: Client,
   request: TurnRequest,
 ): Promise<TurnResponse> {
+  assertUnstructuredResponseFormat(request, "Azure realtime turns");
   const evidence = await validateAzureModelOperation({
     providerApiKeyId: client.options.llmProviderApiKeyId,
     modelId: request.model,

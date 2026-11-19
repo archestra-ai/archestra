@@ -1,6 +1,10 @@
 import path from "node:path";
 import {
+  AGENT_TOOL_PREFIX,
   DEFAULT_APP_NAME,
+  normalizeSubagentLoadBalancingConfig,
+  resolveSubagentLoadBalancerScopeKey,
+  slugify,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -16,34 +20,51 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
+import {
+  actorFromUserId,
+  serviceAccountUserId,
+} from "@/auth/service-account-user-id";
 import { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
   AgentModel,
   AgentRunModel,
   AgentTeamModel,
   AgentWorkspaceModel,
   InteractionModel,
+  ToolModel,
 } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
+import { agentRunAttachmentsSchema } from "@/services/agent-runtime/agent-run-attachments";
 import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
-import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  preflightAgentRuntimeCredentials,
+  SharedCredentialAccessDeniedError,
+} from "@/services/agent-runtime/credentials";
+import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import {
   pendingExports,
   pendingFileNotice,
 } from "@/services/agent-runtime/pending-exports";
-import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import {
+  resolveAgentRuntime,
+  type SubagentExecutionPolicy,
+} from "@/services/agent-runtime/pod-run";
+import {
+  canLaunchAgentRuntimeModel,
+  preflightAgentRuntimeModelReadiness,
+} from "@/services/agent-runtime/preflight";
 import {
   agentRunUrl,
   submittedRunNextStep,
@@ -71,24 +92,30 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
+import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import {
+  resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
+} from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
+  type Agent,
   AgentRunAttentionStateSchema,
   type AgentRunLimits,
   type AgentRunLimitsRequest,
   AgentWorkspaceStateSchema,
   ApiError,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { A2ATaskFailure } from "@/types/a2a-task";
-import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   AgentRunLimitsRequestSchema,
   AgentRuntimeTierSchema,
@@ -102,6 +129,7 @@ import {
 import {
   agentCredentialSetupUrl,
   catchError,
+  credentialsNeededMessage,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -109,21 +137,684 @@ import {
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve an `agent_id` argument that may be either a UUID or an `agent__<slug>`
+ * delegation tool name into an agent UUID. Returns `null` when the identifier
+ * is neither a valid UUID nor a matching delegation tool name for the caller.
+ */
+export async function resolveTargetAgentId(params: {
+  agentIdOrToolName: string;
+  callerAgent: Agent | null;
+  context: ArchestraContext;
+}): Promise<string | null> {
+  const trimmed = params.agentIdOrToolName.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (UUID_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  if (!trimmed.startsWith(AGENT_TOOL_PREFIX)) {
+    return null;
+  }
+  const expectedSlug = trimmed.slice(AGENT_TOOL_PREFIX.length);
+  if (!expectedSlug) {
+    return null;
+  }
+
+  const { callerAgent, context } = params;
+  if (callerAgent) {
+    const delegatedTools = await ToolModel.getDelegationToolsByAgent(
+      callerAgent.id,
+    );
+    const matchedDelegated = delegatedTools.find(
+      (entry) => slugify(entry.targetAgent.name) === expectedSlug,
+    );
+    if (matchedDelegated) {
+      return matchedDelegated.targetAgent.id;
+    }
+  }
+
+  const actorUserId = context.userId ?? context.tokenAuth?.userId;
+  const organizationId =
+    callerAgent?.organizationId ??
+    context.organizationId ??
+    context.tokenAuth?.organizationId;
+  if (
+    actorUserId &&
+    actorUserId !== "system" &&
+    organizationId &&
+    (!callerAgent || callerAgent.accessAllSubagents)
+  ) {
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: actorUserId,
+      organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
+    const [targets, excludedIds] = await Promise.all([
+      AgentModel.findAccessibleDelegationTargets({
+        userId: actorUserId,
+        isAdmin: isAgentAdmin,
+        organizationId,
+        excludeAgentId: callerAgent?.id ?? "",
+        includeDetails: false,
+        environmentId: callerAgent?.environmentId ?? null,
+      }),
+      callerAgent
+        ? AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id)
+        : Promise.resolve([] as string[]),
+    ]);
+    const excluded = new Set(excludedIds);
+    const matchedAccessible = targets.find(
+      (target) =>
+        !excluded.has(target.id) && slugify(target.name) === expectedSlug,
+    );
+    if (matchedAccessible) {
+      return matchedAccessible.id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Verify that `callerAgentId` is permitted to target `targetAgent` as a
+ * subagent when `callerAgentId !== targetAgent.id`.
+ *
+ * Enforces environment isolation, explicit `agent_excluded_subagents` rows,
+ * and `accessAllSubagents: false` custom allowlists (`delegateToAgentId` tools),
+ * including 1-hop delegation through an assigned load-balancing router agent.
+ */
+export async function checkCallerSubagentAccess(
+  callerAgentId: string,
+  targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
+): Promise<
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason: "agent_not_found" | "not_allowed";
+      message: string;
+    }
+> {
+  if (callerAgentId === targetAgent.id) {
+    return { allowed: true };
+  }
+  const callerAgent = await AgentModel.findById(callerAgentId);
+  if (!callerAgent) {
+    return { allowed: true };
+  }
+  if (callerAgent.environmentId !== targetAgent.environmentId) {
+    return {
+      allowed: false,
+      reason: "agent_not_found",
+      message: "Agent not found",
+    };
+  }
+  const excludedSubagentIds =
+    await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id);
+  if (excludedSubagentIds.includes(targetAgent.id)) {
+    return {
+      allowed: false,
+      reason: "not_allowed",
+      message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+    };
+  }
+  if (!callerAgent.accessAllSubagents) {
+    const delegatedAgentIds = callerAgent.tools
+      .map((tool) => tool.delegateToAgentId)
+      .filter((id): id is string => Boolean(id));
+    if (!delegatedAgentIds.includes(targetAgent.id)) {
+      let allowedViaRouter = false;
+      for (const delegatedId of delegatedAgentIds) {
+        if (excludedSubagentIds.includes(delegatedId)) {
+          continue;
+        }
+        const routerAgent = await AgentModel.findById(delegatedId);
+        if (
+          !routerAgent ||
+          routerAgent.environmentId !== callerAgent.environmentId ||
+          resolveAgentRuntime(routerAgent)
+        ) {
+          continue;
+        }
+        const routerLbConfig = normalizeSubagentLoadBalancingConfig(
+          routerAgent.subagentLoadBalancing,
+        );
+        if (!routerLbConfig?.enabled) {
+          continue;
+        }
+        const routerExcludedIds =
+          await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+            routerAgent.id,
+          );
+        if (routerExcludedIds.includes(targetAgent.id)) {
+          continue;
+        }
+        if (routerAgent.accessAllSubagents) {
+          allowedViaRouter = true;
+          break;
+        }
+        const routerDelegatedIds = routerAgent.tools
+          .map((tool) => tool.delegateToAgentId)
+          .filter((id): id is string => Boolean(id));
+        if (routerDelegatedIds.includes(targetAgent.id)) {
+          allowedViaRouter = true;
+          break;
+        }
+      }
+      if (!allowedViaRouter) {
+        return {
+          allowed: false,
+          reason: "not_allowed",
+          message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+        };
+      }
+    }
+  }
+  return { allowed: true };
+}
+
+export {
+  resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
+};
+
 /**
  * Start a durable delegated run through the same lifecycle used by the MCP
  * run tools. Agent delegation uses this when the target has Background run
  * configured, so every delegation surface selects the same runtime.
  */
 export async function startDelegatedTask(params: {
-  agentId: string;
+  agentId?: string;
+  excludeAgentIds?: string[];
+  credentialGrantIds?: string[];
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
-  const { result, outcome } = await launchDelegatedTask(params);
-  if (outcome) await recordRuntimeLaunch(params.context, outcome);
-  return result;
+  if (params.context.suppressContentLogging) {
+    const { result, outcome } = failedLaunch(
+      "not_allowed",
+      errorResult("Agent Runtime runs are not available in encrypted chats."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const callerAgent = params.context.agent?.id
+    ? await AgentModel.findById(params.context.agent.id)
+    : null;
+  let poolAgent: Agent | null = callerAgent;
+  let lbConfig = normalizeSubagentLoadBalancingConfig(
+    callerAgent?.subagentLoadBalancing,
+  );
+  const rawAgentId = params.agentId?.trim();
+  let explicitAgentId: string | undefined;
+  if (rawAgentId) {
+    const resolvedId = await resolveTargetAgentId({
+      agentIdOrToolName: rawAgentId,
+      callerAgent,
+      context: params.context,
+    });
+    if (!resolvedId) {
+      const { result, outcome } = failedLaunch(
+        "agent_not_found",
+        errorResult("Agent not found"),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    explicitAgentId = resolvedId;
+  }
+
+  let assignedIds = callerAgent
+    ? await resolveCandidateRuntimeSubagentIds({
+        callerAgent,
+        actorUserId: params.context.userId,
+      })
+    : [];
+  let assignedSet = new Set(assignedIds);
+
+  // When explicitAgentId targets a foreground load-balanced router agent
+  // (has no runtime of its own, but has subagentLoadBalancing.enabled === true),
+  // verify caller access to the router agent and route through its runtime subagent pool.
+  let targetRouterPoolSelected = false;
+  if (
+    explicitAgentId &&
+    (!lbConfig?.enabled || !assignedSet.has(explicitAgentId))
+  ) {
+    const explicitTargetAgent = await AgentModel.findById(explicitAgentId);
+    const targetLbConfig = explicitTargetAgent
+      ? normalizeSubagentLoadBalancingConfig(
+          explicitTargetAgent.subagentLoadBalancing,
+        )
+      : undefined;
+    if (
+      explicitTargetAgent &&
+      !resolveAgentRuntime(explicitTargetAgent) &&
+      targetLbConfig?.enabled
+    ) {
+      if (
+        params.context.tokenAuth?.oauthExecution ||
+        (params.context.tokenAuth?.oauthClientId &&
+          !params.context.tokenAuth.isUserToken)
+      ) {
+        const { result, outcome } = failedLaunch(
+          "not_allowed",
+          errorResult(
+            "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+          ),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      let actor: A2AActor;
+      try {
+        actor = requireActor(params.context);
+      } catch (error) {
+        const { result, outcome } = failedLaunch(
+          "not_allowed",
+          error instanceof ApiError
+            ? errorResult(error.message)
+            : catchError(error, "starting the run"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      if (explicitTargetAgent.organizationId !== actor.organizationId) {
+        const { result, outcome } = failedLaunch(
+          "agent_not_found",
+          errorResult("Agent not found"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      const principalUserId = actorPrincipalUserId(actor);
+      const isAgentAdmin = await ResourcePermissions.allows({
+        userId: principalUserId,
+        organizationId: actor.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      });
+      if (
+        !(await AgentTeamModel.userHasAgentAccess({
+          userId: principalUserId,
+          agentId: explicitTargetAgent.id,
+          isAgentAdmin,
+          agentAccessContext: explicitTargetAgent,
+          action: "use",
+        }))
+      ) {
+        const { result, outcome } = failedLaunch(
+          "agent_not_found",
+          errorResult("Agent not found"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      if (params.context.agent?.id) {
+        const subagentAccess = await checkCallerSubagentAccess(
+          params.context.agent.id,
+          explicitTargetAgent,
+        );
+        if (!subagentAccess.allowed) {
+          const { result, outcome } = failedLaunch(
+            subagentAccess.reason,
+            errorResult(subagentAccess.message),
+          );
+          if (outcome) await recordRuntimeLaunch(params.context, outcome);
+          return result;
+        }
+      }
+      const routerCandidateIds = await resolveRouterRuntimePoolCandidateIds({
+        routerAgent: explicitTargetAgent,
+        actorUserId: params.context.userId,
+        callerAgentId: callerAgent?.id,
+      });
+      if (routerCandidateIds.length > 0) {
+        poolAgent = explicitTargetAgent;
+        lbConfig = targetLbConfig;
+        assignedIds = routerCandidateIds;
+        assignedSet = new Set(assignedIds);
+        targetRouterPoolSelected = true;
+      }
+    }
+  }
+
+  // When subagent load balancing is disabled (or when the caller specified an
+  // agent_id outside the caller's load-balanced pool so access checks can report
+  // the exact refusal), dispatch directly to explicitAgentId. When load balancing
+  // is enabled and explicitAgentId belongs to the caller's pool (or is itself a
+  // load-balanced router agent), route programmatically through the load balancer
+  // across all assigned candidates.
+  if (
+    explicitAgentId &&
+    !targetRouterPoolSelected &&
+    (!lbConfig?.enabled || !assignedSet.has(explicitAgentId))
+  ) {
+    let ephemeralCredentials: Record<string, string> | undefined;
+    if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+      let actor: A2AActor;
+      try {
+        actor = requireActor(params.context);
+      } catch (error) {
+        const { result, outcome } = failedLaunch(
+          "not_allowed",
+          error instanceof ApiError
+            ? errorResult(error.message)
+            : catchError(error, "starting the run"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      const resolved = await ephemeralCredentialGrantManager.resolveGrants({
+        grantIds: params.credentialGrantIds,
+        organizationId: actor.organizationId,
+        userId: actorPrincipalUserId(actor),
+        callerAgentId: params.context.agent.id,
+        candidateAgentIds: [explicitAgentId],
+      });
+      if (!resolved.ok) {
+        const { result, outcome } = failedLaunch(
+          "invalid_request",
+          errorResult(resolved.message),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      ephemeralCredentials = resolved.envForAgent(explicitAgentId);
+    }
+
+    const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+
+    const { result, outcome } = await launchDelegatedTask({
+      ...params,
+      agentId: explicitAgentId,
+      credentialGrantIds: params.credentialGrantIds,
+      ephemeralCredentials,
+      ...(retries > 0
+        ? {
+            subagentExecutionPolicy: {
+              retries,
+              requestedLimits: params.limits,
+            },
+          }
+        : {}),
+    });
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  if (
+    params.context.tokenAuth?.oauthExecution ||
+    (params.context.tokenAuth?.oauthClientId &&
+      !params.context.tokenAuth.isUserToken)
+  ) {
+    const { result, outcome } = failedLaunch(
+      "not_allowed",
+      errorResult(
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  if (!poolAgent) {
+    const { result, outcome } = failedLaunch(
+      "invalid_request",
+      errorResult("agent_id is required."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const poolSurfaceLabel =
+    poolAgent.agentType === "agent" ? "agent" : "gateway";
+
+  if (assignedIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "invalid_request",
+      errorResult(
+        `No runtime subagents are assigned to this ${poolSurfaceLabel}.`,
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
+  const excludedSet = new Set(
+    (params.excludeAgentIds ?? []).filter((id) => assignedSet.has(id)),
+  );
+  if (excludedSet.size > 0 && !fallbackEnabled) {
+    const { result, outcome } = failedLaunch(
+      "invalid_request",
+      errorResult(
+        `No remaining fallback subagents are available on this ${poolSurfaceLabel}.`,
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  let planningExcludedSet = excludedSet;
+  const nonExcludedIds = assignedIds.filter((id) => !excludedSet.has(id));
+  if (fallbackEnabled && nonExcludedIds.length > 1) {
+    const actor = tryRequireActor(params.context);
+    if (actor) {
+      const readinessChecks = await Promise.all(
+        nonExcludedIds.map(async (candidateId) => {
+          try {
+            const candidateAgent = await AgentModel.findById(candidateId);
+            if (
+              !candidateAgent ||
+              candidateAgent.organizationId !== actor.organizationId
+            ) {
+              return { candidateId, ready: false };
+            }
+            const candidateRuntime = resolveAgentRuntime(candidateAgent);
+            if (!candidateRuntime) {
+              return { candidateId, ready: false };
+            }
+            const ready = await canLaunchAgentRuntimeModel({
+              runtime: candidateRuntime,
+              agent: candidateAgent,
+              actor,
+            });
+            return { candidateId, ready };
+          } catch (error) {
+            logger.warn(
+              {
+                err: error,
+                callerAgentId: poolAgent.id,
+                candidateId,
+              },
+              "Subagent readiness pre-filter check failed; marking candidate unready",
+            );
+            return { candidateId, ready: false };
+          }
+        }),
+      );
+      const readyCount = readinessChecks.filter((entry) => entry.ready).length;
+      const unreadyIds = readinessChecks
+        .filter((entry) => !entry.ready)
+        .map((entry) => entry.candidateId);
+      if (readyCount > 0 && unreadyIds.length > 0) {
+        planningExcludedSet = new Set([...excludedSet, ...unreadyIds]);
+      }
+    }
+  }
+
+  const scopeKey = resolveSubagentLoadBalancerScopeKey({
+    userId: params.context.userId ?? params.context.tokenAuth?.userId,
+    serviceAccountId: params.context.tokenAuth?.serviceAccountId,
+    teamId: params.context.tokenAuth?.teamId,
+    organizationId:
+      params.context.organizationId ??
+      params.context.tokenAuth?.organizationId ??
+      poolAgent.organizationId,
+  });
+
+  const { candidateIds, claimedPrimaryAgentId, dispatchCount } =
+    await subagentLoadBalancer.planCandidates({
+      callerAgentId: poolAgent.id,
+      assignedAgentIds: assignedIds,
+      excludedAgentIds: planningExcludedSet,
+      config: lbConfig,
+      scopeKey,
+    });
+  if (candidateIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "invalid_request",
+      errorResult(
+        `No remaining fallback subagents are available on this ${poolSurfaceLabel}.`,
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+  const activeCandidates = fallbackEnabled
+    ? candidateIds
+    : candidateIds.slice(0, 1);
+
+  let ephemeralCredentialsByAgentId:
+    | Record<string, Record<string, string>>
+    | undefined;
+  if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+    let actor: A2AActor;
+    try {
+      actor = requireActor(params.context);
+    } catch (error) {
+      await subagentLoadBalancer.releaseUnlaunchedClaim({
+        callerAgentId: poolAgent.id,
+        claimedAgentId: claimedPrimaryAgentId,
+        scopeKey,
+      });
+      const { result, outcome } = failedLaunch(
+        "not_allowed",
+        error instanceof ApiError
+          ? errorResult(error.message)
+          : catchError(error, "starting the run"),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    const resolved = await ephemeralCredentialGrantManager.resolveGrants({
+      grantIds: params.credentialGrantIds,
+      organizationId: actor.organizationId,
+      userId: actorPrincipalUserId(actor),
+      callerAgentId: params.context.agent?.id || poolAgent.id,
+      candidateAgentIds: activeCandidates,
+    });
+    if (!resolved.ok) {
+      await subagentLoadBalancer.releaseUnlaunchedClaim({
+        callerAgentId: poolAgent.id,
+        claimedAgentId: claimedPrimaryAgentId,
+        scopeKey,
+      });
+      const { result, outcome } = failedLaunch(
+        "invalid_request",
+        errorResult(resolved.message),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    ephemeralCredentialsByAgentId = Object.fromEntries(
+      activeCandidates.map((id) => [id, resolved.envForAgent(id)]),
+    );
+  }
+
+  const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+  const trackDistributedRotation = lbConfig?.enabled === true;
+
+  let lastAttempt: {
+    result: CallToolResult;
+    outcome?: RuntimeLaunchOutcome;
+  } | null = null;
+  let currentCandidateId: string | null = activeCandidates[0] ?? null;
+  let remainingFallbackIds = activeCandidates.slice(1);
+  let currentPlannedDispatchCount = dispatchCount;
+
+  while (currentCandidateId) {
+    const attempt = await launchDelegatedTask({
+      ...params,
+      agentId: currentCandidateId,
+      credentialGrantIds: params.credentialGrantIds,
+      ephemeralCredentials: ephemeralCredentialsByAgentId?.[currentCandidateId],
+      subagentExecutionPolicy: {
+        ...(trackDistributedRotation
+          ? {
+              callerAgentId: poolAgent.id,
+              scopeKey,
+              assignedAgentIds: assignedIds,
+              plannedDispatchCount: currentPlannedDispatchCount,
+            }
+          : {}),
+        retries,
+        fallbackAgentIds: remainingFallbackIds,
+        requestedLimits: params.limits,
+        ...(ephemeralCredentialsByAgentId
+          ? { ephemeralCredentialsByAgentId }
+          : {}),
+      },
+    });
+    lastAttempt = attempt;
+    if (attempt.outcome?.kind === "launched") {
+      await recordRuntimeLaunch(params.context, attempt.outcome);
+      return attempt.result;
+    }
+    if (
+      attempt.outcome?.kind === "failed" &&
+      (attempt.outcome.reason === "refused" ||
+        attempt.outcome.reason === "invalid_request")
+    ) {
+      if (currentCandidateId === claimedPrimaryAgentId) {
+        await subagentLoadBalancer.releaseUnlaunchedClaim({
+          callerAgentId: poolAgent.id,
+          claimedAgentId: claimedPrimaryAgentId,
+          scopeKey,
+        });
+      }
+      await recordRuntimeLaunch(params.context, attempt.outcome);
+      return attempt.result;
+    }
+    if (remainingFallbackIds.length === 0) {
+      break;
+    }
+    if (trackDistributedRotation) {
+      const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: poolAgent.id,
+        scopeKey,
+        remainingCandidateIds: remainingFallbackIds,
+        assignedAgentIds: assignedIds,
+        plannedDispatchCount: currentPlannedDispatchCount,
+        failedAgentId: currentCandidateId,
+      });
+      currentCandidateId = claimed.claimedAgentId;
+      remainingFallbackIds = claimed.remainingCandidateIds;
+      currentPlannedDispatchCount = claimed.dispatchCount;
+    } else {
+      currentCandidateId = remainingFallbackIds[0] ?? null;
+      remainingFallbackIds = remainingFallbackIds.slice(1);
+    }
+  }
+  if (lastAttempt?.outcome) {
+    await recordRuntimeLaunch(params.context, lastAttempt.outcome);
+  }
+  return (
+    lastAttempt?.result ??
+    errorResult(
+      `No runtime subagents are assigned to this ${poolSurfaceLabel}.`,
+    )
+  );
 }
 
 async function launchDelegatedTask(params: {
@@ -131,28 +822,47 @@ async function launchDelegatedTask(params: {
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
+  credentialGrantIds?: string[];
+  ephemeralCredentials?: Record<string, string>;
+  subagentExecutionPolicy?: SubagentExecutionPolicy;
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
+  if (context.suppressContentLogging) {
+    return failedLaunch(
+      "not_allowed",
+      errorResult("Agent Runtime runs are not available in encrypted chats."),
+    );
+  }
   if (
     context.tokenAuth?.oauthExecution ||
     (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
   ) {
     return failedLaunch(
-      "refused",
+      "not_allowed",
       errorResult(
         "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
       ),
     );
   }
+  let restoreConsumedGrants: (() => Promise<void>) | undefined;
   try {
-    const actor = requireActor(context);
+    let actor: A2AActor;
+    try {
+      actor = requireActor(context);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("not_allowed", errorResult(error.message));
+      }
+      throw error;
+    }
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
+    const principalUserId = actorPrincipalUserId(actor);
     const isAgentAdmin = await ResourcePermissions.allows({
-      userId: actor.id,
+      userId: principalUserId,
       organizationId: actor.organizationId,
       resource: "agent",
       scope: "*",
@@ -160,7 +870,7 @@ async function launchDelegatedTask(params: {
     });
     if (
       !(await AgentTeamModel.userHasAgentAccess({
-        userId: actor.id,
+        userId: principalUserId,
         agentId: agent.id,
         isAgentAdmin: isAgentAdmin,
         agentAccessContext: agent,
@@ -169,11 +879,21 @@ async function launchDelegatedTask(params: {
     ) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
+    const subagentAccess = await checkCallerSubagentAccess(
+      context.agent.id,
+      agent,
+    );
+    if (!subagentAccess.allowed) {
+      return failedLaunch(
+        subagentAccess.reason,
+        errorResult(subagentAccess.message),
+      );
+    }
 
     const runtime = resolveAgentRuntime(agent);
     if (!runtime) {
       return failedLaunch(
-        "refused",
+        context.openappaRuntimeCall?.spawn ? "refused" : "invalid_request",
         errorResult(
           context.openappaRuntimeCall?.spawn
             ? SPAWN_TARGET_MISMATCH
@@ -214,10 +934,17 @@ async function launchDelegatedTask(params: {
       });
     } catch (error) {
       if (error instanceof ApiError)
-        return failedLaunch("refused", errorResult(error.message));
+        return failedLaunch("invalid_request", errorResult(error.message));
       throw error;
     }
-    await prepareAgentRuntimeBackendDriver(runtime.backend);
+    try {
+      await prepareAgentRuntimeBackendDriver(runtime.backend);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("backend_unavailable", errorResult(error.message));
+      }
+      throw error;
+    }
     const crossing = await runtimeCrossingForStart(context);
     if (typeof crossing === "string") {
       return failedLaunch("refused", errorResult(crossing));
@@ -226,13 +953,40 @@ async function launchDelegatedTask(params: {
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
     // has been returned and the user only discovers the problem by polling.
-    const preflight = await preflightAgentRuntimeCredentials({
-      runtime,
-      organizationId: actor.organizationId,
-      userId: actor.id,
-    });
+    let preflight: Awaited<ReturnType<typeof preflightAgentRuntimeCredentials>>;
+    try {
+      preflight = await preflightAgentRuntimeCredentials({
+        runtime,
+        organizationId: actor.organizationId,
+        userId: actor.kind === "user" ? actor.id : null,
+        authorizationUserId: principalUserId,
+        ephemeralCredentials: params.ephemeralCredentials,
+      });
+    } catch (error) {
+      if (error instanceof SharedCredentialAccessDeniedError) {
+        return failedLaunch(
+          "credentials_admin_only",
+          errorResult(error.message),
+        );
+      }
+      if (error instanceof ApiError) {
+        return failedLaunch(
+          error.statusCode === 403
+            ? "not_allowed"
+            : error.statusCode === 400
+              ? "credentials_misconfigured"
+              : "failed",
+          errorResult(error.message),
+        );
+      }
+      throw error;
+    }
     if (preflight.missing.length > 0) {
-      return credentialsNeededLaunch(agent.id, preflight.missing);
+      return await credentialsNeededLaunch(
+        context,
+        agent.id,
+        preflight.missing,
+      );
     }
     if (preflight.misconfigured.length > 0) {
       return failedLaunch(
@@ -243,6 +997,42 @@ async function launchDelegatedTask(params: {
             .join(", ")}`,
         ),
       );
+    }
+    try {
+      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    } catch (error) {
+      const needed = missingCredentialsFrom(error);
+      if (needed) {
+        return await credentialsNeededLaunch(
+          context,
+          needed.agentId,
+          needed.missing,
+        );
+      }
+      if (error instanceof ApiError) {
+        return failedLaunch(
+          error.statusCode >= 500 ? "failed" : "model_unready",
+          errorResult(error.message),
+        );
+      }
+      throw error;
+    }
+
+    if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+      const consumed = await ephemeralCredentialGrantManager.consumeGrants({
+        grantIds: params.credentialGrantIds,
+        organizationId: actor.organizationId,
+        userId: principalUserId,
+        callerAgentId: context.agent.id,
+        candidateAgentIds: [
+          agent.id,
+          ...(params.subagentExecutionPolicy?.fallbackAgentIds ?? []),
+        ],
+      });
+      if (!consumed.ok) {
+        return failedLaunch("invalid_request", errorResult(consumed.message));
+      }
+      restoreConsumedGrants = consumed.restore;
     }
 
     const completionTarget =
@@ -256,6 +1046,9 @@ async function launchDelegatedTask(params: {
             }),
           }
         : undefined;
+    // The caller's LLM session, when the gateway or chat knows it exactly:
+    // recorded on the run so the session trace can show the handoff.
+    const originLlmSessionId = context.tokenAuth?.llmSessionId;
     const taskRow = await startDetachedAgentTask({
       actor,
       agentId: agent.id,
@@ -264,12 +1057,37 @@ async function launchDelegatedTask(params: {
       systemParams: {
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
+        ...(originLlmSessionId
+          ? {
+              onRuntimeSessionCreated: ({ taskId }) =>
+                AgentRunModel.setOriginLlmSessionId({
+                  taskId,
+                  originLlmSessionId,
+                }),
+            }
+          : {}),
         routeCategory: completionTarget
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
         completionTarget,
         runtimeLimits: limits,
         ...(crossing ? { runtimeCrossing: crossing } : {}),
+        ...(params.ephemeralCredentials
+          ? { ephemeralCredentials: params.ephemeralCredentials }
+          : {}),
+        ...(restoreConsumedGrants
+          ? { onRuntimeLaunchFailed: restoreConsumedGrants }
+          : {}),
+        ...(params.subagentExecutionPolicy || restoreConsumedGrants
+          ? {
+              subagentExecutionPolicy: {
+                ...params.subagentExecutionPolicy,
+                ...(restoreConsumedGrants
+                  ? { onLaunchFailed: restoreConsumedGrants }
+                  : {}),
+              },
+            }
+          : {}),
       },
     });
 
@@ -290,7 +1108,10 @@ async function launchDelegatedTask(params: {
     }
 
     // The first turn's task id is the run's stable id (its workspace id).
-    const run = runSummary({ row: taskRow, runId: taskRow.id });
+    const run = {
+      ...runSummary({ row: taskRow, runId: taskRow.id }),
+      agent_name: agent.name,
+    };
     const state = RuntimeLaunchStateSchema.safeParse(run.state);
     const reportsToThread = completionTarget !== undefined;
     return {
@@ -308,12 +1129,26 @@ async function launchDelegatedTask(params: {
       },
     };
   } catch (error) {
+    await restoreConsumedGrants?.();
     const needed = missingCredentialsFrom(error);
     if (needed) {
-      return credentialsNeededLaunch(needed.agentId, needed.missing);
+      return credentialsNeededLaunch(context, needed.agentId, needed.missing);
+    }
+    if (error instanceof SharedCredentialAccessDeniedError) {
+      return failedLaunch("credentials_admin_only", errorResult(error.message));
     }
     const refused = crossingRefusal(error);
     if (refused) return failedLaunch("refused", errorResult(refused));
+    if (error instanceof ApiError) {
+      return failedLaunch(
+        error.statusCode === 403
+          ? "not_allowed"
+          : error.statusCode >= 500
+            ? "failed"
+            : "invalid_request",
+        errorResult(error.message),
+      );
+    }
     return failedLaunch("failed", catchError(error, "starting the run"));
   }
 }
@@ -346,6 +1181,11 @@ const RunSummarySchema = z.object({
       "submitted | working | input-required | completed | canceled | failed",
     ),
   agent_id: z.string().nullable().describe("The agent doing the work."),
+  agent_name: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Display name of the agent doing the work, when known."),
   status_reason: z
     .string()
     .nullable()
@@ -542,8 +1382,22 @@ const registry = defineArchestraTools([
     }),
     handler: async ({ args, context }) => {
       try {
+        const actor = requireActor(context);
+        const session = await AgentRunModel.findByTaskId(args.run_id);
+        if (session?.agentId) {
+          const targetAgent = await AgentModel.findById(session.agentId);
+          if (targetAgent) {
+            const subagentAccess = await checkCallerSubagentAccess(
+              context.agent.id,
+              targetAgent,
+            );
+            if (!subagentAccess.allowed) {
+              return errorResult("Saved run not found");
+            }
+          }
+        }
         const result = await deleteAgentWorkspace({
-          actor: requireActor(context),
+          actor,
           taskId: args.run_id,
         });
         return structuredSuccessResult(
@@ -677,6 +1531,11 @@ const registry = defineArchestraTools([
         .describe("Upload only: the local file's sha256, as hex."),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging && args.direction === "upload") {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       let direct = false;
       try {
         const actor = requireActor(context);
@@ -765,6 +1624,11 @@ const registry = defineArchestraTools([
       overwrite: z.boolean().default(false),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       let direct = false;
       try {
         const actor = requireActor(context);
@@ -812,15 +1676,34 @@ const registry = defineArchestraTools([
     shortName: TOOL_START_AGENT_RUN_SHORT_NAME,
     title: "Start Agent Run",
     description:
-      "Start a background run on an Agent that has Agent Runtime. It returns at once with run_id and run_url: a handle, not the answer. " +
+      "Start a background run on an Agent that has Agent Runtime (or on a load-balanced router agent across its assigned Agent Runtime pool). It returns at once with run_id and run_url: a handle, not the answer. " +
       `Use it for work that has no run yet, including unfinished local work handed over to ${DEFAULT_APP_NAME}. For a follow-up on an existing run, use steer_agent_run with its run_id; never start a replacement run. ` +
-      "Agents without Agent Runtime are refused; delegate to them with their agent tool instead. " +
+      "Agents without Agent Runtime or subagent load balancing are refused; delegate to them with their agent tool instead. " +
       "For repository handoffs, first load the Remote Agents Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_agent_run. " +
       "Don't call get_agent_run in the turn that started the run.",
     schema: z.object({
-      agent_id: z.string().describe("The agent to do the work."),
+      agent_id: z
+        .string()
+        .optional()
+        .describe(
+          "The agent to do the work (UUID or agent__<slug> tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents.",
+        ),
+      exclude_agent_ids: z
+        .array(z.string().uuid())
+        .max(100)
+        .optional()
+        .describe(
+          "Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway.",
+        ),
+      credential_grant_ids: z
+        .array(z.string().uuid())
+        .max(10)
+        .optional()
+        .describe(
+          "One-time credential_grant_id handles minted by transfer_credential({ ephemeral: true }). Consumed at launch and bound only to the winning runtime pod.",
+        ),
       message: z
         .string()
         .trim()
@@ -861,6 +1744,8 @@ const registry = defineArchestraTools([
     handler: ({ args, context }) =>
       startDelegatedTask({
         agentId: args.agent_id,
+        excludeAgentIds: args.exclude_agent_ids,
+        credentialGrantIds: args.credential_grant_ids,
         message: args.message,
         attachments: args.attachments,
         ...(args.limits
@@ -898,7 +1783,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
         const task = run.row;
 
@@ -1079,6 +1968,19 @@ const registry = defineArchestraTools([
         if (agents.length !== requestedAgentIds.length) {
           return errorResult("Agent not found");
         }
+        for (const agent of agents) {
+          const subagentAccess = await checkCallerSubagentAccess(
+            context.agent.id,
+            agent,
+          );
+          if (!subagentAccess.allowed) {
+            return errorResult(
+              subagentAccess.reason === "agent_not_found"
+                ? "Agent not found"
+                : subagentAccess.message,
+            );
+          }
+        }
 
         if (args.mine_only) {
           const { tasks, totalSize } = await A2ATaskModel.listForActor({
@@ -1106,8 +2008,9 @@ const registry = defineArchestraTools([
           });
         }
 
+        const principalUserId = actorPrincipalUserId(actor);
         const isAgentAdmin = await ResourcePermissions.allows({
-          userId: actor.id,
+          userId: principalUserId,
           organizationId: actor.organizationId,
           resource: "agent",
           scope: "*",
@@ -1115,7 +2018,7 @@ const registry = defineArchestraTools([
         });
         const accessible = new Set(
           await AgentTeamModel.getUserAccessibleAgentIds(
-            actor.id,
+            principalUserId,
             isAgentAdmin,
           ),
         );
@@ -1134,8 +2037,18 @@ const registry = defineArchestraTools([
             : undefined,
         });
         const [canReadLogs, canReadAllLogs] = await Promise.all([
-          userHasPermission(actor.id, actor.organizationId, "log", "read"),
-          userHasPermission(actor.id, actor.organizationId, "log", "admin"),
+          userHasPermission(
+            principalUserId,
+            actor.organizationId,
+            "log",
+            "read",
+          ),
+          userHasPermission(
+            principalUserId,
+            actor.organizationId,
+            "log",
+            "admin",
+          ),
         ]);
         // The OpenAPPA key adds a caller scope and is not the key stored on
         // LLM interactions; continued turns keep the same key.
@@ -1144,7 +2057,7 @@ const registry = defineArchestraTools([
           ? await InteractionModel.findLoggedSessionIds({
               organizationId: actor.organizationId,
               sessionIds: sessionKeys,
-              ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+              ...(canReadAllLogs ? {} : { ownUserId: principalUserId }),
             })
           : new Set<string>();
         // Prompts and their generated titles may hold other people's data;
@@ -1214,9 +2127,18 @@ const registry = defineArchestraTools([
         ),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
 
         const session = await AgentRunModel.findByTaskId(run.row.id);
@@ -1227,7 +2149,7 @@ const registry = defineArchestraTools([
         }
         // Narrower than run access on purpose: steering types into a shell
         // holding that person's own credentials.
-        if (session.actorUserId !== actor.id) {
+        if (session.actorKind !== actor.kind || session.actorId !== actor.id) {
           return errorResult("Only the person the run acts as can steer it.");
         }
         const agent = await AgentModel.findById(session.agentId);
@@ -1311,7 +2233,14 @@ const registry = defineArchestraTools([
       } catch (error) {
         const needed = missingCredentialsFrom(error);
         if (needed) {
-          return credentialsNeededResult(needed.agentId, needed.missing);
+          const posted = await postCredentialsNeededToThread(
+            context,
+            needed.agentId,
+            needed.missing,
+          );
+          return credentialsNeededResult(needed.agentId, needed.missing, {
+            posted,
+          });
         }
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
@@ -1331,7 +2260,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
         const task = run.row;
         if (!task.agentId) {
@@ -1393,16 +2326,26 @@ const registry = defineArchestraTools([
       message: z.string().trim().min(1).max(2_000),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
           taskId: args.task_id,
           actor,
+          callerAgentId: context.agent.id,
         });
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
-        if (!session || session.actorUserId !== actor.id) {
+        if (
+          !session ||
+          session.actorKind !== actor.kind ||
+          session.actorId !== actor.id
+        ) {
           return errorResult(
             "Only the person the runtime run acts as can post updates for it.",
           );
@@ -1489,6 +2432,11 @@ const registry = defineArchestraTools([
       comment: z.string().trim().max(2_000).optional(),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         // Malformed arguments are refused before any run or Guardrails lookup.
         const input = runFileInput(args);
@@ -1497,6 +2445,7 @@ const registry = defineArchestraTools([
         const task = await requireAccessibleTask({
           taskId: args.task_id,
           actor,
+          callerAgentId: context.agent.id,
         });
         if ("error" in task) return errorResult(task.error);
 
@@ -1508,7 +2457,7 @@ const registry = defineArchestraTools([
         }
         // Same narrowing as steering: the upload appears in the thread as the
         // run's own delivery, acting for the person the run runs as.
-        if (session.actorUserId !== actor.id) {
+        if (session.actorKind !== actor.kind || session.actorId !== actor.id) {
           return errorResult(
             "Only the person the run acts as can post files for it.",
           );
@@ -1741,23 +2690,67 @@ function tooLarge(bytes: number): string {
  */
 function credentialsNeededResult(
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
+  options: { posted?: boolean } = {},
 ) {
   const url = agentCredentialSetupUrl(
     agentId,
     missing.map(({ key }) => key),
   );
-  return errorResult(
-    `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
-      .map(
-        (entry) =>
-          `- ${entry.label} (${entry.key})${entry.description ? `: ${entry.description}` : ""}`,
-      )
-      .join(
-        "\n",
-      )}\n\nPut this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`,
-  );
+  const heading = missing.every((entry) => entry.reconnect)
+    ? "This Agent's Agent Runtime needs the user to connect these again (their stored connection no longer works):"
+    : "This Agent's Agent Runtime needs credentials you have not set up yet:";
+  const list = missing
+    .map(
+      (entry) =>
+        `- ${entry.label} (${entry.key})${entry.reconnect ? " [connect again]" : ""}${entry.description ? `: ${entry.description}` : ""}`,
+    )
+    .join("\n");
+  const instruction = options.posted
+    ? `The setup link was already posted in the chat thread: ${url}\nDo not post it again; tell the user to use it, then start the run again.`
+    : `Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`;
+  return errorResult(`${heading}\n${list}\n\n${instruction}`);
 }
+
+/**
+ * Posts the setup link straight into the chat thread the caller is answering,
+ * so the person gets it whatever the model does with the tool result. Returns
+ * whether it was posted.
+ */
+async function postCredentialsNeededToThread(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
+  agentId: string,
+  missing: MissingCredentialEntry[],
+): Promise<boolean> {
+  if (!context.chatOpsBindingId || !context.chatOpsThreadId) return false;
+  try {
+    const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
+    const agent = await AgentModel.findById(agentId);
+    return await chatOpsManager.notifyBindingThread({
+      bindingId: context.chatOpsBindingId,
+      threadId: context.chatOpsThreadId,
+      pinnedAgentId: context.chatOpsPinnedAgentId,
+      agentName: agent?.name,
+      text: credentialsNeededMessage({ agentId, missing }),
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId },
+      "Failed to post the credential setup link to the chat thread",
+    );
+    return false;
+  }
+}
+
+type MissingCredentialEntry = {
+  key: string;
+  label: string;
+  description?: string;
+  reconnect?: boolean;
+};
 
 function buildRunThread(
   row: Awaited<ReturnType<typeof AgentRunModel.listDashboard>>[number],
@@ -1794,7 +2787,7 @@ function countRuns(runs: Array<{ state: string }>) {
 /** The missing-credential list when the error is that refusal; null otherwise. */
 function missingCredentialsFrom(error: unknown): {
   agentId: string;
-  missing: Array<{ key: string; label: string; description?: string }>;
+  missing: MissingCredentialEntry[];
 } | null {
   if (
     error &&
@@ -1806,7 +2799,7 @@ function missingCredentialsFrom(error: unknown): {
   ) {
     return error as {
       agentId: string;
-      missing: Array<{ key: string; label: string; description?: string }>;
+      missing: MissingCredentialEntry[];
     };
   }
   return null;
@@ -1829,23 +2822,42 @@ export function requireActor(context: ArchestraContext): A2AActor {
     );
   }
   return {
-    id: context.userId,
-    kind: "user",
+    ...actorFromUserId(context.userId),
     organizationId: context.organizationId,
   };
+}
+
+/** @public — synthetic `service-account:<id>` or human user ID for RBAC/grant checks. */
+export function actorPrincipalUserId(actor: A2AActor): string {
+  return actor.kind === "serviceAccount"
+    ? serviceAccountUserId(actor.id)
+    : actor.id;
+}
+
+function tryRequireActor(context: ArchestraContext): A2AActor | null {
+  try {
+    return requireActor(context);
+  } catch {
+    return null;
+  }
 }
 
 /** The current turn of a run the caller may see, addressed by its run_id. */
 async function requireAccessibleRun(params: {
   runId: string;
   actor: A2AActor;
+  callerAgentId?: string;
 }): ReturnType<typeof requireAccessibleTask> {
   const taskId = await AgentRunModel.findCurrentTurnTaskId({
     runId: params.runId,
     organizationId: params.actor.organizationId,
   });
   if (!taskId) return { error: "Run not found" };
-  return requireAccessibleTask({ taskId, actor: params.actor });
+  return requireAccessibleTask({
+    taskId,
+    actor: params.actor,
+    callerAgentId: params.callerAgentId,
+  });
 }
 
 /**
@@ -1856,9 +2868,11 @@ async function requireAccessibleRun(params: {
 async function requireAccessibleTask({
   taskId,
   actor,
+  callerAgentId,
 }: {
   taskId: string;
   actor: A2AActor;
+  callerAgentId?: string;
 }): Promise<
   | { row: Awaited<ReturnType<typeof A2ATaskModel.findById>> & object }
   | { error: string }
@@ -1874,6 +2888,15 @@ async function requireAccessibleTask({
     if (!agent || agent.organizationId !== actor.organizationId) {
       return notFound;
     }
+    if (callerAgentId) {
+      const subagentAccess = await checkCallerSubagentAccess(
+        callerAgentId,
+        agent,
+      );
+      if (!subagentAccess.allowed) {
+        return notFound;
+      }
+    }
   }
 
   const context = await A2ATaskModel.findActorForTask(taskId);
@@ -1885,7 +2908,7 @@ async function requireAccessibleTask({
     const isAdmin =
       row.agentId !== null &&
       (await ResourcePermissions.allows({
-        userId: actor.id,
+        userId: actorPrincipalUserId(actor),
         organizationId: actor.organizationId,
         resource: "agent",
         scope: "*",
@@ -1904,13 +2927,18 @@ function failedLaunch(
   return { result, outcome: { kind: "failed", reason, ...details } };
 }
 
-function credentialsNeededLaunch(
+async function credentialsNeededLaunch(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
 ) {
+  const posted = await postCredentialsNeededToThread(context, agentId, missing);
   return failedLaunch(
     "credentials_needed",
-    credentialsNeededResult(agentId, missing),
+    credentialsNeededResult(agentId, missing, { posted }),
     {
       setup_url: agentCredentialSetupUrl(
         agentId,
@@ -2021,7 +3049,7 @@ async function parentCrossing(params: {
 }
 
 async function protectedFileAccess(params: {
-  context: Parameters<typeof guardRuntimeCrossing>[0];
+  context: Pick<ArchestraContext, "agent" | "openappaRuntimeCall">;
   actor: A2AActor;
   taskId: string;
 }): Promise<
@@ -2036,6 +3064,18 @@ async function protectedFileAccess(params: {
   | { kind: "error"; result: ReturnType<typeof errorResult> }
 > {
   const session = await AgentRunModel.findByTaskId(params.taskId);
+  if (session?.agentId) {
+    const targetAgent = await AgentModel.findById(session.agentId);
+    if (targetAgent) {
+      const subagentAccess = await checkCallerSubagentAccess(
+        params.context.agent.id,
+        targetAgent,
+      );
+      if (!subagentAccess.allowed) {
+        return { kind: "error", result: errorResult("Saved run not found") };
+      }
+    }
+  }
   const workspace = session
     ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
     : null;
@@ -2063,6 +3103,7 @@ async function protectedFileAccess(params: {
     return { kind: "error", result: errorResult(relation.reason) };
   }
   if (relation.kind === "producer") return { kind: "producer" };
+  if (relation.kind === "waived") return { kind: "open" };
   return {
     kind: "parent",
     child: relation.child,
@@ -2131,6 +3172,7 @@ async function governedRunOutput(params: {
     taskId: params.task.id,
   });
   if (crossed.kind === "producer") return withheld();
+  if (crossed.kind === "waived") return undefined;
   if (crossed.kind === "refused") {
     return crossed.cause === "unparented"
       ? withheld(crossed.reason)

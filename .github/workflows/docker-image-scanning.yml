@@ -38,7 +38,7 @@ jobs:
       matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
@@ -50,11 +50,18 @@ jobs:
     name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    # Build every architecture on native Blacksmith runners in parallel.
-    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    # Build every architecture on native runners in parallel.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
+    # Only merge groups reach this job (release-image-policy.py). The
+    # merge-queue-build environment admits gh-readonly-queue/main/* and
+    # gh-readonly-queue/release/*/* refs and holds the Sentry build secret.
+    environment:
+      name: merge-queue-build
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     permissions:
       contents: read
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -67,7 +74,7 @@ jobs:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -78,7 +85,6 @@ jobs:
       - name: Build candidate locally
         uses: $/.github/actions/build-docker-image
         with:
-          builder-cache-key: ${{ format('{0}-release-scan-{1}-{2}-v1', github.repository, matrix.image, matrix.arch) }}
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
@@ -90,8 +96,9 @@ jobs:
           version: ${{ steps.inputs.outputs.version }}
           previous-image: ${{ steps.inputs.outputs.previous-image }}
           require-previous-assets: "true"
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Publication promotes these exact bytes, so release candidates keep
+          # the Sentry build secret (see ../release-image-security.md). It comes
+          # from the merge-queue-build environment; pull requests never run this.
           sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
           cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
       - name: Seal candidate bytes for scanning
@@ -104,14 +111,17 @@ jobs:
       - name: Verify candidate bytes
         id: image
         run: python3 .github/scripts/release-candidate.py verify
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Scan exact candidate bytes
         id: scan
         uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
           platform: linux/${{ matrix.arch }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
       - name: Record successful scan
         env:
@@ -143,9 +153,11 @@ jobs:
     permissions:
       contents: read # Required to checkout scan policy and image sources.
       pull-requests: read # Recheck the queue release PR head and target after scanning.
+    outputs:
+      subjects: ${{ steps.gate.outputs.subjects }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
@@ -157,6 +169,7 @@ jobs:
           path: ${{ runner.temp }}/release-evidence
           merge-multiple: true
       - name: Require complete queue scan evidence or explicit PR skip
+        id: gate
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
@@ -175,12 +188,28 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Signs build provenance for each release image's multi-arch index in this
+  # run, the run that built and scanned it, in a job that runs no build step
+  # (SLSA Build L3). The release pushes the same index bytes
+  # (release-handoff.py push-index), and release-publisher accepts this
+  # run's provenance for them.
+  attest-release-candidates:
+    name: Attest release candidates
+    needs: [classify, release-image-security]
+    if: ${{ needs.classify.outputs.scan == 'true' && github.event_name == 'merge_group' && needs.release-image-security.result == 'success' }}
+    permissions:
+      id-token: write # Sign the build provenance.
+      attestations: write # Store the build provenance.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
+    with:
+      subjects: ${{ needs.release-image-security.outputs.subjects }}
+
   # Compatibility bridge for current main/release rulesets. These jobs depend on
   # the gate: PRs classify successfully, while version-changing queue groups
   # require complete scan evidence before any required context turns green.
   required-contexts:
     name: Docker Image Scanning (${{ matrix.name }})
-    needs: [release-image-security]
+    needs: [release-image-security, attest-release-candidates]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     strategy:
@@ -190,20 +219,23 @@ jobs:
       - name: Require release image security decision
         env:
           RESULT: ${{ needs.release-image-security.result }}
-        run: test "$RESULT" = success
+          # A release candidate that is not signed must not merge.
+          ATTESTED: ${{ needs.attest-release-candidates.result }}
+        run: test "$RESULT" = success && { test "$ATTESTED" = success || test "$ATTESTED" = skipped; }
 
   # main also requires the historical unexpanded matrix name. Construct it
   # literally without expression interpolation; remove only after ruleset rollout.
   legacy-required-context:
     name: ${{ format('Docker Image Scanning ({0}{1}{1} matrix.name {2}{2})', '$', '{', '}') }} # zizmor: ignore[obfuscation] literal legacy required context contains Actions delimiters
-    needs: [release-image-security]
+    needs: [release-image-security, attest-release-candidates]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require release image security decision
         env:
           RESULT: ${{ needs.release-image-security.result }}
-        run: test "$RESULT" = success
+          ATTESTED: ${{ needs.attest-release-candidates.result }}
+        run: test "$RESULT" = success && { test "$ATTESTED" = success || test "$ATTESTED" = skipped; }
 
   manual-platform-byte-scan:
     name: Manual Docker Image Scanning (Platform, byte-derived)
@@ -212,29 +244,34 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout scan policy and image sources.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Scan exact full and slim Platform image bytes
         uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
 
   handoff-fixture:
     name: Build non-publishing handoff fixture
     if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     permissions:
       contents: read
     steps:
       - name: Checkout fixture policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

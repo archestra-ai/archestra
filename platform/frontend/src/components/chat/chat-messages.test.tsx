@@ -1526,9 +1526,7 @@ describe("ChatMessages", () => {
     );
 
     // Completed: a compact circle whose expanded card lists the input.
-    fireEvent.click(
-      screen.getByRole("button", { name: /execute remedy plan/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /guardrails step/i }));
 
     const shownInputs = screen
       .getAllByText(/Share the report with the team/)
@@ -2049,7 +2047,7 @@ describe("ChatMessages", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("suppresses duplicate assistant auth text when the same message already has a tool auth error", () => {
+  it("keeps the assistant's reply next to the auth card of a failed tool call", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -2095,8 +2093,58 @@ describe("ChatMessages", () => {
       screen.getAllByRole("button", { name: "Re-authenticate" }),
     ).toHaveLength(1);
     expect(
-      screen.queryByText(/Please re-authenticate by visiting this URL/i),
-    ).not.toBeInTheDocument();
+      screen.getByText(/Please re-authenticate by visiting this URL/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a reply that repeats the tool's auth error word for word, without a second card", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+          {
+            type: "text",
+            text: 'Expired or invalid authentication for "id-jag test".\n\nTo re-authenticate, visit this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz\n\nOnce that is done I will fetch the server info.',
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button", { name: "Re-authenticate" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByText(/Once that is done I will fetch the server info/i),
+    ).toBeInTheDocument();
   });
 });
 

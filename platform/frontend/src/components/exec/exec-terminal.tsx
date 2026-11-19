@@ -11,8 +11,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { FileDropZone } from "@/components/files/file-drop-zone";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -53,6 +55,12 @@ export type ExecSessionHandlers = {
    * the plain connecting state instead.
    */
   onProgress?: (progress: ExecSessionProgress) => void;
+  /**
+   * The connection under the session dropped; the transport will attach
+   * again on its own and report `onStarted` when it has. Optional: a
+   * transport that cannot see its own link reports nothing.
+   */
+  onConnectionLost?: () => void;
 };
 
 /**
@@ -63,6 +71,27 @@ export type ExecSessionHandlers = {
  * different WebSocket messages, but neither difference belongs to xterm
  * lifecycle, fitting, or the status chrome below.
  */
+/**
+ * What the terminal asks before it sends Ctrl+C.
+ *
+ * Set for a session whose input loop belongs to an agent: there Ctrl+C stops
+ * the running turn, and it is also the copy shortcut a person presses after a
+ * drag that the agent's own interface, not xterm, turned into a selection.
+ */
+export type InterruptPrompt = {
+  title: string;
+  description: ReactNode;
+  confirmLabel: string;
+};
+
+/** A Ctrl+C held back for confirmation, and the attachment it was typed in. */
+type PendingInterrupt = {
+  sessionKey: string;
+  transport: ExecSessionTransport;
+  /** The attachment at the time of the key; a reattach is a different one. */
+  generation: number;
+};
+
 export type ExecSessionTransport = {
   /**
    * Open the session and return a teardown that also detaches server-side.
@@ -113,6 +142,8 @@ interface ExecTerminalProps {
    * stored file; the paths are then typed at the prompt for the user to send.
    */
   onDropFiles?: (files: File[]) => Promise<string[]>;
+  /** Confirm before sending Ctrl+C; without it Ctrl+C goes straight through. */
+  interruptPrompt?: InterruptPrompt | null;
   onCommandChange?: (command: string | null) => void;
   onError?: () => void;
   onClosed?: () => void;
@@ -132,6 +163,7 @@ export function ExecTerminal({
   initialProgress = null,
   progressStartedAt,
   onDropFiles,
+  interruptPrompt = null,
   onCommandChange,
   onError,
   onClosed,
@@ -142,6 +174,18 @@ export function ExecTerminal({
   transportRef.current = transport;
   const claudeMouseWorkaroundRef = useRef(claudeMouseWorkaround);
   claudeMouseWorkaroundRef.current = claudeMouseWorkaround;
+  const interruptPromptRef = useRef(interruptPrompt);
+  interruptPromptRef.current = interruptPrompt;
+  // Bound to the session whose terminal took the key: a confirmation that
+  // outlives a session change must not stop the session that replaced it.
+  const [pendingInterrupt, setPendingInterrupt] =
+    useState<PendingInterrupt | null>(null);
+  // Counts attachments of this terminal: a reconnect lands in a new one, which
+  // can be a newer turn of the same run, so a question asked in the old one
+  // must not be answered into it.
+  const attachGenerationRef = useRef(0);
+  // Enter on the open prompt means "keep running": the safe answer first.
+  const cancelInterruptRef = useRef<HTMLButtonElement>(null);
   const initialProgressRef = useRef(initialProgress);
   initialProgressRef.current = initialProgress;
   const hasTransportProgressRef = useRef(false);
@@ -252,15 +296,38 @@ export function ExecTerminal({
       };
       terminal.attachCustomKeyEventHandler((event) => {
         if (!focusTerminalRef.current) return false;
+        // xterm derives Ctrl+C from the physical key, so a Cyrillic or Greek
+        // layout sends it while `key` is not "c". Match both.
+        const isKeyC = event.code === "KeyC" || event.key.toLowerCase() === "c";
         if (
           event.type === "keydown" &&
           (event.metaKey || event.ctrlKey) &&
           !event.altKey &&
-          event.key.toLowerCase() === "c" &&
+          isKeyC &&
           terminal.hasSelection()
         ) {
           event.preventDefault();
           copyTerminalText(terminal.getSelection());
+          return false;
+        }
+        if (
+          event.type === "keydown" &&
+          event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          isKeyC &&
+          interruptPromptRef.current
+        ) {
+          // With no xterm selection, this Ctrl+C would reach the agent as an
+          // interrupt. Ask first: a person who dragged over the agent's own
+          // interface meant to copy.
+          event.preventDefault();
+          setPendingInterrupt({
+            sessionKey,
+            transport: transportRef.current,
+            generation: attachGenerationRef.current,
+          });
           return false;
         }
         return true;
@@ -332,6 +399,9 @@ export function ExecTerminal({
           },
           onStarted: (startedCommand) => {
             if (disposed) return;
+            // A new attachment, not the one any open question was about.
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
             setStatus("connected");
             setProgress(null);
             setCommand(startedCommand);
@@ -352,6 +422,8 @@ export function ExecTerminal({
           onError: (message) => {
             if (disposed) return;
             setStatus("error");
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
             setErrorMessage(message);
             onErrorRef.current?.();
           },
@@ -359,7 +431,16 @@ export function ExecTerminal({
             if (disposed) return;
             setClosedReason(reason);
             setStatus("disconnected");
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
             onClosedRef.current?.();
+          },
+          onConnectionLost: () => {
+            if (disposed) return;
+            // The next attachment may be a newer turn; a question asked in
+            // this one is void.
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
           },
         });
       };
@@ -411,6 +492,9 @@ export function ExecTerminal({
       disposed = true;
       cleanupPromise?.then((cleanupFn) => cleanupFn?.());
       cleanup();
+      // The terminal that asked is gone with its session, and its own close
+      // callback is ignored from here on, so dismiss the question here.
+      setPendingInterrupt(null);
     };
   }, [isActive, sessionKey, cleanup]);
 
@@ -440,6 +524,26 @@ export function ExecTerminal({
     },
     [onDropFiles, status],
   );
+
+  const closeInterruptPrompt = useCallback(() => {
+    setPendingInterrupt(null);
+  }, []);
+
+  const sendInterrupt = useCallback(() => {
+    const pending = pendingInterrupt;
+    setPendingInterrupt(null);
+    // Sent to the attachment that asked, and only while it is still the live
+    // one: not to a later turn the transport attached to in the meantime.
+    if (
+      !pending ||
+      pending.sessionKey !== sessionKey ||
+      pending.generation !== attachGenerationRef.current ||
+      status !== "connected"
+    ) {
+      return;
+    }
+    pending.transport.sendInput("\x03");
+  }, [pendingInterrupt, sessionKey, status]);
 
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
@@ -618,6 +722,32 @@ export function ExecTerminal({
             </Button>
           </div>
         </div>
+      )}
+      {interruptPrompt && (
+        <FormDialog
+          open={pendingInterrupt !== null}
+          onOpenChange={(open) => {
+            if (!open) closeInterruptPrompt();
+          }}
+          title={interruptPrompt.title}
+          description={interruptPrompt.description}
+          size="small"
+          initialFocusRef={cancelInterruptRef}
+        >
+          <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
+            <Button
+              type="button"
+              variant="outline"
+              ref={cancelInterruptRef}
+              onClick={closeInterruptPrompt}
+            >
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={sendInterrupt}>
+              {interruptPrompt.confirmLabel}
+            </Button>
+          </DialogStickyFooter>
+        </FormDialog>
       )}
     </div>
   );

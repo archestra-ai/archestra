@@ -1,5 +1,6 @@
 import { SESSION_ID_HEADER } from "@archestra/shared/consts";
 import {
+  CHATGPT_CLIENT_ID,
   CODEX_CLIENT_ID,
   COPILOT_CLI_CLIENT_ID,
   KILO_CLIENT_ID,
@@ -510,6 +511,33 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({
       sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
       sessionSource: "codex_session",
+    });
+  });
+
+  test("ChatGPT attribution: reads the Codex thread as a ChatGPT session", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+        body: {
+          client_metadata: {
+            thread_id: "019f66bc-440e-72d1-b927-4d96fad7dc3b",
+          },
+        },
+        externalAgentId: CHATGPT_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3b",
+      sessionSource: "chatgpt_session",
+    });
+    expect(
+      extractSessionInfo({
+        headers: { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+        body: undefined,
+        externalAgentId: CHATGPT_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "chatgpt_session",
     });
   });
 

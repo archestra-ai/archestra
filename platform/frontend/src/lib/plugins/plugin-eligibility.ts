@@ -16,6 +16,7 @@ export function isDeliverablePlugin(
   clientId: string,
 ): boolean {
   return (
+    clientId !== "grok-build" &&
     plugin.clientType === clientId &&
     plugin.enabled &&
     plugin.approvedContentHash === plugin.contentHash

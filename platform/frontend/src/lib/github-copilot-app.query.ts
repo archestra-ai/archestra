@@ -155,6 +155,28 @@ export function useCheckCopilotGithubOrganization() {
   });
 }
 
+/**
+ * The name GitHub shows for an organization being connected, to suggest the
+ * plan's name before anything is stored. Null while unknown: GitHub may tell
+ * it only once an App is connected, and a refused check (a taken or unknown
+ * organization) is said by Continue, not here.
+ */
+export function useCopilotGithubOrganizationName(organization: string | null) {
+  const { data } = useQuery({
+    queryKey: ["github-copilot-app", "organization-name", organization],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.checkCopilotGithubOrganization({
+        body: { organization: organization ?? "" },
+      });
+      return data?.organizationName ?? null;
+    },
+    enabled: !!organization,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  return organization ? (data ?? null) : null;
+}
+
 /** Use a GitHub App the organization already connected; may answer `needs_permission`. */
 export function useConnectCopilotGithubAppCredential() {
   const client = useQueryClient();

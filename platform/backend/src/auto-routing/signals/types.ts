@@ -5,12 +5,14 @@ export interface PreRunInput {
   firstUserText: string;
   client: string | null;
   systemPrompt?: string;
-  /** Names and descriptions only: never parameter schemas or tool results. */
-  tools?: { name: string; description?: string }[];
+  /** Names only: never descriptions, parameter schemas or tool results. */
+  tools?: { name: string }[];
 }
 
 export interface SignalSourceContext {
   organizationId: string;
+  /** The router's decision-model key; the organization's primary key when unset or no longer usable. */
+  apiKeyId?: string | null;
   /** Overrides the live-routing scorer timeout, for callers no request waits on. */
   timeoutMs?: number;
 }
@@ -30,6 +32,7 @@ type SignalSourceErrorReason =
   | "timeout"
   | "http"
   | "invalid_response"
+  | "input_too_large"
   | "no_credentials";
 
 export class SignalSourceError extends Error {

@@ -355,11 +355,11 @@ test("a policy preview runs the draft's battery helpers for a caller who may cha
   const team = await makeTeam(organization.id, editor.id);
   await makeTeamMember(team.id, editor.id);
   const consulted = await serveHelperBridge();
-  // After reading organization-internal data, sharing a project with a team needs that team's
+  // After reading organization-internal data, scoping a knowledge connector to a team needs that team's
   // members, which the archestra battery's audience source answers.
   const share = {
     path: "traces/share.appa",
-    content: `mcp/notes/read {}\nexpect allow\nmcp/archestra/set_project_share {\n  visibility: "team"\n  team_ids: ["${team.id}"]\n}\nexpect allow\n`,
+    content: `mcp/notes/read {}\nexpect allow\nmcp/archestra/update_knowledge_connector {\n  visibility: "team-scoped"\n  team_ids: ["${team.id}"]\n}\nexpect allow\n`,
   };
   await OpenAppaPolicyTestsModel.saveLocal({
     organizationId: organization.id,

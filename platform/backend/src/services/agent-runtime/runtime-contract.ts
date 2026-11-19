@@ -62,9 +62,9 @@ export const AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE = `${AGENT_RUNTIME_DIR}/read
 
 /**
  * A maintained runtime can leave a normalized transcript in the shared run
- * directory. The bootstrap base64-frames it on stdout after the PTY closes so
- * the control plane can persist it independently without exposing raw provider
- * events in the terminal recording.
+ * directory. The supervisor appends base64 frames to the turn recording after
+ * the PTY closes. The control plane reads that file and persists the transcript
+ * independently, without copying its contents to container logs.
  */
 export const AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START =
   "\u001b]777;archestra-readable-transcript=base64\u0007";
@@ -114,4 +114,33 @@ export function constructStableRunName(
  */
 export function agentRunLlmSessionId(run: { workloadName: string }): string {
   return run.workloadName;
+}
+
+/** Platform-issued OAuth client ID for per-run Agent Runtime gateway tokens. */
+export const AGENT_RUNTIME_OAUTH_CLIENT_ID = "archestra-agent-runtime";
+
+/** Prefix for deterministic OAuth access token row IDs of Agent Runtime runs. */
+const AGENT_RUN_GATEWAY_TOKEN_ID_PREFIX = "agent-run:";
+
+/** Deterministic OAuth access token row ID for an Agent Runtime run session. */
+export function agentRunGatewayTokenId(runId: string): string {
+  return `${AGENT_RUN_GATEWAY_TOKEN_ID_PREFIX}${runId}`;
+}
+
+/**
+ * Whether an authenticated gateway caller is using a per-run Agent Runtime
+ * OAuth token (`authenticateOAuthTokenByHash` keeps `tokenId: "agent-run:<id>"`
+ * and omits `oauthClientId`).
+ */
+export function isAgentRunGatewayToken(
+  tokenAuth:
+    | { tokenId?: string | null; oauthClientId?: string | null }
+    | null
+    | undefined,
+): boolean {
+  if (!tokenAuth) return false;
+  return (
+    tokenAuth.oauthClientId === AGENT_RUNTIME_OAUTH_CLIENT_ID ||
+    Boolean(tokenAuth.tokenId?.startsWith(AGENT_RUN_GATEWAY_TOKEN_ID_PREFIX))
+  );
 }

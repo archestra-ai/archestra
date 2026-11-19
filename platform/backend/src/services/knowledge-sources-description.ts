@@ -9,12 +9,13 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import type { KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 
 /** Caller-scoped indexed sources, shared by prompts and both discovery surfaces. */
 export async function buildKnowledgeSourcesDescription(
   agentId: string,
-  viewer?: { userId?: string; organizationId: string },
+  viewer?: { userId?: string; oauthClientId?: string; organizationId: string },
   lookups?: RequestLookups,
 ): Promise<string | null> {
   const agent = lookups
@@ -31,6 +32,13 @@ export async function buildKnowledgeSourcesDescription(
         lookups,
       })
     : null;
+  const oauthPrincipal =
+    !access && viewer?.oauthClientId
+      ? await ResourcePermissionSubjectModel.resolveOauthClientPrincipal({
+          oauthClientId: viewer.oauthClientId,
+          organizationId,
+        })
+      : null;
   const dynamic = await dynamicAccessContext({
     agentId,
     userId: viewer?.userId,
@@ -56,6 +64,19 @@ export async function buildKnowledgeSourcesDescription(
         limit: MAX_SOURCES + excludedIds.length + 1,
       })
     ).filter((connector) => !excluded.has(connector.id));
+  } else if (agent.accessAllTools && !access && viewer?.userId !== "system") {
+    const excludedConnectorIds =
+      await AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId);
+    const resolved =
+      await knowledgeSourceAccessControlService.findQueryableOrganizationConnectorsForNonUser(
+        {
+          organizationId,
+          environmentId: agent.environmentId,
+          excludedConnectorIds,
+          principal: oauthPrincipal ?? undefined,
+        },
+      );
+    connectors = resolved.connectors;
   } else {
     const [assignments, directIds] = await Promise.all([
       AgentKnowledgeBaseModel.findByAgent(agentId),
@@ -79,6 +100,7 @@ export async function buildKnowledgeSourcesDescription(
             resource: "knowledgeBase",
             sources: assignedBases,
             action: "use",
+            principal: oauthPrincipal ?? undefined,
           },
         );
     const [kbConnectors, directConnectors] = await Promise.all([
@@ -88,7 +110,7 @@ export async function buildKnowledgeSourcesDescription(
           canReadAll: access?.canReadAll,
           viewerTeamIds: access?.teamIds,
           viewerUserId: access?.userId,
-          viewerPrincipal: access?.principal,
+          viewerPrincipal: access?.principal ?? oauthPrincipal ?? undefined,
           visibilityScope: "query",
         },
       ),
@@ -121,6 +143,7 @@ export async function buildKnowledgeSourcesDescription(
             organizationId,
             connectors,
             knowledgeBaseIds: knowledgeBases.map((kb) => kb.id),
+            principal: oauthPrincipal ?? undefined,
           },
         );
     }

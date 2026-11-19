@@ -8,7 +8,9 @@
  * and hung chat streams indefinitely instead of surfacing the error.
  * The handler separately retries status-less connection failures, at most
  * twice and only before the first upstream chunk. Provider HTTP errors,
- * error events, timeouts, and failures after output are never retried here.
+ * error events, timeouts, and failures after output are never retried by SDKs.
+ * Model pools may opt into bounded retries for transient pre-output failures
+ * in model-pool-failover.ts; SDK retries stay disabled to avoid multiplying them.
  * Gemini is excluded because its SDK can discard an HTTP error's status
  * when the error body is interrupted, making a rejected request look retryable.
  */

@@ -25,6 +25,7 @@ import {
   formatAuthMethod,
   formatCallerIdentity,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { credentialClientLabel } from "@/lib/mcp-logs/credential-client";
 import type { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { formatLatency } from "@/lib/utils/format-duration";
@@ -100,6 +101,25 @@ export function ToolCallFacts({
         {authMethod ? <FactSub>via {authMethod}</FactSub> : null}
       </Fact>
 
+      {call.credentialClientId ? (
+        <Fact
+          label="Token issued to"
+          // Two identifiers stack here, so it takes a wider share of the row.
+          className="lg:flex-[2_1_240px]"
+        >
+          <FactValue>
+            {credentialClientLabel(call.credentialClientType)}
+          </FactValue>
+          <CopyableId value={call.credentialClientId} />
+          {call.credentialActorClientId ? (
+            <CopyableId
+              label="acting agent"
+              value={call.credentialActorClientId}
+            />
+          ) : null}
+        </Fact>
+      ) : null}
+
       {executedAs ? (
         <Fact label="Called as">
           <span className="flex min-h-5 items-center">
@@ -117,6 +137,18 @@ export function ToolCallFacts({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+function CopyableId({ label, value }: { label?: string; value: string }) {
+  return (
+    <FactSub>
+      <span className="flex min-w-0 items-center gap-1">
+        {label ? <span className="shrink-0">{label}</span> : null}
+        <span className="truncate font-mono">{value}</span>
+        <CopyButton text={value} size={12} />
+      </span>
+    </FactSub>
+  );
+}
 
 function LinksRow({ call }: { call: McpToolCallRecord }) {
   const { sessionId, gone } = useLinkedSession(call);

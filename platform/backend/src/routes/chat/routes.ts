@@ -55,6 +55,7 @@ import {
   markOpenAiReasoningSummaryUnsupported,
   openAiReasoningSummaryCacheKey,
 } from "@/agents/openai-reasoning-summary";
+import { createStepContextGuard } from "@/agents/step-context-guard";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -73,7 +74,11 @@ import {
   chatTaskPrincipal,
   createChatTaskBridge,
 } from "@/clients/chat-task-bridge";
-import { createLLMModelForAgent, isApiKeyRequired } from "@/clients/llm-client";
+import {
+  createLLMModelForAgent,
+  isApiKeyRequired,
+  type LLMModel,
+} from "@/clients/llm-client";
 import {
   applySubagentToolCallsToMessages,
   createSubagentToolStreamBridge,
@@ -139,7 +144,11 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
-import { resolveChatModelPool } from "@/services/chat-model-pools";
+import {
+  resolveAgentModelPool,
+  resolveChatModelPool,
+} from "@/services/chat-model-pools";
+import { generateInContextSummary } from "@/services/context-compaction";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -174,6 +183,7 @@ import { ConversationFilesResponseSchema } from "@/types/conversation-file";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
+  resolveAutoModelSelection,
   resolveConversationLlmSelectionForAgent,
   resolveConversationModel,
 } from "@/utils/llm-resolution";
@@ -189,11 +199,13 @@ import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
+import { buildBedrockThinkingOptions } from "./bedrock-provider-options";
 import { buildChatContext } from "./build-chat-context";
 import { compactMessagesForChat } from "./compaction/compact-messages";
 import {
   buildContextWindowBreakdown,
   estimateEachToolTokens,
+  estimateToolsTokens,
   refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
@@ -216,6 +228,7 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { buildGeminiProviderOptions } from "./gemini-provider-options";
+import { withChatHeartbeats } from "./heartbeat-stream";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import {
   injectExternalMcpSkillActivation,
@@ -628,6 +641,42 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
+      // Pool membership and ownership can change between turns. Re-anchor
+      // before model/provider and attachment selection, never on the owner's
+      // stored personal credential. Only the current agent's configured pool
+      // inherits its shared-key access; other pools need the caller's own grant.
+      const poolAgent = conversation.modelPoolId
+        ? await AgentModel.findLlmSelectionFieldsById(conversation.agentId)
+        : null;
+      const poolSelection = conversation.modelPoolId
+        ? await (conversation.modelPoolId === poolAgent?.modelPoolId
+            ? resolveAgentModelPool
+            : resolveChatModelPool)({
+            organizationId,
+            userId: user.id,
+            modelPoolId: conversation.modelPoolId,
+          })
+        : null;
+      if (poolSelection) {
+        conversation.modelId = poolSelection.modelId;
+        conversation.chatApiKeyId = poolSelection.chatApiKeyId;
+      }
+
+      // Auto is a live selection, not the normal tier snapshot saved when
+      // the conversation began. Refresh only this turn's view, including its
+      // provider, before attachment gating and wire/client selection.
+      const autoSelection =
+        !poolSelection && conversation.autoRouterId
+          ? await resolveAutoModelSelection(
+              organizationId,
+              conversation.autoRouterId,
+            )
+          : null;
+      if (autoSelection) {
+        conversation.modelId = autoSelection.modelId;
+        conversation.chatApiKeyId = autoSelection.chatApiKeyId;
+      }
+
       // A shared agent may be configured to refuse callers who cannot reach one
       // of the MCP servers its tools come from, rather than letting them find
       // out mid-turn when such a tool errors. The picker greys these agents out,
@@ -701,6 +750,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           policy: {
             ingestibleMimeTypes: getModelReadableMimeTypes(
               attachmentModelRow?.inputModalities ?? null,
+              attachmentModelRow?.provider,
             ),
             sandboxAvailable: await isSkillSandboxAvailableForAgent({
               userId: user.id,
@@ -1339,9 +1389,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     externalAgentId,
                     sessionId: conversationId,
                     source: "chat",
-                    agentLlmApiKeyId: agent.llmApiKeyId,
+                    agentLlmApiKeyId:
+                      poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
+                    providerKeySelection: autoSelection?.chatApiKeyId
+                      ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                      : undefined,
                     modelPoolId: conversation.modelPoolId,
-                    autoRoutable: !conversation.modelPoolId,
+                    autoRouterId: autoSelection?.autoRouterId ?? null,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1439,7 +1493,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     selectedModel,
                     modelId: conversation.modelId,
                     inputModalities: modelRow?.inputModalities ?? null,
-                    agentLlmApiKeyId: agent.llmApiKeyId,
+                    agentLlmApiKeyId:
+                      poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
                     abortSignal: chatAbortController.signal,
@@ -1528,6 +1583,79 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // abortive-turn tracker's flush (which runs after it).
                 let turnNoticeChunk: UIMessageChunk | null = null;
 
+                const stepPromptCache = usesStepPromptCache({
+                  provider,
+                  anthropicNativeEndpoint,
+                })
+                  ? { provider, model: selectedModel, anthropicNativeEndpoint }
+                  : undefined;
+                const turnTools = supportsToolCalling ? mcpTools : undefined;
+                const contextLength = modelRow
+                  ? ModelModel.resolveEffectiveContextLength(modelRow)
+                  : null;
+                // Built on the first later step, once the turn's output budget
+                // is set on streamTextConfig.
+                let stepContextGuard:
+                  | ReturnType<typeof createStepContextGuard>
+                  | undefined;
+                const createChatStepContextGuard = () => {
+                  let compactionModel: Promise<LLMModel> | undefined;
+                  return createStepContextGuard({
+                    contextLength,
+                    systemPrompt,
+                    toolTokens: turnTools
+                      ? estimateToolsTokens({
+                          provider,
+                          model: selectedModel,
+                          tools: turnTools,
+                        })
+                      : 0,
+                    // OpenAI chat-completions carries the cap in providerOptions.
+                    replyTokens:
+                      streamTextConfig.maxOutputTokens ?? maxOutputTokens,
+                    abortSignal: chatAbortController.signal,
+                    logContext: { conversationId },
+                    promptCache: stepPromptCache,
+                    // EncryptedChat: never send the history to a summarizer;
+                    // the guard caps and trims instead.
+                    summarizeMessages: conversation.encryptedChat
+                      ? undefined
+                      : async ({ messages, hasPreviousSummary }) => {
+                          // A separate model instance so the summary request
+                          // is logged and governed as compaction, like the
+                          // turn-start one.
+                          compactionModel ??= createLLMModelForAgent({
+                            organizationId,
+                            userId: user.id,
+                            agentId,
+                            model: selectedModel,
+                            provider,
+                            conversationId,
+                            externalAgentId,
+                            sessionId: conversationId,
+                            source: "chat:compaction",
+                            agentLlmApiKeyId:
+                              poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
+                            providerKeySelection: autoSelection?.chatApiKeyId
+                              ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                              : undefined,
+                            modelPoolId: conversation.modelPoolId,
+                            autoRouterId: autoSelection?.autoRouterId ?? null,
+                          }).then((created) => created.model);
+                          return generateInContextSummary({
+                            model: await compactionModel,
+                            systemPrompt,
+                            messages,
+                            tools: turnTools,
+                            hasPreviousSummary,
+                            contextLength,
+                            abortSignal: chatAbortController.signal,
+                            logFields: { conversationId, provider },
+                          });
+                        },
+                  });
+                };
+
                 const streamTextConfig: ChatStreamTextConfig = {
                   model: withStreamIdleTimeout(
                     model,
@@ -1539,17 +1667,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       toolExecutionErrors.add(event.error);
                     }
                   },
-                  prepareStep: ({ messages }) => {
+                  prepareStep: ({ messages, stepNumber }) => {
+                    // The first step is the prompt turn-start compaction and
+                    // the context-window check already sized.
+                    if (stepNumber > 0) {
+                      stepContextGuard ??= createChatStepContextGuard();
+                      return stepContextGuard({ messages });
+                    }
                     const ordered = orderToolResultsByCall(messages);
                     return {
-                      messages: usesStepPromptCache({
-                        provider,
-                        anthropicNativeEndpoint,
-                      })
+                      messages: stepPromptCache
                         ? applyStepPromptCacheBreakpoint({
-                            provider,
-                            model: selectedModel,
-                            anthropicNativeEndpoint,
+                            ...stepPromptCache,
                             messages: ordered,
                           })
                         : ordered,
@@ -1579,9 +1708,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           externalAgentId,
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
-                          agentLlmApiKeyId: agent.llmApiKeyId,
+                          agentLlmApiKeyId:
+                            poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
+                          providerKeySelection: autoSelection?.chatApiKeyId
+                            ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                            : undefined,
                           modelPoolId: conversation.modelPoolId,
-                          autoRoutable: !conversation.modelPoolId,
+                          autoRouterId: autoSelection?.autoRouterId ?? null,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -1866,6 +1999,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
+
+                const bedrockTurn = buildBedrockThinkingOptions({
+                  provider,
+                  selectedModel,
+                  thinkingEffort,
+                  maxOutputTokens,
+                  hasExplicitOutputLimit:
+                    config.chat.maxOutputTokensExplicitlyConfigured ||
+                    modelRow?.customOutputLength != null,
+                  temperature,
+                });
+                if (bedrockTurn) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    bedrock: bedrockTurn.providerOptions,
+                  };
+                  streamTextConfig.maxOutputTokens =
+                    bedrockTurn.maxOutputTokens;
                 }
 
                 // vLLM and Ollama's `/v1` speak `reasoning_effort` too, but
@@ -2532,9 +2684,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: {
           "Content-Encoding": "none",
         },
-        stream: activeChatRunService.createReplayStream(
-          activeRun.id,
-          replayEncryptedChatAudit,
+        // Replayed runs (including scheduled runs) may not persist heartbeats.
+        // Keep this connection alive without adding transport events to storage.
+        stream: withChatHeartbeats(
+          activeChatRunService.createReplayStream(
+            activeRun.id,
+            replayEncryptedChatAudit,
+          ),
         ),
       });
 
@@ -3095,6 +3251,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           modelPoolId: true,
+          autoRouterId: true,
           projectId: true,
           encryptedChat: true,
           thinkingEffort: true,
@@ -3105,6 +3262,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             modelPoolId: true,
+            autoRouterId: true,
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
@@ -3120,6 +3278,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId,
           chatApiKeyId,
           modelPoolId,
+          autoRouterId,
           projectId,
           encryptedChat,
           thinkingEffort,
@@ -3171,9 +3330,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      const effectiveModelPoolId =
+        modelPoolId ??
+        (modelPoolId === undefined && !modelId && !chatApiKeyId && !autoRouterId
+          ? agent.modelPoolId
+          : null);
+
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (!modelPoolId && chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
+      if (
+        !effectiveModelPoolId &&
+        chatApiKeyId &&
+        chatApiKeyId !== agent.llmApiKeyId
+      ) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
@@ -3181,21 +3350,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // pool -> explicit pick -> member -> agent -> organization -> best available.
       // The explicit pick is a (model, key) pair — both are carried so the
       // chosen key is honored instead of being re-derived.
-      const llmSelection = modelPoolId
+      const llmSelection = effectiveModelPoolId
         ? {
-            ...(await resolveChatModelPool({
+            ...(await (effectiveModelPoolId === agent.modelPoolId
+              ? resolveAgentModelPool
+              : resolveChatModelPool)({
               organizationId,
               userId: user.id,
-              modelPoolId,
+              modelPoolId: effectiveModelPoolId,
             })),
             selectedModel: null,
           }
         : await resolveConversationLlmSelectionForAgent({
-            agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+            agent: {
+              llmApiKeyId: agent.llmApiKeyId,
+              modelId: agent.modelId,
+              autoRouterId: agent.autoRouterId,
+            },
             organizationId,
             userId: user.id,
             explicitModelId: modelId,
             explicitApiKeyId: chatApiKeyId,
+            explicitAutoRouterId: autoRouterId,
+            allowAutoModel: agent.runtime === null,
           });
 
       logger.info(
@@ -3240,7 +3417,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
-          modelPoolId: modelPoolId ?? null,
+          modelPoolId: effectiveModelPoolId ?? null,
+          autoRouterId:
+            ("autoRouterId" in llmSelection && llmSelection.autoRouterId) ||
+            null,
           projectId: projectId ?? null,
           thinkingEffort,
         }),
@@ -3306,14 +3486,51 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // The agent picker sends only agentId. Its configured pool comes with
+      // it unless the request deliberately chooses a key, model or router.
+      if (
+        nextAgent?.modelPoolId &&
+        body.modelPoolId === undefined &&
+        body.autoRouterId === undefined &&
+        body.modelId === undefined &&
+        body.chatApiKeyId === undefined
+      ) {
+        body.modelPoolId = nextAgent.modelPoolId;
+      }
+
       // Validate chatApiKeyId if provided. Skip validation when it is the
       // configured key of the agent the conversation will run on after this
       // update (permission flows through agent access) — the new agent when
       // this request switches agents, not the one being left.
       // Picking a pool stores one of its members as the conversation's key
       // and model; picking a key or model, or another agent, leaves the pool.
-      if (body.modelPoolId) {
-        const pooled = await resolveChatModelPool({
+      // Picking an auto router stores its normal tier the same way, and
+      // leaves the pool; picking anything else leaves the router.
+      if (body.autoRouterId) {
+        const auto = await resolveAutoModelSelection(
+          organizationId,
+          body.autoRouterId,
+        );
+        if (!auto) {
+          throw new ApiError(400, "This auto router is not set up.");
+        }
+        body.modelId = auto.modelId;
+        body.chatApiKeyId = auto.chatApiKeyId;
+        body.modelPoolId = null;
+      } else if (body.modelPoolId) {
+        const agentModelPoolId = nextAgent
+          ? nextAgent.modelPoolId
+          : currentConversation.agent
+            ? (
+                await AgentModel.findLlmSelectionFieldsById(
+                  currentConversation.agent.id,
+                  user.id,
+                )
+              )?.modelPoolId
+            : null;
+        const pooled = await (body.modelPoolId === agentModelPoolId
+          ? resolveAgentModelPool
+          : resolveChatModelPool)({
           organizationId,
           userId: user.id,
           modelPoolId: body.modelPoolId,
@@ -3328,12 +3545,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         body.modelPoolId = null;
       }
+      // Any explicit pool, `null` included, leaves the auto router: the menu
+      // leaves a pool, and a router, by picking the key it already runs on.
+      if (
+        body.autoRouterId === undefined &&
+        (body.modelPoolId !== undefined ||
+          body.modelId !== undefined ||
+          body.chatApiKeyId !== undefined ||
+          nextAgent)
+      ) {
+        body.autoRouterId = null;
+      }
 
       const effectiveAgentLlmApiKeyId = nextAgent
         ? nextAgent.llmApiKeyId
         : currentConversation.agent?.llmApiKeyId;
       if (
         !body.modelPoolId &&
+        !body.autoRouterId &&
         body.chatApiKeyId &&
         body.chatApiKeyId !== effectiveAgentLlmApiKeyId
       ) {
@@ -3347,6 +3576,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         nextAgent &&
         !body.modelPoolId &&
+        !body.autoRouterId &&
         body.modelId === undefined &&
         body.chatApiKeyId === undefined
       ) {
@@ -3354,13 +3584,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agent: {
             llmApiKeyId: nextAgent.llmApiKeyId ?? null,
             modelId: nextAgent.modelId ?? null,
+            autoRouterId: nextAgent.autoRouterId,
           },
           organizationId,
           userId: user.id,
+          allowAutoModel: nextAgent.runtime === null,
         });
 
         body.modelId = llmSelection.modelId;
         body.chatApiKeyId = llmSelection.chatApiKeyId;
+        body.autoRouterId = llmSelection.autoRouterId ?? null;
         // The new agent's pool comes with its model.
         if (
           nextAgent.modelPoolId &&
@@ -4786,6 +5019,8 @@ function redactChatErrorForEncryptedChat(
       ? { usageLimitEntityType: error.usageLimitEntityType }
       : {}),
     ...(error.authAction ? { authAction: error.authAction } : {}),
+    // Agent and model names, not conversation content.
+    ...(error.subagent ? { subagent: error.subagent } : {}),
   };
 }
 

@@ -12,10 +12,12 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
   SkillModel,
   TeamTokenModel,
   ToolModel,
   UserCredentialModel,
+  UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -42,6 +44,7 @@ import {
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { agentRunUrl } from "./run-handle";
+import { agentRunGatewayTokenId } from "./runtime-contract";
 
 /** The default tiers, as an organization without settings has them. */
 const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
@@ -147,6 +150,106 @@ describe("buildAgentRunLaunchSpec", () => {
       disabled: true,
     });
     await expect(launch()).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("a user run receives an expiring, agent-scoped gateway token instead of the personal user token", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const otherAgent = await makeAgent({
+      organizationId: setup.agent.organizationId,
+      authorId: setup.user.id,
+      agentType: "agent",
+    });
+    const personalToken = await UserTokenModel.ensureUserToken(
+      setup.user.id,
+      setup.agent.organizationId,
+    );
+    const personalTokenValue = await UserTokenModel.getTokenValue(
+      personalToken.id,
+    );
+
+    const runId = crypto.randomUUID();
+    const launchedAt = Date.now();
+    const result = await buildAgentRunLaunchSpec({
+      runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+      limits: resolveAgentRunLimits({
+        tiers: TIERS,
+        runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+      }),
+      taskId: crypto.randomUUID(),
+      runId,
+      agentId: setup.agent.id,
+      actor: {
+        kind: "user",
+        id: setup.user.id,
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+
+    const token = result.spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN;
+    expect(token).not.toBe(personalTokenValue);
+    expect(token).not.toMatch(/^arch_/);
+
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(token);
+    const stored = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(stored).toMatchObject({
+      id: agentRunGatewayTokenId(runId),
+      userId: setup.user.id,
+      referenceId: `mcp-resource:${setup.agent.id}`,
+      scopes: ["mcp"],
+    });
+    expect(stored?.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      launchedAt + 3600000,
+    );
+    expect(stored?.expiresAt.getTime()).toBeLessThan(Date.now() + 3600001);
+
+    const validated = await validateMCPGatewayToken(setup.agent.id, token);
+    expect(validated).toEqual({
+      tokenId: agentRunGatewayTokenId(runId),
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: setup.agent.organizationId,
+      isUserToken: true,
+      userId: setup.user.id,
+    });
+
+    // Cannot be used on any other Agent or MCP Gateway in the organization
+    expect(await validateMCPGatewayToken(otherAgent.id, token)).toBeNull();
+
+    // Expired token is rejected
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() - 1),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+
+    // Revoked token is deleted by runId
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).not.toBeNull();
+    await OAuthAccessTokenModel.deleteById(agentRunGatewayTokenId(runId));
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
   });
 
   test("tells the client when Guardrails v2 governs the run", async ({
@@ -438,8 +541,8 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
       ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(taskId),
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
-      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
-      OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
+      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
+      OPENAI_BASE_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
       ARCHESTRA_MCP_GATEWAY_URL: `https://platform.example.test/v1/mcp/${setup.agent.id}`,
       ARCHESTRA_AGENT_RUNTIME_BANNER:
         "Example AI\nSecure access to your AI tools",
@@ -745,6 +848,68 @@ describe("buildAgentRunLaunchSpec", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test("refuses a privileged Agent once the operator disables privileged runs", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const privileged = {
+      ...runtime(setup.agent, "openai_chat"),
+      privileged: true,
+    };
+    const launch = () =>
+      buildAgentRunLaunchSpec({
+        runtime: privileged,
+        limits: resolveAgentRunLimits({ tiers: TIERS, runtime: privileged }),
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+      });
+    const previous = config.agentRuntime.allowPrivileged;
+    try {
+      // The Agent was saved while privileged runs were allowed.
+      config.agentRuntime.allowPrivileged = true;
+      expect((await launch()).spec.privileged).toBe(true);
+
+      config.agentRuntime.allowPrivileged = false;
+      const providerKeyId = setup.agent.llmApiKeyId as string;
+      const keysBefore =
+        await VirtualApiKeyModel.countByProviderApiKeyId(providerKeyId);
+      await expect(launch()).rejects.toMatchObject({
+        statusCode: 403,
+        message: expect.stringContaining("privileged"),
+      });
+      // Refused before anything was minted for the run.
+      expect(
+        await VirtualApiKeyModel.countByProviderApiKeyId(providerKeyId),
+      ).toBe(keysBefore);
+    } finally {
+      config.agentRuntime.allowPrivileged = previous;
+    }
+  });
+
   test("rejects a Responses-only model for a Chat Completions image", async ({
     makeOrganization,
     makeAdmin,
@@ -930,13 +1095,18 @@ describe("buildAgentRunLaunchSpec", () => {
       runMode: "one_shot",
     });
 
+    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
       "managed-subscription-token",
     );
+    expect(JSON.stringify(spec)).not.toContain("managed-subscription-token");
+    expect(JSON.stringify(spec)).not.toContain("claude-subscription-token");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
-    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.env.ANTHROPIC_BASE_URL).toBe(
       `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
     );
@@ -970,6 +1140,34 @@ describe("buildAgentRunLaunchSpec", () => {
         userId: setup.user.id,
         runtime: configuredRuntime,
       }),
+    );
+
+    const secondLaunch = await buildAgentRunLaunchSpec({
+      runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+    expect(secondLaunch.virtualApiKeyId).not.toBe(virtualApiKeyId);
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      secondLaunch.spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
+      spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN,
     );
   });
 
@@ -1398,52 +1596,57 @@ describe("buildAgentRunLaunchSpec", () => {
     });
   }
 
-  test("never falls back to an OpenAI API key for Codex", async ({
-    makeOrganization,
-    makeAdmin,
-    makeMember,
-    makeSecret,
-    makeLlmProviderApiKey,
-    makeAgent,
-  }) => {
-    const setup = await makeConfiguredAgent({
-      provider: "openai",
+  for (const command of [
+    ["archestra-codex"],
+    ["archestra-codex-runtime"],
+  ] as const) {
+    test(`never falls back to an OpenAI API key for Codex (${command[0]})`, async ({
       makeOrganization,
       makeAdmin,
       makeMember,
       makeSecret,
       makeLlmProviderApiKey,
       makeAgent,
-    });
-    const configuredRuntime = runtime(setup.agent, "openai_responses");
-    configuredRuntime.command = ["archestra-codex"];
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "openai",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = runtime(setup.agent, "openai_responses");
+      configuredRuntime.command = [...command];
 
-    await expect(
-      buildAgentRunLaunchSpec({
-        runtime: configuredRuntime,
-        limits: resolveAgentRunLimits({
+      await expect(
+        buildAgentRunLaunchSpec({
           runtime: configuredRuntime,
-          tiers: TIERS,
-        }),
-        taskId: crypto.randomUUID(),
-        runId: crypto.randomUUID(),
-        agentId: setup.agent.id,
-        actor: {
-          id: setup.user.id,
-          kind: "user",
+          limits: resolveAgentRunLimits({
+            runtime: configuredRuntime,
+            tiers: TIERS,
+          }),
+          taskId: crypto.randomUUID(),
+          runId: crypto.randomUUID(),
+          agentId: setup.agent.id,
+          actor: {
+            id: setup.user.id,
+            kind: "user",
+            organizationId: setup.agent.organizationId,
+          },
           organizationId: setup.agent.organizationId,
-        },
-        organizationId: setup.agent.organizationId,
-        runtimeScope: "agent-tests",
-        effectiveNetworkPolicy: { source: "built_in", policy: null },
-        appName: "Archestra",
-        runMode: "interactive",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining("never falls back"),
+          runtimeScope: "agent-tests",
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+          appName: "Archestra",
+          runMode: "interactive",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining("never falls back"),
+      });
     });
-  });
+  }
 
   test("does not inject a Claude subscription token into a custom runtime", async ({
     makeOrganization,

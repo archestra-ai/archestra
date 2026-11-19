@@ -160,13 +160,6 @@ export function createVertexClientForLocation(
 }
 
 /**
- * Check if Vertex AI mode is enabled
- */
-export function isVertexAiEnabled(): boolean {
-  return config.llm.gemini.vertexAi.enabled;
-}
-
-/**
  * The Vertex AI location a model should be addressed at: the configured one,
  * except for models Vertex serves only from `global` — those go to `global`
  * when the deployment allows it.

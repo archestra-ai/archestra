@@ -13,10 +13,10 @@ import {
 } from "vitest";
 import config, {
   agentRuntimeWorkspaceStorage,
-  betaFeatureEnabled,
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
+  getAuditLogOtelExporter,
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
@@ -29,7 +29,9 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getRumOtlpAuthHeaders,
+  getSentryConfig,
   getTrustedOrigins,
+  isChatMaxOutputTokensConfigured,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
@@ -54,9 +56,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
@@ -72,6 +71,11 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
+  parseOpenAppaPolicyCheckName,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseOptionalNamespace,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -80,6 +84,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -105,6 +110,7 @@ describe("getAnalyticsConfig", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.ARCHESTRA_ANALYTICS;
+    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST;
   });
@@ -138,6 +144,21 @@ describe("getAnalyticsConfig", () => {
     expect(getAnalyticsConfig().enabled).toBe(true);
   });
 
+  test("defaults to disabled in production with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
   test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
     process.env.NODE_ENV = "production";
     process.env.ARCHESTRA_ANALYTICS = "disabled";
@@ -157,6 +178,69 @@ describe("getAnalyticsConfig", () => {
         key: "ph_custom",
         host: "https://posthog.example.com",
       },
+    });
+  });
+});
+
+describe("getSentryConfig", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", undefined);
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", undefined);
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  test("reports errors only to Archestra's project by default in production", () => {
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: expect.stringMatching(
+        /^https:\/\/[0-9a-f]+@[\w.]+\.sentry\.io\/\d+$/,
+      ),
+      environment: "self-hosted",
+      errorsOnly: true,
+    });
+  });
+
+  test("ARCHESTRA_ANALYTICS=disabled turns default error reporting off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+
+    expect(getSentryConfig().enabled).toBe(false);
+  });
+
+  test("stays off in development unless analytics is turned on", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(getSentryConfig().enabled).toBe(false);
+
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "enabled");
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      environment: "development",
+    });
+  });
+
+  test("an explicit DSN reports to that project with full diagnostics, even with analytics off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+    vi.stubEnv(
+      "ARCHESTRA_SENTRY_BACKEND_DSN",
+      "https://key@sentry.example.com/7",
+    );
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", "Staging");
+
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: "https://key@sentry.example.com/7",
+      environment: "staging",
+      errorsOnly: false,
+    });
+  });
+
+  test("an empty DSN falls back to the default project", () => {
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", "");
+
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      errorsOnly: true,
     });
   });
 });
@@ -379,6 +463,40 @@ describe("getOtlpAuthHeaders", () => {
   });
 });
 
+describe("getAuditLogOtelExporter", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("shares the backend log pipeline when no endpoint is set", () => {
+    expect(getAuditLogOtelExporter(undefined)).toBeNull();
+    expect(getAuditLogOtelExporter("  ")).toBeNull();
+  });
+
+  test("sends to the logs path of its own endpoint with only its own credentials", () => {
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "shared-token";
+    delete process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER;
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318/")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: undefined,
+    });
+
+    process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER = "audit-token";
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: { Authorization: "Bearer audit-token" },
+    });
+  });
+});
+
 describe("getRumOtlpAuthHeaders", () => {
   const originalEnv = process.env;
 
@@ -418,6 +536,37 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parseSpiffeTrustDomain", () => {
+  test("defaults to the frontend's hostname", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: undefined,
+        frontendBaseUrl: "https://archestra.example.com:8443",
+      }),
+    ).toBe("archestra.example.com");
+  });
+
+  test("takes a configured trust domain", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: " prod.example.org ",
+        frontendBaseUrl: "https://archestra.example.com",
+      }),
+    ).toBe("prod.example.org");
+  });
+
+  test("rejects a value that is not a trust domain", () => {
+    for (const rawValue of ["Example.com", "spiffe://example.com", "a b"]) {
+      expect(() =>
+        parseSpiffeTrustDomain({
+          rawValue,
+          frontendBaseUrl: "https://archestra.example.com",
+        }),
+      ).toThrow(/SPIFFE trust domain/);
+    }
   });
 });
 
@@ -1095,6 +1244,22 @@ describe("parseContentMaxLength", () => {
 });
 
 describe("parseChatMaxOutputTokens", () => {
+  test.each([
+    [undefined, false],
+    ["", false],
+    ["32k", false],
+    ["0", false],
+    ["1.5", false],
+    ["1000001", false],
+    [" 16000 ", true],
+    ["32768", true],
+    ["1e6", true],
+  ])("only accepted ceilings count as explicit (%s)", (value, expected) => {
+    expect(isChatMaxOutputTokensConfigured(value as string | undefined)).toBe(
+      expected,
+    );
+  });
+
   test("should return default 32768 when no value provided", () => {
     expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
   });
@@ -1687,12 +1852,12 @@ describe("Agent Runtime catalog images", () => {
     );
   });
 
-  test("follows the stable alias on a stable platform release", async () => {
+  test("uses the platform version on a stable release, not a moving alias", async () => {
     vi.stubEnv("ARCHESTRA_VERSION", "1.3.52");
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
-      "ghcr.io/archestra-ai/agent-claude-code:latest",
+      "ghcr.io/archestra-ai/agent-claude-code:1.3.52",
     );
   });
 
@@ -1717,6 +1882,99 @@ describe("Agent Runtime catalog images", () => {
     expect(cfg.agentRuntime.catalogImages.hermes).toBe(
       "mirror.example:5000/team/agent-hermes:v2",
     );
+  });
+});
+
+describe("release image digests", () => {
+  const digest = (char: string) => `sha256:${char.repeat(64)}`;
+  const shipped = JSON.stringify({
+    version: "1.6.0",
+    images: {
+      "mcp-server-base": digest("a"),
+      "p4-shim": digest("b"),
+      "agent-codex": digest("c"),
+    },
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "");
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", "");
+    vi.stubEnv("ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE", "");
+    vi.stubEnv("ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE", "");
+    vi.stubEnv(
+      "ARCHESTRA_DATABASE_URL",
+      "postgresql://archestra:pass@localhost:5432/archestra",
+    );
+  });
+
+  test("pins the default release images to the digests shipped with this version", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      `ghcr.io/archestra-ai/mcp-server-base:1.6.0@${digest("a")}`,
+    );
+    expect(cfg.kb.perforceShim.image).toBe(
+      `ghcr.io/archestra-ai/p4-shim:1.6.0@${digest("b")}`,
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      `ghcr.io/archestra-ai/agent-codex:1.6.0@${digest("c")}`,
+    );
+    // No digest shipped for this image: it keeps its version tag.
+    expect(cfg.agentRuntime.catalogImages.hermes).toBe(
+      "ghcr.io/archestra-ai/agent-hermes:1.6.0",
+    );
+  });
+
+  test("leaves operator overrides and mirrors exactly as configured", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    vi.stubEnv(
+      "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE",
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "mirror.example");
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      "mirror.example/agent-codex:1.6.0",
+    );
+  });
+
+  test("falls back to version tags when the digests belong to another version or none ship", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.1");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "ghcr.io/archestra-ai/mcp-server-base:1.6.1",
+    );
+
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", "");
+    const { default: dev } = await import("./config");
+    expect(dev.agentRuntime.catalogImages.codex).toBe(
+      "ghcr.io/archestra-ai/agent-codex:1.6.1",
+    );
+  });
+
+  test("rejects a malformed digest map", async () => {
+    const { parseReleaseImageDigests } = await import("./config");
+    for (const rawValue of [
+      "not json",
+      JSON.stringify({ version: "1.6.0", images: { codex: "latest" } }),
+      JSON.stringify({ version: "1.6.0", images: { "../x": digest("a") } }),
+      JSON.stringify({ images: {} }),
+      JSON.stringify({ version: "1.6.0", images: {}, extra: true }),
+    ]) {
+      expect(() =>
+        parseReleaseImageDigests({ rawValue, appVersion: "1.6.0" }),
+      ).toThrow(/ARCHESTRA_RELEASE_IMAGE_DIGESTS/);
+    }
   });
 });
 
@@ -2278,6 +2536,17 @@ describe("isCodeRuntimeEnabled", () => {
     loadKubeconfigFromCurrentCluster: undefined,
   };
 
+  test("disabled when the orchestrator is turned off, even with the flag and k8s configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+        orchestratorEnabledEnv: "false",
+      }),
+    ).toBe(false);
+  });
+
   test("enabled when an explicit runner host is configured, even without k8s", () => {
     expect(
       isCodeRuntimeEnabled({
@@ -2829,6 +3098,62 @@ describe("parseMcpIdleHibernationSeconds", () => {
 });
 // SPDX-SnippetEnd
 
+describe("parseOptionalNamespace", () => {
+  test("takes a valid namespace name", () => {
+    expect(
+      parseOptionalNamespace(
+        "agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+    expect(
+      parseOptionalNamespace(
+        "  agent-runtimes  ",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+  });
+
+  test("unset or blank leaves runs in their fallback namespace", () => {
+    expect(
+      parseOptionalNamespace(
+        undefined,
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace("   ", "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE"),
+    ).toBeUndefined();
+  });
+
+  test("ignores a name Kubernetes would reject", () => {
+    expect(
+      parseOptionalNamespace(
+        "Agent-Runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "agent_runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "-agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "a".repeat(64),
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+  });
+});
+
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2993,31 +3318,39 @@ describe("parseTrustProxy", () => {
   });
 
   test("should return string for a single IP", () => {
-    expect(parseTrustProxy("127.0.0.1")).toBe("127.0.0.1");
+    expect(parseTrustProxy("127.0.0.1")).toBe("loopback,127.0.0.1");
   });
 
   test("should return string for a single CIDR", () => {
-    expect(parseTrustProxy("192.168.1.0/24")).toBe("192.168.1.0/24");
+    expect(parseTrustProxy("192.168.1.0/24")).toBe("loopback,192.168.1.0/24");
   });
 
   test("should return normalised string for comma-separated IPs", () => {
-    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
   });
 
   test("should return normalised string for comma-separated CIDRs", () => {
     expect(parseTrustProxy("10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")).toBe(
-      "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+      "loopback,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
     );
   });
 
   test("should trim whitespace around each IP in a comma-separated list", () => {
     expect(parseTrustProxy("  127.0.0.1 , 10.0.0.1  ")).toBe(
-      "127.0.0.1,10.0.0.1",
+      "loopback,127.0.0.1,10.0.0.1",
     );
   });
 
   test("should filter empty entries from extra commas", () => {
-    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
+  });
+
+  test("keeps an explicit loopback entry once", () => {
+    expect(parseTrustProxy("10.0.0.0/8,loopback")).toBe("10.0.0.0/8,loopback");
   });
 });
 
@@ -3201,77 +3534,6 @@ describe("parseRetentionDays", () => {
     expect(parse("30days")).toBe(0);
     expect(parse("1.5")).toBe(0);
     expect(logger.warn).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("betaFeatureEnabled", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.ARCHESTRA_BETA;
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  describe("with ARCHESTRA_BETA unset", () => {
-    test("an unset flag stays off", () => {
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-
-    test("a blank flag stays off", () => {
-      expect(betaFeatureEnabled("")).toBe(false);
-    });
-
-    test('an explicit "true" enables the flag', () => {
-      expect(betaFeatureEnabled("true")).toBe(true);
-    });
-
-    test('an explicit "false" disables the flag', () => {
-      expect(betaFeatureEnabled("false")).toBe(false);
-    });
-  });
-
-  describe("with ARCHESTRA_BETA=true", () => {
-    beforeEach(() => {
-      process.env.ARCHESTRA_BETA = "true";
-    });
-
-    test("an unset flag falls back to beta (on)", () => {
-      expect(betaFeatureEnabled(undefined)).toBe(true);
-    });
-
-    test("a blank flag falls back to beta (on)", () => {
-      expect(betaFeatureEnabled("")).toBe(true);
-    });
-
-    test('an explicit "false" still wins over beta', () => {
-      expect(betaFeatureEnabled("false")).toBe(false);
-    });
-
-    test('an explicit "true" stays on', () => {
-      expect(betaFeatureEnabled("true")).toBe(true);
-    });
-  });
-
-  describe("with ARCHESTRA_BETA set to a non-true value", () => {
-    test('"false" does not trigger the fallback', () => {
-      process.env.ARCHESTRA_BETA = "false";
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-
-    test("any other value is treated as off", () => {
-      process.env.ARCHESTRA_BETA = "1";
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-  });
-
-  test('only the exact string "true" enables a flag', () => {
-    expect(betaFeatureEnabled("TRUE")).toBe(false);
-    expect(betaFeatureEnabled("yes")).toBe(false);
-    expect(betaFeatureEnabled("1")).toBe(false);
   });
 });
 
@@ -3604,6 +3866,7 @@ describe("OpenAPPA feature configuration", () => {
     "true",
     " true ",
   ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     for (const analytics of ["disabled", "enabled", undefined]) {
       vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
       for (const environment of ["production", "development"]) {
@@ -3631,6 +3894,56 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the policy check's name defaults to a product-free one, is trimmed, and is bounded", () => {
+    expect(parseOpenAppaPolicyCheckName(undefined)).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName("  ")).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName(" Acme policy ")).toBe("Acme policy");
+    expect(() => parseOpenAppaPolicyCheckName("x".repeat(101))).toThrow(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+    expect(
+      parseOpenAppaConfig({ policyCheckName: "Acme policy" }),
+    ).toMatchObject({ policyCheckName: "Acme policy" });
+  });
+
+  test("self-service Guardrails is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfService");
+    expect(parseOpenAppaConfig({ selfService: " " })).not.toHaveProperty(
+      "selfService",
+    );
+    expect(parseOpenAppaConfig({ selfService: "enabled" }).selfService).toBe(
+      "enabled",
+    );
+    expect(parseOpenAppaConfig({ selfService: "disabled" }).selfService).toBe(
+      "disabled",
+    );
+    expect(() => parseOpenAppaConfig({ selfService: "true" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE must be one of: enabled, disabled",
+    );
+  });
+
+  test("auto-merge of self-served pull requests is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "" }),
+    ).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: " enabled " })
+        .selfServiceAutoMerge,
+    ).toBe("enabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "disabled" })
+        .selfServiceAutoMerge,
+    ).toBe("disabled");
+    expect(() => parseOpenAppaConfig({ selfServiceAutoMerge: "on" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE must be one of: enabled, disabled",
+    );
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
@@ -3641,12 +3954,7 @@ describe("OpenAPPA feature configuration", () => {
     }
   });
 
-  test.each([
-    undefined,
-    "false",
-    "true",
-  ])("makes OpenAPPA available independently of the beta switch (value=%s)", (beta) => {
-    vi.stubEnv("ARCHESTRA_BETA", beta);
+  test("enables OpenAPPA and the appa proxy plugin by default", () => {
     expect(parseOpenAppaConfig().enabled).toBe(true);
     expect(parseLlmProxyPlugins(undefined)).toEqual(["appa"]);
     expect(parseLlmProxyPlugins("")).toEqual(["appa"]);
@@ -3662,9 +3970,36 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the Break the glass variables override only while set, and refuse other values", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("breakTheGlassOverrides");
+    expect(
+      parseOpenAppaConfig({ humanApprovalMode: "", softBlockMode: " " }),
+    ).not.toHaveProperty("breakTheGlassOverrides");
+    expect(
+      parseOpenAppaConfig({ humanApprovalMode: "block" })
+        .breakTheGlassOverrides,
+    ).toEqual({ humanApprovalMode: "block" });
+    expect(
+      parseOpenAppaConfig({
+        humanApprovalMode: " unattended ",
+        softBlockMode: "allow",
+      }).breakTheGlassOverrides,
+    ).toEqual({
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "allow",
+    });
+    expect(() => parseOpenAppaConfig({ humanApprovalMode: "always" })).toThrow(
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE must be one of: block, unattended, everywhere",
+    );
+    expect(() => parseOpenAppaConfig({ softBlockMode: "waive" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE must be one of: refuse, allow",
+    );
+  });
+
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
+      policyCheckName: "Check OpenAPPA Guardrails",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

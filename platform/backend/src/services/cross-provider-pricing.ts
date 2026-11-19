@@ -3,6 +3,7 @@ import {
   type ModelsDevApiResponse,
   type ModelsDevModel,
   modelsDevCostToPerToken,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 
@@ -15,19 +16,20 @@ export interface CrossProviderPrices {
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
+  syncedLongContextPricing: ReturnType<typeof modelsDevLongContextPricing>;
 }
 
 /**
  * Resolve pricing for providers whose model ids do not match models.dev keys
- * (AWS Bedrock and Azure), by mapping the id back to the underlying vendor model
- * and reading that vendor's models.dev entry.
+ * (AWS Bedrock and Azure). Bedrock first uses an exact profile entry when
+ * available; otherwise the existing mapping resolves the underlying vendor.
  *
  * Why this is needed: Bedrock stores region-prefixed inference-profile ids
  * (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`) and Azure stores arbitrary
  * deployment names — neither matches the canonical `anthropic`/`openai` keys in
  * models.dev, so without this both always fall back to the flat default price.
- * Crucially, the underlying vendor entry (e.g. `anthropic`) reliably carries
- * cache prices, which the region-keyed `amazon-bedrock` entry may omit.
+ * The underlying vendor entry (e.g. `anthropic`) also supplements cache prices
+ * that the exact `amazon-bedrock` entry omits.
  *
  * Returns null when no confident match is found (caller keeps its existing
  * behaviour, i.e. the default price) — never guesses across unrelated models.
@@ -40,9 +42,12 @@ export function resolveCrossProviderPrices(params: {
   underlyingModelName?: string | null;
   modelsDevData: ModelsDevApiResponse;
 }): CrossProviderPrices | null {
-  // Entries are ordered by preference (a vendor's canonical entry, which has
-  // cache prices, before the region-keyed amazon-bedrock fallback).
-  return pricesFromEntries(resolveCrossProviderEntries(params));
+  return pricesFromEntries(
+    resolveCrossProviderEntries(params),
+    params.provider === "bedrock"
+      ? params.modelsDevData["amazon-bedrock"]?.models[params.modelId]
+      : undefined,
+  );
 }
 
 /**
@@ -64,9 +69,9 @@ export interface CrossProviderMetadata {
  * Resolve non-price capabilities for Bedrock/Azure, whose model ids never match
  * models.dev keys directly.
  *
- * Preference deliberately inverts {@link resolveCrossProviderPrices}: cost reads
- * the vendor's canonical entry first because only that reliably carries cache
- * prices, while limits and modalities read the reseller's entry first because
+ * Unlike pricing's exact-profile override, limits and modalities retain their
+ * existing reseller-first resolution. Canonical entries can supplement missing
+ * modalities and tool support, while limits read the reseller's entry because
  * the reseller's numbers are the ones that apply. Claude Sonnet 4.5 forces the
  * split — Anthropic publishes a 1M window, Bedrock serves 200K, and both
  * entries carry identical prices.
@@ -119,7 +124,12 @@ export function resolveDiscoveredModelRegistryEntry(params: {
     return null;
   }
   return {
-    prices: pricesFromEntries(entries),
+    prices: pricesFromEntries(
+      entries,
+      params.provider === "bedrock"
+        ? params.modelsDevData["amazon-bedrock"]?.models[params.modelId]
+        : undefined,
+    ),
     metadata: metadataFromEntries(entries),
   };
 }
@@ -453,9 +463,52 @@ function findModelsDevModel(params: {
 
 function pricesFromEntries(
   entries: ModelsDevModel[],
+  exactBedrockEntry?: ModelsDevModel,
 ): CrossProviderPrices | null {
   const entry = entries.find((e) => e.cost);
-  return entry?.cost ? modelsDevCostToPerToken(entry.cost) : null;
+  const fallback = entry?.cost
+    ? {
+        ...modelsDevCostToPerToken(entry.cost),
+        syncedLongContextPricing: modelsDevLongContextPricing(entry.cost),
+      }
+    : null;
+  if (!exactBedrockEntry?.cost) {
+    return fallback;
+  }
+
+  // A regional/global profile can have different rates from its canonical
+  // vendor model. Only an exact full-id match overrides the existing fallback;
+  // omitted meters can still use the canonical cache prices.
+  const exact = modelsDevCostToPerToken(exactBedrockEntry.cost);
+  const exactTier = modelsDevLongContextPricing(exactBedrockEntry.cost);
+  // An empty cost object supplies no tariff: all flat meters below fall through,
+  // so its tier must follow that same source rather than hiding the fallback.
+  const hasExactPrimaryPrice =
+    exact.promptPricePerToken !== null ||
+    exact.completionPricePerToken !== null;
+  const hasExactCachePrice =
+    exact.cacheReadPricePerToken !== null ||
+    exact.cacheWritePricePerToken !== null;
+  return {
+    // Never mix a canonical vendor tier with an exact reseller flat tariff.
+    syncedLongContextPricing: hasExactPrimaryPrice
+      ? exactTier
+      : hasExactCachePrice
+        ? null
+        : (fallback?.syncedLongContextPricing ?? null),
+    promptPricePerToken:
+      exact.promptPricePerToken ?? fallback?.promptPricePerToken ?? null,
+    completionPricePerToken:
+      exact.completionPricePerToken ??
+      fallback?.completionPricePerToken ??
+      null,
+    cacheReadPricePerToken:
+      exact.cacheReadPricePerToken ?? fallback?.cacheReadPricePerToken ?? null,
+    cacheWritePricePerToken:
+      exact.cacheWritePricePerToken ??
+      fallback?.cacheWritePricePerToken ??
+      null,
+  };
 }
 
 function metadataFromEntries(

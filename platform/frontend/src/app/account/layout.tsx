@@ -7,10 +7,12 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
 import { accountSections } from "@/app/account/_parts/account-sections";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
+import { BetaBadge } from "@/components/beta-badge";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { DEVICES_HREF } from "@/lib/mcp/desktop-mcp";
 
 // The title stays put across tabs — the tab bar says which one is open — and
 // the description says what the open tab is for.
@@ -21,6 +23,8 @@ const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
   "/account/api-keys": <ApiKeysDescription />,
   "/account/sessions":
     "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
+  "/account/devices":
+    "The device where the MCP bridge runs MCP servers for your agents.",
 };
 
 const PAGES_WITH_ACTION = new Set([
@@ -74,10 +78,24 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   // has nothing to show here (no credential:read, no Claude Code agent); its
   // page forwards them.
   const { hasTab: hasCredentialsTab } = useAccountCredentialsAccess();
-  const tabs = accountSections.filter(
-    (section) =>
-      section.href !== "/account/credentials" || hasCredentialsTab !== false,
-  );
+  const tabs = accountSections
+    .filter(
+      (section) =>
+        section.href !== "/account/credentials" || hasCredentialsTab !== false,
+    )
+    .map((section) =>
+      section.href === DEVICES_HREF
+        ? {
+            ...section,
+            label: (
+              <span className="inline-flex items-center gap-1.5">
+                <span>{section.label}</span>
+                <BetaBadge />
+              </span>
+            ),
+          }
+        : section,
+    );
 
   return (
     <PageLayout

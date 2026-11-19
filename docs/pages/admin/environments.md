@@ -50,7 +50,10 @@ Restrict who can deploy into production through the environment's [permissions](
 2. Remove the grant to **Everyone in the organization** that new environments start with.
 3. Grant **Can use** to the people or teams allowed to deploy there.
 
-The grant covers agents, MCP servers, apps, gateways, and knowledge connectors. Default stays open to anyone who can create the resource.
+**Can use** covers agents, MCP gateways, MCP servers, skills, apps, and knowledge connectors. To let someone deploy only some of these, such as agents and apps but not MCP servers, clear the other kinds under **Can use**.
+
+- Default stays open to anyone who can create the resource.
+- Roles that could deploy only some kinds into restricted environments before the upgrade to 1.4 keep those limits.
 
 ## Trusted Image Registries
 
@@ -72,7 +75,7 @@ These rules apply to both manual assignments and execution. An app created from 
 
 ## Network Egress Policies
 
-Choose what workloads can reach from the environment's namespace. Archestra uses the environment policy, then the organization default, then Public internet.
+Choose what workloads can reach from the environment's namespace. Archestra uses the agent's own policy, then the environment policy, then the organization default, then Public internet.
 
 | Need | Mode |
 | --- | --- |
@@ -82,6 +85,14 @@ Choose what workloads can reach from the environment's namespace. Archestra uses
 | Public destinations plus a private service | Public internet, with that service's range under **Additional allowed CIDRs**. |
 
 Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
+
+### Give One Agent Its Own Policy
+
+Lock one agent down, or open it up, without moving it to another environment. Edit the agent, open the **Advanced** step, and under **Network egress** set **Policy** to **Custom for this agent**.
+
+- The agent's policy replaces its environment's for its code sandbox and its [Agent Runtime](/docs/agents/runtime#environments-and-network-egress) workspaces. Its MCP servers keep the environment's policy.
+- Setting or clearing it takes [`environment:update`](/docs/reference/permissions#environment:update), because it overrides an environment policy.
+- Choose **Inherit from environment** to go back to the environment's policy.
 
 Remote MCP servers run elsewhere. Archestra checks its connection to their URL host when the entry is saved and on every connection, but cannot constrain what the remote server reaches downstream. A tightened policy can therefore block calls to an existing remote server.
 

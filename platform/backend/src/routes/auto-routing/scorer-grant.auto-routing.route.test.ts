@@ -1,7 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
 import { runBackfill } from "@/auto-routing/backfill";
-import config from "@/config";
 import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import resourcePermissionRoutes from "@/routes/resource-permission/resource-permission.routes";
@@ -25,7 +24,6 @@ describe("the session scorer and a Jev key's grants", () => {
   let jevCalls: number;
 
   beforeEach(async ({ makeMember }) => {
-    config.autoRouting.enabled = true;
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     await configureAutoRouting(ctx.organizationId);
     jevCalls = 0;
@@ -85,8 +83,8 @@ describe("the session scorer and a Jev key's grants", () => {
     const inject = ctx.app.inject.bind(ctx.app);
     const scorer = async () =>
       (
-        await inject({ method: "GET", url: "/api/auto-routing/settings" })
-      ).json().status.scorer;
+        await inject({ method: "GET", url: "/api/auto-routing/routers" })
+      ).json()[0].status.scorer;
     const score = async () => {
       const { scoreOffer } = (
         await inject({ method: "GET", url: "/api/auto-routing/backfill" })

@@ -2,16 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      ingestRumEvents: vi.fn().mockResolvedValue({ data: { accepted: 1 } }),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  ingestRumEvents: vi.fn().mockResolvedValue({ data: { accepted: 1 } }),
+}));
 
 import {
   archestraApiSdk,

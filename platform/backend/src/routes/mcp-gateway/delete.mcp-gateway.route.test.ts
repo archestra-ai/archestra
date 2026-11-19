@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 /**
  * Codex 0.159.2 (rmcp 3.2.0) treats a returned Mcp-Session-Id as a transport

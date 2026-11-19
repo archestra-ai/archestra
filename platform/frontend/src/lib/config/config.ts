@@ -116,32 +116,6 @@ export const getWebSocketUrl = (): string => {
 };
 
 /**
- * Hostnames that posthog-js should decorate with `X-POSTHOG-SESSION-ID` /
- * `X-POSTHOG-DISTINCT-ID` tracing headers (its `__add_tracing_headers` config).
- *
- * These let the backend link errors and logs it captures during a request back
- * to the originating session replay. We cover both the page's own origin
- * (API calls go through Next.js rewrites, so they hit the frontend host) and
- * the configured backend host (for any direct calls). Hostnames only — no
- * protocol, port, or path, per the posthog-js contract.
- */
-export const getTracingHeaderHosts = (): string[] => {
-  const hosts = new Set<string>();
-
-  if (typeof window !== "undefined") {
-    hosts.add(window.location.hostname);
-  }
-
-  try {
-    hosts.add(new URL(getBackendBaseUrl()).hostname);
-  } catch {
-    // Ignore an unparseable backend URL — the page origin still covers rewrites.
-  }
-
-  return [...hosts].filter((host) => host.length > 0);
-};
-
-/**
  * Compute a short hash of a string using djb2 (synchronous, no crypto dependency).
  * Used to derive per-server sandbox subdomains from the server prefix.
  */
@@ -259,6 +233,9 @@ export default {
   posthog: {
     config: {
       person_profiles: "identified_only",
+      // Errors go to Sentry only. Set explicitly: when unset, the PostHog
+      // project's remote setting can turn exception autocapture on.
+      capture_exceptions: false,
       // Keep interaction analytics without collecting page content.
       autocapture: false,
       enable_recording_console_log: false,
@@ -324,14 +301,12 @@ export default {
     },
   },
   sentry: {
-    get dsn() {
-      return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "";
+    /** The deployment's own Sentry project, when it set one. */
+    get dsnOverride() {
+      return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN");
     },
-    get environment() {
-      return (
-        env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
-        environment
-      );
+    get environmentOverride() {
+      return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT");
     },
   },
 };

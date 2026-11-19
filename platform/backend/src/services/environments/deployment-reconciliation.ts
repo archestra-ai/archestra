@@ -35,7 +35,12 @@ export async function reconcileCatalogDeployments(params: {
     }),
     ...[...multitenantCatalogIds].map(async (catalogId) => {
       try {
-        await mcpServerRuntimeManager.reinstallSharedDeployment(catalogId);
+        // The deployment and its policy are applied before this returns.
+        // Pod readiness is tracked separately; waiting for it can hold an
+        // environment save open for the full rollout timeout.
+        await mcpServerRuntimeManager.reinstallSharedDeployment(catalogId, {
+          awaitReady: false,
+        });
       } catch (err) {
         logger.warn(
           { catalogId, err, reason },

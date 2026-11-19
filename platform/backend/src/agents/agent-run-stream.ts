@@ -293,14 +293,14 @@ export async function runAgentStream(params: {
         replayedReasoningStripAttempts <
           MAX_REPLAYED_REASONING_STRIP_ATTEMPTS &&
         Array.isArray(currentConfig.messages) &&
-        isThinkingSignatureRejection(probe.error)
+        isReplayedReasoningRejection(probe.error)
           ? withoutReplayedReasoning(currentConfig.messages)
           : null;
       if (messagesWithoutReplayedReasoning !== null) {
         replayedReasoningStripAttempts++;
         logger.warn(
           logContext,
-          "[ReplayedReasoning] provider rejected a replayed thinking signature, retrying without earlier reasoning",
+          "[ReplayedReasoning] provider rejected replayed reasoning, retrying without earlier reasoning",
         );
         currentConfig = {
           ...currentConfig,
@@ -526,7 +526,7 @@ function configRequestsOpenAiReasoningSummary(
   return config.providerOptions?.openai?.reasoningSummary != null;
 }
 
-function isThinkingSignatureRejection(error: unknown): boolean {
+function isReplayedReasoningRejection(error: unknown): boolean {
   // SDK wrappers can nest the provider rejection under `cause`.
   let current: unknown = error;
   for (
@@ -544,7 +544,7 @@ function isThinkingSignatureRejection(error: unknown): boolean {
       [message, responseBody].some(
         (text) =>
           typeof text === "string" &&
-          THINKING_SIGNATURE_REJECTION_PATTERN.test(text),
+          REPLAYED_REASONING_REJECTION_PATTERN.test(text),
       )
     ) {
       return true;
@@ -577,10 +577,11 @@ function withoutReplayedReasoning(
   return stripped ? result : null;
 }
 
-// "Invalid `signature` in `thinking` block", returned by Anthropic and by
-// Bedrock for Anthropic models.
-const THINKING_SIGNATURE_REJECTION_PATTERN =
-  /invalid `?signature`? in `?thinking`? block/i;
+// Signed thinking can become invalid after a system-prompt change. Bedrock
+// also rejects reasoning replayed across model families: GPT redacted content
+// is not Claude thinking, and GPT does not accept Claude reasoning text.
+const REPLAYED_REASONING_REJECTION_PATTERN =
+  /invalid `?signature`? in `?thinking`? block|invalid `?data`? in `?redacted_thinking`? block|doesn't support the reasoningContent\.reasoningText\.text field for assistant messages/i;
 
 const MAX_ERROR_CAUSE_DEPTH = 5;
 

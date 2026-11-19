@@ -5,7 +5,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { ChatOpsProviderTypeSchema } from "./chatops";
 
 export const SelectChatOpsChannelBindingSchema = createSelectSchema(

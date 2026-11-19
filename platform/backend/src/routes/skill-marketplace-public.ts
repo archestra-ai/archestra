@@ -1,12 +1,18 @@
 import { spawnSync } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
-import { DEFAULT_APP_NAME } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  resolveMcpClientServerName,
+} from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentModel,
+  ConnectionSetupModel,
   OrganizationModel,
   PluginModel,
   SkillFileModel,
@@ -298,7 +304,42 @@ async function buildShareLinkServeContext(
     }),
     OrganizationModel.getById(validated.link.organizationId),
   ]);
-  if (skills.length === 0 && plugins.length === 0) return null;
+  const setup = await ConnectionSetupModel.findBySkillShareLinkId(
+    validated.link.id,
+  );
+  const connectionSetup =
+    setup?.clientId === "chatgpt" &&
+    setup.organizationId === validated.link.organizationId &&
+    setup.userId === validated.link.createdByUserId
+      ? setup
+      : null;
+  const gateway = connectionSetup?.mcpGatewayId
+    ? await AgentModel.findById(connectionSetup.mcpGatewayId)
+    : null;
+  if (
+    connectionSetup?.mcpGatewayId &&
+    (!gateway || gateway.organizationId !== connectionSetup.organizationId)
+  )
+    return null;
+  const appName = organization?.appName ?? DEFAULT_APP_NAME;
+  const connection = connectionSetup
+    ? {
+        appName,
+        gatewayUrl: gateway
+          ? `${connectionSetup.baseUrl}/mcp/${gateway.slug ?? gateway.id}`
+          : null,
+        serverName: gateway
+          ? resolveMcpClientServerName({
+              gatewayName: gateway.name,
+              appName,
+              isPersonalGateway: gateway.isPersonalGateway,
+            })
+          : "gateway",
+        frontendUrl: config.frontendBaseUrl,
+        iconLogo: archestraMcpBranding.iconLogo,
+      }
+    : undefined;
+  if (skills.length === 0 && plugins.length === 0 && !connection) return null;
 
   const ownerName = organization?.name ?? DEFAULT_APP_NAME;
   const ref: MarketplaceRepoRef = { kind: "link", id: validated.link.id };
@@ -310,10 +351,14 @@ async function buildShareLinkServeContext(
       ref,
       marketplaceName: validated.link.marketplaceName,
       ownerName,
-      displayName:
-        skills.length > 0 ? `${ownerName} Skills` : `${ownerName} Plugins`,
+      displayName: connection
+        ? appName
+        : skills.length > 0
+          ? `${ownerName} Skills`
+          : `${ownerName} Plugins`,
       skills,
       plugins,
+      connection,
     });
   } catch (error) {
     if (

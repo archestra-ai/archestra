@@ -287,31 +287,33 @@ type TaskOutcome =
   | { kind: "completed"; result: Record<string, unknown> }
   | { kind: "failed"; error: Record<string, unknown> };
 
+// The extension puts the fields of a task on the result itself, next to
+// `resultType`. A client reads `taskId` and `status` there, and refuses a
+// handle that nests them.
+
 function buildCreateTaskResult(task: McpGatewayTask): Record<string, unknown> {
   return {
     resultType: TASK_RESULT_TYPE,
-    task: {
-      taskId: task.id,
-      status: task.status,
-      ttlMs: TASK_TTL_MS,
-      pollIntervalMs: TASK_POLL_INTERVAL_MS,
-      createdAt: task.createdAt.toISOString(),
-    },
+    taskId: task.id,
+    status: task.status,
+    ttlMs: TASK_TTL_MS,
+    pollIntervalMs: TASK_POLL_INTERVAL_MS,
+    createdAt: task.createdAt.toISOString(),
+    lastUpdatedAt: task.updatedAt.toISOString(),
   };
 }
 
 function buildTaskState(task: McpGatewayTask): Record<string, unknown> {
   return {
     resultType: COMPLETE_RESULT_TYPE,
-    task: {
-      taskId: task.id,
-      status: task.status,
-      ttlMs: Math.max(0, task.expiresAt.getTime() - Date.now()),
-      pollIntervalMs: TASK_POLL_INTERVAL_MS,
-      ...(task.status === "completed" &&
-        task.result && { result: task.result }),
-      ...(task.status === "failed" && task.error && { error: task.error }),
-    },
+    taskId: task.id,
+    status: task.status,
+    ttlMs: Math.max(0, task.expiresAt.getTime() - Date.now()),
+    pollIntervalMs: TASK_POLL_INTERVAL_MS,
+    createdAt: task.createdAt.toISOString(),
+    lastUpdatedAt: task.updatedAt.toISOString(),
+    ...(task.status === "completed" && task.result && { result: task.result }),
+    ...(task.status === "failed" && task.error && { error: task.error }),
   };
 }
 

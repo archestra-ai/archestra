@@ -45,6 +45,7 @@ describe("githubCopilotTokenManager.getCredentials", () => {
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers.authorization).toBe(`token ${githubToken}`);
     expect(init.headers["copilot-integration-id"]).toBe("vscode-chat");
+    expect(init.headers["x-github-api-version"]).toBe("2025-04-01");
     expect(init.headers["editor-version"]).toMatch(/^vscode\/\d+\.\d+\.\d+$/);
     expect(init.headers["editor-plugin-version"]).toMatch(
       /^copilot-chat\/\d+\.\d+\.\d+$/,
@@ -233,6 +234,7 @@ describe("createGithubCopilotFetch", () => {
     const headers = init.headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer copilot-bearer");
     expect(headers.get("copilot-integration-id")).toBe("vscode-chat");
+    expect(headers.get("x-github-api-version")).toBe("2026-08-01");
     expect(headers.get("editor-version")).toMatch(/^vscode\/\d+\.\d+\.\d+$/);
     expect(headers.get("editor-plugin-version")).toMatch(
       /^copilot-chat\/\d+\.\d+\.\d+$/,

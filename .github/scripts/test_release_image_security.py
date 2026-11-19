@@ -324,7 +324,7 @@ print(json.dumps({'manifests': [
 
 
 class ScannerFailureTests(unittest.TestCase):
-    def scan(self, statuses, platform="linux/arm64", concurrent="false"):
+    def scan(self, statuses, platform="linux/arm64", concurrent="false", findings=None):
         source = (ROOT / ".github/actions/scan-docker-image/action.yml").read_text()
         scanner = textwrap.dedent(source.split("    - name: Docker Scout CVE Check\n", 1)[1].split("      run: |\n", 1)[1])
         with tempfile.TemporaryDirectory() as directory:
@@ -344,6 +344,7 @@ exit(int(json.loads(os.environ['STATUSES'])[sys.argv[2]]))
                     "SCOUT_PLATFORM": platform, "SCOUT_CONCURRENT": concurrent,
                     "SCOUT_ONLY_SEVERITIES": "critical,high", "SCOUT_ONLY_FIXED": "true",
                     "SCOUT_EXIT_CODE": "true", "CALLS": str(calls),
+                    **({"SCOUT_FINDINGS_FILE": str(findings)} if findings else {}),
                     "STATUSES": json.dumps(dict(zip(("registry://image@sha256:first",
                                                      "registry://image@sha256:second"), statuses)))},
                 capture_output=True, text=True)
@@ -363,22 +364,43 @@ exit(int(json.loads(os.environ['STATUSES'])[sys.argv[2]]))
                         self.assertEqual(args[args.index("--platform") + 1], "linux/arm64")
 
 
+    def test_only_vulnerability_findings_are_recorded_for_the_release_hold(self):
+        # Scout exits 2 for vulnerabilities; auth, network and CLI errors must
+        # not hold a release from its retries.
+        for concurrent in ("false", "true"):
+            for statuses, expected in (((0, 0), []), ((2, 0), ["first"]), ((2, 2), ["first", "second"]),
+                                       ((1, 2), ["second"]), ((1, 23), []), ((137, 0), [])):
+                with self.subTest(statuses=statuses, concurrent=concurrent), tempfile.TemporaryDirectory() as temp:
+                    findings = Path(temp) / "findings"
+                    result, _ = self.scan(statuses, concurrent=concurrent, findings=findings)
+                    self.assertEqual(result.returncode, max(statuses), result.stderr)
+                    recorded = findings.read_text().splitlines() if findings.exists() else []
+                    self.assertEqual(recorded, [f"registry://image@sha256:{name}" for name in expected])
+
+
 class WorkflowContractTests(unittest.TestCase):
     def test_tagging_follows_both_scans_and_release_reuse_is_disabled(self):
         source = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
-        # Guard the orchestration boundary: failures in either real scan action
-        # must prevent version-tag creation, including recovered older releases.
-        resolve = source.index("      - name: Resolve release scan inputs")
-        amd64 = source.index("      - name: Scan release amd64 bytes before tagging")
-        arm64 = source.index("      - name: Scan release arm64 bytes before tagging")
-        tag = source.index("      - name: Create manifest list and push")
-        self.assertLess(resolve, amd64)
-        self.assertLess(amd64, arm64)
-        self.assertLess(arm64, tag)
-        for name in ("Scan release amd64 bytes before tagging", "Scan release arm64 bytes before tagging"):
-            section = step_source(source, name)
-            self.assertNotIn("continue-on-error", section)
-            self.assertIn('exit-code: "true"', section)
+        # Guard the orchestration boundary: failures in either architecture's
+        # real scan must prevent version-tag creation, including recovered
+        # older releases. Each build leg scans the bytes it promoted, and the
+        # tagging job runs only after every leg succeeds.
+        build = source.split("  build-image:\n", 1)[1].split("  merge-manifests:\n", 1)[0]
+        merge = source.split("  merge-manifests:\n", 1)[1]
+        self.assertIn("os_and_arch:", build)
+        promote = build.index("      - name: Promote exact scanned bytes without rebuilding")
+        scan = build.index("      - name: Scan release bytes before tagging")
+        self.assertLess(promote, scan)
+        section = step_source(build, "Scan release bytes before tagging")
+        self.assertNotIn("continue-on-error", section)
+        self.assertIn('exit-code: "true"', section)
+        self.assertIn("@${{ steps.promote.outputs.digest }}", section)
+        self.assertIn("platform: ${{ matrix.os_and_arch }}", section)
+        self.assertNotIn("scan-docker-image", merge)
+        self.assertIn("needs.build-image.result == 'success'", merge.split("    steps:\n", 1)[0])
+        resolve = merge.index("      - name: Resolve release scan inputs")
+        self.assertLess(resolve, merge.index("      - name: Push the queue's signed release index"))
+        self.assertLess(resolve, merge.index("      - name: Create manifest list and push"))
         reuse = source.split("  reuse-image:\n", 1)[1].split("  build-image:\n", 1)[0]
         self.assertIn("!startsWith(inputs.checkout_ref, 'platform-v')", reuse)
         checkout = step_source(source.split("  merge-manifests:\n", 1)[1], "Checkout repository")
@@ -401,12 +423,16 @@ class WorkflowContractTests(unittest.TestCase):
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
             self.assertIn("if: ${{ always() }}", section)
-            self.assertIn("needs: [release-image-security]", section)
+            self.assertIn("needs: [release-image-security, attest-release-candidates]", section)
+            # An unsigned release candidate must not merge; a run with nothing
+            # to sign (pull requests, non-release queue groups) skips signing.
+            command = section.split("        run: ", 1)[1].splitlines()[0]
             for result in ("success", "failure", "cancelled", "skipped", ""):
-                command = section.split("        run: ", 1)[1].splitlines()[0]
-                completed = subprocess.run(["bash", "-e", "-c", command],
-                    env=os.environ | {"RESULT": result})
-                self.assertEqual(completed.returncode == 0, result == "success")
+                for attested in ("success", "skipped", "failure", "cancelled", ""):
+                    completed = subprocess.run(["bash", "-e", "-c", command],
+                        env=os.environ | {"RESULT": result, "ATTESTED": attested})
+                    self.assertEqual(completed.returncode == 0,
+                                     result == "success" and attested in ("success", "skipped"), (result, attested))
         e2e = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
         self.assertNotIn(".github/actions/scan-docker-image", e2e)
         self.assertNotIn("run-docker-scan", source)

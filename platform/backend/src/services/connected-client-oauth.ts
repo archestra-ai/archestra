@@ -21,6 +21,7 @@ export function isOAuthClientForConnectClient(
   clientId: string,
   oauthClient: OAuthClientIdentity,
 ): boolean {
+  if (clientId === "chatgpt") clientId = "codex";
   return (
     isOAuthRecognisedClient(clientId) &&
     OAUTH_AGENTS[clientId].identities.some((identity) =>

@@ -1,35 +1,51 @@
 {
-  "compilerOptions": {
-    "isolatedModules": true,
-    "resolveJsonModule": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "resolvePackageJsonExports": true,
-    "esModuleInterop": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
-    "target": "ES2023",
-    "noEmit": true,
-    "incremental": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "strict": true,
-    "types": ["node"],
-    "paths": {
-      "@/*": ["./src/*"],
-      "@drizzle-migration-linter": ["../tools/drizzle-migration-linter/src/index.ts"]
-    }
-  },
-  "include": [
-    "src/**/*.ts",
-    "*.config.ts",
-    // The opt-in storage benchmark lives outside src/ but imports backend
-    // modules, so it is type-checked here.
-    "../benchmarks/session-storage.test.ts"
-  ],
-  "exclude": [
-    "node_modules"
+  // The backend's TypeScript projects, lowest first. `pnpm type-check` builds
+  // them one at a time (scripts/type-check.ts), and editors find a file's
+  // project here. Source projects emit declarations into .tsbuild/, which the
+  // projects above them read instead of their sources:
+  //   shared lib, migration linter lib -> schema -> core -> models
+  //   -> models-agents -> models-upper -> runtime and llm-clients
+  //   -> kb-core -> kb-connectors -> kb -> app -> test-support -> tests-*, tools
+  // The options every project shares, and the `paths` alias the runtime tools
+  // read through this file, are in tsconfig.base.json. pnpm check:projects
+  // checks that every backend file is in exactly one project.
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
+    { "path": "./tsconfig.kb-core.json" },
+    { "path": "./tsconfig.kb-connectors.json" },
+    { "path": "./tsconfig.kb.json" },
+    { "path": "./tsconfig.llm-protocol.json" },
+    { "path": "./tsconfig.provider-adapters.json" },
+    { "path": "./tsconfig.connections.json" },
+    { "path": "./tsconfig.policy-config.json" },
+    { "path": "./tsconfig.services-support.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.routes-proxy.json" },
+    { "path": "./tsconfig.routes-chat.json" },
+    { "path": "./tsconfig.routes-rest.json" },
+    { "path": "./tsconfig.server.json" },
+    { "path": "./tsconfig.test-support.json" },
+    { "path": "./tsconfig.tests-database.json" },
+    { "path": "./tsconfig.tests-core.json" },
+    { "path": "./tsconfig.tests-models.json" },
+    { "path": "./tsconfig.tests-services.json" },
+    { "path": "./tsconfig.tests-knowledge-base.json" },
+    { "path": "./tsconfig.tests-agents.json" },
+    { "path": "./tsconfig.tests-integrations.json" },
+    { "path": "./tsconfig.tests-other.json" },
+    { "path": "./tsconfig.tests-routes-proxy.json" },
+    { "path": "./tsconfig.tests-routes-chat.json" },
+    { "path": "./tsconfig.tests-routes-rest.json" },
+    { "path": "./tsconfig.tools.json" }
   ]
 }

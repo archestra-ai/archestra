@@ -35,6 +35,10 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+  useRefreshInternalMcpCatalogImage: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 const { liveRuleInputs } = vi.hoisted(() => ({

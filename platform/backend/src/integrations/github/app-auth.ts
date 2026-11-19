@@ -117,6 +117,8 @@ export async function fetchAsGithubApp<T>(
     appId: string;
     privateKey: string;
     path: `/app${string}`;
+    method?: "GET" | "POST";
+    body?: object;
   },
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<T> {
@@ -128,11 +130,14 @@ export async function fetchAsGithubApp<T>(
   const response = await fetchImpl(
     `${params.githubUrl.replace(/\/+$/, "")}${params.path}`,
     {
+      method: params.method ?? "GET",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${jwt}`,
         "X-GitHub-Api-Version": "2022-11-28",
+        ...(params.body ? { "Content-Type": "application/json" } : {}),
       },
+      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
       redirect: "error",
       signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
     },

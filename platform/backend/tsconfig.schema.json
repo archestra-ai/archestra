@@ -1,0 +1,23 @@
+{
+  // The schema layer (layers.mjs): Drizzle tables and the types and zod
+  // schemas derived from them. It imports nothing above itself.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/schema",
+    "tsBuildInfoFile": "./.tsbuild/schema.tsbuildinfo"
+  },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/types/**/*.ts",
+    "src/database/schemas/**/*.ts",
+    "src/database/schema.ts",
+    "src/agents/a2a/a2a-protocol.ts",
+    "src/utils/billable-usage.ts",
+    "src/utils/network.ts",
+    "src/utils/sanitize-svg.ts",
+    "src/utils/schedule-trigger.ts",
+    "src/utils/uuid.ts"
+  ],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test-*.ts", "src/**/__mocks__/**"],
+  "references": [{ "path": "../shared/tsconfig.lib.json" }]
+}

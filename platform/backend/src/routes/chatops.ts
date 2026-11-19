@@ -2954,7 +2954,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!config.chatops.telegramEnabled) {
         throw new ApiError(
           400,
-          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
+          "The Telegram integration is not enabled on this deployment. Remove ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false and restart.",
         );
       }
       await assertMessagingChannelAllowed({
@@ -3224,7 +3224,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // If the provider can discover channels eagerly, do it now
       const provider = chatOpsManager.getChatOpsProvider(providerType);
       const workspaceId = provider?.getWorkspaceId();
-      if (provider && workspaceId) {
+      if (providerType === "slack") {
+        // Slack discovery includes agent bots even without a connected router.
+        await chatOpsManager.discoverSlackChannels(null);
+      } else if (provider && workspaceId) {
         await chatOpsManager.discoverChannels({
           provider,
           context: null,

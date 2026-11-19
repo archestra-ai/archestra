@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import config from "@/config";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -18,7 +17,6 @@ describe("scoped plugin grants", () => {
   const ctx = useRouteTestApp(pluginRoutes);
 
   beforeEach(async ({ makeMember }) => {
-    config.beta = false;
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 

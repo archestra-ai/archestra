@@ -1,11 +1,9 @@
 "use client";
 
-import {
-  addDays,
-  differenceInCalendarDays,
-  format,
-  startOfDay,
-} from "date-fns";
+import { addDays } from "date-fns/addDays";
+import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
+import { format } from "date-fns/format";
+import { startOfDay } from "date-fns/startOfDay";
 import { ArrowRight, Info, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import {

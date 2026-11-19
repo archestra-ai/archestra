@@ -20,8 +20,8 @@ wiremock:
 keycloak:
   enabled: true
   image:
-    registry: europe-west1-docker.pkg.dev
-    repository: friendly-path-465518-r6/archestra-public/keycloak
+    registry: ghcr.io
+    repository: archestra-ai/ci/keycloak
     tag: "pr46048-5afbf42"
     pullPolicy: IfNotPresent
   # Admin credentials for e2e testing
@@ -77,7 +77,7 @@ keycloak:
 mcpServerJwks:
   enabled: true
   image:
-    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
+    repository: ghcr.io/archestra-ai/ci/mcp-server-jwks-keycloak
     tag: "0.0.3"
     pullPolicy: IfNotPresent
   # JWT audience claim the server expects (must match Keycloak client's audience mapper)
@@ -100,7 +100,7 @@ mcpServerJwks:
 mcpExampleOAuth:
   enabled: true
   image:
-    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server
+    repository: ghcr.io/archestra-ai/ci/mcp-example-oauth-server
     tag: "0.0.1"
     pullPolicy: IfNotPresent
   # Service configuration
@@ -121,7 +121,7 @@ mcpExampleOAuth:
 mcpServerIdJag:
   enabled: true
   image:
-    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag
+    repository: ghcr.io/archestra-ai/ci/mcp-server-id-jag
     tag: "0.0.4"
     pullPolicy: IfNotPresent
   gatewayAudience: "id-jag-gateway-client"

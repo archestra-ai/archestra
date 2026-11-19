@@ -6,6 +6,89 @@ cd "$(dirname "$0")/.."
 export ARCHESTRA_LOGGING_LEVEL=debug
 export ARCHESTRA_ANALYTICS=disabled
 
+# tilt (default outside an Agent Runtime): Tilt watches the sources and
+# rebuilds; false (default inside one): manual `tilt trigger`; true: the
+# resident `tsdown --watch`. Tiltfile.dev applies the same defaults.
+backend_watch_mode() {
+  mode="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
+  if [ -z "$mode" ]; then
+    if [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]; then mode=false; else mode=tilt; fi
+  fi
+  echo "$mode"
+}
+
+# One build into a backend/.dist-next.* directory, moved over backend/dist only once it
+# succeeds. A failed build therefore leaves the previous dist/ in place, and
+# Tilt, which runs this as the resource's update command, keeps the previous
+# server running. The staging directory sits next to dist/ so the relative
+# source paths in the source maps stay valid after the move.
+build_backend() {
+  (
+    cd backend || exit 1
+    # Per-build names, so a manual build and a Tilt build cannot remove each
+    # other's staging directory.
+    next=".dist-next.$$"
+    old=".dist-old.$$"
+    rm -rf "$next" "$old"
+    if ! ./node_modules/.bin/tsdown --out-dir "$next"; then
+      rm -rf "$next"
+      echo "backend build failed; the previous build keeps running until the next successful build" >&2
+      exit 1
+    fi
+    # Builds share dist/, so the swap runs one at a time under a lock that
+    # names its owner. A lock whose owner is gone (a build killed mid-swap)
+    # is reclaimed under a second lock, re-checking the owner there, so two
+    # waiters cannot both reclaim it or remove a live replacement.
+    lock=.dist-swap.lock
+    until mkdir "$lock" 2>/dev/null; do
+      owner="$(cat "$lock/pid" 2>/dev/null || true)"
+      if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null && mkdir "$lock.reap" 2>/dev/null; then
+        if [ "$(cat "$lock/pid" 2>/dev/null || true)" = "$owner" ]; then
+          rm -rf "$lock"
+        fi
+        rmdir "$lock.reap"
+        continue
+      fi
+      sleep 0.2
+    done
+    echo $$ > "$lock/pid"
+    trap 'rm -rf "$lock"' EXIT
+    if [ -d dist ] && ! mv dist "$old"; then
+      rm -rf "$next"
+      echo "backend build: could not move the previous dist/ aside; keeping it" >&2
+      exit 1
+    fi
+    # mv into an existing directory would nest the build inside it.
+    if [ -e dist ] || ! mv "$next" dist; then
+      [ -d "$old" ] && mv "$old" dist
+      rm -rf "$next"
+      echo "backend build: could not install the new dist/; restored the previous one" >&2
+      exit 1
+    fi
+    rm -rf "$old"
+  )
+}
+
+if [ "${1:-}" = "build" ]; then
+  [ "${DEBUG:-}" = "1" ] || unset DEBUG
+  build_backend
+  exit $?
+fi
+
+# A Tilt killed outright never stops this script, which would keep the server
+# and its ports. Once the Tilt that started it ($PPID; Tiltfile.dev execs this
+# script) is gone, TERM ourselves so the trap below stops the server. It is
+# armed before any setup, which can take minutes (the Dagger CLI download), so
+# the parent it watches is still Tilt. The watchdog exits once this script has.
+tilt_pid=$PPID
+(
+  while kill -0 "$tilt_pid" 2>/dev/null; do
+    sleep 5
+    kill -0 $$ 2>/dev/null || exit 0
+  done
+  kill -TERM $$ 2>/dev/null
+) &
+
 backend_pid=""
 backend_ports="$(node --env-file-if-exists=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
 
@@ -47,29 +130,36 @@ start_backend() {
   # RSS that only forward signals. Tilt already loaded .env into this
   # environment.
   #
-  # ARCHESTRA_DEV_BACKEND_WATCH=false builds once and runs the server without
-  # the watcher. The watcher is the build kept resident: about 1.2 GB of RSS
-  # for a build that takes 3 s. Inside an Agent Runtime (the pod sets
-  # ARCHESTRA_AGENT_RUNTIME_TASK_ID) the default is false: the agent rebuilds
-  # on demand with `tilt trigger pnpm-dev-backend`, which reruns this script.
+  # Only ARCHESTRA_DEV_BACKEND_WATCH=true keeps `tsdown --watch` resident. That
+  # watcher is the build kept in memory: about 1.3 GB for a build that takes
+  # 2 s and then exits. In the default mode Tilt watches the sources itself
+  # (see Tiltfile.dev), runs `run-backend-dev.sh build` on a change and then
+  # restarts this script, which only runs the server. With
+  # ARCHESTRA_DEV_BACKEND_WATCH=false (the default inside an Agent Runtime,
+  # where the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID) nothing watches: the
+  # agent rebuilds with `tilt trigger pnpm-dev-backend`.
   #
   # Without turbo in between, the shell's environment reaches tsdown and the
   # server. tsdown.config.ts treats any DEBUG value as "start the server with
   # --inspect", and shells often export DEBUG=* for the debug package, so only
   # the documented DEBUG=1 passes through.
   [ "${DEBUG:-}" = "1" ] || unset DEBUG
-  watch="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
-  if [ -z "$watch" ]; then
-    if [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]; then watch=false; else watch=true; fi
-  fi
-  if [ "$watch" = "false" ]; then
-    echo "backend watcher off: run 'tilt trigger pnpm-dev-backend' after backend changes" >&2
+  watch="$(backend_watch_mode)"
+  if [ "$watch" != "true" ]; then
+    if [ "$watch" = "false" ]; then
+      echo "backend watcher off: run 'tilt trigger pnpm-dev-backend' after backend changes" >&2
+    fi
     inspect=""
     [ "${DEBUG:-}" = "1" ] && inspect="--inspect"
-    # A failed build leaves no server: Tilt shows the resource red with the
-    # compiler error, and the next successful trigger brings it back. Once the
-    # server has started, restart it when it exits: unlike tsdown --watch, this
-    # process is the server, and Tilt does not restart a serve_cmd that exits.
+    # Tilt runs `run-backend-dev.sh build` as the resource's update command
+    # before it (re)starts this serve command, so dist/ is already current.
+    # Build here only when nothing has built yet.
+    if [ ! -f backend/dist/server.mjs ]; then
+      build_backend || exit 1
+    fi
+    # Once the server has started, restart it when it exits: unlike
+    # tsdown --watch, this process is the server, and Tilt does not restart a
+    # serve_cmd that exits.
     # Five exits in a row within 60 s of starting end the loop (startup takes
     # about 15 s), so a server that cannot start does not spin. The loop runs
     # its child in the background and passes TERM and INT on to it, so
@@ -80,9 +170,6 @@ start_backend() {
       cd backend || exit 1
       child=""
       trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child"; fi; exit 143' TERM INT
-      ./node_modules/.bin/tsdown &
-      child=$!
-      wait "$child" || { echo "backend build failed; the server stays down until the next successful 'tilt trigger pnpm-dev-backend'" >&2; exit 1; }
       quick_exits=0
       while :; do
         started=$(date +%s)
@@ -111,7 +198,11 @@ cleanup() {
   stop_backend
 }
 
-trap cleanup EXIT INT TERM
+# A signal ends the script: cleanup alone would fall through to
+# start_backend during setup. EXIT runs cleanup again, which is harmless.
+trap cleanup EXIT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 130' INT
 
 if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # Without an explicit runner host, the backend provisions per-organization

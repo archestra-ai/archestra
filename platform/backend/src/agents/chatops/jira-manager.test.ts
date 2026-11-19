@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
@@ -14,6 +14,7 @@ import {
   UserModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { IncomingChatMessage } from "@/types";
 import type { JiraBotConfig, JiraDbConfig } from "@/types/chatops-jira";
 import { ChatOpsManager } from "./chatops-manager";

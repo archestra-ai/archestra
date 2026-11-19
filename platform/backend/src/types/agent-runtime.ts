@@ -10,8 +10,9 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
+import type { NetworkPolicy } from "./environment";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -238,6 +239,13 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
    * this by connecting anything; an admin has to run the Agent or change it.
    */
   adminOnly: z.boolean().optional(),
+  /**
+   * True when the caller connected this credential before but the stored
+   * connection no longer works (for example the organization's GitHub App
+   * changed), so they must connect it again. Reported whether or not the
+   * declaration is required: they meant to use it.
+   */
+  reconnect: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema
@@ -264,9 +272,13 @@ export class AgentRuntimeCredentialsRequiredError extends ApiError {
   constructor(agentId: string, missing: MissingAgentRuntimeCredential[]) {
     super(
       409,
-      `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
-        .map((entry) => entry.label)
-        .join(", ")}`,
+      missing.every((entry) => entry.reconnect)
+        ? `This Agent's Agent Runtime needs you to connect again: ${missing
+            .map((entry) => entry.label)
+            .join(", ")}`
+        : `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
+            .map((entry) => entry.label)
+            .join(", ")}`,
     );
     this.name = "AgentRuntimeCredentialsRequiredError";
     this.agentId = agentId;
@@ -288,7 +300,7 @@ export type AgentRuntimeEnvironmentEntry = z.infer<
 export const AgentRuntimeSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
-  /** Wire protocol the image uses to reach Archestra's model router. */
+  /** Wire protocol the image uses to reach Archestra's unified model API. */
   inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
   backend: AgentRuntimeBackendSchema,
   steerMode: AgentRuntimeSteerModeSchema,
@@ -354,6 +366,8 @@ export type ResolvedAgentRuntime = AgentRuntime & {
   organizationId: string;
   environmentId: string | null;
   secretId: string | null;
+  /** The Agent's own egress override; absent or null inherits the environment. */
+  agentNetworkPolicy?: NetworkPolicy | null;
 };
 
 export const SelectAgentRunRecordSchema = createSelectSchema(
@@ -393,6 +407,8 @@ export type AgentRunFailure = z.infer<typeof AgentRunFailureSchema>;
 
 export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   logs: true,
+  // Read through the session-handoffs route, which checks log access.
+  originLlmSessionId: true,
   completionTarget: true,
   completionNotificationClaimedAt: true,
   completionNotifiedAt: true,
@@ -411,7 +427,13 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
+  /** The run's stable id across turns: its workspace, or its only task. */
+  sessionId: z.string().uuid(),
   initiatorName: z.string().nullable(),
+  /** The run's saved files; null for a run that never had a workspace. */
+  workspace: z
+    .object({ state: AgentWorkspaceStateSchema, expiresAt: z.date() })
+    .nullable(),
   canAttach: z.boolean().optional(),
   /** Who the run is shared with, derived from its permission policy. */
   shareVisibility: z.union([

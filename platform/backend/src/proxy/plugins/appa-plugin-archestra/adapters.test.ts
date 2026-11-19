@@ -15,6 +15,7 @@ import {
   claudeCodeNativeChildIds,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
@@ -889,7 +890,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
 
   test("Claude Code names_children matches minted child ids for documented files", () => {
     expect(claudeCode.childTranscriptPaths).toEqual([
-      { prefix: "tasks/", suffix: ".output" },
+      { prefix: "tasks/", suffix: ".output", ownOutputId: /^b[0-9a-z]{8}$/u },
       { prefix: "subagents/agent-", suffix: ".jsonl" },
     ]);
     expect(
@@ -1597,6 +1598,73 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
             parent_thread_id: "requester-session",
           },
         },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("names the session a Codex auto-review assesses", () => {
+    const review = (turn: Record<string, string>) => ({
+      headers: {
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify(turn),
+      },
+      requestBody: { model: "gpt-5.5", tools: [] },
+    });
+    // The root thread asked for the review.
+    expect(
+      codex.reviewedSession(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t0",
+        }),
+      ),
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A subagent asked: the proxy finds it under the root as recorded.
+    expect(
+      codex.reviewedSession(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t2",
+        }),
+      ),
+    ).toEqual({ rootId: "t0", requesterId: "t2" });
+    // Body metadata alone also names the requester, taken for a root.
+    expect(
+      codex.reviewedSession({
+        headers: { "user-agent": "codex_cli_rs/0.164.0" },
+        requestBody: {
+          model: "codex-auto-review",
+          client_metadata: {
+            thread_id: "review",
+            "x-codex-parent-thread-id": "t0",
+          },
+        },
+      }),
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A review never stands for itself, and an id is one thread, not a path.
+    for (const turn of [
+      { session_id: "review", thread_id: "review", parent_thread_id: "" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "review" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "t1:t2" },
+      { session_id: "t0|x", thread_id: "review", parent_thread_id: "t2" },
+    ]) {
+      expect(codex.reviewedSession(review(turn))).toBeUndefined();
+    }
+    // A request that is not a review, such as a subagent's, names none.
+    expect(
+      codex.reviewedSession({
+        headers: {
+          "user-agent": "codex_cli_rs/0.164.0",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "t0",
+            thread_id: "t1",
+            parent_thread_id: "t0",
+          }),
+        },
+        requestBody: { model: "gpt-5.5" },
       }),
     ).toBeUndefined();
   });
@@ -3027,3 +3095,66 @@ function delegated(params: {
     },
   };
 }
+
+describe("runtime nest with spawn-minted children", () => {
+  // Kimi Code names no native child id: a child shares the parent's session id
+  // and is told apart by the signed marker on its opening prompt.
+  const kimi = new AppaKimiCodeAdapter();
+  const callerId = "user:user";
+  const workspace = "workspace";
+  const runtimeSessionId = `${callerId}|${workspace}`;
+  const spawnCallId = "tool_spawn_date";
+  const prompt = "run date";
+  const kimiChild = (parentId: string): AppaMatchContext => {
+    const marker = mintDelegationMarker({
+      organizationId: "org",
+      callerId,
+      parentId,
+      spawnerNativeId: "session_parent",
+      prompt,
+      spawnCallId,
+      runtimeSessionId,
+    });
+    const context = runtimeRoot({
+      headers: {
+        "user-agent": "kimi-code-cli/2.3.3",
+        "x-appa-session-id": workspace,
+      },
+      interactionType: "kimi-code:chatCompletions",
+      body: {
+        prompt_cache_key: "session_parent",
+        messages: [{ role: "user", content: `${prompt}\n\n${marker}` }],
+      },
+    });
+    const trusted = context.trustedContext;
+    if (!trusted) throw new Error("expected trusted context");
+    trusted.runtimeSessionId = runtimeSessionId;
+    return context;
+  };
+
+  test("binds a direct child of the workspace by its signed spawn call", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    expect(kimi.bindChildTrajectory(kimiChild(workspace))).toMatchObject({
+      parentId: workspace,
+      sessionId: childSessionId(workspace, spawnCallId),
+    });
+  });
+
+  test("binds a nested child under an intermediate parent by its signed spawn call", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const parentId = childSessionId(workspace, "a1");
+    expect(kimi.bindChildTrajectory(kimiChild(parentId))).toMatchObject({
+      parentId,
+      sessionId: childSessionId(parentId, spawnCallId),
+    });
+  });
+
+  test("refuses a spawn-minted child signed for another workspace", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const context = kimiChild(childSessionId(workspace, "a1"));
+    const trusted = context.trustedContext;
+    if (!trusted) throw new Error("expected trusted context");
+    trusted.runtimeSessionId = `${callerId}|other-workspace`;
+    expect(() => kimi.bindChildTrajectory(context)).toThrow(ApiError);
+  });
+});

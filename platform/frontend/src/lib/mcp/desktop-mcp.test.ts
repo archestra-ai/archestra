@@ -1,0 +1,570 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  addDesktopMcpServer,
+  desktopArgumentsProgramNotice,
+  desktopArgumentsSaveIsFollowed,
+  desktopMcpArgumentsError,
+  desktopMcpCommandOf,
+  desktopMcpTargetError,
+  desktopMcpTargetOf,
+  desktopMcpTargetToApi,
+  desktopServerErrorSentence,
+  desktopServerStartLabel,
+  ownDesktopMcpServers,
+} from "./desktop-mcp";
+
+describe("addDesktopMcpServer", () => {
+  const catalogItem = { id: "catalog-matlab", name: "MATLAB" };
+
+  it("asks for a personal installation and resolves with it", async () => {
+    const server = { id: "server-1" };
+    const install = vi.fn(async () => ({
+      installedServer: server,
+      errorMessage: null,
+    }));
+
+    await expect(addDesktopMcpServer({ install, catalogItem })).resolves.toBe(
+      server,
+    );
+    expect(install).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "MATLAB",
+        catalogId: "catalog-matlab",
+        scope: "personal",
+      }),
+    );
+  });
+
+  it("resolves with null when the installation was refused", async () => {
+    const install = async () => ({
+      installedServer: undefined,
+      errorMessage: "A desktop MCP server needs a command or a URL",
+    });
+
+    await expect(
+      addDesktopMcpServer({ install, catalogItem }),
+    ).resolves.toBeNull();
+  });
+
+  it("sends the arguments the user added, also when there are none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({
+      install,
+      catalogItem,
+      desktopArguments: ["--root", "$HOME/My Models"],
+    });
+    await addDesktopMcpServer({ install, catalogItem, desktopArguments: [] });
+
+    expect(install).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        desktopArguments: ["--root", "$HOME/My Models"],
+      }),
+    );
+    expect(install).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ desktopArguments: [] }),
+    );
+  });
+
+  it("sends no arguments key for an item that takes none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({ install, catalogItem });
+
+    expect(install.mock.calls[0]).toEqual([
+      expect.not.objectContaining({ desktopArguments: expect.anything() }),
+    ]);
+  });
+});
+
+describe("desktopArgumentsProgramNotice", () => {
+  const appName = "Acme";
+  const device = {
+    name: "MBP-0142",
+    platform: "macos" as const,
+    lastPolledAt: "2026-11-12T12:00:00.000Z",
+    programVersion: "0.1.0",
+    programUpdate: null,
+    programAutoUpdate: true,
+  };
+
+  it("says nothing to a viewer with no device", () => {
+    expect(desktopArgumentsProgramNotice({ device: null, appName })).toBeNull();
+    expect(
+      desktopArgumentsProgramNotice({ device: undefined, appName }),
+    ).toBeNull();
+  });
+
+  it("says nothing when the program of the device applies arguments", () => {
+    for (const programVersion of ["0.1.2", "0.1.10", "0.2.0", "0.1.2-dev"]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programVersion },
+          appName,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("says nothing of a device that was linked a moment ago and has not reported yet", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, lastPolledAt: null, programVersion: null },
+        appName,
+      }),
+    ).toBeNull();
+  });
+
+  it("names the update command when the deployment serves a program that applies arguments", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programUpdate: { version: "0.1.2" } },
+        appName,
+      }),
+    ).toEqual({
+      title: "Arguments need a newer version of the MCP bridge",
+      text: {
+        before:
+          "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Run ",
+        command: "archestra update",
+        after:
+          " in a terminal on that device. Arguments are saved and apply after the update.",
+      },
+    });
+  });
+
+  it("says that a Windows device updates by itself where the deployment lets it", () => {
+    const notice = desktopArgumentsProgramNotice({
+      device: {
+        ...device,
+        platform: "windows",
+        programUpdate: { version: "0.2.0" },
+      },
+      appName,
+    });
+    expect(notice?.text.before).toBe(
+      "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. The device updates by itself when no tool call is running. To update now, run ",
+    );
+    expect(notice?.text.command).toBe("archestra update");
+  });
+
+  it("names no command while the deployment serves no program that applies arguments: an update would get the same one", () => {
+    for (const programUpdate of [
+      null,
+      { version: "0.1.1" },
+      // A build put there by hand: its version is not known.
+      { version: null },
+    ]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programUpdate },
+          appName,
+        }),
+      ).toEqual({
+        title: "Arguments need a newer version of the MCP bridge",
+        text: {
+          before:
+            "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+          command: null,
+          after: "",
+        },
+      });
+    }
+  });
+
+  it("counts a device that reported no version as too old", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programVersion: null },
+        appName,
+      })?.text.before,
+    ).toBe(
+      "The MCP bridge on MBP-0142 did not report its version. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+    );
+  });
+});
+
+describe("desktopArgumentsSaveIsFollowed", () => {
+  const notice = {
+    title: "Arguments need a newer version of the MCP bridge",
+    text: { before: "", command: null, after: "" },
+  };
+
+  it("follows an installation that waits again: the MCP server starts again on the device", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "pending",
+      }),
+    ).toBe(true);
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "discovering-tools",
+      }),
+    ).toBe(true);
+  });
+
+  it("follows nothing on a device that does not apply arguments, whatever the installation says", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "success" }),
+    ).toBe(false);
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "pending" }),
+    ).toBe(false);
+  });
+
+  it("follows nothing when the saved installation is complete: the dialog would say connected at once", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "success",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("desktopMcpCommandOf", () => {
+  it("gives the command exactly as stored", () => {
+    expect(
+      desktopMcpCommandOf({
+        command: "/Users/$USER/bins/mcp  serve --flag 'two words'",
+      }),
+    ).toBe("/Users/$USER/bins/mcp  serve --flag 'two words'");
+  });
+
+  it("gives none for an item with a URL, and for one that is not set up", () => {
+    expect(desktopMcpCommandOf({ command: null })).toBeNull();
+    expect(desktopMcpCommandOf({ command: "   " })).toBeNull();
+    expect(desktopMcpCommandOf({})).toBeNull();
+    expect(desktopMcpCommandOf(null)).toBeNull();
+    expect(desktopMcpCommandOf(undefined)).toBeNull();
+  });
+});
+
+describe("desktopMcpArgumentsError", () => {
+  it("accepts no arguments and ordinary ones", () => {
+    expect(desktopMcpArgumentsError([])).toBeNull();
+    expect(
+      desktopMcpArgumentsError(["--root", "$HOME/My Models", "--verbose"]),
+    ).toBeNull();
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 64 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBeNull();
+    expect(desktopMcpArgumentsError(["a".repeat(4096)])).toBeNull();
+  });
+
+  it("refuses more arguments than the backend stores", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 65 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBe("Use at most 64 arguments.");
+  });
+
+  it("refuses an argument that is too long", () => {
+    expect(desktopMcpArgumentsError(["--ok", "a".repeat(4097)])).toBe(
+      "Use at most 4096 characters in one argument.",
+    );
+  });
+
+  it("refuses arguments that are too long together", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 5 }, () => "a".repeat(4000)),
+      ),
+    ).toBe("Use at most 16384 characters in all arguments together.");
+  });
+});
+
+describe("desktopMcpTargetOf", () => {
+  it("reads a command", () => {
+    expect(
+      desktopMcpTargetOf({ command: "/opt/mcp serve", url: null }),
+    ).toEqual({ kind: "command", value: "/opt/mcp serve" });
+  });
+
+  it("reads a URL", () => {
+    expect(
+      desktopMcpTargetOf({ command: null, url: "http://127.0.0.1:8080/mcp" }),
+    ).toEqual({ kind: "url", value: "http://127.0.0.1:8080/mcp" });
+  });
+
+  it("starts as an empty command when neither is set", () => {
+    expect(desktopMcpTargetOf({})).toEqual({ kind: "command", value: "" });
+    expect(desktopMcpTargetOf({ command: null, url: null })).toEqual({
+      kind: "command",
+      value: "",
+    });
+  });
+});
+
+describe("desktopMcpTargetToApi", () => {
+  it("sends the command and no URL", () => {
+    expect(
+      desktopMcpTargetToApi({ kind: "command", value: " /opt/mcp serve " }),
+    ).toEqual({ command: "/opt/mcp serve", url: null });
+  });
+
+  it("sends the URL and no command", () => {
+    expect(
+      desktopMcpTargetToApi({
+        kind: "url",
+        value: "http://127.0.0.1:8080/mcp",
+      }),
+    ).toEqual({ command: null, url: "http://127.0.0.1:8080/mcp" });
+  });
+
+  it("sends null for both when the value is empty", () => {
+    expect(desktopMcpTargetToApi({ kind: "command", value: "  " })).toEqual({
+      command: null,
+      url: null,
+    });
+    expect(desktopMcpTargetToApi({ kind: "url", value: "" })).toEqual({
+      command: null,
+      url: null,
+    });
+  });
+});
+
+describe("desktopMcpTargetError", () => {
+  it("accepts an empty value", () => {
+    expect(desktopMcpTargetError({ kind: "command", value: "" })).toBeNull();
+    expect(desktopMcpTargetError({ kind: "url", value: "   " })).toBeNull();
+  });
+
+  it("accepts a command with the two variables", () => {
+    expect(
+      desktopMcpTargetError({
+        kind: "command",
+        value: "/Users/$USER/bins/mcp --home $HOME",
+      }),
+    ).toBeNull();
+  });
+
+  it("accepts an http and an https URL", () => {
+    expect(
+      desktopMcpTargetError({
+        kind: "url",
+        value: "http://127.0.0.1:8080/mcp",
+      }),
+    ).toBeNull();
+    expect(
+      desktopMcpTargetError({ kind: "url", value: "https://localhost/mcp" }),
+    ).toBeNull();
+  });
+
+  it("rejects a URL that is not http(s)", () => {
+    expect(
+      desktopMcpTargetError({ kind: "url", value: "127.0.0.1:8080/mcp" }),
+    ).toBe("The URL must start with http:// or https://");
+    expect(
+      desktopMcpTargetError({ kind: "url", value: "file:///tmp/mcp.sock" }),
+    ).toBe("The URL must start with http:// or https://");
+  });
+
+  it("rejects a value longer than the backend stores", () => {
+    expect(
+      desktopMcpTargetError({ kind: "command", value: "a".repeat(4097) }),
+    ).toBe("Use at most 4096 characters.");
+    expect(
+      desktopMcpTargetError({ kind: "command", value: "a".repeat(4096) }),
+    ).toBeNull();
+  });
+});
+
+describe("ownDesktopMcpServers", () => {
+  const VIEWER = "user-viewer";
+  const catalogItems = [
+    { id: "matlab", name: "MATLAB", serverType: "desktop_mcp", icon: null },
+    {
+      id: "notes",
+      name: "Notes",
+      serverType: "desktop_mcp",
+      icon: "notes.png",
+      iconUrl: "/icons/notes.png",
+    },
+    { id: "github", name: "GitHub", serverType: "remote", icon: null },
+  ];
+  const install = (
+    catalogId: string,
+    ownerId: string,
+    localInstallationStatus: string,
+    scope = "personal",
+  ) => ({ catalogId, ownerId, scope, localInstallationStatus });
+
+  it("lists the viewer's own desktop installations, by name, ready or waiting", () => {
+    expect(
+      ownDesktopMcpServers({
+        catalogItems,
+        servers: [
+          install("notes", VIEWER, "success"),
+          install("matlab", VIEWER, "pending"),
+          install("matlab", "user-colleague", "success"),
+          install("github", VIEWER, "success"),
+          install("notes", VIEWER, "success", "team"),
+        ],
+        viewerId: VIEWER,
+      }),
+    ).toEqual([
+      { catalogId: "matlab", name: "MATLAB", icon: null, ready: false },
+      {
+        catalogId: "notes",
+        name: "Notes",
+        icon: "/icons/notes.png",
+        ready: true,
+      },
+    ]);
+  });
+
+  it("lists nothing without a viewer or data", () => {
+    expect(
+      ownDesktopMcpServers({
+        catalogItems,
+        servers: [install("matlab", VIEWER, "success")],
+        viewerId: null,
+      }),
+    ).toEqual([]);
+    expect(
+      ownDesktopMcpServers({
+        catalogItems: undefined,
+        servers: undefined,
+        viewerId: VIEWER,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("desktopServerStartLabel", () => {
+  it("names each state the MCP bridge reports", () => {
+    for (const [state, label] of [
+      ["running", "Running"],
+      ["starting", "Starting"],
+      ["failed", "Failed"],
+      ["stopped", "Stopped"],
+      ["no_command", "No command"],
+    ]) {
+      expect(desktopServerStartLabel(state)).toBe(label);
+    }
+  });
+
+  it("says a server the MCP bridge did not report yet is about to start", () => {
+    expect(desktopServerStartLabel(null)).toBe("Starting");
+    expect(desktopServerStartLabel(undefined)).toBe("Starting");
+    expect(desktopServerStartLabel("something-new")).toBe("Starting");
+  });
+});
+
+describe("desktopServerErrorSentence", () => {
+  const sentence = (
+    error: string | null,
+    target: { command?: string | null; url?: string | null } = {},
+  ) => desktopServerErrorSentence({ error, name: "MATLAB", ...target });
+
+  it("says nothing when there is no error", () => {
+    expect(sentence(null)).toBeNull();
+    expect(sentence("  ")).toBeNull();
+  });
+
+  it("names the program that was not found", () => {
+    expect(
+      sentence(
+        "cannot start the program: No such file or directory (os error 2)",
+        { command: "eda-agent --stdio" },
+      ),
+    ).toBe('The program "eda-agent" was not found on this device.');
+  });
+
+  it("reads what Windows says for a program that was not found", () => {
+    for (const error of [
+      "cannot start the program: program not found",
+      "cannot start the program: The system cannot find the file specified. (os error 2)",
+      "cannot start the program: The system cannot find the path specified. (os error 3)",
+    ]) {
+      expect(sentence(error, { command: "matlab-mcp.exe" })).toBe(
+        'The program "matlab-mcp.exe" was not found on this device.',
+      );
+    }
+  });
+
+  it("takes the program from a quoted path with spaces", () => {
+    expect(
+      sentence(
+        "cannot start the program: No such file or directory (os error 2)",
+        { command: '"/Applications/My Tools/mcp" --port 1' },
+      ),
+    ).toBe(
+      'The program "/Applications/My Tools/mcp" was not found on this device.',
+    );
+  });
+
+  it("names a program the computer does not let run", () => {
+    expect(
+      sentence("cannot start the program: Permission denied (os error 13)", {
+        command: "/opt/router/mcp",
+      }),
+    ).toBe(
+      'The program "/opt/router/mcp" is not allowed to run on this device.',
+    );
+    expect(
+      sentence("cannot start the program: Access is denied. (os error 5)", {
+        command: "router.exe",
+      }),
+    ).toBe('The program "router.exe" is not allowed to run on this device.');
+  });
+
+  it("keeps a sentence for any other reason a program did not start, also with no command known", () => {
+    expect(
+      sentence("cannot start the program: Exec format error (os error 8)", {
+        command: "mcp",
+      }),
+    ).toBe('The program "mcp" could not start on this device.');
+    expect(
+      sentence(
+        "cannot start the program: No such file or directory (os error 2)",
+      ),
+    ).toBe("The program was not found on this device.");
+  });
+
+  it("words what the server did after it started", () => {
+    expect(
+      sentence("the MCP server closed before it answered `initialize`"),
+    ).toBe("MATLAB closed right after it started.");
+    expect(sentence("the MCP server did not answer `initialize` in time")).toBe(
+      "MATLAB started, but did not answer in time.",
+    );
+    expect(
+      sentence(
+        'the MCP server answered `initialize` with an error: {"code":-32600}',
+      ),
+    ).toBe("MATLAB started, but answered with an error.");
+    expect(sentence("the MCP server stopped (exit status: 3)")).toBe(
+      "MATLAB stopped by itself.",
+    );
+  });
+
+  it("names the URL where nothing answers", () => {
+    expect(
+      sentence(
+        "the request failed: error sending request: tcp connect error: Connection refused (os error 61)",
+        { url: "http://127.0.0.1:8080/mcp" },
+      ),
+    ).toBe("Nothing answers at http://127.0.0.1:8080/mcp on this device.");
+  });
+
+  it("returns an error it does not know as it came", () => {
+    expect(sentence("the program has no stdin or stdout pipe")).toBe(
+      "the program has no stdin or stdout pipe",
+    );
+  });
+});

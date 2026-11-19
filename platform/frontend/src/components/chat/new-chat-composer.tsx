@@ -146,18 +146,22 @@ export function NewChatComposer({
           column. */}
       <div className="w-full">
         <div className="mb-3 empty:hidden">
-          {isRuntimeMode && runtimePreflight.data?.ready === false && (
-            <AgentRuntimeCredentialPrompt
-              agentId={agentId}
-              missing={[
-                ...runtimePreflight.data.missing,
-                ...runtimePreflight.data.misconfigured,
-              ]}
-              declarations={runtimeAgent?.runtime?.credentials ?? []}
-              incompatible={runtimePreflight.data.incompatible}
-              onConnected={() => runtimePreflight.refetch()}
-            />
-          )}
+          {isRuntimeMode &&
+            runtimePreflight.data != null &&
+            (!runtimePreflight.data.ready ||
+              runtimePreflight.data.missing.length > 0 ||
+              runtimePreflight.data.misconfigured.length > 0) && (
+              <AgentRuntimeCredentialPrompt
+                agentId={agentId}
+                missing={[
+                  ...runtimePreflight.data.missing,
+                  ...runtimePreflight.data.misconfigured,
+                ]}
+                declarations={runtimeAgent?.runtime?.credentials ?? []}
+                incompatible={runtimePreflight.data.incompatible}
+                onConnected={() => runtimePreflight.refetch()}
+              />
+            )}
           {isRuntimeMode && runtimePreflight.isError && (
             <AgentRuntimePreflightError
               error={runtimePreflight.error}

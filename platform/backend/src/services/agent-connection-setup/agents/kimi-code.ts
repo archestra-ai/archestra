@@ -222,9 +222,10 @@ try {
     config = c.setTopLevel(config, "default_permission_mode", c.tomlString("yolo")).text;
   }
   if (connection.skills) {
-    c.pruneSkills(connection.skills.marketplaceName, new URL(connection.skills.cloneUrl).origin);
+    const repository = marketplaceSkillsLocation(connection.skills, c.skillsRoot).repository;
     const dir = syncMarketplaceSkills({ source: connection.skills, install: true, root: c.skillsRoot });
     if (dir) {
+      c.pruneSkills(path.basename(repository));
       const next = c.withSkillDir(config, dir, true);
       if (next) { config = next.text; state.skillDir = dir; }
       else console.warn("Skills were downloaded, but extra_skill_dirs in config.toml is not a one-line list of folders. Add " + dir + " to it yourself.");

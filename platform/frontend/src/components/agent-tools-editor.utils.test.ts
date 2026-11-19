@@ -66,6 +66,32 @@ describe("getCatalogAssignmentGate", () => {
     expect(gate.unavailable).toBe(false);
   });
 
+  // A desktop MCP server runs on each caller's own computer: the assigning
+  // caller's connections say nothing about it.
+  it("never reads a desktop MCP server as not connected", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: false,
+      isEnvIncompatible: false,
+      isDesktop: true,
+    });
+
+    expect(gate).toEqual({ disabled: false, unavailable: false });
+  });
+
+  it("refuses a desktop MCP server no computer has read the tools of, in its own words", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: false,
+      hasResolvableInstall: false,
+      isEnvIncompatible: false,
+      isDesktop: true,
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe("Not connected from a device yet");
+    expect(gate.unavailable).toBe(false);
+  });
+
   it("refuses an environment-incompatible catalog with a named-environment reason", () => {
     const gate = getCatalogAssignmentGate({
       hasDiscoveredTools: true,

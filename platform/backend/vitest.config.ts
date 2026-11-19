@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import {
@@ -7,9 +8,16 @@ import {
   reportMemoryKillsAtExit,
 } from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
+import { ensureNativeAddons } from "./src/test/native-addons";
+import { ProjectGroupedSequencer } from "./src/test/project-grouped-sequencer";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
+
+// On macOS the temp directory is under /var, a symlink to /private/var, and
+// child processes report the resolved path. Workers inherit the resolved one,
+// so a test's temp paths compare equal to what the code under test reports.
+process.env.TMPDIR = realpathSync(tmpdir());
 
 /**
  * Fork workers each load the backend graph and a PGlite database. CI keeps the
@@ -49,14 +57,17 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
 }
 
 /**
- * Partition test files by explicit database usage and Vitest module mocking.
+ * Partition test files by explicit database usage and module isolation needs.
  *
  * `vi.mock`/`vi.doMock` registrations live in the worker's shared module/mock
  * registry, which Vitest does NOT reset between files when `isolate: false`
  * (see https://vitest.dev/guide/improving-performance and
- * vitest-dev/vitest#4894, #10145) — so mock-using files must keep isolation,
- * while everything else can share each worker's module cache and skip
- * re-importing the whole backend graph per file (~6s/file saved).
+ * vitest-dev/vitest#4894, #10145) — so mock-using files must keep isolation.
+ * `vi.resetModules` also needs isolation: it reloads app singletons while
+ * external packages retain theirs (for example, the Prometheus registry).
+ * A later file can then register a gauge twice. Everything else can share
+ * each worker's module cache and skip re-importing the whole backend graph
+ * per file (~6s/file saved).
  *
  * Rollback-eligible files join the clean project and select transaction
  * teardown through their filename in setup hooks, retaining its shared module
@@ -72,7 +83,8 @@ function partitionTestFiles(): {
   rollback: string[];
 } {
   const root = path.resolve(__dirname, "./src");
-  const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
+  const needsModuleIsolation =
+    /\bvi\.(mock|doMock|unmock|doUnmock|hoisted|resetModules)\(/;
   const mocked: string[] = [];
   const clean: string[] = [];
   const unitMocked: string[] = [];
@@ -88,16 +100,18 @@ function partitionTestFiles(): {
     const relative = `./${path.relative(__dirname, absolute)}`;
     const databaseFree = entry.name.endsWith(".unit.test.ts");
     const rollsBack = entry.name.endsWith(".rollback.test.ts");
-    const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
+    const isolated = needsModuleIsolation.test(readFileSync(absolute, "utf-8"));
     if (databaseFree) {
-      (moduleMocks ? unitMocked : unit).push(relative);
+      (isolated ? unitMocked : unit).push(relative);
     } else if (rollsBack) {
-      if (moduleMocks) {
-        throw new Error(`${relative} cannot use module mocks with rollback`);
+      if (isolated) {
+        throw new Error(
+          `${relative} cannot use module mocks or resetModules with rollback`,
+        );
       }
       rollback.push(relative);
     } else {
-      (moduleMocks ? mocked : clean).push(relative);
+      (isolated ? mocked : clean).push(relative);
     }
   }
 
@@ -112,6 +126,17 @@ function partitionTestFiles(): {
 }
 
 const testFiles = partitionTestFiles();
+
+// The backend loads the NAPI addons (@archestra/*-rs), which a fresh checkout
+// lacks: they are gitignored and pnpm install never builds them. Install the
+// ones CI published for this archestra-rs tree when any is missing or was
+// installed for another tree; never a cargo build. A checkout Tilt, the lite
+// stack or CI prepared already has them, so this reads a few files and stops.
+ensureNativeAddons({
+  backendDir: __dirname,
+  rustDir: path.resolve(__dirname, "../archestra-rs"),
+  installer: path.resolve(__dirname, "../scripts/napi-prebuilt.mjs"),
+});
 
 export default defineConfig({
   plugins: [rawPythonPlugin()],
@@ -162,7 +187,8 @@ export default defineConfig({
     unstubGlobals: true,
     unstubEnvs: true,
 
-    maxWorkers: MAX_WORKERS,
+    // Projects copy this value and would ignore `--maxWorkers` on the CLI.
+    ...(cliSetsMaxWorkers() ? {} : { maxWorkers: MAX_WORKERS }),
 
     // Pin each fork's V8 old-space ceiling. CI divides most runner memory over
     // its workers; local runs cap each heap at 3 GB and their aggregate budget
@@ -182,10 +208,12 @@ export default defineConfig({
     // workflow caches, and avoids the experimental cache path entirely.
     experimental: { fsModuleCache: !isCI },
 
-    // Sequence settings
     sequence: {
-      // Shuffle test files to balance load across workers
+      // Shuffle files and tests, to balance load and surface order
+      // dependence, but keep each project's files together so shared
+      // workers survive from one file to the next.
       shuffle: true,
+      sequencer: ProjectGroupedSequencer,
     },
 
     // Increase test timeout for database operations
@@ -203,6 +231,7 @@ export default defineConfig({
           name: "unit",
           include: testFiles.unit,
           isolate: false,
+          setupFiles: ["./src/test/worker-globals.ts"],
           // An accidental runtime config/database import must fail even on CI,
           // where a database URL is available to the database-backed projects.
           env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
@@ -227,7 +256,7 @@ export default defineConfig({
           // Vitest's current test-file context. Both variants share workers.
           // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/worker-globals.ts", "./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
           // shared mutable state (the config object) between tests. The
           // isolated project skips that — its per-file registries can't leak,
@@ -248,6 +277,10 @@ export default defineConfig({
     ],
   },
 });
+
+function cliSetsMaxWorkers(): boolean {
+  return process.argv.some((arg) => /^--max-?workers(=|$)/i.test(arg));
+}
 
 function rawPythonPlugin() {
   return {

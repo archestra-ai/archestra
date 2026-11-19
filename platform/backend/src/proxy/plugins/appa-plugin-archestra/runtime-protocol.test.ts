@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { AgentExcludedSubagentModel, ToolModel } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import * as agentRuntimeMetrics from "@/observability/metrics/agent-runtime";
@@ -576,6 +577,42 @@ describe("protected runtime protocol", () => {
     expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
       "failed",
     );
+
+    for (const [reason, expectedMessage] of [
+      [
+        "credentials_admin_only",
+        "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
+      ],
+      [
+        "model_unready",
+        "No runtime was started. This Agent's model or provider credential is not set up for your account.",
+      ],
+      [
+        "backend_unavailable",
+        "No runtime was started. The Agent Runtime backend is not available right now.",
+      ],
+      [
+        "not_allowed",
+        "No runtime was started. This caller is not allowed to start a run on the requested Agent.",
+      ],
+      [
+        "invalid_request",
+        "No runtime was started. The launch request parameters or limits are not valid for this Agent.",
+      ],
+    ] as const) {
+      const reasonOrg = await makeOrganization();
+      const reasonLaunch = await releasedLaunch(reasonOrg.id, {
+        kind: "failed",
+        reason,
+      });
+      const reasonOutcome = await reasonLaunch.plugin.onToolResults({
+        ...reasonLaunch.context,
+        toolResults: [reported],
+      });
+      expect(reasonOutcome?.toolResultUpdates["runtime-call"]).toBe(
+        expectedMessage,
+      );
+    }
   });
 
   test("gives the model no handle when the gateway recorded no launch", async ({
@@ -624,6 +661,294 @@ describe("protected runtime protocol", () => {
       ],
     });
     expect(evaluate.mock.calls[0][2]?.spawnCallIds?.size).toBe(0);
+  });
+
+  test("classifies omitted-agent_id start_agent_run as a spawn iff the resolved caller has candidate runtime subagents", async ({
+    makeOrganization,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const runtimeWorker = await makeAgent({
+      organizationId: org.id,
+      name: "Lobster Grok",
+      agentType: "agent",
+      runtime: runtimeConfig(),
+    });
+    const workerDelegationTool = await ToolModel.findOrCreateDelegationTool(
+      runtimeWorker.id,
+    );
+    const lobsterEnv = await makeAgent({
+      organizationId: org.id,
+      name: "Lobster Env",
+      agentType: "agent",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+    });
+    await makeAgentTool(lobsterEnv.id, workerDelegationTool.id);
+    const plainChatAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Plain Chat Agent",
+      agentType: "agent",
+    });
+    const lbGateway = await makeAgent({
+      organizationId: org.id,
+      name: "LB Gateway",
+      agentType: "mcp_gateway",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await makeAgentTool(lbGateway.id, workerDelegationTool.id);
+    const pooledPlainGateway = await makeAgent({
+      organizationId: org.id,
+      name: "Pooled Non-LB Gateway",
+      agentType: "mcp_gateway",
+    });
+    await makeAgentTool(pooledPlainGateway.id, workerDelegationTool.id);
+    const plainGateway = await makeAgent({
+      organizationId: org.id,
+      name: "Plain Gateway",
+      agentType: "mcp_gateway",
+    });
+    const unattestedProfile = await makeAgent({
+      organizationId: org.id,
+      name: "Unattested Profile",
+      agentType: "profile",
+    });
+
+    const plugin = new AppaPluginArchestra([]);
+    const evaluate = vi
+      .spyOn(service, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    // 1. Load-balanced Chat router (`Lobster Env`) with runtime subagent omitting `agent_id` -> `spawn: true`
+    const envChatCtx = request(org.id);
+    envChatCtx.profileId = lobsterEnv.id;
+    const envTrusted = envChatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    envTrusted.profileId = lobsterEnv.id;
+    envTrusted.chatSource = "chat";
+    await plugin.onSessionInit(envChatCtx);
+    const envReleased = await plugin.onToolCalls({
+      ...envChatCtx,
+      toolCalls: [
+        {
+          id: "env-spawn",
+          name: "archestra__run_tool",
+          arguments: {
+            tool_name: "archestra__start_agent_run",
+            tool_args: { message: "Fix the bug" },
+          },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("env-spawn"),
+    ).toBe(true);
+    if (envReleased?.decision !== "allow")
+      throw new Error("Expected governed released call for Lobster Env");
+    const envSigned = (
+      envReleased.toolCalls[0].arguments as {
+        tool_args: Record<string, unknown>;
+      }
+    ).tool_args;
+    expect(
+      verifyRuntimeToolProof({
+        proof: envSigned.runtime_proof,
+        arguments: envSigned,
+        organizationId: org.id,
+        callerId: "user:owner",
+        action: "start_agent_run",
+        secret,
+      }),
+    ).toMatchObject({ toolCallId: "env-spawn", spawn: true });
+
+    // 2. Chat agent without runtime subagents omitting `agent_id` -> `spawn: false`
+    const plainChatCtx = request(org.id);
+    plainChatCtx.profileId = plainChatAgent.id;
+    const plainTrusted = plainChatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    plainTrusted.profileId = plainChatAgent.id;
+    plainTrusted.chatSource = "chat";
+    await plugin.onSessionInit(plainChatCtx);
+    await plugin.onToolCalls({
+      ...plainChatCtx,
+      toolCalls: [
+        {
+          id: "plain-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Missing agent_id" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("plain-no-spawn"),
+    ).toBe(false);
+
+    // 2b. Auto-subagent Chat agent (`accessAllSubagents: true`) classifies omitted
+    // `agent_id` as `spawn: true` when non-excluded runtime targets exist, and
+    // `spawn: false` once all runtime targets are excluded.
+    const autoRouter = await makeAgent({
+      organizationId: org.id,
+      name: "Auto Router",
+      agentType: "agent",
+      accessAllSubagents: true,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const autoCtx = request(org.id);
+    autoCtx.profileId = autoRouter.id;
+    const autoTrusted = autoCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    autoTrusted.profileId = autoRouter.id;
+    autoTrusted.chatSource = "chat";
+    await plugin.onSessionInit(autoCtx);
+    await plugin.onToolCalls({
+      ...autoCtx,
+      toolCalls: [
+        {
+          id: "auto-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Dispatch via auto subagent pool" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("auto-spawn"),
+    ).toBe(true);
+
+    await AgentExcludedSubagentModel.replaceForAgent(autoRouter.id, [
+      runtimeWorker.id,
+    ]);
+    await plugin.onToolCalls({
+      ...autoCtx,
+      toolCalls: [
+        {
+          id: "auto-excluded-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "All runtime targets excluded" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls
+        .at(-1)?.[2]
+        ?.spawnCallIds?.has("auto-excluded-no-spawn"),
+    ).toBe(false);
+
+    // 3. Attested external gateways: both LB and non-LB gateways with assigned runtime
+    // subagents classify omitted `agent_id` as `spawn: true`; gateway without subagents -> `false`.
+    for (const [gateway, expectedSpawn] of [
+      [lbGateway, true],
+      [pooledPlainGateway, true],
+      [plainGateway, false],
+    ] as const) {
+      const gwCtx = request(org.id);
+      const gwTrusted = gwCtx.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      gwTrusted.toolIdentity = {
+        canonicalize: () => "archestra__run_tool",
+        attestationOf: () => ({
+          name: "mcp__gw__archestra__run_tool",
+          gatewayId: gateway.id,
+          advertisedName: "archestra__run_tool",
+          kind: "b",
+        }),
+        looseRunToolDispatch: false,
+      };
+      await plugin.onSessionInit(gwCtx);
+      await plugin.onToolCalls({
+        ...gwCtx,
+        toolCalls: [
+          {
+            id: `gw-${gateway.id}`,
+            name: "mcp__gw__archestra__run_tool",
+            arguments: {
+              tool_name: "archestra__start_agent_run",
+              tool_args: { message: "Dispatch via gateway" },
+            },
+          },
+        ],
+      });
+      expect(
+        evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has(`gw-${gateway.id}`),
+      ).toBe(expectedSpawn);
+    }
+
+    // 4. Unattested / compat-mode call from a profile with no subagents stays `spawn: false`
+    // even when another agent in the organization (`lobsterEnv`) has load balancing enabled.
+    const compatCtx = request(org.id);
+    compatCtx.profileId = unattestedProfile.id;
+    const compatTrusted = compatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    compatTrusted.profileId = unattestedProfile.id;
+    await plugin.onSessionInit(compatCtx);
+    await plugin.onToolCalls({
+      ...compatCtx,
+      toolCalls: [
+        {
+          id: "compat-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Compat without agent_id" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("compat-no-spawn"),
+    ).toBe(false);
+
+    // 5. Observer path (`enforcement: "inactive"`) preserves `chat` and never signs a launch.
+    const observedCtx = request(org.id);
+    observedCtx.profileId = lobsterEnv.id;
+    const observedTrusted = observedCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    observedTrusted.profileId = lobsterEnv.id;
+    observedTrusted.chatSource = "chat";
+    observedTrusted.enforcement = "inactive";
+    observedTrusted.session = {
+      organization_id: org.id,
+      caller_id: "user:owner",
+      session_id: "user:owner|observed-chat",
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: observedTrusted.session.caller_id,
+      sessionId: observedTrusted.session.session_id,
+      actor: openappaActor(observedTrusted.session.session_id),
+      root: openappaActor(observedTrusted.session.session_id),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await plugin.onSessionInit(observedCtx);
+    const observedOutcome = await plugin.onToolCalls({
+      ...observedCtx,
+      toolCalls: [
+        {
+          id: "observed-omitted-launch",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Observed router launch" },
+        },
+      ],
+    });
+    expect(observedOutcome).toBeUndefined();
   });
 
   test("delivers the retained return contract before inference and does not end the retained runtime", async ({
@@ -682,6 +1007,181 @@ describe("protected runtime protocol", () => {
     await plugin.onSessionInit(root);
     await plugin.onBeforeModel({ ...root, request: body });
     expect(drain).toHaveBeenCalledOnce();
+  });
+
+  test("classifies a runtime launch on an ephemeral child trajectory as detached while keeping root and runtime-pod launches pending", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const plugin = new AppaPluginArchestra([]);
+    vi.spyOn(service, "loadChildReturns").mockResolvedValue([]);
+
+    // 1. Ephemeral child trajectory (parent_id set, no runtimeSessionId) settles its
+    //    runtime launch as "detached" so endChild does not fail with ChildDispatchOpen,
+    //    while preserving the verified launch JSON over any runtime placeholder.
+    const childSession = {
+      organization_id: org.id,
+      caller_id: "user:owner",
+      session_id: "user:owner|root-chat/subagent:call-subagent-1",
+      parent_id: "user:owner|root-chat",
+    };
+    const childCtx = request(org.id);
+    const childTrusted = childCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    childTrusted.session = childSession;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      actor: openappaActor(childSession.session_id),
+      root: openappaActor(childSession.parent_id),
+      parentId: childSession.parent_id,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      operationId: "call:sub-launch-1",
+      root: openappaActor(childSession.parent_id),
+      status: "complete",
+      input: {
+        semantic: {
+          event: "tool_call",
+          tool: "archestra__start_agent_run",
+          spawn: true,
+        },
+      },
+      decision: { decision: "allow_call" },
+    });
+    const launchedRunId = randomUUID();
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      toolCallId: "sub-launch-1",
+      outcome: {
+        kind: "launched",
+        session_id: launchedRunId,
+        state: "submitted",
+      },
+    });
+    const processed = vi
+      .spyOn(service, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          "sub-launch-1": {
+            content: "[appa] Spawn dispatch closed",
+            outputSource: "runtime",
+          },
+        },
+      });
+
+    await plugin.onSessionInit(childCtx);
+    const childReported = {
+      id: "sub-launch-1",
+      name: "archestra__start_agent_run",
+      content: JSON.stringify({ run_id: randomUUID() }),
+      isError: false,
+    };
+    const childOutcome = await plugin.onToolResults({
+      ...childCtx,
+      toolResults: [childReported],
+    });
+    expect(
+      processed.mock.calls[0]?.[0].classifySpawnResult?.(childReported),
+    ).toBe("detached");
+    expect(
+      JSON.parse(String(childOutcome?.toolResultUpdates["sub-launch-1"])),
+    ).toMatchObject({
+      run_id: launchedRunId,
+      state: "submitted",
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${launchedRunId}$`),
+      ),
+    });
+
+    // 2. Root chat session (no parent_id) keeps its runtime launch "pending".
+    const rootOrg = await makeOrganization();
+    const rootLaunch = await releasedLaunch(rootOrg.id, {
+      kind: "launched",
+      session_id: randomUUID(),
+      state: "submitted",
+    });
+    const rootReported = {
+      id: "runtime-call",
+      name: "archestra__start_agent_run",
+      content: "{}",
+      isError: false,
+    };
+    await rootLaunch.plugin.onToolResults({
+      ...rootLaunch.context,
+      toolResults: [rootReported],
+    });
+    expect(
+      rootLaunch.processed.mock.calls
+        .at(-1)?.[0]
+        .classifySpawnResult?.(rootReported),
+    ).toBe("pending");
+
+    // 3. Long-lived runtime pod session (runtimeSessionId === session.session_id)
+    //    also keeps its own sub-launches "pending".
+    const podCtx = request(org.id, true);
+    const { session: podSession } = podCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      actor: openappaActor(podSession.session_id),
+      root: openappaActor(podSession.parent_id ?? podSession.session_id),
+      parentId: podSession.parent_id ?? null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      operationId: "call:pod-sub-launch",
+      root: openappaActor(podSession.parent_id ?? podSession.session_id),
+      status: "complete",
+      input: {
+        semantic: {
+          event: "tool_call",
+          tool: "archestra__start_agent_run",
+          spawn: true,
+        },
+      },
+      decision: { decision: "allow_call" },
+    });
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      toolCallId: "pod-sub-launch",
+      outcome: {
+        kind: "launched",
+        session_id: randomUUID(),
+        state: "submitted",
+      },
+    });
+    processed.mockResolvedValue({ toolResultUpdates: {} });
+    await plugin.onSessionInit(podCtx);
+    const podReported = {
+      id: "pod-sub-launch",
+      name: "archestra__start_agent_run",
+      content: "{}",
+      isError: false,
+    };
+    await plugin.onToolResults({
+      ...podCtx,
+      toolResults: [podReported],
+    });
+    expect(
+      processed.mock.calls.at(-1)?.[0].classifySpawnResult?.(podReported),
+    ).toBe("pending");
   });
 });
 

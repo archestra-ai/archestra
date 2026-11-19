@@ -155,6 +155,13 @@ export function AgentRuntimeCredentialsDialog({
       .filter((entry) => entry.canConnect === false)
       .map(({ key }) => key),
   );
+  // A connection the caller made before that no longer works (for example
+  // the organization's GitHub App changed): offer to connect it again.
+  const reconnectKeys = new Set(
+    (preflight.data?.missing ?? [])
+      .filter((entry) => entry.reconnect)
+      .map(({ key }) => key),
+  );
   const canSet = (credential: (typeof declarations)[number]) =>
     !noAccessKeys.has(credential.key) &&
     (credential.scope === "per_user" ||
@@ -205,6 +212,9 @@ export function AgentRuntimeCredentialsDialog({
       <RuntimeCredentialConnectionDialog
         definition={connectionDefinition}
         scope="personal"
+        reconnect={
+          !connecting && missing[0] ? reconnectKeys.has(missing[0].key) : false
+        }
         onClose={connecting ? () => setConnecting(null) : onClose}
       />
     );
@@ -415,6 +425,11 @@ export function AgentRuntimeCredentialsDialog({
                       <GitHubConnectButton
                         className="ml-auto"
                         disabled={save.isPending}
+                        label={
+                          reconnectKeys.has(credential.key)
+                            ? "Reconnect GitHub"
+                            : undefined
+                        }
                         onClick={() => setConnecting(definition)}
                       />
                     </div>

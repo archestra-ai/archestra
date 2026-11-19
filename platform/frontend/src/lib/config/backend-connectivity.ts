@@ -95,12 +95,12 @@ export function calculateEstimatedTotalAttempts(
 }
 
 async function defaultCheckReadiness(): Promise<ReadinessResult> {
-  if (!navigator.onLine) return "browser-offline";
   try {
     const response = await getReady();
     if (response.error?.database === "disconnected") {
       return "database-unavailable";
     }
+    if (!response.response && !navigator.onLine) return "browser-offline";
     return response.response?.ok ? "ready" : "backend-unreachable";
   } catch {
     return navigator.onLine ? "backend-unreachable" : "browser-offline";

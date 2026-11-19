@@ -1,10 +1,15 @@
-import { ApiError } from "@archestra/shared";
+import {
+  ApiError,
+  ChatErrorCode,
+  type ChatErrorResponse,
+} from "@archestra/shared";
 import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
 import type { FastifyReply } from "fastify";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import {
   ActiveChatRunPersistenceError,
+  ActiveChatRunShutdownError,
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { withChatHeartbeats } from "./heartbeat-stream";
@@ -63,6 +68,18 @@ export async function sendGatedUiMessageStreamResponse(params: {
           const reason = abortController.signal.reason;
           if (reason instanceof ActiveChatRunPersistenceError) {
             controller.enqueue({ type: "error", errorText: reason.message });
+          }
+          // A retryable network error, so the client re-sends the turn and
+          // lands on a replica that is not shutting down.
+          if (reason instanceof ActiveChatRunShutdownError) {
+            controller.enqueue({
+              type: "error",
+              errorText: JSON.stringify({
+                code: ChatErrorCode.NetworkError,
+                message: reason.message,
+                isRetryable: true,
+              } satisfies ChatErrorResponse),
+            });
           }
         },
       }),

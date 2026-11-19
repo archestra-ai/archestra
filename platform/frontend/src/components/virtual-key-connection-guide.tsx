@@ -4,6 +4,7 @@ import {
   E2eTestId,
   isModelRouterSupportedProvider,
   PROVIDER_MODEL_TIERS,
+  PROVIDERS_REQUIRING_BASE_URL,
   providerSupportsChat,
   requiresPerplexityAgentApi,
   type SupportedProvider,
@@ -23,6 +24,9 @@ import {
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
+import { AutoRoutingUnavailableHint } from "@/components/auto-routing-model-control";
+import { KeyAutoRouters } from "@/components/credential-billing/key-auto-routers";
+import { ProviderGroupedModelSelect } from "@/components/provider-grouped-model-select";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   terminalActionClass,
@@ -44,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useAutoRoutingOffer } from "@/components/use-auto-routing-offer";
 import {
   buildCurlExample,
   getImageExampleOperations,
@@ -76,6 +81,7 @@ export function VirtualKeyConnectionGuide({
   name,
   expiration,
   visibleTo,
+  virtualApiKeyId,
 }: {
   keyValue?: string;
   keyType: "standard" | "passthrough";
@@ -91,13 +97,17 @@ export function VirtualKeyConnectionGuide({
   expiration: string;
   /** Who can use the key; omitted for passthrough keys (always personal). */
   visibleTo: string | null;
+  /** The key itself, to show and offer the auto routers it was given. */
+  virtualApiKeyId?: string;
 }) {
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
+  const isPoolOnly =
+    !isPassthrough && !includeFutureProviders && explicitKeys.length === 0;
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
-  // that provider's shared primary key.
+  // that provider's shared primary key, if that key is usable.
   const mappedProviderKeys = useMemo(() => {
     if (!includeFutureProviders) return explicitKeys;
     const mapped = new Set(explicitKeys.map((mapping) => mapping.provider));
@@ -106,14 +116,21 @@ export function VirtualKeyConnectionGuide({
       ...providerApiKeys
         .filter(
           (key) =>
-            key.isPrimary && key.userId === null && !mapped.has(key.provider),
+            key.isPrimary &&
+            key.userId === null &&
+            !key.subscriptionKind &&
+            !key.requiresReauthentication &&
+            (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+              !!key.baseUrl?.trim()) &&
+            !mapped.has(key.provider),
         )
         .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
     ];
   }, [includeFutureProviders, explicitKeys, providerApiKeys]);
 
-  // A standard key only works on routes for the providers it maps; a
-  // passthrough key carries no provider key, so any chat provider route works.
+  // Direct mappings determine which native examples this guide can offer.
+  // Without them, offer the Unified Model API for pools. Passthrough keys
+  // can use any chat provider route with the caller's own credential.
   const providers = useMemo(
     () =>
       isPassthrough
@@ -124,11 +141,12 @@ export function VirtualKeyConnectionGuide({
   const routerProviders = isPassthrough
     ? []
     : providers.filter(isModelRouterSupportedProvider);
-  const routerAvailable = routerProviders.length > 0;
+  const routerAvailable = isPoolOnly || routerProviders.length > 0;
 
-  const [endpoint, setEndpoint] = useState<Endpoint>(
+  const [pickedEndpoint, setEndpoint] = useState<Endpoint>(
     routerAvailable ? "model-router" : "provider",
   );
+  const endpoint = isPoolOnly ? "model-router" : pickedEndpoint;
   const [pickedProvider, setPickedProvider] =
     useState<SupportedProvider | null>(null);
   const provider =
@@ -198,6 +216,7 @@ export function VirtualKeyConnectionGuide({
           value={endpoint}
           onChange={setEndpoint}
           routerAvailable={routerAvailable}
+          providerAvailable={!isPoolOnly}
         />
         {endpoint === "provider" && providers.length > 1 && (
           <Select
@@ -222,22 +241,46 @@ export function VirtualKeyConnectionGuide({
         <EndpointDetails
           target={target}
           isPassthrough={isPassthrough}
-          providerLabel={providerCatalog.label(provider)}
+          isPoolOnly={isPoolOnly}
+          providerLabel={provider ? providerCatalog.label(provider) : ""}
         />
       </Step>
 
       <Step number={3} title="Make your first request">
-        <RequestExample
-          // Remount on target change so the model resets to that target's
-          // recommended model instead of keeping one it can't serve.
-          key={endpoint === "model-router" ? endpoint : provider}
-          connectionBaseUrl={connectionBaseUrl}
-          target={target}
-          keyType={keyType}
-          keyValue={keyValue}
-          routerProviders={routerProviders}
-          mappedProviderKeys={mappedProviderKeys}
-        />
+        {isPoolOnly ? (
+          <p className="text-sm text-muted-foreground">
+            Open{" "}
+            <Link
+              href="/llm/model-pools"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              Model pools
+            </Link>
+            , select a pool assigned to this key, then open its Connect section
+            for a request example. Send the pool&apos;s name as the model.
+          </p>
+        ) : (
+          <>
+            {virtualApiKeyId &&
+              endpoint === "model-router" &&
+              !isPassthrough && (
+                <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+              )}
+            <RequestExample
+              // Remount on target change so the model resets to that target's
+              // recommended model instead of keeping one it can't serve.
+              key={endpoint === "model-router" ? endpoint : provider}
+              connectionBaseUrl={connectionBaseUrl}
+              target={target}
+              keyType={keyType}
+              keyValue={keyValue}
+              routerProviders={routerProviders}
+              mappedProviderKeys={mappedProviderKeys}
+              offerAutoModel={!!virtualApiKeyId && !isPassthrough}
+              virtualApiKeyId={virtualApiKeyId}
+            />
+          </>
+        )}
         {isPassthrough && (
           <p className="text-xs text-muted-foreground">
             Using Claude Code or Claude Desktop? The{" "}
@@ -282,16 +325,18 @@ function EndpointPicker({
   value,
   onChange,
   routerAvailable,
+  providerAvailable,
 }: {
   value: Endpoint;
   onChange: (value: Endpoint) => void;
   routerAvailable: boolean;
+  providerAvailable: boolean;
 }) {
   const id = useId();
   const options = [
     {
       value: "model-router" as const,
-      label: "Model Router",
+      label: "Unified Model API",
       description: "One OpenAI-compatible endpoint for all providers",
       icon: Waypoints,
       disabled: !routerAvailable,
@@ -301,7 +346,7 @@ function EndpointPicker({
       label: "Native provider API",
       description: "Keep your provider's SDK, change only the base URL",
       icon: Plug,
-      disabled: false,
+      disabled: !providerAvailable,
     },
   ];
   return (
@@ -342,13 +387,24 @@ function EndpointPicker({
 function EndpointDetails({
   target,
   isPassthrough,
+  isPoolOnly,
   providerLabel,
 }: {
   target: RequestTarget;
   isPassthrough: boolean;
+  isPoolOnly: boolean;
   providerLabel: string;
 }) {
   if (target.kind === "model-router") {
+    if (isPoolOnly) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Use an OpenAI-compatible client with your virtual key as the API key
+          and an assigned pool&apos;s exact name as the model. Do not add a
+          provider prefix.
+        </p>
+      );
+    }
     return (
       <p className="text-xs text-muted-foreground">
         Use any OpenAI-compatible client with your virtual key as the API key.
@@ -413,6 +469,13 @@ export function RequestExample({
   credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY",
   secret,
   credentialField,
+  pools = [],
+  initialModel,
+  onModelChange,
+  fixedModel,
+  offerAutoModel = false,
+  virtualApiKeyId,
+  grantedRouterIds,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -434,12 +497,36 @@ export function RequestExample({
    * set {@link credentialEnvVar}.
    */
   credentialField?: React.ReactNode;
+  /**
+   * Model pools offered above the models. A pool is asked for by its name,
+   * on chat completions.
+   */
+  pools?: Array<{ name: string; description: React.ReactNode }>;
+  /** The option picked at first, such as the one picked before a remount. */
+  initialModel?: string;
+  /** Told the picked option's value, so a remount can start from it. */
+  onModelChange?: (value: string) => void;
+  /**
+   * The one model the request asks for, such as a pool's name, with no
+   * picker. It has no listed endpoints, so the request uses chat completions.
+   */
+  fixedModel?: string;
+  /**
+   * Lists the auto routers the credential can call in the picker. Only the
+   * Unified Model API accepts them.
+   */
+  offerAutoModel?: boolean;
+  /** The virtual key the example is for, which reaches only the auto routers it was given. */
+  virtualApiKeyId?: string;
+  /** The auto routers given to the OAuth client the example is for, when it calls as the app. */
+  grantedRouterIds?: string[];
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
   // A credential with no provider keys of its own (passthrough, an identity
   // provider's JWT) can reach the whole catalog.
-  const usesCatalog = keyType !== "standard" && mappedProviderKeys.length === 0;
+  const usesCatalog =
+    !fixedModel && keyType !== "standard" && mappedProviderKeys.length === 0;
   const { data: passthroughModels, isPending: passthroughModelsPending } =
     useLlmModels({ enabled: usesCatalog });
   // The general catalog spans every key the creator can access. For mapped
@@ -448,7 +535,8 @@ export function RequestExample({
   const mappedKeyIds = new Set(
     mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
   );
-  const readsLinkedModels = !usesCatalog && mappedKeyIds.size > 0;
+  const readsLinkedModels =
+    !fixedModel && !usesCatalog && mappedKeyIds.size > 0;
   const { data: linkedModels, isPending: linkedModelsPending } =
     useModelsWithApiKeys({
       enabled: readsLinkedModels,
@@ -495,7 +583,16 @@ export function RequestExample({
               )
             : null,
         }));
-  const modelOptions = candidates
+  const modelOptions: Array<{
+    value: string;
+    supportedEndpoints: string[] | null | undefined;
+    isImage: boolean;
+    pool?: string;
+    /** The endpoint every tier model of an auto router serves. */
+    routerEndpoint?: "chat/completions" | "responses";
+    provider?: SupportedProvider;
+    modelId?: string;
+  }> = candidates
     .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
       target.kind === "model-router"
@@ -515,6 +612,8 @@ export function RequestExample({
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
       isImage: model.isImage,
+      provider: model.provider as SupportedProvider,
+      modelId: model.id,
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
@@ -523,28 +622,67 @@ export function RequestExample({
     target.kind === "provider"
       ? PROVIDER_MODEL_TIERS[target.provider]?.normal
       : undefined;
-  if (!isPending && modelOptions.length === 0 && defaultModel) {
+  if (fixedModel) {
+    modelOptions.push({
+      value: fixedModel,
+      supportedEndpoints: null,
+      isImage: false,
+      pool: fixedModel,
+    });
+  } else if (!isPending && modelOptions.length === 0 && defaultModel) {
     modelOptions.push({
       value: defaultModel,
       supportedEndpoints: null,
       isImage: false,
+      provider: target.kind === "provider" ? target.provider : undefined,
     });
   }
 
+  // A pool has no listed endpoints, so its request uses chat completions.
+  const poolOptions = pools.map((pool) => ({
+    value: POOL_VALUE_PREFIX + pool.name,
+    supportedEndpoints: null,
+    isImage: false,
+    pool: pool.name,
+  }));
+  const autoRouting = useAutoRoutingOffer({
+    enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
+    virtualApiKeyId: virtualApiKeyId ?? null,
+    grantedRouterIds: grantedRouterIds ?? null,
+    routableModels: modelOptions,
+    modelsPending: isPending,
+  });
+  const offeredRouters =
+    autoRouting.kind === "available" ? autoRouting.routers : [];
+  // An auto router is asked for by its name, like a pool.
+  const routerOptions = offeredRouters.map((router) => ({
+    value: router.name,
+    supportedEndpoints: null,
+    isImage: false,
+    routerEndpoint: router.endpoint,
+  }));
+  const allOptions = [...poolOptions, ...routerOptions, ...modelOptions];
+  const initialOption = allOptions.find(
+    (option) => option.value === initialModel,
+  )?.value;
   const [pickedModel, setPickedModel] = useState<string | null>(null);
   const model =
-    pickedModel && modelOptions.some((option) => option.value === pickedModel)
+    pickedModel && allOptions.some((option) => option.value === pickedModel)
       ? pickedModel
-      : modelOptions[0]?.value;
-  const selectedModel = modelOptions.find((option) => option.value === model);
+      : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
+  const selectedModel:
+    | ((typeof modelOptions)[number] & { pool?: string })
+    | undefined = allOptions.find((option) => option.value === model);
+  const isAuto = selectedModel?.routerEndpoint !== undefined;
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
-  const selectedImageOperation = selectedModel?.isImage
-    ? (imageOperations.find((operation) => operation === imageOperation) ??
-      imageOperations[0])
-    : undefined;
+  const selectedImageOperation =
+    !isAuto && selectedModel?.isImage
+      ? (imageOperations.find((operation) => operation === imageOperation) ??
+        imageOperations[0])
+      : undefined;
   const showImageOperationPicker =
-    selectedModel?.isImage && imageOperations.length > 1;
+    !isAuto && selectedModel?.isImage && imageOperations.length > 1;
 
   const example =
     model &&
@@ -553,14 +691,16 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model,
+      model: selectedModel?.pool ?? model,
+      isPool: !!selectedModel?.pool,
+      routerEndpoint: selectedModel?.routerEndpoint,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
 
-  if (!isPending && modelOptions.length === 0) {
+  if (!isPending && allOptions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         {target.kind === "model-router" &&
@@ -614,69 +754,79 @@ export function RequestExample({
           )}
         </p>
       )}
-      <div
-        className={cn(
-          "grid gap-3",
-          showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
-        )}
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="virtual-key-example-model">Model</Label>
-          <Select
-            value={model ?? ""}
-            onValueChange={setPickedModel}
-            disabled={isPending || modelOptions.length === 0}
-          >
-            <SelectTrigger id="virtual-key-example-model" className="w-full">
-              <SelectValue
-                placeholder={
-                  isPending ? "Loading models…" : "No models found for this key"
+      {!fixedModel && (
+        <div
+          className={cn(
+            "grid gap-3",
+            showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
+          )}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="virtual-key-example-model">Model</Label>
+            <ProviderGroupedModelSelect
+              id="virtual-key-example-model"
+              value={model ?? ""}
+              onValueChange={(value) => {
+                setPickedModel(value);
+                onModelChange?.(value);
+              }}
+              models={modelOptions}
+              pools={pools.map((pool) => ({
+                value: POOL_VALUE_PREFIX + pool.name,
+                name: pool.name,
+                description: pool.description,
+              }))}
+              autoRouters={offeredRouters.map((router) => ({
+                value: router.name,
+                name: router.name,
+                description: (["fast", "normal", "smart"] as const)
+                  .map((tier) => router.tiers[tier].modelId)
+                  .join(" · "),
+              }))}
+              disabled={isPending || allOptions.length === 0}
+              placeholder={
+                isPending ? "Loading models…" : "No models found for this key"
+              }
+            />
+            {usesCatalog && !isAuto && (
+              <p className="text-xs text-muted-foreground">
+                From your organization&apos;s model catalog. Your own key may
+                have access to different models.
+              </p>
+            )}
+          </div>
+          {showImageOperationPicker && (
+            <div className="space-y-1.5">
+              <Label htmlFor="virtual-key-image-operation">
+                Image operation
+              </Label>
+              <Select
+                value={selectedImageOperation}
+                onValueChange={(value) =>
+                  setImageOperation(value as ImageExampleOperation)
                 }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {usesCatalog && (
-            <p className="text-xs text-muted-foreground">
-              From your organization&apos;s model catalog. Your own key may have
-              access to different models.
-            </p>
+              >
+                <SelectTrigger
+                  id="virtual-key-image-operation"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imageOperations.map((operation) => (
+                    <SelectItem key={operation} value={operation}>
+                      {operation === "generate"
+                        ? "Generate an image"
+                        : "Edit an image"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
         </div>
-        {showImageOperationPicker && (
-          <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-image-operation">Image operation</Label>
-            <Select
-              value={selectedImageOperation}
-              onValueChange={(value) =>
-                setImageOperation(value as ImageExampleOperation)
-              }
-            >
-              <SelectTrigger
-                id="virtual-key-image-operation"
-                className="w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {imageOperations.map((operation) => (
-                  <SelectItem key={operation} value={operation}>
-                    {operation === "generate"
-                      ? "Generate an image"
-                      : "Edit an image"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
+      )}
+      {!fixedModel && <AutoRoutingUnavailableHint offer={autoRouting} />}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the
@@ -746,6 +896,10 @@ function CopyField({
 
 /** Stands in for a key the reader has not asked to reveal. */
 export const MASKED_KEY = "arch_••••••••••••••••";
+
+// A pool can share its name with a model a provider lists, so a picked pool
+// keeps its own value in the picker.
+const POOL_VALUE_PREFIX = "pool:";
 
 /**
  * A key the reader may see once they ask. The caller owns `revealed` so every

@@ -1,10 +1,11 @@
-import { hasArchestraTokenPrefix, RouteId } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import ModelModel from "@/models/model";
 import {
   constructResponseSchema,
   ErrorResponsesSchema,
@@ -18,10 +19,7 @@ import {
   geminiAdapterFactory,
 } from "../adapters/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import {
-  createPassthroughAuthenticator,
-  validateVirtualApiKey,
-} from "../llm-proxy-auth";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { cleanForwardedBody } from "./proxy-prehandler";
 
@@ -35,13 +33,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   logger.debug("[UnifiedProxy] Registering unified Gemini routes");
 
   /**
-   * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent
-   * This will proxy routes like /v1/gemini/models to https://generativelanguage.googleapis.com/v1beta/models
+   * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent.
+   * The client's API version is kept: /v1/gemini/v1beta/cachedContents goes to
+   * https://generativelanguage.googleapis.com/v1beta/cachedContents. Several
+   * endpoints, cachedContents among them, exist only on v1beta.
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.gemini.baseUrl,
     prefix: `${API_PREFIX}/v1beta`,
-    rewritePrefix: "/v1",
+    rewritePrefix: "/v1beta",
     preHandler: createGeminiProxyPreHandler(),
     replyOptions: { rewriteRequestHeaders: stripArchestraHeaders },
   });
@@ -49,7 +49,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.gemini.baseUrl,
     prefix: `${API_PREFIX}/:agentId/v1beta`,
-    rewritePrefix: "/v1",
+    rewritePrefix: "/v1beta",
     preHandler: createGeminiProxyPreHandler(),
     replyOptions: { rewriteRequestHeaders: stripArchestraHeaders },
   });
@@ -132,7 +132,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^.+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent (non-streaming)
@@ -319,15 +319,14 @@ export default geminiProxyRoutes;
 function createGeminiProxyPreHandler() {
   const authenticateGemini = createPassthroughAuthenticator("gemini");
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    // A virtual key in ?key= is itself a platform credential. Any other
-    // request must pass the same platform check as every catch-all, before
-    // anything below reads the body or forwards it upstream.
-    if (!(await resolveGeminiVirtualQueryKey(request))) {
-      await authenticateGemini({
-        request,
-        agentId: (request.params as { agentId?: string } | undefined)?.agentId,
-      });
-    }
+    // Every request passes the platform check before anything below reads the
+    // body or forwards it upstream. Google's SDKs send the key in
+    // x-goog-api-key or ?key=; the authenticator reads a platform key there and
+    // swaps it for the mapped Gemini key in x-goog-api-key.
+    await authenticateGemini({
+      request,
+      agentId: (request.params as { agentId?: string } | undefined)?.agentId,
+    });
 
     const urlPath = request.url.split("?")[0];
     if (
@@ -344,53 +343,30 @@ function createGeminiProxyPreHandler() {
       });
     }
 
+    if (request.method === "POST") {
+      // Native inference methods select the model in the path, including
+      // image/video prediction and batch generation. Token counts and reads
+      // of already-started operations do not start model execution.
+      let decodedPath = urlPath;
+      try {
+        decodedPath = decodeURIComponent(urlPath);
+      } catch {
+        // Leave malformed paths for the provider's existing validation.
+      }
+      const modelMethod = decodedPath.match(/\/models\/([^/:]+):([^/:]+)\/?$/);
+      if (
+        modelMethod &&
+        !["countTokens", "fetchPredictOperation"].includes(modelMethod[2])
+      ) {
+        await ModelModel.assertAvailable({
+          provider: "gemini",
+          modelId: modelMethod[1],
+        });
+      }
+    }
+
     await cleanForwardedBody(request);
   };
-}
-
-/**
- * Resolves virtual API keys in Gemini's ?key= query parameter.
- * Gemini uses ?key= for auth (unlike OpenAI which uses Authorization header).
- * If the key is a platform virtual key, resolve it
- * to the real provider API key and rewrite the URL. Real Gemini keys pass through unchanged.
- *
- * Returns true when a virtual key was resolved, i.e. the request presented a
- * valid platform credential in the query.
- */
-async function resolveGeminiVirtualQueryKey(
-  request: FastifyRequest,
-): Promise<boolean> {
-  const url = request.raw.url;
-  if (!url) return false;
-
-  const keyMatch = url.match(/[?&]key=([^&]+)/);
-  if (!keyMatch) return false;
-
-  const keyValue = keyMatch[1];
-  if (!hasArchestraTokenPrefix(keyValue)) return false;
-
-  try {
-    const resolved = await validateVirtualApiKey({
-      tokenValue: keyValue,
-      expectedProvider: "gemini",
-      expectedOrganizationId: null,
-    });
-    if (!resolved.apiKey) return false;
-
-    request.raw.url = url.replace(`key=${keyValue}`, `key=${resolved.apiKey}`);
-
-    logger.info(
-      { method: request.method, url: request.url },
-      "Gemini proxy: resolved virtual API key in query parameter",
-    );
-    return true;
-  } catch (error) {
-    logger.warn(
-      { error, method: request.method, url: request.url },
-      "Gemini proxy: failed to resolve virtual API key",
-    );
-    throw error;
-  }
 }
 
 function stripArchestraHeaders(

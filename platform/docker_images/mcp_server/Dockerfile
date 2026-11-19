@@ -1,23 +1,22 @@
-ARG PYTHON_IMAGE=python:3.12-alpine@sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d
-ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b
+# Base images sit on their FROM lines, not in ARGs, so Dependabot can bump them
+# (platform/dev/RELEASE.md, "Catch Findings Before A Release").
+
 # Go toolchain is sourced from the official golang:alpine image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
-ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
+FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-bin
+
+FROM ghcr.io/astral-sh/uv:0.9.30@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 AS uv-bin
+
 # TODO: return to Alpine's `nodejs` apk once v3.23 aarch64 ships nodejs>=24.22.1-r0
 # (CVE-2026-111497); it lagged at 24.18.1-r0 while x86_64 already had the fix.
-# Same 24.22.1 digest as platform/Dockerfile; it bundles its own Brotli.
-ARG NODE_RUNTIME_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
-
-FROM ${GOLANG_IMAGE} AS go-bin
-
-FROM ${UV_IMAGE} AS uv-bin
-
-FROM ${NODE_RUNTIME_IMAGE} AS node-runtime
+# Same Node base as platform/Dockerfile; it bundles its own Brotli.
+FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS node-runtime
 
 # Multi-stage build for minimal final image
-FROM ${PYTHON_IMAGE} AS python-builder
+# Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
+# are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
+FROM python:3.12.15-alpine3.23@sha256:3d0ca66b723a0ff2a7a6e424cc2d01443e1b7c75ffcc110145f75d0f4daf6d63 AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -49,7 +48,7 @@ RUN uv pip sync \
    python -c "import mcp; import pydantic_core"
 
 # Node.js stage
-FROM ${NODE_IMAGE} AS node-builder
+FROM node:20.20.2-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS node-builder
 
 # Upgrade npm to a version whose bundled dependencies already include the fixes for
 # picomatch CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151
@@ -119,7 +118,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM ${PYTHON_IMAGE}
+FROM python:3.12.15-alpine3.23@sha256:3d0ca66b723a0ff2a7a6e424cc2d01443e1b7c75ffcc110145f75d0f4daf6d63
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
@@ -147,7 +146,8 @@ RUN apk add --no-cache \
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
-   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
+   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest.
+   # CVE-2026-107891 requires a newer musl package than that digest contains.
    # CVE-2026-92392: curl/libcurl vulnerabilities are resolved in 8.23.0-r0.
    # The explicit `apk add curl` above installs them, so explicit floors below ensure
    # a cached layer cannot retain the older packages.
@@ -175,13 +175,9 @@ RUN apk add --no-cache \
    # stale cache.
    apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
        "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
-   # CVE-2026-76641, CVE-2026-66046: expat vulnerabilities (HIGH) fixed in 2.8.4-r0.
-   # CVE-2026-93990: expat vulnerability (HIGH) fixed in 2.8.5-r0.
-   # CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0.
-   # expat is pulled in transitively (python), never named in an `apk add` here, so it
-   # needs its own floor for the same reason the openssl ones above do: the cached layer
-   # never re-runs against a newer index on its own.
-   apk add --no-cache --upgrade "expat>=2.9.0-r0" && \
+   # Require patched expat and invalidate cached package layers that retain the
+   # older XML parser. Python brings this package in transitively.
+   apk add --no-cache --upgrade "expat>=2.10.0-r0" && \
    # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
    # package layer, which otherwise retains the vulnerable 10.48-r0 build.
    apk add --no-cache --upgrade "pcre2>=10.49-r0" && \
@@ -192,7 +188,16 @@ RUN apk add --no-cache \
    # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
-   apk add --no-cache --upgrade "zlib>=1.3.2-r1"
+   # CVE-2026-4738: zlib vulnerability (CRITICAL) fixed in 1.4-r0.
+   apk add --no-cache --upgrade "zlib>=1.4-r0" && \
+   # Require the Alpine 3.23 musl fix for both installed packages and invalidate
+   # cached layers with 1.2.5-r23.
+   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
+   # CVE-2026-119079, CVE-2026-112323, CVE-2026-112322, CVE-2026-112321, CVE-2026-112320,
+   # CVE-2026-112314, CVE-2026-107778: krb5 vulnerabilities (HIGH) fixed in 1.22.3-r0.
+   # krb5-libs comes in transitively through bind-libs, bind-tools and libtirpc, so no
+   # earlier line upgrades it; it is the only installed krb5-origin package.
+   apk add --no-cache --upgrade "krb5-libs>=1.22.3-r0"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

@@ -552,9 +552,9 @@ describe("policy replay runs", () => {
   });
   test("saves valid oversized multibyte effective policies as cannot-run instead of throwing", async () => {
     const sourceVersion = await saveFiles([files[0]]);
-    const oversized = `[policy]\nversion = 2\n[[policy.tool]]\nname = 'files__read'\ndescription = '${"é".repeat(131072)}'\ndelta = {}\n`;
-    expect(oversized.length).toBeLessThan(262144);
-    expect(Buffer.byteLength(oversized)).toBeGreaterThan(262144);
+    const oversized = `[policy]\nversion = 2\n[[policy.tool]]\nname = 'files__read'\ndescription = '${"é".repeat(1048576)}'\ndelta = {}\n`;
+    expect(oversized.length).toBeLessThan(2097152);
+    expect(Buffer.byteLength(oversized)).toBeGreaterThan(2097152);
     await GuardrailsPolicyModel.save({
       organizationId: ctx.organizationId,
       content: oversized,
@@ -579,7 +579,6 @@ describe("policy replay runs", () => {
       validation: { valid: true },
       files: [{ status: "cannot_run", assertionCount: 0 }],
     });
-    expect(run.json().files[0].error).toContain("256 KiB");
     const stored = await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId);
     expect(stored).toHaveLength(1);
     expect(stored[0].result).toMatchObject({

@@ -1,5 +1,6 @@
 import {
   type AgentType,
+  BUILT_IN_AGENT_IDS,
   getResourceForAgentType,
   type Permissions,
 } from "@archestra/shared";
@@ -44,12 +45,15 @@ export function getAgentActionModel({
     id: string;
     agentType: AgentType;
     builtIn?: boolean | null;
+    builtInAgentConfig?: { name: string } | null;
     runtime?: unknown | null;
   };
   /** The deployment's `agentRuntime` feature; a stored runtime only changes Chat while it is on, matching the composer's gate. */
   agentRuntimeEnabled?: boolean;
 }): AgentActionDefinition[] {
   const builtIn = !!agent.builtIn;
+  const chatCapable =
+    !builtIn || agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE;
   const resource = getResourceForAgentType(agent.agentType);
   const startsRun =
     agentRuntimeEnabled && kind === "agent" && agent.runtime != null;
@@ -65,7 +69,7 @@ export function getAgentActionModel({
     {
       id: "chat",
       label: startsRun ? ACTION_LABEL.startRun : ACTION_LABEL.chat,
-      visible: kind === "agent" && !builtIn,
+      visible: kind === "agent" && chatCapable,
       href: `/chat/new?agent_id=${agent.id}`,
       startsRun,
     },

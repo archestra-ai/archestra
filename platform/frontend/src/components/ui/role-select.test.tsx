@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RoleSelect } from "@/components/ui/role-select";
@@ -127,39 +126,7 @@ describe("RoleSelect", () => {
   });
 });
 
-it("adds multiple roles without replacing earlier choices and removes an individual grant", async () => {
-  function Picker() {
-    const [value, setValue] = useState("member");
-    return <RoleSelect multiple value={value} onValueChange={setValue} />;
-  }
-  mockRoles(manyRoles());
-  vi.mocked(useAllPermissions).mockReturnValue({
-    data: { agent: ["read"] },
-  } as unknown as ReturnType<typeof useAllPermissions>);
-  const user = userEvent.setup();
-  render(<Picker />);
-  expect(
-    screen.getAllByRole("button", { name: "Remove selected item" })[0],
-  ).toBeDisabled();
-  await user.click(screen.getByRole("combobox"));
-  await user.type(screen.getByPlaceholderText("Search roles..."), "squad 29");
-  await user.click(screen.getByRole("option", { name: /Squad 29/ }));
-  expect(
-    screen.getAllByRole("button", { name: "Remove selected item" })[0],
-  ).toBeEnabled();
-  await user.click(
-    screen.getAllByRole("button", { name: "Remove selected item" })[0],
-  );
-  expect(screen.queryByText("Member", { selector: "span" })).toBeNull();
-  expect(
-    screen.getByRole("button", { name: "Remove selected item" }),
-  ).toBeDisabled();
-});
-
-it.each([
-  false,
-  true,
-])("shows and searches role descriptions (multiple=%s)", async (multiple) => {
+it("shows and searches role descriptions", async () => {
   mockRoles([
     {
       ...manyRoles()[4],
@@ -167,7 +134,7 @@ it.each([
     } as ReturnType<typeof manyRoles>[number],
   ]);
   const user = userEvent.setup();
-  render(<RoleSelect multiple={multiple} />);
+  render(<RoleSelect />);
   await user.click(screen.getByRole("combobox"));
   await user.type(screen.getByPlaceholderText("Search roles..."), "deployment");
   expect(

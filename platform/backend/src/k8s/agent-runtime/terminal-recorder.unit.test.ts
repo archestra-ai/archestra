@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -20,6 +20,47 @@ describe("terminal recorder", () => {
       );
       expect(readFileSync(`${turn}.log`).toString()).toContain("retained");
       expect(result.status).not.toBe(0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("records successfully with stdout closed", () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "terminal-recorder-"));
+    const turn = path.join(directory, "turn");
+    try {
+      const result = spawnSync(
+        "/bin/sh",
+        ["-c", `exec 1>&-\n${buildTerminalRecorderScript()}`, "recorder", turn],
+        {
+          input:
+            "archestra-recording-size %1 @0 80x23\n%output %1 retained\n%exit\n",
+        },
+      );
+      expect(result.status, result.stderr.toString()).toBe(0);
+      expect(readFileSync(`${turn}.log`).toString()).toBe(
+        "\u001b]777;archestra-terminal-size=80x23\u0007retained",
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("still fails when the recording file cannot be written", () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "terminal-recorder-"));
+    const turn = path.join(directory, "turn");
+    try {
+      mkdirSync(`${turn}.log`);
+      const result = spawnSync(
+        "/bin/sh",
+        ["-c", buildTerminalRecorderScript(), "recorder", turn],
+        {
+          input:
+            "archestra-recording-size %1 @0 80x23\n%output %1 retained\n%exit\n",
+        },
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toEqual(Buffer.alloc(0));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -50,7 +91,7 @@ archestra-recording-size %1 @0 80x23
         "\u001b]777;archestra-terminal-size=80x23\u0007first\r\n\u001b[2J\\012\u0000" +
           "\u001b]777;archestra-terminal-size=200x57\u0007resized界\r\n",
       );
-      expect(result.stdout).toEqual(expected);
+      expect(result.stdout).toEqual(Buffer.alloc(0));
       expect(readFileSync(`${turn}.log`)).toEqual(expected);
     } finally {
       rmSync(directory, { recursive: true, force: true });

@@ -20,7 +20,6 @@ export const openaiImagesAdapterFactory: LLMProvider<
   spanName: "generate_content",
   unavailableUsageAccounting: true,
   recordRequestDurationInHandler: true,
-  cancelOnDisconnect: true,
   createClient(apiKey, options) {
     if (isOpenAiCodexCredential(apiKey))
       throw new ApiError(

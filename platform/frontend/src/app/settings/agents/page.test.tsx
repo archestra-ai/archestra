@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -150,18 +150,14 @@ vi.mock("@/lib/config/config.query", () => ({
         : undefined,
 }));
 
+let mockModels: Array<Record<string, unknown>> = [];
+
 vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
-      {
-        id: "gemini-2.5-pro",
-        dbId: "gemini-2.5-pro",
-        provider: "gemini",
-        displayName: "Gemini 2.5 Pro",
-      },
-    ],
-    isPending: false,
-  }),
+  useLlmModels: () => ({ data: mockModels, isPending: false }),
+}));
+
+vi.mock("@/lib/agent.query", () => ({
+  useUpdateAgentModels: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -175,9 +171,27 @@ const saveTiers = vi.fn();
 
 vi.mock("@/lib/organization.query");
 
+let mockAutoRouters: Array<{
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+}> = [];
+
+vi.mock("@/lib/hooks/use-organization-default-model", () => ({
+  useOrganizationDefaultModel: () => ({
+    model: null,
+    label: null,
+    autoRoutedTiers: null,
+    autoRouters: mockAutoRouters,
+    defaultAutoRouterId: null,
+  }),
+}));
+
 import {
   useAgentRuntimeTiers,
   useAppearanceSettings,
+  useDefaultModelRuntimeDependents,
   useIsGlobalAdmin,
   useOrganization,
   useSaveAgentRuntimeTiers,
@@ -186,7 +200,16 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
+import { AgentRuntimeSettings } from "./_parts/agent-runtime-settings";
 import AgentSettingsPage from "./page";
+
+function renderRuntimesPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AgentRuntimeSettings />
+    </QueryClientProvider>,
+  );
+}
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -224,6 +247,15 @@ beforeEach(() => {
   ];
   mockRuntimeBackend = null;
   mockRuntimeEnabled = undefined;
+  mockAutoRouters = [];
+  mockModels = [
+    {
+      id: "gemini-2.5-pro",
+      dbId: "gemini-2.5-pro",
+      provider: "gemini",
+      displayName: "Gemini 2.5 Pro",
+    },
+  ];
 
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
     isGlobalAdmin: true,
@@ -251,15 +283,16 @@ beforeEach(() => {
     mutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
+  vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+    data: { agents: [], hiddenBlockingCount: 0 },
+  } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows the configured runtime backend as a managed row only when enabled", () => {
-    const { rerender } = renderPage();
+  it("shows the configured runtime backend as a managed row below the tiers, only when enabled", () => {
+    const { rerender } = renderRuntimesPage();
 
-    expect(
-      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
-    ).toBeVisible();
+    expect(screen.getByText("Runtime templates")).toBeVisible();
 
     expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
@@ -279,7 +312,7 @@ describe("AgentSettingsPage", () => {
     };
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <AgentSettingsPage />
+        <AgentRuntimeSettings />
       </QueryClientProvider>,
     );
 
@@ -297,12 +330,12 @@ describe("AgentSettingsPage", () => {
       screen.queryByText("registry.example.test/agent:latest"),
     ).not.toBeInTheDocument();
 
-    const messagingChannels = screen.getByText("Available messaging channels");
+    const runtimeTiers = screen.getByRole("heading", { name: "Runtime tiers" });
     const runtimeBackend = screen.getByRole("heading", {
       name: "Runtime backend",
     });
     expect(
-      messagingChannels.compareDocumentPosition(runtimeBackend) &
+      runtimeTiers.compareDocumentPosition(runtimeBackend) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
@@ -356,6 +389,288 @@ describe("AgentSettingsPage", () => {
   });
 });
 
+describe("Default model on an auto router", () => {
+  const routers = [
+    {
+      id: "router-a",
+      name: "auto",
+      label: "Auto",
+      description: "Haiku, Sonnet, Opus",
+    },
+    {
+      id: "router-b",
+      name: "auto:support",
+      label: "Auto · support",
+      description: "Flash, Pro, Ultra",
+    },
+  ];
+  const useSavedOrganization = (overrides: Record<string, unknown>) => {
+    mockOrganization = { ...mockOrganization, ...overrides };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+  };
+  const openDefaultPicker = (
+    user: ReturnType<typeof userEvent.setup>,
+    selected: RegExp,
+  ) => user.click(screen.getByRole("button", { name: selected }));
+
+  beforeEach(() => {
+    // cmdk, inside the key dropdown, needs both in jsdom.
+    global.ResizeObserver = class ResizeObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    };
+    Element.prototype.scrollIntoView = vi.fn();
+    mockAutoRouters = routers;
+    mutateAsync.mockResolvedValue({});
+  });
+
+  it("offers each router and saves the picked one's id, leaving the model and key alone", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await openDefaultPicker(user, /gemini - org/);
+    expect(
+      screen.getByRole("option", { name: /^Auto\s*Haiku, Sonnet, Opus/ }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("option", { name: /Auto · support.*Flash, Pro, Ultra/ }),
+    );
+
+    expect(
+      screen.getByText(
+        /New chats and agents on the default use Auto · support/,
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        defaultAutoRouterId: "router-b",
+      }),
+    );
+  });
+
+  it("moves the default from one router to another", async () => {
+    useSavedOrganization({ defaultAutoRouterId: "router-b" });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      screen.getByText(
+        /New chats and agents on the default use Auto · support/,
+      ),
+    ).toBeInTheDocument();
+    await openDefaultPicker(user, /^Auto · support$/);
+    await user.click(
+      screen.getByRole("option", { name: /^Auto\s*Haiku, Sonnet, Opus/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        defaultAutoRouterId: "router-a",
+      }),
+    );
+  });
+
+  it("sends null when a provider key replaces the router, and offers the fast and smart models again", async () => {
+    useSavedOrganization({ defaultAutoRouterId: "router-a" });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.queryByText("Fast model")).not.toBeInTheDocument();
+    await openDefaultPicker(user, /^Auto$/);
+    await user.click(screen.getByRole("option", { name: /gemini - org/ }));
+
+    expect(screen.getByText("Fast model")).toBeInTheDocument();
+    expect(screen.getByText("Smart model")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ defaultAutoRouterId: null }),
+    );
+  });
+
+  it("keeps a saved router that is no longer offered selected as Auto", () => {
+    mockAutoRouters = [];
+    useSavedOrganization({ defaultAutoRouterId: "router-gone" });
+    renderPage();
+
+    expect(
+      screen.getByText(/New chats and agents on the default use Auto\./),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Default model blocked by Agent Runtime agents", () => {
+  it("names the Claude Code agents that can't run the default and opens a dialog offering only keys they can use", async () => {
+    const user = userEvent.setup();
+    mockApiKeys = [
+      { id: "key-1", name: "gemini - org", provider: "gemini", scope: "org" },
+      {
+        id: "key-2",
+        name: "anthropic - org",
+        provider: "anthropic",
+        scope: "org",
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            canUpdate: true,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(
+      screen.getByText("Can't make Gemini 2.5 Pro the default"),
+    ).toBeVisible();
+    expect(screen.getByText("Release Notes Writer")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Set model" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Set a model for Release Notes Writer",
+    });
+    // Claude Code can't use the Gemini key, so only the Anthropic key is offered.
+    expect(within(dialog).getByText("anthropic - org")).toBeVisible();
+    expect(within(dialog).queryByText("gemini - org")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("counts a Responses-only model as blocking an agent whose runtime uses Chat Completions", async () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: "copilot-1" };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockApiKeys = [
+      {
+        id: "key-1",
+        name: "copilot",
+        provider: "github-copilot",
+        scope: "org",
+      },
+    ];
+    mockModels = [
+      {
+        id: "gpt-5.1-codex",
+        dbId: "copilot-1",
+        provider: "github-copilot",
+        displayName: "GPT-5.1 Codex",
+        capabilities: { supportedEndpoints: ["/responses"] },
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Chat Completions Agent",
+            runtimeCommand: null,
+            inferenceProtocol: "openai_chat",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(screen.getByText(/requires the Responses API/)).toBeVisible();
+  });
+
+  it("does not count a Claude Code agent on subscription authentication, which runs on the person's Claude account instead", () => {
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("counts blocking agents the viewer can't read, without saying anything about them", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: { agents: [], hiddenBlockingCount: 2 },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "2 agents can't run this" }),
+    );
+    expect(screen.getByText("2 agents you can't view")).toBeVisible();
+    expect(screen.queryByText(/Claude Code/)).not.toBeInTheDocument();
+  });
+
+  it("offers no Set model action for an agent the viewer can't update", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-read-only",
+            name: "Read-only agent",
+            canUpdate: false,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(screen.getByText("Ask an agent admin")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Set model" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no warning when every runtime agent can run the default", () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("Runtime tiers", () => {
   const enableRuntime = () => {
     mockRuntimeEnabled = true;
@@ -403,7 +718,7 @@ describe("Runtime tiers", () => {
   it("lists the tiers smallest first with their memory, pools and default; the header links the docs and explains pools, with no search or hint text", async () => {
     enableRuntime();
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     expect(block()).toHaveTextContent(
       "Runtime tiers control compute and other resources allocation to agent runtimes.",
@@ -450,7 +765,7 @@ describe("Runtime tiers", () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(screen.getByRole("button", { name: "Edit L" }));
     const dialog = screen.getByRole("dialog", { name: "Edit tier" });
@@ -458,10 +773,10 @@ describe("Runtime tiers", () => {
     expect(cpu).toHaveValue(8);
 
     await user.clear(cpu);
-    await user.type(cpu, "9");
+    await user.type(cpu, "257");
     await user.tab();
     expect(
-      within(dialog).getByText("Enter a number from 0.1 to 8"),
+      within(dialog).getByText("Enter a number from 0.1 to 256"),
     ).toBeVisible();
     expect(cpu).toHaveAttribute("aria-invalid", "true");
     await user.click(
@@ -471,8 +786,12 @@ describe("Runtime tiers", () => {
 
     await user.clear(cpu);
     await user.type(cpu, "6");
-    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
-      "Memory: 12 GiB, 24 GiB limit",
+    expect(
+      within(dialog).getByLabelText("Memory request (GiB)"),
+    ).toHaveAttribute("placeholder", "12");
+    expect(within(dialog).getByLabelText("Memory limit (GiB)")).toHaveAttribute(
+      "placeholder",
+      "24",
     );
     const limit = within(dialog).getByLabelText("CPU limit");
     await user.type(limit, "2");
@@ -482,10 +801,11 @@ describe("Runtime tiers", () => {
     ).toBeVisible();
     await user.clear(limit);
     await user.type(limit, "7");
-    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
-      "Memory: 12 GiB, 14 GiB limit",
+    expect(within(dialog).getByLabelText("Memory limit (GiB)")).toHaveAttribute(
+      "placeholder",
+      "24",
     );
-    await user.type(within(dialog).getByLabelText("Workspace (GiB)"), "60");
+    await user.type(within(dialog).getByLabelText("Disk (GiB)"), "60");
     await user.click(within(dialog).getByRole("switch", { name: "Pooled" }));
     await user.click(
       within(dialog).getByRole("button", { name: "Save changes" }),
@@ -499,6 +819,8 @@ describe("Runtime tiers", () => {
           name: "L",
           cpuRequest: 6,
           cpuLimit: 7,
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
           pooled: true,
           workspaceGiB: 60,
         },
@@ -511,7 +833,7 @@ describe("Runtime tiers", () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(screen.getByRole("button", { name: "Edit M" }));
     const dialog = screen.getByRole("dialog", { name: "Edit tier" });
@@ -534,29 +856,74 @@ describe("Runtime tiers", () => {
     expect(saveTiers).toHaveBeenCalledWith({
       tiers: [
         seedInput.S,
-        { ...seedInput.M, name: "Medium", previousName: "M" },
+        {
+          ...seedInput.M,
+          name: "Medium",
+          previousName: "M",
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
+        },
         seedInput.L,
       ],
       defaultTier: "Medium",
     });
   });
 
+  it("keeps edit validation stable during the dialog exit animation", async () => {
+    // jsdom has no live computed styles. Model the browser's exit animation
+    // so Radix keeps the real dialog mounted after its open state changes.
+    const computedStyle = window.getComputedStyle.bind(window);
+    const styles = vi
+      .spyOn(window, "getComputedStyle")
+      .mockImplementation((element, pseudo) => {
+        const result = computedStyle(element, pseudo);
+        if (element.getAttribute("role") === "dialog")
+          Object.defineProperty(result, "animationName", {
+            get: () =>
+              element.getAttribute("data-state") === "closed"
+                ? "dialog-exit"
+                : "none",
+          });
+        return result;
+      });
+    try {
+      enableRuntime();
+      const user = userEvent.setup();
+      renderRuntimesPage();
+      await user.click(screen.getByRole("button", { name: "Edit L" }));
+      const dialog = screen.getByRole("dialog", { name: "Edit tier" });
+      const name = within(dialog).getByLabelText("Name");
+      await user.click(name);
+      await user.tab();
+      await user.keyboard("{Escape}");
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveAttribute("data-state", "closed");
+      expect(within(dialog).getByText("Edit tier")).toBeInTheDocument();
+      expect(name).not.toHaveAttribute("aria-invalid", "true");
+      expect(dialog).not.toHaveTextContent("Another tier is named");
+    } finally {
+      styles.mockRestore();
+    }
+  });
+
   it("creates a tier from the toolbar, as the default when asked", async () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(
       within(block()).getByRole("button", { name: "Create tier" }),
     );
     const dialog = screen.getByRole("dialog", { name: "Create tier" });
+    await user.type(within(dialog).getByLabelText("CPU request"), "0");
     await user.click(
       within(dialog).getByRole("button", { name: "Create tier" }),
     );
-    expect(within(dialog).getByText("Enter a name")).toBeVisible();
+    expect(within(dialog).queryByText("Enter a name")).not.toBeInTheDocument();
     expect(saveTiers).not.toHaveBeenCalled();
     await user.type(within(dialog).getByLabelText("Name"), "XL");
+    await user.clear(within(dialog).getByLabelText("CPU request"));
     await user.type(within(dialog).getByLabelText("CPU request"), "8");
     await user.click(
       within(dialog).getByRole("checkbox", { name: "Default tier" }),
@@ -574,6 +941,8 @@ describe("Runtime tiers", () => {
           name: "XL",
           cpuRequest: 8,
           cpuLimit: null,
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
           pooled: true,
           workspaceGiB: null,
         },
@@ -585,7 +954,7 @@ describe("Runtime tiers", () => {
   it("deletes a tier after a confirmation, never the default, and shows a refusal in the dialog", async () => {
     enableRuntime();
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     expect(screen.getByRole("button", { name: "Delete M" })).toBeDisabled();
     saveTiers.mockRejectedValueOnce(
@@ -619,7 +988,7 @@ describe("Runtime tiers", () => {
       isGlobalAdmin: false,
       isLoading: false,
     });
-    renderPage();
+    renderRuntimesPage();
 
     expect(
       within(block()).queryByRole("button", { name: "Create tier" }),

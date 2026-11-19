@@ -1,3 +1,4 @@
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 /**
  * Mistral LLM Proxy Adapter - OpenAI-compatible
  *
@@ -100,8 +101,8 @@ class MistralRequestAdapter
   convertToolResultContent(messages: MistralMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 
@@ -160,7 +161,7 @@ class MistralStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: MistralRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {
@@ -250,7 +251,7 @@ export const mistralAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.mistral.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },

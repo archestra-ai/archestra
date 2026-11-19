@@ -2,29 +2,29 @@ import { z } from "zod";
 
 /**
  * Agent Runtime tiers: the container sizes a run can get. An organization's
- * administrators define the list, name each tier and set its CPU; memory
- * follows the CPU. A tier can also size its runs' workspace volume, for the
- * work that needs more than the deployment's default. The names are the
+ * administrators define the list, name each tier and set its CPU and memory.
+ * Memory follows the CPU unless overridden. A tier can also size its runs'
+ * workspace volume, for work that needs more than the deployment's default. The names are the
  * organization's own: S, M and L are only
  * the defaults a new organization starts with. Agents and callers choose a
  * tier by its size, as `sortAgentRuntimeTiers` orders them, and refer to it
  * by name.
  */
 
+/** Smallest CPU request or limit a tier may set. */
+export const AGENT_RUNTIME_TIER_MIN_CPU = 0.1;
 /** Largest CPU request a tier may ask for one container. */
-export const AGENT_RUNTIME_TIER_MAX_CPU_REQUEST = 8;
+export const AGENT_RUNTIME_TIER_MAX_CPU_REQUEST = 256;
 /** Largest CPU limit a tier may set. */
-export const AGENT_RUNTIME_TIER_MAX_CPU_LIMIT = 16;
+export const AGENT_RUNTIME_TIER_MAX_CPU_LIMIT = 256;
 /** Most spare containers one tier keeps ready per pool. */
 export const AGENT_RUNTIME_TIER_MAX_WARM_SPARES = 10;
 export const AGENT_RUNTIME_TIER_MAX_COUNT = 12;
-/** Largest workspace volume a tier may give its runs, in GiB. */
-export const AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB = 1024;
 export const AGENT_RUNTIME_TIER_NAME_MAX_LENGTH = 32;
 /**
  * Memory per CPU of request, in GiB. A tier's memory request is this much per
- * requested CPU; its memory limit is twice the request, or this much per CPU
- * of the CPU limit when that is lower.
+ * requested CPU. The memory limit is the maximum of twice the effective
+ * memory request, this much per requested CPU, and this much per CPU limit.
  */
 export const AGENT_RUNTIME_MEMORY_GIB_PER_CPU = 2;
 
@@ -35,6 +35,9 @@ export interface AgentRuntimeTierDefinition {
   cpuRequest: number;
   /** CPUs the container may use at most; null means no limit. */
   cpuLimit: number | null;
+  /** Memory overrides in MiB; null or absent follows the CPU-derived default. */
+  memoryRequestMiB?: number | null;
+  memoryLimitMiB?: number | null;
   /**
    * Spare containers of this tier kept running and empty per warm pool, so a
    * run starts on one in seconds. Null follows the deployment's
@@ -58,13 +61,16 @@ export interface AgentRuntimeTierSettings {
   defaultTier: string;
 }
 
-/** A tier with the memory its CPU gives it. Spares are resolved to a number. */
+/** A tier with resolved memory and spare counts. */
 export interface AgentRuntimeTierSize extends AgentRuntimeTierDefinition {
   warmSpares: number;
   /** Whether the tier keeps spares at all: what an administrator chose. */
   pooled: boolean;
   memoryRequestMiB: number;
   memoryLimitMiB: number;
+  /** Present only when the administrator set an explicit memory amount. */
+  memoryRequestMiBOverride?: number;
+  memoryLimitMiBOverride?: number;
 }
 
 /** The tiers in effect for an organization, smallest first. */
@@ -107,18 +113,21 @@ export const DEFAULT_AGENT_RUNTIME_TIERS: AgentRuntimeTierSettings = {
 
 const MIB_PER_GIB = 1024;
 
-/** The memory a tier's CPU gives it, in MiB. */
-export function agentRuntimeTierMemory(
-  cpuRequest: number,
-  cpuLimit: number | null,
-): { memoryRequestMiB: number; memoryLimitMiB: number } {
+/** Derive memory in MiB from CPU and the effective memory request. */
+export function agentRuntimeTierMemory(params: {
+  cpuRequest: number;
+  cpuLimit: number | null;
+  memoryRequestMiB?: number | null;
+}): { memoryRequestMiB: number; memoryLimitMiB: number } {
+  const { cpuRequest, cpuLimit } = params;
   const perCpu = AGENT_RUNTIME_MEMORY_GIB_PER_CPU * MIB_PER_GIB;
-  const memoryRequestMiB = Math.round(cpuRequest * perCpu);
-  const doubled = 2 * memoryRequestMiB;
-  const memoryLimitMiB =
-    cpuLimit === null
-      ? doubled
-      : Math.min(doubled, Math.round(cpuLimit * perCpu));
+  const memoryRequestMiB =
+    params.memoryRequestMiB ?? Math.round(cpuRequest * perCpu);
+  const memoryLimitMiB = Math.max(
+    2 * memoryRequestMiB,
+    Math.round(cpuRequest * perCpu),
+    Math.round((cpuLimit ?? cpuRequest) * perCpu),
+  );
   return { memoryRequestMiB, memoryLimitMiB };
 }
 
@@ -179,7 +188,7 @@ export function describeAgentRuntimeTier(
 }
 
 /**
- * Smallest first: by CPU request, then CPU limit (no limit last), then name.
+ * Smallest first: by CPU request, CPU limit (no limit last), memory, then name.
  * The order is the only notion of "larger" the platform has, so a warm spare
  * from the next tier up and a run that moves to a larger tier both follow it.
  */
@@ -191,6 +200,8 @@ export function sortAgentRuntimeTiers<T extends AgentRuntimeTierDefinition>(
       a.cpuRequest - b.cpuRequest ||
       (a.cpuLimit ?? Number.POSITIVE_INFINITY) -
         (b.cpuLimit ?? Number.POSITIVE_INFINITY) ||
+      tierMemory(a).memoryRequestMiB - tierMemory(b).memoryRequestMiB ||
+      tierMemory(a).memoryLimitMiB - tierMemory(b).memoryLimitMiB ||
       a.name.localeCompare(b.name),
   );
 }
@@ -220,7 +231,7 @@ export function agentRuntimeTierRank(
 
 /**
  * The next larger tier: the first one after `name` in the size order that is
- * bigger in CPU request or CPU limit, or undefined when none is.
+ * bigger in CPU or memory, with no smaller memory request or limit.
  */
 export function nextLargerAgentRuntimeTier(
   tiers: readonly AgentRuntimeTierSize[],
@@ -229,13 +240,20 @@ export function nextLargerAgentRuntimeTier(
   const sorted = sortAgentRuntimeTiers(tiers);
   const current = findAgentRuntimeTier(sorted, name);
   if (!current) return undefined;
-  return sorted.find(
-    (tier) =>
-      tier.cpuRequest > current.cpuRequest ||
-      (tier.cpuRequest === current.cpuRequest &&
-        (tier.cpuLimit ?? Number.POSITIVE_INFINITY) >
-          (current.cpuLimit ?? Number.POSITIVE_INFINITY)),
-  );
+  return sorted.find((tier) => {
+    const cpuLimit = tier.cpuLimit ?? Number.POSITIVE_INFINITY;
+    const currentCpuLimit = current.cpuLimit ?? Number.POSITIVE_INFINITY;
+    return (
+      tier.memoryRequestMiB >= current.memoryRequestMiB &&
+      tier.memoryLimitMiB >= current.memoryLimitMiB &&
+      (tier.cpuRequest > current.cpuRequest ||
+        (tier.cpuRequest === current.cpuRequest &&
+          (cpuLimit > currentCpuLimit ||
+            (cpuLimit === currentCpuLimit &&
+              (tier.memoryRequestMiB > current.memoryRequestMiB ||
+                tier.memoryLimitMiB > current.memoryLimitMiB)))))
+    );
+  });
 }
 
 const CPU_DECIMALS = 1000;
@@ -248,41 +266,45 @@ const TierNameSchema = z
     AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
     `A tier name has at most ${AGENT_RUNTIME_TIER_NAME_MAX_LENGTH} characters`,
   );
-const CpuRequestSchema = z
+// Stored tiers can predate the 0.1-CPU write minimum. Keep their sizes readable.
+const StoredCpuRequestSchema = z
   .number()
-  .positive("The CPU request is more than 0")
+  .positive()
   .max(
     AGENT_RUNTIME_TIER_MAX_CPU_REQUEST,
     `The CPU request is at most ${AGENT_RUNTIME_TIER_MAX_CPU_REQUEST}`,
   )
   .refine(
-    (cpus) => Number.isInteger(cpus * CPU_DECIMALS),
+    (cpus) => cpus === Math.round(cpus * CPU_DECIMALS) / CPU_DECIMALS,
     "A CPU amount has at most three decimals",
   );
-const CpuLimitSchema = z
+const StoredCpuLimitSchema = z
   .number()
-  .positive("The CPU limit is more than 0")
+  .positive()
   .max(
     AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
     `The CPU limit is at most ${AGENT_RUNTIME_TIER_MAX_CPU_LIMIT}`,
   )
   .refine(
-    (cpus) => Number.isInteger(cpus * CPU_DECIMALS),
+    (cpus) => cpus === Math.round(cpus * CPU_DECIMALS) / CPU_DECIMALS,
     "A CPU amount has at most three decimals",
   );
+const CpuRequestSchema = StoredCpuRequestSchema.min(
+  AGENT_RUNTIME_TIER_MIN_CPU,
+  `The CPU request is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
+);
+const CpuLimitSchema = StoredCpuLimitSchema.min(
+  AGENT_RUNTIME_TIER_MIN_CPU,
+  `The CPU limit is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
+);
 /**
- * A tier's workspace volume size: whole GiB, from 1 to the largest a tier may
- * give. The one definition of the rule: the API schema, the save check and the
- * settings form all use it.
+ * A tier's workspace volume size: positive whole GiB. The API schema, save
+ * check and settings form all use this rule.
  */
 export const AgentRuntimeWorkspaceGiBSchema = z
   .number()
   .int("A workspace size is a whole number of GiB")
-  .min(1, "The workspace is at least 1 GiB")
-  .max(
-    AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB,
-    `The workspace is at most ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB} GiB`,
-  );
+  .min(1, "The workspace is at least 1 GiB");
 /** Spare counts in stored settings, from before the pooled choice existed. */
 const StoredWarmSparesSchema = z
   .number()
@@ -290,11 +312,19 @@ const StoredWarmSparesSchema = z
   .min(0)
   .max(AGENT_RUNTIME_TIER_MAX_WARM_SPARES);
 
+export const AgentRuntimeMemoryMiBSchema = z
+  .number()
+  .int("Memory is a whole number of MiB")
+  .positive("Memory is at least 1 MiB");
+
 /** One tier as an administrator saves it. */
 export const AgentRuntimeTierDefinitionSchema = z.strictObject({
   name: TierNameSchema,
   cpuRequest: CpuRequestSchema,
   cpuLimit: CpuLimitSchema.nullable(),
+  /** Null restores the derived default; omission preserves an existing override. */
+  memoryRequestMiB: AgentRuntimeMemoryMiBSchema.nullable().optional(),
+  memoryLimitMiB: AgentRuntimeMemoryMiBSchema.nullable().optional(),
   /**
    * Whether the tier keeps spare containers ready. A pooled tier keeps the
    * deployment's `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`; the other keeps none.
@@ -367,7 +397,13 @@ export function resolveAgentRuntimeTiers(
       ...tier,
       warmSpares: tier.warmSpares ?? defaults.defaultWarmSpares,
       pooled: tier.warmSpares === null || tier.warmSpares > 0,
-      ...agentRuntimeTierMemory(tier.cpuRequest, tier.cpuLimit),
+      ...(tier.memoryRequestMiB == null
+        ? {}
+        : { memoryRequestMiBOverride: tier.memoryRequestMiB }),
+      ...(tier.memoryLimitMiB == null
+        ? {}
+        : { memoryLimitMiBOverride: tier.memoryLimitMiB }),
+      ...tierMemory(tier),
     })),
   );
   const defaultTier =
@@ -406,15 +442,38 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
   if (!entry || typeof entry !== "object") return null;
   const value = entry as Record<string, unknown>;
   const name = TierNameSchema.safeParse(value.name);
-  const cpuRequest = CpuRequestSchema.safeParse(value.cpuRequest);
+  const cpuRequest = StoredCpuRequestSchema.safeParse(value.cpuRequest);
   if (!name.success || !cpuRequest.success) return null;
-  const cpuLimit = CpuLimitSchema.nullable().safeParse(value.cpuLimit ?? null);
+  const cpuLimit = StoredCpuLimitSchema.nullable().safeParse(
+    value.cpuLimit ?? null,
+  );
   const warmSpares = StoredWarmSparesSchema.nullable().safeParse(
     value.warmSpares ?? null,
   );
   const workspaceGiB = AgentRuntimeWorkspaceGiBSchema.nullable().safeParse(
     value.workspaceGiB ?? null,
   );
+  const memoryRequest = AgentRuntimeMemoryMiBSchema.safeParse(
+    value.memoryRequestMiB,
+  );
+  const memoryLimit = AgentRuntimeMemoryMiBSchema.safeParse(
+    value.memoryLimitMiB,
+  );
+  const memory = {
+    ...(memoryRequest.success ? { memoryRequestMiB: memoryRequest.data } : {}),
+    ...(memoryLimit.success ? { memoryLimitMiB: memoryLimit.data } : {}),
+  };
+  // Ignore inconsistent stored overrides rather than emit an invalid Pod.
+  const resolvedMemory = tierMemory({
+    cpuRequest: cpuRequest.data,
+    cpuLimit:
+      cpuLimit.success &&
+      cpuLimit.data !== null &&
+      cpuLimit.data >= cpuRequest.data
+        ? cpuLimit.data
+        : null,
+    ...memory,
+  });
   return {
     name: name.data,
     cpuRequest: cpuRequest.data,
@@ -425,6 +484,13 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
         : null,
     warmSpares: warmSpares.success ? warmSpares.data : null,
     workspaceGiB: workspaceGiB.success ? workspaceGiB.data : null,
+    ...(AgentRuntimeMemoryMiBSchema.safeParse(resolvedMemory.memoryRequestMiB)
+      .success &&
+    AgentRuntimeMemoryMiBSchema.safeParse(resolvedMemory.memoryLimitMiB)
+      .success &&
+    resolvedMemory.memoryLimitMiB >= resolvedMemory.memoryRequestMiB
+      ? memory
+      : {}),
   };
 }
 
@@ -495,7 +561,12 @@ export function agentRuntimeTierProblems(settings: {
   tiers: ReadonlyArray<
     Pick<
       AgentRuntimeTierDefinition,
-      "name" | "cpuRequest" | "cpuLimit" | "workspaceGiB"
+      | "name"
+      | "cpuRequest"
+      | "cpuLimit"
+      | "workspaceGiB"
+      | "memoryRequestMiB"
+      | "memoryLimitMiB"
     >
   >;
   defaultTier: string;
@@ -517,25 +588,52 @@ export function agentRuntimeTierProblems(settings: {
     if (name && seen.has(key)) problems.push(`Two tiers are named ${name}`);
     seen.add(key);
     if (
+      (tier.memoryRequestMiB != null &&
+        !AgentRuntimeMemoryMiBSchema.safeParse(tier.memoryRequestMiB)
+          .success) ||
+      (tier.memoryLimitMiB != null &&
+        !AgentRuntimeMemoryMiBSchema.safeParse(tier.memoryLimitMiB).success)
+    )
+      problems.push(`${label}: memory is a positive whole number of MiB`);
+    else if (tier.memoryRequestMiB != null || tier.memoryLimitMiB != null) {
+      const memory = tierMemory(tier);
+      if (
+        !AgentRuntimeMemoryMiBSchema.safeParse(memory.memoryRequestMiB)
+          .success ||
+        !AgentRuntimeMemoryMiBSchema.safeParse(memory.memoryLimitMiB).success
+      )
+        problems.push(
+          `${label}: calculated memory exceeds the supported numeric range; set an explicit memory limit`,
+        );
+      else if (memory.memoryLimitMiB < memory.memoryRequestMiB)
+        problems.push(`${label}: the memory limit is below the memory request`);
+    }
+    if (
       !Number.isFinite(tier.cpuRequest) ||
-      tier.cpuRequest <= 0 ||
+      tier.cpuRequest < AGENT_RUNTIME_TIER_MIN_CPU ||
       tier.cpuRequest > AGENT_RUNTIME_TIER_MAX_CPU_REQUEST
     )
       problems.push(
-        `${label}: the CPU request is more than 0 and at most ${AGENT_RUNTIME_TIER_MAX_CPU_REQUEST}`,
+        `${label}: the CPU request is at least ${AGENT_RUNTIME_TIER_MIN_CPU} and at most ${AGENT_RUNTIME_TIER_MAX_CPU_REQUEST}`,
       );
-    else if (!Number.isInteger(tier.cpuRequest * CPU_DECIMALS))
+    else if (
+      tier.cpuRequest !==
+      Math.round(tier.cpuRequest * CPU_DECIMALS) / CPU_DECIMALS
+    )
       problems.push(`${label}: a CPU amount has at most three decimals`);
     if (tier.cpuLimit !== null) {
       if (
         !Number.isFinite(tier.cpuLimit) ||
-        tier.cpuLimit <= 0 ||
+        tier.cpuLimit < AGENT_RUNTIME_TIER_MIN_CPU ||
         tier.cpuLimit > AGENT_RUNTIME_TIER_MAX_CPU_LIMIT
       )
         problems.push(
-          `${label}: the CPU limit is more than 0 and at most ${AGENT_RUNTIME_TIER_MAX_CPU_LIMIT}`,
+          `${label}: the CPU limit is at least ${AGENT_RUNTIME_TIER_MIN_CPU} and at most ${AGENT_RUNTIME_TIER_MAX_CPU_LIMIT}`,
         );
-      else if (!Number.isInteger(tier.cpuLimit * CPU_DECIMALS))
+      else if (
+        tier.cpuLimit !==
+        Math.round(tier.cpuLimit * CPU_DECIMALS) / CPU_DECIMALS
+      )
         problems.push(`${label}: a CPU amount has at most three decimals`);
       else if (tier.cpuLimit < tier.cpuRequest)
         problems.push(`${label}: the CPU limit is below the CPU request`);
@@ -545,7 +643,7 @@ export function agentRuntimeTierProblems(settings: {
       !AgentRuntimeWorkspaceGiBSchema.safeParse(tier.workspaceGiB).success
     )
       problems.push(
-        `${label}: the workspace is a whole number of GiB from 1 to ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB}`,
+        `${label}: the workspace is a positive whole number of GiB`,
       );
   }
   if (
@@ -571,5 +669,25 @@ export function agentRuntimeTierDefinitionFromInput(
     warmSpares: input.pooled ? null : 0,
     // The caller fills a left-out size from the tier's current one first.
     workspaceGiB: input.workspaceGiB ?? null,
+    ...(input.memoryRequestMiB == null
+      ? {}
+      : { memoryRequestMiB: input.memoryRequestMiB }),
+    ...(input.memoryLimitMiB == null
+      ? {}
+      : { memoryLimitMiB: input.memoryLimitMiB }),
+  };
+}
+
+/** Apply the request override before deriving the limit, then apply its override. */
+function tierMemory(
+  tier: Pick<
+    AgentRuntimeTierDefinition,
+    "cpuRequest" | "cpuLimit" | "memoryRequestMiB" | "memoryLimitMiB"
+  >,
+): { memoryRequestMiB: number; memoryLimitMiB: number } {
+  const derived = agentRuntimeTierMemory(tier);
+  return {
+    memoryRequestMiB: derived.memoryRequestMiB,
+    memoryLimitMiB: tier.memoryLimitMiB ?? derived.memoryLimitMiB,
   };
 }

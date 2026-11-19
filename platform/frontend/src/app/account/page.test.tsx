@@ -156,12 +156,12 @@ describe("AccountProfilePage", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it("puts profile, access and sign-in & security on one page, in that order", () => {
+  it("puts profile, sign-in & security and access on one page, in that order", () => {
     renderPage();
 
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
-    ).toEqual(["Profile", "Access", "Sign-in & security"]);
+    ).toEqual(["Profile", "Sign-in & security", "Access"]);
 
     expect(screen.getByText("Ada")).toBeVisible();
     expect(screen.getByText("Platform")).toBeVisible();

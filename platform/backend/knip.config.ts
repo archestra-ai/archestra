@@ -20,17 +20,20 @@ const config: KnipConfig = {
     "scripts/update-agent-runtime-clis.mjs!",
     "scripts/update-playwright-mcp.mjs!",
     "scripts/update-codex-models-client-version.mjs!",
+    "scripts/update-copilot-api-version.mjs!",
     "scripts/update-copilot-chat-client-version.mjs!",
     "scripts/update-grok-client-version.mjs!",
     "scripts/update-vscode-client-version.mjs!",
     "scripts/update-openappa-template.mjs!",
+    "scripts/generate-grok-toml.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
     "vitest.benchmark.config.ts",
     // `pnpm check:layers` and the layer table it checks (also its
-    // dependency-cruiser configuration).
+    // dependency-cruiser configuration), and `pnpm check:projects`.
     "scripts/check-layers.mjs!",
+    "scripts/check-projects.mjs!",
     "layers.mjs!",
   ],
   // Browser-side static assets read at runtime via readFileSync (server.ts) —
@@ -41,9 +44,8 @@ const config: KnipConfig = {
     "typescript-7",
   ],
   ignoreBinaries: [
-    // biome and concurrently are in root package.json
+    // biome is in root package.json
     "biome",
-    "concurrently",
     // System tools that tests run where the machine has them.
     "kubectl",
     "unshare",

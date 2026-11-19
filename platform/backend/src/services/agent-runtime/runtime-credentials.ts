@@ -10,6 +10,7 @@ import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
   InsertRuntimeCredentialDefinition,
+  RuntimeCredentialConnection,
   RuntimeCredentialConnectionScope,
   RuntimeCredentialDefinitionView,
   UpdateRuntimeCredentialDefinition,
@@ -197,7 +198,7 @@ export async function setRuntimeCredentialConnection(params: {
   credentialId: string;
   scope: RuntimeCredentialConnectionScope;
   value: string;
-}) {
+}): Promise<RuntimeCredentialConnection> {
   const definition = await requireRuntimeCredentialDefinition(params);
   assertScopeAllowed({ definition, scope: params.scope });
   if (definition.kind === "github_app_user")

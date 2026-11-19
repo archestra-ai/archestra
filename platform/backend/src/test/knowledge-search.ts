@@ -111,6 +111,7 @@ export async function indexKnowledgeFile(params: {
     organizationId: params.organizationId,
     knowledgeBaseId: params.knowledgeBaseId,
     fileIds: [file.id],
+    newConnectorEnvironmentId: null,
   });
   if (result.indexed !== 1) throw new Error(JSON.stringify(result.failures));
   const connectors = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(

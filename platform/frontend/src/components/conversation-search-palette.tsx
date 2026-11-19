@@ -18,7 +18,6 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -72,6 +71,7 @@ import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useConnectNavigation } from "@/lib/hooks/use-connect-navigation";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useMcpRegistryPage } from "@/lib/mcp/mcp-registry.query";
@@ -150,12 +150,7 @@ function useNavigationDestinations(
   permissionMap: Record<string, boolean> | null,
 ) {
   const openappaEnabled = useFeature("openappaEnabled");
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
-  // Connect is useful with either half, exactly as the sidebar gates its row.
-  const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
+  const { visible: showConnect } = useConnectNavigation();
 
   return useMemo(() => {
     // null, not an empty list: an empty list would read as "no pages", when
@@ -170,12 +165,9 @@ function useNavigationDestinations(
     return items
       .filter((item) => {
         if (item.url === "/connection") {
-          return canReadLlmProxy === true || canReadMcpGateway === true;
+          return showConnect;
         }
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
-        if (item.url === AUTO_ROUTING_URL && autoRoutingEnabled !== true) {
-          return false;
-        }
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -185,13 +177,7 @@ function useNavigationDestinations(
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [
-    permissionMap,
-    openappaEnabled,
-    autoRoutingEnabled,
-    canReadLlmProxy,
-    canReadMcpGateway,
-  ]);
+  }, [permissionMap, openappaEnabled, showConnect]);
 }
 
 interface ConversationSearchPaletteProps {

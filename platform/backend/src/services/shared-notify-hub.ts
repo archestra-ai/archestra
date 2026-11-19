@@ -19,4 +19,9 @@ export const sharedNotifyHub: PgNotifyHub = config.chat.activeRun
   ? createPollingNotifyHub()
   : createPostgresNotifyHub(
       config.chat.activeRun.notifyDatabaseUrl || config.database.url,
+      {
+        iamAuthEnabled: config.database.iamAuthEnabled,
+        entraAuthEnabled: config.database.entraAuthEnabled,
+        awsRegion: config.database.awsRegion || undefined,
+      },
     );

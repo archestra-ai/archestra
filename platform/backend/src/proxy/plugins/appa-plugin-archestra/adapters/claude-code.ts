@@ -23,6 +23,11 @@ import {
   claudeCodeRelayArrivals,
   isClaudeCodeRelayReceipt,
 } from "./claude-code-relay";
+import {
+  claudeDesktopGroupedAnswer,
+  claudeDesktopQuestion,
+  claudeOversizedQuestion,
+} from "./claude-question";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
   bindMintedChildTrajectory,
@@ -55,8 +60,11 @@ export function isClaudeCodeFamilyAdapter(
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const HANDBACK_TOOLS = new Set(["SubagentHandback"]);
 const HANDBACK_VALUE_KEYS = ["message", "result", "content", "output"] as const;
+// A background Bash command's output (`tasks/b<8 base36>.output`) shares the
+// directory with agent transcripts (`tasks/a<hex>.output`) and is the
+// caller's own output. Any other id, or a glob, may name a child.
 const CHILD_PATHS = [
-  { prefix: "tasks/", suffix: ".output" },
+  { prefix: "tasks/", suffix: ".output", ownOutputId: /^b[0-9a-z]{8}$/u },
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
@@ -100,6 +108,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    maxOptions: 4,
     // A review shows its call in each option's preview, inside the form, and
     // asks one line about it.
     fromAskUser: (args: AskUserArguments) => {
@@ -475,19 +484,12 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   // submission enabled.
   override readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
+    requiresNativeForm: true,
+    maxOptions: 4,
+    maxConvertedOptions: 12,
+    fromAskUser: claudeDesktopQuestion,
+    fromNativeQuestion: claudeOversizedQuestion,
+    ordinaryResultFromAskUser: claudeDesktopGroupedAnswer,
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, asked.question),
     formFallback: true,

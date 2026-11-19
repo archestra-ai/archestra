@@ -149,6 +149,13 @@ const interactionsTable = pgTable(
     attemptOutcome: varchar("attempt_outcome"),
     failureReason: text("failure_reason"),
     /**
+     * Whether the stored response is an error (`{ error }`), including a
+     * stream that failed after usage arrived. Derived on write, before content
+     * is encrypted or withheld, so list and session aggregates can read it
+     * without the response payload. Null on rows written before the column.
+     */
+    failed: boolean("failed"),
+    /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
@@ -163,9 +170,9 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'codex_session', 'copilot_session', 'opencode_session',
-     * 'kilo_session', 'pi_session', 'kimi_code_session', 'claude_code_header',
-     * 'appa_header', 'openai_user', null. Legacy rows may
+     * 'openwebui_chat', 'codex_session', 'chatgpt_session', 'copilot_session',
+     * 'opencode_session', 'kilo_session', 'pi_session', 'kimi_code_session',
+     * 'claude_code_header', 'appa_header', 'openai_user', null. Legacy rows may
      * carry 'claude_code' / 'claude_desktop'.
      */
     sessionSource: varchar("session_source"),

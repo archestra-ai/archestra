@@ -1,7 +1,9 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test } from "vitest";
 import config from "@/config";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import { ServerDrainingError } from "@/types/server-draining-error";
 import { classifyErrorForTracking } from "./error-tracking-policy";
 
 /** A generic Error whose `.name` marks it as an MCP-connectivity failure. */
@@ -17,6 +19,18 @@ function statusError(statusCode: number): Error & { statusCode: number } {
 }
 
 describe("classifyErrorForTracking", () => {
+  test("drops only the intentional shutdown refusal, preserving unrelated 503s", () => {
+    expect(classifyErrorForTracking(new ServerDrainingError())).toEqual({
+      report: false,
+    });
+    expect(
+      classifyErrorForTracking(new ApiError(503, "Server is shutting down"))
+        .report,
+    ).toBe(true);
+    expect(
+      classifyErrorForTracking(namedError("ServerDrainingError")).report,
+    ).toBe(true);
+  });
   test("reports a genuine server-side bug (generic 500) without grouping", () => {
     const decision = classifyErrorForTracking(
       new Error("undefined is not a function"),
@@ -68,7 +82,7 @@ describe("classifyErrorForTracking", () => {
 
     expect(classifyErrorForTracking(relay)).toEqual({ report: false });
     expect(
-      classifyErrorForTracking(new Error("Failed query", { cause })),
+      classifyErrorForTracking(new DrizzleQueryError("select 1", [], cause)),
     ).toMatchObject({
       report: true,
       fingerprint: ["db-transient", "ECONNRESET"],
@@ -119,18 +133,18 @@ describe("classifyErrorForTracking", () => {
     });
     expect(classifyErrorForTracking(connectTimeout).report).toBe(false);
 
-    // A bare libuv errno (ECONNREFUSED in the cause chain) is claimed first
-    // by the transient-DB classification, which matches network codes without
-    // DB context — kept and grouped rather than dropped. Pinned so the
-    // precedence between the two rules stays explicit.
+    // A bare libuv errno that names no endpoint is not a database outage
+    // unless the database client raised it.
     const refused = Object.assign(new Error("fetch failed"), {
       cause: Object.assign(new Error("connect ECONNREFUSED"), {
         code: "ECONNREFUSED",
       }),
     });
-    const refusedDecision = classifyErrorForTracking(refused);
-    expect(refusedDecision.report).toBe(true);
-    expect(refusedDecision.fingerprint?.[0]).toBe("db-transient");
+    expect(classifyErrorForTracking(refused)).toEqual({ report: false });
+    const clientTimeout = Object.assign(new Error("Request timed out"), {
+      code: "ETIMEDOUT",
+    });
+    expect(classifyErrorForTracking(clientTimeout)).toEqual({ report: false });
   });
 
   test("does not group outbound failures to other hosts as database outages", () => {
@@ -151,7 +165,7 @@ describe("classifyErrorForTracking", () => {
     ).toEqual({ report: false });
     // The same network failure from a database operation must still report.
     expect(
-      classifyErrorForTracking(new Error("Failed query", { cause })),
+      classifyErrorForTracking(new DrizzleQueryError("select 1", [], cause)),
     ).toMatchObject({
       report: true,
       fingerprint: ["db-transient", "ETIMEDOUT"],

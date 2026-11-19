@@ -17,10 +17,11 @@ import type {
   RoutingPlanStatus,
   RoutingPlanTrigger,
 } from "@/types/auto-routing";
+import autoRoutersTable from "./auto-router";
 import organizationsTable from "./organization";
 import routingScorerVersionsTable from "./routing-scorer-version";
 
-/** Every fit outcome per organization; at most one `active` plan serves traffic. */
+/** Every fit outcome per auto router; at most one `active` plan serves its traffic. */
 const routingPlansTable = pgTable(
   "routing_plans",
   {
@@ -28,6 +29,9 @@ const routingPlansTable = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    routerId: uuid("router_id")
+      .notNull()
+      .references(() => autoRoutersTable.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -41,10 +45,11 @@ const routingPlansTable = pgTable(
     tiersFingerprint: jsonb("tiers_fingerprint")
       .$type<RouterDocument>()
       .notNull(),
+    /** Null when the fit was for a budget preset and resolved no budget (cold start, failure). */
     budgetUsdPerDay: numeric("budget_usd_per_day", {
       precision: 12,
       scale: 2,
-    }).notNull(),
+    }),
     scorerVersionId: uuid("scorer_version_id")
       .notNull()
       .references(() => routingScorerVersionsTable.id),
@@ -57,13 +62,15 @@ const routingPlansTable = pgTable(
     error: text("error"),
   },
   (table) => [
-    uniqueIndex("routing_plans_one_active_per_org_uidx")
-      .on(table.organizationId)
+    uniqueIndex("routing_plans_one_active_per_router_uidx")
+      .on(table.routerId)
       .where(sql`${table.status} = 'active'`),
-    index("routing_plans_org_created_at_idx").on(
-      table.organizationId,
+    index("routing_plans_router_created_at_idx").on(
+      table.routerId,
       table.createdAt,
     ),
+    // Backs the cascade from organizations.
+    index("routing_plans_organization_id_idx").on(table.organizationId),
     check(
       "routing_plans_status_check",
       sql`${table.status} IN ('active', 'superseded', 'failed', 'cold_start', 'rejected')`,

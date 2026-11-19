@@ -17,6 +17,8 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
   "copilot-cli-prompt-cache-key": "copilot-cli",
   "pi-session-header": "pi",
   "kimi-code-cache-key": "kimi-code",
+  "grok-session-header": "grok-build",
+  "cursor-opening": "cursor",
   "opencode-session-header": "opencode",
   "opencode-hosted-header": "opencode",
   "kilo-session-header": "kilo",

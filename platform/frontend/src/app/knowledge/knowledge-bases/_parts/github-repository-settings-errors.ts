@@ -1,6 +1,7 @@
 const REPOSITORY_SETTINGS_FIELDS = new Set([
   "repos",
   "repositoryEntries",
+  "repositorySharedSettings",
   "repositoryOverrides",
   "includeIssues",
   "includePullRequests",

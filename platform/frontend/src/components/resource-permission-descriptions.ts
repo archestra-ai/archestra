@@ -5,6 +5,7 @@ import { scopedResourceNouns } from "@archestra/shared";
 type Descriptions = {
   view: string;
   use?: string;
+  configure?: string;
   deploy?: string;
 } & ({ edit: string; manage?: string } | { edit?: never; manage: string });
 
@@ -114,8 +115,16 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   llmOauthClient: oauthClientDescriptions(),
   environment: {
     view: "View the environment's configuration and network policies without deploying into it.",
-    use: "View the environment and deploy agents or MCP servers into it, subject to its network policies.",
+    use: "View the environment and deploy the selected resources into it, subject to its network policies.",
     edit: "Use the environment and update its configuration and network policies.",
+  },
+  agentRuntime: {
+    view: "See the runtime in the list of runtimes.",
+    use: "Create agents on the runtime. They take its settings and can't change them.",
+    configure:
+      "Create agents on the runtime and change its settings on those agents.",
+    manage:
+      "Use and configure the runtime on agents, and change who can access it.",
   },
   serviceAccount: {
     view: "View the service account's details, permissions, and token metadata. Existing token values are not revealed.",

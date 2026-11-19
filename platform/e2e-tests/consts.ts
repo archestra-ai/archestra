@@ -214,7 +214,7 @@ export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET =
 
 /** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
 export const MCP_SERVER_JWKS_DOCKER_IMAGE =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3";
+  "ghcr.io/archestra-ai/ci/mcp-server-jwks-keycloak:0.0.3";
 
 /**
  * Keycloak internal URL for use by K8s pods (MCP servers spawned by orchestrator).

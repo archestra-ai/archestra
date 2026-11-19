@@ -2,10 +2,11 @@ import { setDispatcher } from "jsforce/lib/request";
 import { MockAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import logger from "@/logging";
+import { spyOnLogger } from "@/test/logging";
 import { SalesforceConfigSchema } from "@/types";
 import { SalesforceConnector } from "./salesforce-connector";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 const DOMAIN = "https://example.my.salesforce.com";
 const CONFIG = {

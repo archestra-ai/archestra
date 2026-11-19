@@ -16,7 +16,9 @@ import { updateGithubPat } from "@/services/github-pat";
 import { resolveGithubPatToken } from "@/skills/github-app-token";
 import { expect, test } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
+import { recordQueries } from "@/test/query-counter";
 import {
+  CredentialResolutionBatch,
   preflightMcpCredentials,
   resolveCredentialValue,
   resolveMcpCredentialValues,
@@ -386,4 +388,110 @@ test("says before install which credential stops a member, and why", async ({
   ).rejects.toThrow(
     'This server needs the "Restricted key" credential, and you don\'t have access to it. Ask an admin to share it with you.',
   );
+});
+
+test("a credential batch reads connections and fresh secret values once per owner", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const other = await makeUser();
+  const keys = ["batch-first", "batch-second", "batch-third"];
+  for (const key of keys) {
+    await createRuntimeCredentialDefinition({
+      organizationId: organization.id,
+      userId: user.id,
+      definition: {
+        key,
+        name: key,
+        description: "",
+        icon: null,
+        allowPersonal: true,
+        allowOrganization: false,
+      },
+    });
+    for (const owner of [user, other]) {
+      await setRuntimeCredentialConnection({
+        organizationId: organization.id,
+        userId: owner.id,
+        scope: "personal",
+        credentialId: key,
+        value: `${owner.id}-${key}`,
+      });
+    }
+  }
+  await createRuntimeCredentialDefinition({
+    organizationId: organization.id,
+    userId: user.id,
+    definition: {
+      key: "batch-shared",
+      name: "Shared",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  await setRuntimeCredentialConnection({
+    organizationId: organization.id,
+    scope: "organization",
+    userId: user.id,
+    credentialId: "batch-shared",
+    value: "shared-value",
+  });
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: organization.id,
+    credentialIds: [...keys, "batch-shared"],
+  });
+  const params = {
+    organizationId: organization.id,
+    scope: "personal" as const,
+    userId: user.id,
+  };
+  const measured = await recordQueries(async () => {
+    const values = [];
+    for (const credentialId of keys)
+      values.push((await batch.resolve({ ...params, credentialId }))?.value);
+    return values;
+  });
+  expect(measured.result).toEqual(keys.map((key) => `${user.id}-${key}`));
+  expect(measured.statements).toHaveLength(2);
+  expect(
+    (
+      await batch.resolve({
+        ...params,
+        userId: other.id,
+        credentialId: keys[0],
+      })
+    )?.value,
+  ).toBe(`${other.id}-${keys[0]}`);
+  expect(
+    (
+      await batch.resolve({
+        ...params,
+        scope: "organization",
+        credentialId: "batch-shared",
+      })
+    )?.value,
+  ).toBe("shared-value");
+  await setRuntimeCredentialConnection({
+    ...params,
+    credentialId: keys[0],
+    value: "rotated-value",
+  });
+  const next = await CredentialResolutionBatch.create({
+    organizationId: organization.id,
+    credentialIds: keys,
+  });
+  expect(
+    (await next.resolve({ ...params, credentialId: keys[0] }))?.value,
+  ).toBe("rotated-value");
+  expect(() =>
+    batch.resolve({
+      ...params,
+      organizationId: "different-organization",
+      credentialId: keys[0],
+    }),
+  ).toThrow("no longer available");
 });

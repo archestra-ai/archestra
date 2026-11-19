@@ -32,9 +32,9 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.McpServerProxyPost,
-        tags: ["mcp-proxy"],
+        tags: ["MCP App Runtime"],
         description:
-          "Proxy a server-scoped MCP App's runtime requests with session auth",
+          "Handle MCP App JSON-RPC requests for an installed MCP server. The caller must have access to the server.",
         params: z.object({ mcpServerId: UuidIdSchema }),
         body: z.record(z.string(), z.unknown()),
       },
@@ -68,6 +68,14 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           403,
           "You don't have access to this MCP server, or it doesn't exist.",
+        );
+      }
+      // A desktop MCP server runs on its owner's computer: an installation
+      // admin who can see another user's installation does not run it there.
+      if (server.serverType === "desktop_mcp" && server.ownerId !== userId) {
+        throw new ApiError(
+          403,
+          "This MCP server runs on another user's computer. Install it to use it on yours.",
         );
       }
       const { catalogId } = server;

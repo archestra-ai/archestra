@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -24,6 +29,136 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
+/** The GitHub App's permissions against what self-service needs, on demand. */
+export function useAppaGithubAppGrants(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: [...appaGithubSyncQueryKey, "app-grants"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+  });
+}
+
+/**
+ * How the policy repository protects server rules files: the branch ruleset
+ * the administrator imports, as the server last read it. The server keeps a
+ * read for a minute, so polling more often only reads its cache; a change
+ * just made on GitHub is read with `useFreshAppaRepositoryProtection`.
+ */
+export function useAppaRepositoryProtection(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: [...appaGithubSyncQueryKey, "protection"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getAppaRepositoryProtection();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+}
+
+/**
+ * Read the protection from GitHub now, for the check-again buttons: the
+ * administrator just imported or edited the ruleset. What comes back
+ * replaces the cached read, so the Git sync card follows at once.
+ */
+export function useFreshAppaRepositoryProtection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaRepositoryProtection(
+        {
+          query: { fresh: "true" },
+        },
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...appaGithubSyncQueryKey, "protection"], data);
+    },
+  });
+}
+/**
+ * Whether this organization's MCP server editors change their servers' rules
+ * themselves, which shows the registry's Guardrails action. Anyone who may
+ * open the registry reads it.
+ */
+export function useAppaSelfService(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: appaSelfServiceQueryKey,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaSelfService();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { enabled: false };
+    },
+    staleTime: 60_000,
+  });
+}
+export const appaSelfServiceQueryKey = ["openappa-github-sync", "self-service"];
+
+/**
+ * The MCP servers' rules files this reader may open with no Guardrails
+ * permission: those of servers they may open in the MCP registry.
+ */
+function useServerRulesFiles(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: serverRulesFilesQueryKey,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaServerRulesFiles();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.files ?? [];
+    },
+    staleTime: 60_000,
+  });
+}
+const serverRulesFilesQueryKey = ["openappa-github-sync", "server-rules-files"];
+
+/**
+ * Whether the Policy page is open to this reader through their MCP servers
+ * alone: no Guardrails permission, and at least one server's rules file they
+ * may open. Null until known. The page then lists only those files.
+ */
+export function useServerRulesAccess(): {
+  scoped: boolean | null;
+  files: ServerRulesFile[];
+} {
+  const policy = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const registry = useHasPermissions({ mcpRegistry: ["read"] });
+  // Asked only of a reader without the permission. With Guardrails off the
+  // list is empty, so the answer is no.
+  const wanted = policy.data === false;
+  const files = useServerRulesFiles(wanted);
+  const scoped = policy.isPending
+    ? null
+    : policy.data === true
+      ? false
+      : registry.isPending
+        ? null
+        : registry.data !== true
+          ? false
+          : files.isPending
+            ? null
+            : (files.data?.length ?? 0) > 0;
+  return { scoped, files: scoped ? (files.data ?? NO_FILES) : NO_FILES };
+}
+type ServerRulesFile =
+  archestraApiTypes.GetOpenappaServerRulesFilesResponses["200"]["files"][number];
+const NO_FILES: ServerRulesFile[] = [];
+
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({
@@ -72,9 +207,33 @@ export function useCreateAppaGithubRepository() {
     onSettled: () => invalidatePolicyViews(client),
   });
 }
-export function useUpdateAppaGithubSync() {
+/** Every Git sync action; a sync started anywhere shows on the card. */
+const updateAppaGithubSyncKey = [...appaGithubSyncQueryKey, "update"];
+
+/** Whether a sync runs now, wherever it was started: the card, a dialog. */
+export function useAppaGithubSyncing() {
+  return (
+    useIsMutating({
+      mutationKey: updateAppaGithubSyncKey,
+      predicate: (mutation) =>
+        (mutation.state.variables as { action?: string } | undefined)
+          ?.action === "sync",
+    }) > 0
+  );
+}
+
+export function useUpdateAppaGithubSync({
+  quiet = false,
+}: {
+  /**
+   * For a wizard that shows each outcome in its own rows: no toast says it
+   * again. A failed request still shows its error toast.
+   */
+  quiet?: boolean;
+} = {}) {
   const client = useQueryClient();
   return useMutation({
+    mutationKey: updateAppaGithubSyncKey,
     mutationFn: async (
       body: archestraApiTypes.UpdateAppaGithubSyncData["body"],
     ) => {
@@ -94,8 +253,29 @@ export function useUpdateAppaGithubSync() {
         archestraApiTypes.GetAppaGithubSyncResponses["200"]
       >(appaGithubSyncQueryKey)?.source?.setupPullRequestNumber,
     }),
-    onSettled: () => invalidatePolicyViews(client),
+    onSettled: () => {
+      invalidatePolicyViews(client);
+      client.invalidateQueries({ queryKey: appaSelfServiceQueryKey });
+    },
     onSuccess: (data, body, context) => {
+      // Every action answers with the status: whoever waits on a sync reads
+      // its outcome as soon as the sync ends, not at the next refetch.
+      if (data) client.setQueryData(appaGithubSyncQueryKey, data);
+      if (quiet) return;
+      if (body.action === "self_service") {
+        toast.success(
+          body.enabled
+            ? "MCP Guardrails Self-Service turned on."
+            : "MCP Guardrails Self-Service turned off. The branch ruleset was removed.",
+        );
+        return;
+      }
+      if (body.action === "include_servers") {
+        toast.success(
+          "Pull request opened. Merge it so the servers' files apply.",
+        );
+        return;
+      }
       if (body.action === "sync" && data?.source?.lastSyncError) return;
       // Still waiting on the setup PR: the dialog and panel already say so.
       if (body.action === "sync" && data?.source?.setupPullRequestNumber)

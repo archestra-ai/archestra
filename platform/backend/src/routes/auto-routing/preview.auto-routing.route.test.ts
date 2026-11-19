@@ -1,9 +1,10 @@
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  autoRouterId,
   configureAutoRouting,
   makeScorerVersion,
   publishFittedPlan,
@@ -27,13 +28,12 @@ const SMART_ANSWERS = {
   usage: { input_tokens: 420, output_tokens: 6, cost: 0.0001 },
 };
 
-describe("POST /api/auto-routing/preview", () => {
+describe("POST /api/auto-routing/routers/:id/preview", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   const server = useMswServer();
   let jevStates: unknown[];
 
   beforeEach(async ({ makeSecret, makeLlmProviderApiKey }) => {
-    config.autoRouting.enabled = true;
     jevStates = [];
     server.use(
       http.post(config.llm.jev.baseUrl, async ({ request }) => {
@@ -48,12 +48,14 @@ describe("POST /api/auto-routing/preview", () => {
     });
   });
 
-  const preview = (payload: Record<string, unknown>) =>
+  const preview = async (payload: Record<string, unknown>) =>
     ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/preview",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/preview`,
       payload,
     });
+  const findRouter = async () =>
+    AutoRouterModel.find(await autoRouterId(ctx.organizationId));
 
   test("scores the text and decides with the active plan, storing nothing", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
@@ -61,7 +63,7 @@ describe("POST /api/auto-routing/preview", () => {
       organizationId: ctx.organizationId,
       trio,
     });
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await findRouter();
 
     const response = await preview({ text: "Refactor the billing module" });
 
@@ -82,9 +84,7 @@ describe("POST /api/auto-routing/preview", () => {
     expect(jevStates).toEqual([{ prompt: "Refactor the billing module" }]);
     expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
     expect(await db.$count(schema.routingUsageTable)).toBe(0);
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(await findRouter()).toEqual(before);
   });
 
   test("a plan fitted for another scorer version reports a cold start", async () => {
@@ -103,6 +103,96 @@ describe("POST /api/auto-routing/preview", () => {
       planId: null,
       chosen: { tier: "normal" },
     });
+  });
+
+  test.each([
+    {
+      messages: [
+        { role: "system", content: "Review migration locking." },
+        { role: "user", content: "Review this change." },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "inspect_schema",
+            description: "Read table metadata.",
+            parameters: { private: "not scored" },
+          },
+        },
+      ],
+    },
+    {
+      input: [
+        {
+          role: "developer",
+          content: [{ type: "input_text", text: "Review migration locking." }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "Review this change." }],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          name: "inspect_schema",
+          description: "Read table metadata.",
+          parameters: null,
+        },
+      ],
+    },
+    {
+      system: [{ type: "text", text: "Review migration locking." }],
+      messages: [{ role: "user", content: "Review this change." }],
+      tools: [
+        {
+          name: "inspect_schema",
+          description: "Read table metadata.",
+          input_schema: {},
+        },
+      ],
+    },
+  ])("scores request context through the live extractor without saving a decision (shape %#)", async (request) => {
+    await configureAutoRouting(ctx.organizationId);
+
+    const response = await preview({ request });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(jevStates).toEqual([
+      {
+        prompt: "Review this change.",
+        system_prompt: "Review migration locking.",
+        tools: "Available tools: 1\ninspect_schema",
+      },
+    ]);
+    expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
+    expect(await db.$count(schema.routingUsageTable)).toBe(0);
+  });
+
+  test.each([
+    {
+      request: {
+        instructions: "System instructions alone are not a user task.",
+      },
+    },
+    { text: "Task", request: { input: "Ambiguous task" } },
+    { request: [] },
+    { request: { input: "Task" }, client: "   " },
+  ])("rejects invalid request previews before scoring (case %#)", async (payload) => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview(payload);
+    expect(response.statusCode, response.body).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects request previews above the body limit before scoring", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: { input: "x".repeat(256 * 1024) },
+    });
+    expect(response.statusCode, response.body).toBe(413);
+    expect(jevStates).toEqual([]);
   });
 
   test("without a plan, reports the cold-start normal tier", async () => {
@@ -124,7 +214,7 @@ describe("POST /api/auto-routing/preview", () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await publishFittedPlan({ organizationId: ctx.organizationId, trio });
     const repriced = await configureAutoRouting(ctx.organizationId);
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await findRouter();
 
     const response = await preview({ text: "Fix a typo" });
 
@@ -133,9 +223,7 @@ describe("POST /api/auto-routing/preview", () => {
       reason: "plan_stale",
       chosen: { tier: "normal", model: { id: repriced[1].id } },
     });
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(await findRouter()).toEqual(before);
   });
 
   test("rejects text over the cap without calling the scorer", async () => {
@@ -144,6 +232,20 @@ describe("POST /api/auto-routing/preview", () => {
     const response = await preview({ text: "x".repeat(20_001) });
 
     expect(response.statusCode).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects oversized tool-name context instead of silently scoring only some tools", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: {
+        input: "Review this change.",
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          name: `tool_${index}`,
+        })),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
     expect(jevStates).toEqual([]);
   });
 

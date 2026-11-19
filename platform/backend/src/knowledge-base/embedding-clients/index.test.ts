@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import ModelModel from "@/models/model";
 import { useMswServer } from "@/test/msw";
 import {
   UnsupportedEmbeddingProviderError,
@@ -24,6 +25,8 @@ import {
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
+}));
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
 
@@ -427,5 +430,88 @@ describe("getEmbeddingRetryDelayMs", () => {
     expect(
       getEmbeddingRetryDelayMs(new OpenAIEmbeddingError(429, "rate"), 2_000),
     ).toBe(2_000);
+  });
+});
+
+describe("callEmbedding availability", () => {
+  const server = useMswServer();
+  test("a Fireworks embedding alias cannot bypass its hidden canonical row", async () => {
+    const canonical = "accounts/fireworks/models/embedding-fixture";
+    const row = await ModelModel.create({
+      provider: "vllm",
+      modelId: canonical,
+      externalId: `vllm/${canonical}`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      ignored: true,
+    });
+    let calls = 0;
+    server.use(
+      http.post("https://api.fireworks.ai/inference/v1/embeddings", () => {
+        calls++;
+        return HttpResponse.json({
+          data: [{ index: 0, embedding: [1, 2] }],
+          usage: { prompt_tokens: 1, total_tokens: 1 },
+        });
+      }),
+    );
+    const call = () =>
+      callEmbedding({
+        provider: "vllm",
+        model: "embedding-fixture",
+        baseUrl: "https://api.fireworks.ai/inference/v1",
+        apiKey: "synthetic",
+        inputs: ["fixture"],
+      });
+    await expect(call()).rejects.toMatchObject({
+      internalCode: "model_hidden",
+    });
+    expect(calls).toBe(0);
+    await ModelModel.update(row.id, { ignored: false });
+    await call();
+    expect(calls).toBe(1);
+  });
+
+  test("checks current availability for document and query embedding calls", async () => {
+    const row = await ModelModel.create({
+      provider: "openai",
+      modelId: "embedding-fixture",
+      externalId: "openai/embedding-fixture",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    let calls = 0;
+    server.use(
+      http.post("https://embedding.example.test/embeddings", () => {
+        calls++;
+        return HttpResponse.json({
+          data: [{ index: 0, embedding: [1, 2] }],
+          usage: { prompt_tokens: 1, total_tokens: 1 },
+        });
+      }),
+    );
+    const call = (
+      purpose: "search_document" | "search_query",
+      model = row.modelId,
+    ) =>
+      callEmbedding({
+        provider: "openai",
+        model,
+        apiKey: "synthetic",
+        baseUrl: "https://embedding.example.test",
+        inputs: ["fixture"],
+        purpose,
+      });
+    await call("search_document");
+    await ModelModel.update(row.id, { ignored: true });
+    for (const purpose of ["search_document", "search_query"] as const)
+      await expect(call(purpose)).rejects.toMatchObject({
+        internalCode: "model_hidden",
+      });
+    expect(calls).toBe(1);
+    await ModelModel.update(row.id, { ignored: false });
+    await call("search_query");
+    await call("search_query", "uncatalogued-embedding");
+    expect(calls).toBe(3);
   });
 });

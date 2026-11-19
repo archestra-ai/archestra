@@ -12,7 +12,10 @@ import {
   ServiceAccountModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
-import { validateMCPGatewayToken } from "./mcp-gateway/utils";
+import {
+  authenticateMCPGatewayRequest,
+  validateMCPGatewayToken,
+} from "./mcp-gateway/utils";
 
 /**
  * End-to-end authorization tests for MCP OAuth client (application) tokens
@@ -129,6 +132,12 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(otherGateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(otherGateway.id, token)).toEqual(
+      {
+        result: null,
+        reason: "no_gateway_access",
+      },
+    );
   });
 
   test("rejects a gateway in a different organization", async ({
@@ -155,6 +164,12 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(otherOrgGateway.id, token)).toBeNull();
+    expect(
+      await authenticateMCPGatewayRequest(otherOrgGateway.id, token),
+    ).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("rejects an expired token", async ({ makeOrganization, makeAgent }) => {
@@ -176,6 +191,10 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("rejects a token missing the mcp scope", async ({
@@ -200,6 +219,10 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("rejects a token whose referenceId points to a different client", async ({
@@ -223,6 +246,10 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("rejects a token after its client is deleted", async ({
@@ -251,6 +278,10 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("rejects a token after its client is disabled", async ({
@@ -279,6 +310,10 @@ describe("MCP OAuth client gateway authorization", () => {
       .where(eq(schema.oauthClientsTable.id, oauthClient.id));
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   /**
@@ -515,6 +550,12 @@ describe("MCP OAuth client gateway authorization", () => {
       ),
     );
     expect(await validateMCPGatewayToken(privateGateway.id, token)).toBeNull();
+    expect(
+      await authenticateMCPGatewayRequest(privateGateway.id, token),
+    ).toEqual({
+      result: null,
+      reason: "no_gateway_access",
+    });
     await McpOauthClientModel.update({
       id: oauthClient.id,
       organizationId: org.id,
@@ -530,6 +571,10 @@ describe("MCP OAuth client gateway authorization", () => {
       serviceAccountId: other.id,
     });
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
     const rebound = await mintToken({
       clientId: oauthClient.clientId,
       referenceClientUuid: oauthClient.id,
@@ -542,6 +587,14 @@ describe("MCP OAuth client gateway authorization", () => {
       .set({ disabled: true })
       .where(eq(schema.serviceAccountsTable.id, other.id));
     expect(await validateMCPGatewayToken(gateway.id, rebound)).toBeNull();
+    expect(await authenticateMCPGatewayRequest(gateway.id, rebound)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
+    const unlistedGateway = await makeAgent({ organizationId: org.id });
+    expect(
+      await authenticateMCPGatewayRequest(unlistedGateway.id, rebound),
+    ).toEqual({ result: null, reason: "invalid_token" });
     await db
       .delete(schema.serviceAccountsTable)
       .where(eq(schema.serviceAccountsTable.id, other.id));

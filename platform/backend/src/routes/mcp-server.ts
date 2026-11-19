@@ -12,6 +12,7 @@ import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -45,11 +46,9 @@ import {
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
-import {
-  filterMcpServersAssignableToTarget,
-  isPredefinedAdmin,
-} from "@/services/agent-tool-assignment";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveMcpCredentialValues } from "@/services/credentials";
+import { desktopMcpInstallService } from "@/services/desktop-mcp/desktop-mcp-install";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import {
@@ -74,7 +73,9 @@ import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { filterMcpServersAssignableToTarget } from "@/services/mcp-server-assignability";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -83,6 +84,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  DesktopMcpArgumentsSchema,
   type EnterpriseManagedCredentialConfig,
   generateErrorResponseSchema,
   InsertMcpServerSchema,
@@ -409,6 +411,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         userConfigValues,
         environmentValues,
+        desktopArguments,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -509,6 +512,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The catalog row is the source of truth for the install name.
         serverData.name = catalogItem.name;
 
+        // A desktop MCP server runs on the computer of the user who installs
+        // it: no shared installation, and nobody installs it for another user.
+        if (catalogItem.serverType === "desktop_mcp") {
+          if (serverData.scope !== "personal") {
+            throw new ApiError(
+              400,
+              "A desktop MCP server runs on a user's own computer, so it can only be installed as a personal installation.",
+            );
+          }
+          if (targetUserId !== user.id) {
+            throw new ApiError(
+              400,
+              "A desktop MCP server runs on a user's own computer, so each user installs it for themselves.",
+            );
+          }
+        }
+
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
           scope: serverData.scope,
@@ -558,8 +578,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Check for duplicate personal installation (same user, no team)
-        // Return existing server instead of erroring (idempotent behavior)
-        if (serverData.scope === "personal") {
+        // Return existing server instead of erroring (idempotent behavior).
+        // A desktop MCP install is idempotent in its own path below: its
+        // tools go to the owner's personal gateway only, never to the agents
+        // of the request.
+        if (
+          serverData.scope === "personal" &&
+          catalogItem.serverType !== "desktop_mcp"
+        ) {
           const existingPersonal = existingServers.find(
             (s) => s.scope === "personal" && s.ownerId === targetUserId,
           );
@@ -625,6 +651,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
       }
 
+      // Arguments go after the command a device runs; no other server type
+      // has one.
+      if (
+        desktopArguments?.length &&
+        catalogItem?.serverType !== "desktop_mcp"
+      ) {
+        throw new ApiError(
+          400,
+          "Only a desktop MCP server takes arguments from its user.",
+        );
+      }
+
       if (
         secretId &&
         (!catalogItem?.oauthConfig ||
@@ -636,6 +674,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (await McpServerModel.hasSecretReference(secretId)))
       ) {
         throw new ApiError(400, "Credential references cannot be supplied");
+      }
+
+      // A desktop MCP server starts on the user's device only after its
+      // installation exists, so the installation is created waiting and is
+      // completed when the device reports the server in operation.
+      if (catalogItem?.serverType === "desktop_mcp") {
+        const mcpServer = await desktopMcpInstallService.install({
+          catalogItem,
+          userId: targetUserId,
+          desktopArguments,
+        });
+        broadcastMcpServersChanged({
+          organizationId,
+          serverIds: [mcpServer.id],
+        });
+        return reply.send(mcpServer);
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -904,7 +958,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           try {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
-            const capturedCatalogName = catalogItem.name;
             const capturedCatalogItem = catalogItem;
             const capturedEnterpriseManagedConfig =
               catalogItem.enterpriseManagedConfig;
@@ -989,11 +1042,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     })
                   : await McpServerModel.getToolsFromServer(mcpServer);
 
-                // Persist tools in the database
-                // Use catalog item name (without userId) for tool naming to avoid duplicates across users
-                const toolNamePrefix = capturedCatalogName || mcpServer.name;
+                // Persist tools in the database, named by the catalog item
+                // (not the per-user install) so users share them.
+                const toolNameFor = await mintCatalogToolNames({
+                  catalogId: capturedCatalogId,
+                  rawToolNames: tools.map((tool) => tool.name),
+                });
                 const toolsToCreate = tools.map((tool) => ({
-                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  name: toolNameFor(tool.name),
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
@@ -1049,12 +1105,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   if (toolIds.length > 0) {
                     const targetAgentIds: string[] = [];
                     if (!mcpServer.teamId) {
-                      const personalGateway =
-                        await AgentModel.ensurePersonalMcpGateway({
+                      const personalGatewayId =
+                        await installerPersonalGatewayId({
                           userId: targetUserId,
                           organizationId,
                         });
-                      targetAgentIds.push(personalGateway.id);
+                      if (personalGatewayId) {
+                        targetAgentIds.push(personalGatewayId);
+                      }
                     }
                     if (agentIds && agentIds.length > 0) {
                       targetAgentIds.push(...agentIds);
@@ -1172,10 +1230,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogItem.enterpriseManagedConfig !== null,
         });
 
-        // Persist tools in the database with source='mcp_server' and mcpServerId
-        // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
+        // Persist tools in the database, named by the catalog item.
+        const toolNameFor = await mintCatalogToolNames({
+          catalogId: catalogItem.id,
+          rawToolNames: tools.map((tool) => tool.name),
+        });
         const toolsToCreate = tools.map((tool) => ({
-          name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          name: toolNameFor(tool.name),
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
@@ -1230,13 +1291,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
             if (!mcpServer.teamId) {
-              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
-                {
-                  userId: targetUserId,
-                  organizationId,
-                },
-              );
-              targetAgentIds.push(personalGateway.id);
+              const personalGatewayId = await installerPersonalGatewayId({
+                userId: targetUserId,
+                organizationId,
+              });
+              if (personalGatewayId) {
+                targetAgentIds.push(personalGatewayId);
+              }
             }
             if (agentIds && agentIds.length > 0) {
               targetAgentIds.push(...agentIds);
@@ -1697,6 +1758,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
           await McpServerModel.delete(id);
+          await syncDeviceAfterDesktopInstallChange(server);
         },
         audit: { target: request, snapshot },
       });
@@ -1786,6 +1848,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Soft-delete the MCP server record (uninstall = recoverable delete).
       const success = await McpServerModel.delete(mcpServerId);
       if (success) {
+        await syncDeviceAfterDesktopInstallChange(mcpServer);
         broadcastMcpServersChanged({
           organizationId,
           serverIds: [mcpServerId],
@@ -1869,11 +1932,55 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
+      if (mcpServer.serverType === "desktop_mcp") {
+        // Nothing to reinstall: the owner's device starts the MCP server
+        // again at its next sync.
+        await McpServerModel.update(mcpServerId, { reinstallRequired: false });
+      }
       const restored = await McpServerModel.findById(mcpServerId);
       if (!restored) {
         throw new ApiError(404, "MCP server not found");
       }
+      await syncDeviceAfterDesktopInstallChange(restored);
       return reply.send(restored);
+    },
+  );
+
+  fastify.put(
+    "/api/mcp_server/:id/desktop-arguments",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpServerDesktopArguments,
+        description:
+          "Set the arguments the signed-in user adds to the command of a desktop MCP server, for their own installation. The MCP bridge on their device starts the MCP server again with them.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          // Null or an empty list: no arguments.
+          desktopArguments: DesktopMcpArgumentsSchema.nullable(),
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async (request, reply) => {
+      const { mcpServer, changed } =
+        await desktopMcpInstallService.updateArguments({
+          mcpServerId: request.params.id,
+          userId: request.user.id,
+          desktopArguments: request.body.desktopArguments,
+        });
+      if (changed) {
+        broadcastMcpServersChanged({
+          organizationId: request.organizationId,
+          serverIds: [mcpServer.id],
+        });
+      } else {
+        // The stored arguments: nothing was updated.
+        request.auditSkip = true;
+      }
+      return reply.send(mcpServer);
     },
   );
 
@@ -3234,6 +3341,18 @@ async function failHardReset(
   return message;
 }
 
+/**
+ * A desktop MCP installation was removed or restored: the owner's device gets
+ * its config again, so the MCP server stops or starts there.
+ */
+async function syncDeviceAfterDesktopInstallChange(mcpServer: {
+  serverType: InternalMcpCatalogServerType;
+  ownerId: string | null;
+}): Promise<void> {
+  if (mcpServer.serverType !== "desktop_mcp") return;
+  await desktopMcpInstallService.notifyDeviceOfUser(mcpServer.ownerId);
+}
+
 async function connectAndGetToolsForInstallation(params: {
   catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
   mcpServerId: string;
@@ -3838,4 +3957,18 @@ async function validateScopeAndAuthorization(params: {
       );
     }
   }
+}
+
+/**
+ * The gateway an installer's newly discovered tools are added to, or null when
+ * the installer is a service account: it has no personal gateway, and asking
+ * for one fails the install after the server has already started.
+ */
+async function installerPersonalGatewayId(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<string | null> {
+  if (isServiceAccountUserId(params.userId)) return null;
+  const gateway = await AgentModel.ensurePersonalMcpGateway(params);
+  return gateway.id;
 }

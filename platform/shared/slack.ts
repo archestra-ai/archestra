@@ -51,7 +51,19 @@ export const SLACK_SLASH_COMMANDS = buildSlackSlashCommands(DEFAULT_APP_NAME);
 export function buildSlackSlashCommands(
   appName: string,
 ): Record<SlackSlashCommandAction, string> {
-  const commandPrefix = urlSlugify(appName) || "archestra";
+  // Slack's 32-character limit includes the slash and the action suffix.
+  // Keep one prefix for every command, reserving room for the longest suffix.
+  const maxPrefixLength =
+    32 -
+    1 -
+    Math.max(
+      ...Object.values(SLACK_SLASH_COMMAND_SUFFIXES).map(
+        (suffix) => suffix.length,
+      ),
+    );
+  const commandPrefix =
+    urlSlugify(appName).slice(0, maxPrefixLength).replace(/-+$/, "") ||
+    "archestra";
 
   return {
     SELECT_AGENT: `/${commandPrefix}${SLACK_SLASH_COMMAND_SUFFIXES.SELECT_AGENT}`,

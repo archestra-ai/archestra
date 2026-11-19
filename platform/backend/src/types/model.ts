@@ -19,7 +19,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { LabelWithDetailsSchema } from "./label";
 import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
@@ -108,6 +108,18 @@ export const ConfiguredParametersSchema = z.object({
 });
 export type ConfiguredParameters = z.infer<typeof ConfiguredParametersSchema>;
 
+/** Provider-synced context tier; separate from the administrator's override. */
+export const SyncedLongContextPricingSchema = z.object({
+  threshold: z.number().int().positive(),
+  pricePerMillionInput: z.string(),
+  pricePerMillionOutput: z.string(),
+  pricePerMillionCacheRead: z.string().nullable(),
+  pricePerMillionCacheWrite: z.string().nullable(),
+});
+export type SyncedLongContextPricing = z.infer<
+  typeof SyncedLongContextPricingSchema
+>;
+
 /**
  * Fields to extend for drizzle-zod schema generation.
  */
@@ -118,6 +130,7 @@ const fieldsToExtend = {
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
   defaultParameters: ModelDefaultParametersSchema.nullable(),
   configuredParameters: ConfiguredParametersSchema.nullable(),
+  syncedLongContextPricing: SyncedLongContextPricingSchema.nullable(),
 };
 
 /**
@@ -143,6 +156,8 @@ export const CreateModelSchema = InsertModelSchema.omit({
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
   defaultParameters: ModelDefaultParametersSchema.nullable().optional(),
   configuredParameters: ConfiguredParametersSchema.nullable().optional(),
+  syncedLongContextPricing:
+    SyncedLongContextPricingSchema.nullable().optional(),
 });
 
 /**

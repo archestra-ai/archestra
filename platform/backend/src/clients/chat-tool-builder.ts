@@ -6,11 +6,14 @@ import { randomUUID } from "node:crypto";
 import {
   extractMcpExecutedAs,
   extractMcpHumanRuling,
+  isAgentTool,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
   type ModelSelection,
+  markLoadBalancedRuntimeRouterTool,
   OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseFullToolName,
   platformExecutedAs,
@@ -39,7 +42,11 @@ import {
   executeArchestraTool,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
-import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
+import {
+  readRunToolArgs,
+  resolveRunToolDispatch,
+} from "@/archestra-mcp-server/run-tool-target";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -67,10 +74,10 @@ import {
 import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -114,6 +121,8 @@ export interface ChatToolContext {
   scheduleTriggerRunId?: string;
   /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
   runId?: string;
+  /** Child runtime run IDs already persisted as handoffs in this context, distinct from the caller's incoming `runId`. */
+  launchedRunIds?: Set<string>;
   /** Explicit runtime tier of the calling instance, when available. */
   agentRuntimeTier?: string;
   abortSignal?: AbortSignal;
@@ -289,6 +298,7 @@ export function buildMcpGatewayTool(params: {
                 agentRuntimeTier: ctx.agentRuntimeTier,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
+                upstreamElicitation: ctx.elicitation,
                 // EncryptedChat: never detach into a durable task — task rows
                 // persist tool results in plaintext. Forcing inline execution
                 // keeps the result inside the encrypted conversation only.
@@ -348,58 +358,27 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
-            } else if (!ctx.runId) {
+            } else {
               const targetToolName = resolveRunToolTargetName(
                 mcpTool.name,
                 toolArguments,
               );
-              const isStartAgentRun =
+              const isRuntimeLaunchTarget =
                 archestraMcpBranding.getToolShortName(targetToolName) ===
                   TOOL_START_AGENT_RUN_SHORT_NAME ||
-                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
-              const launchedRunId = isStartAgentRun
-                ? (
-                    archestraResponse.structuredContent as
-                      | { run?: { run_id?: unknown } }
-                      | undefined
-                  )?.run?.run_id
-                : undefined;
-              if (
-                typeof launchedRunId === "string" &&
-                launchedRunId.length > 0
-              ) {
-                ctx.runId = launchedRunId;
-                const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
-                if (sessionId) {
-                  try {
-                    await McpToolCallModel.create({
-                      agentId: ctx.agentId,
-                      mcpServerName: archestraMcpBranding.serverName,
-                      method: "tools/call",
-                      durationMs: Math.max(0, Date.now() - startTime),
-                      toolCall: {
-                        id: options.toolCallId,
-                        name: mcpTool.name,
-                        arguments: toolArguments || {},
-                      },
-                      toolResult: ctx.suppressContentLogging
-                        ? { redacted: true }
-                        : archestraResponse,
-                      userId: ctx.userId ?? null,
-                      runId: launchedRunId,
-                      sessionId,
-                      llmToolCallId: options.toolCallId ?? null,
-                      authMethod: null,
-                      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
-                      source: "chat",
-                    });
-                  } catch (dbError) {
-                    logger.info(
-                      { err: dbError },
-                      "Failed to persist archestra run launch tool call",
-                    );
-                  }
-                }
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+                isAgentTool(targetToolName);
+              if (isRuntimeLaunchTarget) {
+                await persistLaunchedRuntimeToolCall({
+                  ctx,
+                  toolName: mcpTool.name,
+                  toolArguments,
+                  toolCallId: options.toolCallId,
+                  response: archestraResponse,
+                  startTime,
+                  failureLogMessage:
+                    "Failed to persist archestra run launch tool call",
+                });
               }
             }
 
@@ -496,35 +475,12 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
-  const archestraContext: ArchestraContext = {
-    agent: { id: ctx.agentId, name: ctx.agentName },
-    agentId: ctx.agentId,
-    organizationId: ctx.organizationId,
-    userId:
-      ctx.mcpGwToken?.oauthClientId && !ctx.mcpGwToken.serviceAccountId
-        ? undefined
-        : ctx.userId,
-    conversationId: ctx.conversationId,
-    isolationKey: ctx.scopeKey,
-    chatOpsBindingId: ctx.chatOpsBindingId,
-    chatOpsThreadId: ctx.chatOpsThreadId,
-    chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
-    sessionId: ctx.sessionId,
-    scheduleTriggerRunId: ctx.scheduleTriggerRunId,
-    runId: ctx.runId,
-    agentRuntimeTier: ctx.agentRuntimeTier,
-    delegationChain: ctx.delegationChain,
-    openappaSubagent: ctx.appaSubagent,
-    abortSignal: ctx.abortSignal,
-    tokenAuth: buildTokenAuthContext({
-      mcpGwToken: ctx.mcpGwToken,
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      runId: ctx.runId,
-    }),
-  };
+  const isLoadBalancedRuntimeRouter =
+    (agentTool._meta as Record<string, unknown> | undefined)?.[
+      LOAD_BALANCED_RUNTIME_ROUTER_META_KEY
+    ] === true;
 
-  return {
+  const builtTool: Tool = {
     description: agentTool.description || `Agent tool: ${agentTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
     execute: async (args: Record<string, unknown>, options) =>
@@ -550,14 +506,48 @@ export function buildAgentDelegationTool(params: {
             return repeatNudge;
           }
 
-          const response = await executeArchestraTool(agentTool.name, args, {
-            ...archestraContext,
+          const archestraContext: ArchestraContext = {
+            agent: { id: ctx.agentId, name: ctx.agentName },
+            agentId: ctx.agentId,
+            organizationId: ctx.organizationId,
+            userId:
+              ctx.mcpGwToken?.oauthClientId && !ctx.mcpGwToken.serviceAccountId
+                ? undefined
+                : ctx.userId,
+            conversationId: ctx.conversationId,
+            isolationKey: ctx.scopeKey,
+            chatOpsBindingId: ctx.chatOpsBindingId,
+            chatOpsThreadId: ctx.chatOpsThreadId,
+            chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
+            sessionId: ctx.sessionId,
+            scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+            runId: ctx.runId,
+            agentRuntimeTier: ctx.agentRuntimeTier,
+            delegationChain: ctx.delegationChain,
+            openappaSubagent: ctx.appaSubagent,
+            abortSignal: ctx.abortSignal,
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
             parentLlm: ctx.parentLlm,
-          });
+            suppressContentLogging: ctx.suppressContentLogging,
+            encryptedChatAudit: ctx.encryptedChatAudit,
+            tokenAuth: buildTokenAuthContext({
+              mcpGwToken: ctx.mcpGwToken,
+              organizationId: ctx.organizationId,
+              userId: ctx.userId,
+              llmSessionId: ctx.sessionId,
+              llmToolCallId: options.toolCallId,
+              runId: ctx.runId,
+            }),
+          };
+
+          const response = await executeArchestraTool(
+            agentTool.name,
+            args,
+            archestraContext,
+          );
 
           span.setAttribute(
             ATTR_MCP_IS_ERROR_RESULT,
@@ -570,6 +560,19 @@ export function buildAgentDelegationTool(params: {
             startTime,
             isError: response.isError ?? false,
           });
+
+          if (!response.isError) {
+            await persistLaunchedRuntimeToolCall({
+              ctx,
+              toolName: agentTool.name,
+              toolArguments: args,
+              toolCallId: options.toolCallId,
+              response,
+              startTime,
+              failureLogMessage:
+                "Failed to persist archestra delegation run launch tool call",
+            });
+          }
 
           const content = response.content
             .map((item) =>
@@ -585,6 +588,78 @@ export function buildAgentDelegationTool(params: {
         },
       }),
   };
+
+  return isLoadBalancedRuntimeRouter
+    ? markLoadBalancedRuntimeRouterTool(builtTool)
+    : builtTool;
+}
+
+async function persistLaunchedRuntimeToolCall(params: {
+  ctx: ChatToolContext;
+  toolName: string;
+  toolArguments: Record<string, unknown> | undefined;
+  toolCallId: string;
+  response: CallToolResult;
+  startTime: number;
+  failureLogMessage: string;
+}): Promise<void> {
+  const {
+    ctx,
+    toolName,
+    toolArguments,
+    toolCallId,
+    response,
+    startTime,
+    failureLogMessage,
+  } = params;
+  const launchedRunId = (
+    response.structuredContent as { run?: { run_id?: unknown } } | undefined
+  )?.run?.run_id;
+  if (typeof launchedRunId !== "string" || launchedRunId.length === 0) {
+    return;
+  }
+  if (launchedRunId === ctx.runId || ctx.launchedRunIds?.has(launchedRunId)) {
+    return;
+  }
+  const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+  if (!sessionId) {
+    return;
+  }
+  if (!ctx.launchedRunIds) {
+    ctx.launchedRunIds = new Set();
+  }
+  ctx.launchedRunIds.add(launchedRunId);
+  const persistedUserId =
+    ctx.userId && ctx.userId !== "system" && !isServiceAccountUserId(ctx.userId)
+      ? ctx.userId
+      : null;
+  try {
+    await McpToolCallModel.create({
+      agentId: ctx.agentId,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: Math.max(0, Date.now() - startTime),
+      toolCall: {
+        id: toolCallId,
+        name: toolName,
+        arguments: ctx.suppressContentLogging
+          ? { redacted: true }
+          : toolArguments || {},
+      },
+      toolResult: ctx.suppressContentLogging ? { redacted: true } : response,
+      userId: persistedUserId,
+      runId: launchedRunId,
+      sessionId,
+      llmToolCallId: toolCallId ?? null,
+      authMethod: null,
+      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+      serviceAccountId: ctx.mcpGwToken?.serviceAccountId ?? null,
+      source: "chat",
+    });
+  } catch (dbError) {
+    ctx.launchedRunIds.delete(launchedRunId);
+    logger.info({ err: dbError }, failureLogMessage);
+  }
 }
 
 /**
@@ -1644,6 +1719,25 @@ interface ToolHookContext {
 }
 
 /**
+ * The call a hook script sees: a run_tool dispatch is presented as its target
+ * tool and that tool's own arguments, so a hook keyed on a tool name fires the
+ * same whether the model called the tool directly or through run_tool.
+ */
+function hookToolCall(
+  toolName: string,
+  toolInput: unknown,
+): { toolName: string; toolInput: unknown } {
+  const dispatch = resolveRunToolDispatch({ toolName, args: toolInput });
+  if (dispatch.kind !== "target" || !isRecord(toolInput)) {
+    return { toolName, toolInput };
+  }
+  return {
+    toolName: dispatch.toolName,
+    toolInput: readRunToolArgs(toolInput.tool_args) ?? toolInput.tool_args,
+  };
+}
+
+/**
  * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
  * reason string when a hook blocks (the caller must NOT execute the tool and
  * should return a tool-result describing the block); returns null to proceed.
@@ -1655,7 +1749,11 @@ async function firePreToolUseHook(params: {
   toolInput: unknown;
   toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput, toolCallId } = params;
+  const { ctx, toolCallId } = params;
+  const { toolName, toolInput } = hookToolCall(
+    params.toolName,
+    params.toolInput,
+  );
   if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: hook dispatch would hand tool args to the hook sandbox,
     // which persists its payloads into the durable replay log in plaintext.
@@ -1777,7 +1875,11 @@ async function firePostToolUseHook(params: {
   toolResponse: string;
   toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
+  const { ctx, toolResponse, toolCallId } = params;
+  const { toolName, toolInput } = hookToolCall(
+    params.toolName,
+    params.toolInput,
+  );
   if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;

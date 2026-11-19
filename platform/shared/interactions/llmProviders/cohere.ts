@@ -6,7 +6,11 @@
 
 import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 
 class CohereChatInteraction implements InteractionUtils {
   private request: archestraApiTypes.CohereChatRequest;
@@ -65,6 +69,12 @@ class CohereChatInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsUsed);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    return (this.response?.message?.tool_calls ?? []).flatMap((toolCall) =>
+      toolCall.id ? [{ id: toolCall.id, name: toolCall.function.name }] : [],
+    );
   }
 
   getToolNamesRequested(): string[] {

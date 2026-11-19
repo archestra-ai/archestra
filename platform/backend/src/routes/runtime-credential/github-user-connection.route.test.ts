@@ -1,17 +1,24 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { RuntimeCredentialConnectionModel } from "@/models";
 import {
+  preflightAgentRuntimeCredentials,
+  resolveAgentRuntimeCredentials,
+} from "@/services/agent-runtime/credentials";
+import {
   createRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
+  updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import { resolveCredential } from "@/services/credentials";
 import { afterEach, beforeEach, expect, test } from "@/test";
@@ -320,6 +327,336 @@ test("a connected account joins the member roster of GitHub's deployed target", 
     config.openappa = openappa;
     config.daggerRuntime.enabled = sandbox;
   }
+});
+
+test("a connection made with a replaced GitHub App withholds the stale token without blocking optional runs, while setup preflight still offers to reconnect", async ({
+  makeAgent,
+}) => {
+  await app.register(
+    (await import("@/routes/agent-runtime/agent-runtime.routes")).default,
+  );
+  await complete(await start());
+  await updateRuntimeCredentialDefinition({
+    organizationId,
+    key: "repository-app",
+    definition: { githubClientId: "replacement-client" },
+  });
+  const optionalCredential = {
+    key: "GITHUB_TOKEN",
+    scope: "per_user" as const,
+    credentialId: "github-user",
+    label: "GitHub",
+    required: false,
+  };
+  const requiredCredential = {
+    ...optionalCredential,
+    required: true,
+  };
+  const optionalRuntime = {
+    agentId: randomUUID(),
+    secretId: null,
+    credentials: [optionalCredential],
+  };
+  const requiredRuntime = {
+    agentId: randomUUID(),
+    secretId: null,
+    credentials: [requiredCredential],
+  };
+
+  // Launch preflight and credential resolution withhold the stale token
+  // without blocking an optional declaration, while still blocking a required one.
+  const optionalLaunchCheck = await preflightAgentRuntimeCredentials({
+    runtime: optionalRuntime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(optionalLaunchCheck.configured).toEqual([]);
+  expect(optionalLaunchCheck.missing).toEqual([]);
+
+  const optionalSetupCheck = await preflightAgentRuntimeCredentials({
+    runtime: optionalRuntime,
+    organizationId,
+    userId: user.id,
+    reportOptionalReconnect: true,
+  });
+  expect(optionalSetupCheck.configured).toEqual([]);
+  expect(optionalSetupCheck.missing).toEqual([
+    expect.objectContaining({
+      key: "GITHUB_TOKEN",
+      label: "GitHub",
+      reconnect: true,
+    }),
+  ]);
+
+  const optionalLaunch = await resolveAgentRuntimeCredentials({
+    runtime: optionalRuntime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(optionalLaunch.env.GITHUB_TOKEN).toBeUndefined();
+  expect(optionalLaunch.missing).toEqual([]);
+
+  const requiredLaunchCheck = await preflightAgentRuntimeCredentials({
+    runtime: requiredRuntime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(requiredLaunchCheck.missing).toEqual([
+    expect.objectContaining({
+      key: "GITHUB_TOKEN",
+      label: "GitHub",
+      reconnect: true,
+    }),
+  ]);
+  const requiredLaunch = await resolveAgentRuntimeCredentials({
+    runtime: requiredRuntime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(requiredLaunch.env.GITHUB_TOKEN).toBeUndefined();
+  expect(requiredLaunch.missing).toEqual([
+    expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
+  ]);
+
+  // The HTTP preflight endpoint marks an optional stale connection ready: true
+  // while still returning reconnect: true so the UI offers Reconnect without disabling Send.
+  const sandboxSpy = vi
+    .spyOn(agentSandboxApi, "isInstalled", "get")
+    .mockReturnValue(true);
+  try {
+    const baseRuntimeConfig = {
+      image: "example.com/coding-agent:latest",
+      command: null,
+      inferenceProtocol: "openai_responses" as const,
+      backend: "kubernetes" as const,
+      steerMode: "pipe" as const,
+      privileged: false,
+      environment: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+    };
+    const optionalAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: { ...baseRuntimeConfig, credentials: [optionalCredential] },
+    });
+    const requiredAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: { ...baseRuntimeConfig, credentials: [requiredCredential] },
+    });
+    const optionalHttpPreflight = await app.inject({
+      method: "GET",
+      url: `/api/agents/${optionalAgent.id}/runtime/preflight`,
+    });
+    expect(optionalHttpPreflight.statusCode).toBe(200);
+    expect(optionalHttpPreflight.json()).toMatchObject({
+      ready: true,
+      configured: [],
+      missing: [
+        {
+          key: "GITHUB_TOKEN",
+          label: "GitHub",
+          reconnect: true,
+          canConnect: true,
+        },
+      ],
+    });
+    const requiredHttpPreflight = await app.inject({
+      method: "GET",
+      url: `/api/agents/${requiredAgent.id}/runtime/preflight`,
+    });
+    expect(requiredHttpPreflight.statusCode).toBe(200);
+    expect(requiredHttpPreflight.json()).toMatchObject({
+      ready: false,
+      configured: [],
+      missing: [
+        {
+          key: "GITHUB_TOKEN",
+          label: "GitHub",
+          reconnect: true,
+          canConnect: true,
+        },
+      ],
+    });
+  } finally {
+    sandboxSpy.mockRestore();
+  }
+});
+
+test("asks to reconnect on a stale refresh grant while surfacing admin misconfiguration and GitHub outages", async () => {
+  expect((await complete(await start())).statusCode).toBe(200);
+  const owner = {
+    organizationId,
+    userId: user.id,
+    credentialId: "github-user",
+    scope: "personal" as const,
+  };
+  const stored = JSON.parse(
+    (await RuntimeCredentialConnectionModel.resolveValue(owner)) ?? "null",
+  );
+  await RuntimeCredentialConnectionModel.upsert({
+    ...owner,
+    value: JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }),
+  });
+
+  const runtime = {
+    agentId: randomUUID(),
+    secretId: null,
+    credentials: [
+      {
+        key: "GITHUB_TOKEN",
+        scope: "per_user" as const,
+        credentialId: "github-user",
+        label: "GitHub",
+        required: false,
+      },
+    ],
+  };
+
+  for (const oauthError of [
+    "bad_refresh_token",
+    "invalid_grant",
+    "expired_token",
+  ]) {
+    server.use(
+      http.post("https://github.com/login/oauth/access_token", () =>
+        HttpResponse.json({
+          error: oauthError,
+          error_description:
+            "The refresh token passed is incorrect or expired.",
+        }),
+      ),
+    );
+    const launchCheck = await preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    });
+    expect(launchCheck.missing).toEqual([]);
+    const setupCheck = await preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+      reportOptionalReconnect: true,
+    });
+    expect(setupCheck.missing).toEqual([
+      expect.objectContaining({
+        key: "GITHUB_TOKEN",
+        label: "GitHub",
+        reconnect: true,
+      }),
+    ]);
+    const launch = await resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    });
+    expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+    expect(launch.missing).toEqual([]);
+  }
+
+  // Invalid OAuth client credentials on the GitHub App -> surfaces 400 instead of reconnect.
+  server.use(
+    http.post("https://github.com/login/oauth/access_token", () =>
+      HttpResponse.json({
+        error: "incorrect_client_credentials",
+        error_description:
+          "The client_id and/or client_secret passed are incorrect.",
+      }),
+    ),
+  );
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message:
+      "GitHub authorization failed. Connect GitHub again and ensure expiring user tokens are enabled.",
+  });
+
+  // Transient GitHub 502 or malformed HTTP-200 body -> surfaces 502 instead of 400 or reconnect.
+  const callbackFlow = await start();
+  server.use(
+    http.post(
+      "https://github.com/login/oauth/access_token",
+      () =>
+        new HttpResponse("<html>upstream proxy error</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    ),
+  );
+  const malformedCallback = await complete(callbackFlow);
+  expect(malformedCallback.statusCode).toBe(502);
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 502,
+    message: "Could not exchange GitHub authorization token",
+  });
+
+  server.use(
+    http.post("https://github.com/login/oauth/access_token", () =>
+      HttpResponse.json({ message: "Bad Gateway" }, { status: 502 }),
+    ),
+  );
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 502,
+    message: "Could not exchange GitHub authorization token",
+  });
+
+  // Missing admin OAuth client secret / missing OAuth client ID -> surfaces 400.
+  await setRuntimeCredentialConnection({
+    organizationId,
+    userId: user.id,
+    credentialId: "repository-app",
+    scope: "organization",
+    value:
+      "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+  });
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message: "An administrator must connect the GitHub App OAuth client secret",
+  });
+
+  await updateRuntimeCredentialDefinition({
+    organizationId,
+    key: "repository-app",
+    definition: { githubClientId: null },
+  });
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message:
+      "Configure an organization GitHub.com App with an OAuth client ID first",
+  });
 });
 
 async function start() {

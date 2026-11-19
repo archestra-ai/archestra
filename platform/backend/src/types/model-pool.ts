@@ -1,10 +1,12 @@
 import { SupportedProvidersSchema } from "@archestra/shared";
+import { ModelPoolRetrySettingsSchema } from "@archestra/shared/model-pool-retries";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const SelectModelPoolMemberSchema = createSelectSchema(
   schema.modelPoolMembersTable,
+  { retrySettings: ModelPoolRetrySettingsSchema.nullable() },
 ).extend({
   providerApiKeyName: z.string(),
   /** The member key's provider, which decides how a request reaches it. */
@@ -13,6 +15,10 @@ export const SelectModelPoolMemberSchema = createSelectSchema(
 
 export const SelectModelPoolSchema = createSelectSchema(
   schema.modelPoolsTable,
+  {
+    retrySettings: ModelPoolRetrySettingsSchema.nullable(),
+    routingStrategy: z.enum(["weighted", "least-tokens"]),
+  },
 ).extend({
   members: z.array(SelectModelPoolMemberSchema),
   /** Virtual keys that may call the pool by its name. */
@@ -35,14 +41,17 @@ export const ModelPoolMemberInputSchema = z.object({
   priority: z.number().int().min(1).max(100).default(1),
   weight: z.number().int().min(1).max(1000).default(1),
   enabled: z.boolean().default(true),
+  retrySettings: ModelPoolRetrySettingsSchema.nullish(),
 });
 
 export const ModelPoolInputSchema = z.object({
+  routingStrategy: z.enum(["weighted", "least-tokens"]).optional(),
   name: z.string().trim().min(1).max(512),
   members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
   // Null keeps the default; omitted keeps the pool's current value.
   streamTimeoutSeconds: z.number().int().min(1).max(1800).nullish(),
   timeoutSeconds: z.number().int().min(1).max(1800).nullish(),
+  retrySettings: ModelPoolRetrySettingsSchema.nullish(),
   cooldownSeconds: z.number().int().min(1).max(3600).nullish(),
 });
 

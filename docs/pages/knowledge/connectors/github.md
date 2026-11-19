@@ -2,12 +2,12 @@
 title: GitHub
 description: Connect GitHub documents to Knowledge and configure source access
 order: 3
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-11
 ---
 
 Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds the pull request where you decided it. The connector syncs issues, pull request discussions, and repository files.
 
-**Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
+**Indexed:** issues, pull requests, comments, and selected text files and PDFs from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
 **Authentication:** an organization [credential](/docs/admin/credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
 
@@ -35,7 +35,7 @@ Sync issues from one repository and selected documentation from another, with se
 4. When repository files are enabled, set **File Types**, **Folders** and **Exclude paths**. Save the connector, reopen **Advanced**, and check its mode and settings.
 
 - Removing the last selected repository does not enable discovery; add a repository or choose **All accessible repositories** explicitly. Switching modes keeps each unsaved draft. Saving applies the active form. Switching to **All accessible repositories** or changing its shared settings replaces individual customizations when saved; an unchanged save preserves existing settings.
-- Blank **Folders** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
+- Blank **Folders** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. PDFs need their own `.pdf` entry, and scanned pages are read when [Document OCR](/docs/knowledge/settings#document-ocr) is on. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
 - Existing populated repository lists open as cards with their previous effective settings; existing blank lists open the shared form. Saving either mode keeps one connector. Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
 
 ## GitHub Auto-Sync Permissions

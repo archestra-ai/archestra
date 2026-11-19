@@ -158,11 +158,14 @@ if (process.argv[2] === "-p") {
     writeFileSync(path.join(kimiHome, "config.toml"), options.config);
   const opener = path.join(home, "opener");
   mkdirSync(opener);
-  writeFileSync(
-    path.join(opener, "xdg-open"),
-    `#!/bin/sh\nprintf '%s\\n' "$1" >> ${JSON.stringify(path.join(home, "opened.txt"))}\n`,
-  );
-  chmodSync(path.join(opener, "xdg-open"), 0o755);
+  // xdg-open on Linux, open on macOS: whichever the host's opener is.
+  for (const name of ["xdg-open", "open"]) {
+    writeFileSync(
+      path.join(opener, name),
+      `#!/bin/sh\nprintf '%s\\n' "$1" >> ${JSON.stringify(path.join(home, "opened.txt"))}\n`,
+    );
+    chmodSync(path.join(opener, name), 0o755);
+  }
   // The person's own keys stay out; tests set the one they need.
   const {
     KIMI_API_KEY: _kimi,
@@ -468,7 +471,21 @@ describe("Kimi Code setup", () => {
       revision: "0".repeat(40),
     });
     writeFileSync(path.join(shared, ".git/archestra-skills.json"), sharedOwner);
-    const own = path.join(f.home, ".archestra/kimi-code/skills/team-skills");
+    let own: string;
+    const selectedCheckout = () => {
+      const state = JSON.parse(
+        readFileSync(
+          path.join(f.home, ".archestra/kimi-code/state.json"),
+          "utf8",
+        ),
+      );
+      expect(state.skillDir).toBeTypeOf("string");
+      const repository = path.resolve(state.skillDir, "../../..");
+      expect(path.dirname(repository)).toBe(
+        path.join(f.home, ".archestra/kimi-code/skills"),
+      );
+      return repository;
+    };
     const connect = (origin: string) =>
       f.setup(
         {
@@ -487,6 +504,7 @@ describe("Kimi Code setup", () => {
 
     let result = connect("https://one.example");
     expect(result.status, result.stderr + result.stdout).toBe(0);
+    own = selectedCheckout();
     expect(
       existsSync(
         path.join(own, "plugins/team-skills/skills/check-add/SKILL.md"),
@@ -497,9 +515,20 @@ describe("Kimi Code setup", () => {
     );
     expect(ownerOrigin()).toBe("https://one.example");
 
+    const localNote = path.join(own, "local-notes.txt");
+    writeFileSync(localNote, "Keep this local note.");
+    result = connect("https://one.example");
+    expect(result.status, result.stderr + result.stdout).toBe(0);
+    expect(selectedCheckout()).toBe(own);
+    expect(readFileSync(localNote, "utf8")).toBe("Keep this local note.");
+
     // Connecting to another deployment replaces the checkout.
     result = connect("https://two.example");
     expect(result.status, result.stderr + result.stdout).toBe(0);
+    const previous = own;
+    own = selectedCheckout();
+    expect(own).not.toBe(previous);
+    expect(existsSync(previous)).toBe(false);
     expect(ownerOrigin()).toBe("https://two.example");
 
     // The launch check's refresh brings in what the marketplace added since.

@@ -26,6 +26,7 @@ export const InteractionSourceSchema = z.enum([
   // Retained for historical logs after the legacy feature was removed.
   "guardrail:dual_llm",
   "guardrail:annotator",
+  "guardrail:sanitizer",
   "guardrail:hitl_summary",
   "chatops:slack",
   "chatops:ms-teams",
@@ -40,6 +41,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:ocr",
   "app:llm_complete",
   "app:recording_enhancement",
+  "tool_search_text:generation",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -73,7 +75,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   { label: string }
 > = {
   api: { label: "API" },
-  model_router: { label: "Model Router" },
+  model_router: { label: "Unified Model API" },
   "opencode:main": { label: "OpenCode Main" },
   "opencode:subagent": { label: "OpenCode Sub-agent" },
   "opencode:title": { label: "OpenCode Title" },
@@ -91,6 +93,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "skill:description_generation": { label: "Skill Description Generation" },
   "guardrail:dual_llm": { label: "Dual LLM Sanitization (legacy)" },
   "guardrail:annotator": { label: "Guardrails Annotator" },
+  "guardrail:sanitizer": { label: "Guardrails Sanitizer" },
   "guardrail:hitl_summary": { label: "Guardrails Review Summary" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },
@@ -107,6 +110,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:ocr": { label: "Knowledge - OCR" },
   "app:llm_complete": { label: "App LLM Completion" },
   "app:recording_enhancement": { label: "App Recording Enhancement" },
+  "tool_search_text:generation": { label: "Tool Search Text Generation" },
 };
 
 /**

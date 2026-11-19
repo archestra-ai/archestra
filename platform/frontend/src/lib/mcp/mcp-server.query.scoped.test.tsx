@@ -7,16 +7,10 @@ const { getMcpServersMock } = vi.hoisted(() => ({
   getMcpServersMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getMcpServers: getMcpServersMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMcpServers: getMcpServersMock,
+}));
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),

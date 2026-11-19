@@ -97,6 +97,7 @@ context_control = true
       )
       .then(JSON.parse);
 
+  await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1,$1,$1,now()), ($2,$2,$2,now())', [organization_id, other_organization]);
   assert.equal((await hook(parent, { event: 'session_start' })).decision, 'ack');
   const presentation = {
     control_tool: 'archestra__execute_remedy_plan',
@@ -276,6 +277,18 @@ context_control = true
   });
   assert.equal(admitted.kind, 'admitted');
   assert.equal(admitted.value, 'hello from the parent');
+  // Delivery removes this row from the unread inbox, but native histories
+  // repeat it on later requests. Recheck its explicit proof, not inbox status.
+  const historyProof = {
+    message_id: first.message_id,
+    sender_session_id: parent.session_id,
+    value: 'hello from the parent',
+  };
+  assert.deepEqual(await admit(child, historyProof), admitted);
+  assert.deepEqual(await admit(child, { ...historyProof, value: 'changed' }), { kind: 'unverified' });
+  assert.deepEqual(await admit(child, { ...historyProof, sender_session_id: child.session_id }), { kind: 'unverified' });
+  assert.deepEqual(await admit(parent, historyProof), { kind: 'unverified' });
+  assert.deepEqual(await admit(child, { ...historyProof, message_id: randomUUID() }), { kind: 'unverified' });
 
   const ambiguous = await admit(child, { sender_session_id: parent.session_id });
   assert.equal(ambiguous.kind, 'unverified');

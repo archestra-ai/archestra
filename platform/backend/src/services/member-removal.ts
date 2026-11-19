@@ -1,15 +1,13 @@
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import logger from "@/logging";
-import {
-  AccountModel,
-  AgentModel,
-  InvitationModel,
-  McpServerModel,
-  MemberModel,
-  SkillMarketplaceCredentialModel,
-  UserModel,
-  UserTokenModel,
-} from "@/models";
+import AccountModel from "@/models/account";
+import AgentModel from "@/models/agent";
+import InvitationModel from "@/models/invitation";
+import McpServerModel from "@/models/mcp-server";
+import MemberModel from "@/models/member";
+import SkillMarketplaceCredentialModel from "@/models/skill-marketplace-credential";
+import UserModel from "@/models/user";
+import UserTokenModel from "@/models/user-token";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 
 type MemberRemovalTarget =

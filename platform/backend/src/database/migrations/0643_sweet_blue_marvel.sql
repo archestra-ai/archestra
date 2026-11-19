@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "aws_iam_config" jsonb;

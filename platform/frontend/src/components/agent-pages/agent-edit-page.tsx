@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info, Loader2, PackageX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -121,7 +121,8 @@ function AgentEditor({ agent }: { agent: Agent }) {
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
     builtIn: isBuiltIn,
-  }).filter((entry) => entry.id !== "messaging" || !!canReadAgentTriggers);
+    canReadTriggers: !!canReadAgentTriggers,
+  });
   const stepParam = searchParams.get("step");
   const step = steps.find((entry) => entry.id === stepParam)?.id ?? steps[0].id;
   const stepIndex = steps.findIndex((entry) => entry.id === step);
@@ -139,7 +140,10 @@ function AgentEditor({ agent }: { agent: Agent }) {
         ]
       : [id];
   const mountedGroups = steps.flatMap((entry) => groupsForStep(entry.id));
-  const showPermissions = !isBuiltIn;
+  const showPermissions =
+    !isBuiltIn ||
+    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   const overviewHref = agentDetailHref("agent", agent.id);

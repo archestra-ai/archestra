@@ -11,6 +11,7 @@ import {
   Copy,
   FileSearch,
   Globe,
+  Laptop,
   MessageSquare,
   Pencil,
   Plus,
@@ -60,6 +61,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { McpRegistryRow } from "@/lib/mcp/mcp-registry.query";
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
@@ -78,6 +80,11 @@ import {
   DeploymentStatusIconDot,
   STATE_PRIORITY,
 } from "./deployment-status";
+import { desktopAddAction } from "./desktop-mcp-install";
+import {
+  DesktopMcpNoDeviceStatus,
+  DesktopMcpWaitingStatus,
+} from "./desktop-mcp-install-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
@@ -96,6 +103,7 @@ import {
   type UninstallServerInstall,
 } from "./uninstall-server-dialog";
 import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
+import { useDesktopInstallState } from "./use-desktop-install-state";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -152,7 +160,7 @@ export type McpServerCardProps = {
   };
 };
 
-export type McpServerCardVariant = "remote" | "local" | "builtin";
+export type McpServerCardVariant = "remote" | "local" | "builtin" | "desktop";
 
 export type McpServerCardBaseProps = McpServerCardProps & {
   variant: McpServerCardVariant;
@@ -329,6 +337,7 @@ export function McpServerCard({
               name: install.name,
               scope: install.scope,
               teamId: install.teamId,
+              serverType: install.serverType,
             },
           },
         ]
@@ -352,7 +361,7 @@ export function McpServerCard({
       className="flex-1 px-2.5"
       onClick={handleUninstallClick}
     >
-      Uninstall
+      {variant === "desktop" ? DESKTOP_MCP_COPY.remove : "Uninstall"}
     </PermissionButton>
   ) : null;
 
@@ -919,6 +928,50 @@ export function McpServerCard({
     </>
   );
 
+  // A desktop MCP server runs on the computer of the user who adds it: only
+  // the viewer's own installation counts, and the card says where it stands
+  // on that computer, with Remove from my computer.
+  const desktopState = useDesktopInstallState({
+    items: [item],
+    // Undefined while they load, so the card shows nothing until then.
+    servers: allMcpServers ? allServersForCatalog : undefined,
+  })(item);
+  const desktopAdd = desktopAddAction({
+    state: desktopState,
+    installedForViewer: isInstalledForViewer,
+  });
+  const desktopInstallButton = desktopAdd ? (
+    <PermissionButton
+      permissions={{ mcpServerInstallation: ["create"] }}
+      onClick={onInstallRemoteServer}
+      disabled={isInstalling || desktopAdd.disabledReason !== null}
+      tooltip={desktopAdd.disabledReason ?? undefined}
+      size="sm"
+      variant="outline"
+      className="flex-1"
+      aria-label={`Connect ${item.name} from my device`}
+    >
+      <Laptop className="h-4 w-4" />
+      {DESKTOP_MCP_COPY.add}
+    </PermissionButton>
+  ) : null;
+  const desktopCardContent = (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {primaryIssueAction}
+        {chatButton}
+        {uninstallButton}
+        {desktopInstallButton}
+      </div>
+      {desktopState === "waiting" && (
+        <DesktopMcpWaitingStatus className="text-xs text-muted-foreground" />
+      )}
+      {desktopState === "no-device" && (
+        <DesktopMcpNoDeviceStatus className="text-xs text-muted-foreground" />
+      )}
+    </div>
+  );
+
   const dialogs = (
     <>
       <Dialog
@@ -971,7 +1024,9 @@ export function McpServerCard({
       ? builtinCardContent
       : isRemoteVariant
         ? remoteCardContent
-        : localCardContent);
+        : variant === "desktop"
+          ? desktopCardContent
+          : localCardContent);
   const hasCardBody = Boolean(
     compactInfoRow || (variant === "local" && isInstalling),
   );

@@ -13,7 +13,10 @@ import {
 import { afterEach, expect, test, vi } from "@/test";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
-import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+import {
+  getClaudeCodeCloudProvider,
+  preflightAgentRuntimeModelCompatibility,
+} from "./model-compatibility";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -279,6 +282,25 @@ test("uses provider credentials after switching away from the Claude Code runtim
   await expect(
     preflightAgentRuntimeModelCompatibility({
       runtime: {
+        command: ["archestra-claude-code-runtime"],
+        inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription", model: "sonnet" },
+      },
+      agent,
+      organizationId: organization.id,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: true,
+    llm: {
+      chatApiKeyId: null,
+      selectedProvider: "anthropic",
+      selectedModel: "sonnet",
+    },
+  });
+  await expect(
+    preflightAgentRuntimeModelCompatibility({
+      runtime: {
         command: ["custom-runtime"],
         inferenceProtocol: "anthropic",
         claudeCode: { authentication: "subscription", model: "sonnet" },
@@ -295,6 +317,15 @@ test("uses provider credentials after switching away from the Claude Code runtim
       selectedModel: model.modelId,
     },
   });
+  expect(
+    getClaudeCodeCloudProvider({
+      runtime: {
+        command: ["archestra-claude-code-runtime"],
+        claudeCode: { authentication: "provider" },
+      },
+      provider: "bedrock",
+    }),
+  ).toBe("bedrock");
 });
 
 async function createModelSelection(params: {

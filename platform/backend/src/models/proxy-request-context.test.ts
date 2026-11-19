@@ -45,6 +45,8 @@ test("one request snapshot preserves scoped model, team, label and deployment me
     externalId: "openai/snapshot-test",
     provider: "openai",
     modelId: "snapshot-test",
+    contextLength: 1_000_000,
+    customContextLength: 800_000,
   });
   const params = {
     organizationId: organization.id,
@@ -55,12 +57,14 @@ test("one request snapshot preserves scoped model, team, label and deployment me
     modelId: model.modelId,
   };
   const context = await ProxyRequestContextModel.read(params);
-  expect(context.model).toEqual(
-    await ModelModel.findIdentityByProviderAndModelId(
+  expect(context.model).toEqual({
+    ...(await ModelModel.findIdentityByProviderAndModelId(
       params.provider,
       params.modelId,
-    ),
-  );
+    )),
+    contextLength: 1_000_000,
+    customContextLength: 800_000,
+  });
   expect(
     await getGuardrailsDeploymentFromSnapshot({ row: context.guardrails }),
   ).toEqual(await getGuardrailsDeployment());

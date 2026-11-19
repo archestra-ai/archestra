@@ -3,10 +3,12 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
-import config from "@/config";
+import { withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  ConnectionSetupModel,
+  OAuthAccessTokenModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
   SkillMarketplaceRepoModel,
@@ -25,10 +27,6 @@ import {
   type TestAccess,
   test,
 } from "@/test";
-
-beforeEach(() => {
-  config.beta = false;
-});
 
 async function seedSkill(params: {
   organizationId: string;
@@ -420,6 +418,97 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       expect(skillMd).toContain("# Clone Me");
     }, 30_000);
 
+    for (const withSkills of [false, true]) {
+      test(`ChatGPT clone contains the connection plugin with shared skills: ${withSkills}`, async ({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        const gateway = await makeAgent({
+          organizationId: org.id,
+          agentType: "mcp_gateway",
+          name: "Team Gateway",
+        });
+        const { setup, rawToken: setupToken } =
+          await ConnectionSetupModel.create({
+            organizationId: org.id,
+            userId: user.id,
+            clientId: "chatgpt",
+            baseUrl: `${baseUrl}/v1`,
+            mcpGatewayId: gateway.id,
+            includeSkills: withSkills,
+            expiresAt: new Date(Date.now() + 60_000),
+          });
+        const params = {
+          organizationId: org.id,
+          createdByUserId: user.id,
+          skillIds: [] as string[],
+          marketplaceName: "org-connection",
+          connectionSetupId: setup.id,
+        };
+        await expect(SkillShareLinkModel.create(params)).rejects.toThrow(
+          "claimed ChatGPT setup",
+        );
+        await ConnectionSetupModel.claimByToken({ rawToken: setupToken });
+        if (withSkills)
+          params.skillIds.push(
+            (
+              await seedSkill({
+                organizationId: org.id,
+                name: "connection-setup",
+              })
+            ).id,
+          );
+        const { link, rawToken } = await SkillShareLinkModel.create(params);
+        await withDbTransaction((tx) =>
+          ConnectionSetupModel.attachSkillShareLink({
+            connectionSetupId: setup.id,
+            skillShareLinkId: link.id,
+            tx,
+          }),
+        );
+        const target = path.join(cloneDir, "connection");
+        const result = await runGitClone(
+          `${baseUrl}/skills/m/${rawToken}/repo.git`,
+          target,
+        );
+        expect(result.code).toBe(0);
+        const root = path.join(target, "plugins/org-connection");
+        const manifest = JSON.parse(
+          await fs.readFile(
+            path.join(root, ".codex-plugin/plugin.json"),
+            "utf8",
+          ),
+        );
+        expect(manifest.interface.displayName).toBe("Archestra");
+        const mcp = JSON.parse(
+          await fs.readFile(path.join(root, ".mcp.json"), "utf8"),
+        );
+        expect(mcp.mcpServers.team_gateway.url).toBe(
+          `${baseUrl}/v1/mcp/${gateway.slug ?? gateway.id}`,
+        );
+        const onboarding = await fs.readFile(
+          path.join(root, manifest.extensions["com.openai"].onboardingSkill),
+          "utf8",
+        );
+        expect(onboarding).toContain("approved terminal installer");
+        expect(
+          await fs.readFile(path.join(root, "assets/logo.svg"), "utf8"),
+        ).toContain("<svg");
+        if (withSkills)
+          expect(
+            await fs.readFile(
+              path.join(root, "skills/connection-setup/SKILL.md"),
+              "utf8",
+            ),
+          ).toContain("# connection-setup");
+      }, 30_000);
+    }
+
     test("git clone preserves hookless Claude plugin components and executable modes", async ({
       makeOrganization,
       makeUser,
@@ -686,56 +775,73 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       ]);
     }, 30_000);
 
-    test("the static URL clones what the caller may read, and updates in place", async ({
-      makeOrganization,
-      makeUser,
-      makeMember,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id);
-      const other = await makeUser({ email: "other@test.com" });
-      await makeMember(other.id, org.id);
+    for (const credentialKind of ["personal", "oauth"] as const) {
+      test(`the static URL clones what a ${credentialKind} caller may read, and updates in place`, async ({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeOAuthClient,
+        makeOAuthAccessToken,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        const other = await makeUser({ email: "other@test.com" });
+        await makeMember(other.id, org.id);
 
-      await seedSkill({ organizationId: org.id, name: "Team Wide" });
-      await seedSkill({
-        organizationId: org.id,
-        name: "Someone Elses",
-        access: "personal",
-        authorId: other.id,
-      });
-      const { value: token } = await UserTokenModel.create(user.id, org.id);
+        await seedSkill({ organizationId: org.id, name: "Team Wide" });
+        await seedSkill({
+          organizationId: org.id,
+          name: "Someone Elses",
+          access: "personal",
+          authorId: other.id,
+        });
+        const token =
+          credentialKind === "personal"
+            ? (await UserTokenModel.create(user.id, org.id)).value
+            : crypto.randomUUID();
+        if (credentialKind === "oauth") {
+          const client = await makeOAuthClient({ scopes: ["mcp"] });
+          await makeOAuthAccessToken(client.clientId, user.id, {
+            token: OAuthAccessTokenModel.hashTokenForLookup(token),
+          });
+        }
 
-      // credentials in the URL keep the clone non-interactive; a real user
-      // types the same token at git's password prompt
-      const cloneUrl = `http://archestra:${token}@127.0.0.1:${new URL(baseUrl).port}/skills/marketplace.git`;
-      const target = path.join(cloneDir, "static");
-      const result = await runGitClone(cloneUrl, target);
-      if (result.code !== 0) {
-        throw new Error(`git clone failed (${result.code}): ${result.stderr}`);
-      }
+        // credentials in the URL keep the clone non-interactive; a real user
+        // types the same token at git's password prompt
+        const cloneUrl = `http://archestra:${token}@127.0.0.1:${new URL(baseUrl).port}/skills/marketplace.git`;
+        const target = path.join(cloneDir, "static");
+        const result = await runGitClone(cloneUrl, target);
+        if (result.code !== 0) {
+          throw new Error(
+            `git clone failed (${result.code}): ${result.stderr}`,
+          );
+        }
 
-      const manifest = JSON.parse(
-        await fs.readFile(
-          path.join(target, ".claude-plugin/marketplace.json"),
-          "utf8",
-        ),
-      );
-      const pluginRoot = path.join(target, manifest.plugins[0].source);
-      const installedSkills = await fs.readdir(path.join(pluginRoot, "skills"));
-      expect(installedSkills).toEqual(["team-wide"]);
+        const manifest = JSON.parse(
+          await fs.readFile(
+            path.join(target, ".claude-plugin/marketplace.json"),
+            "utf8",
+          ),
+        );
+        const pluginRoot = path.join(target, manifest.plugins[0].source);
+        const installedSkills = await fs.readdir(
+          path.join(pluginRoot, "skills"),
+        );
+        expect(installedSkills).toEqual(["team-wide"]);
 
-      // a later skill change lands as a new commit on the same history, so
-      // `git pull` fast-forwards instead of hitting unrelated histories
-      const headBefore = await gitHead(target);
-      await seedSkill({ organizationId: org.id, name: "Added Later" });
-      const pull = await runGit(target, ["pull", "--quiet"]);
-      expect(pull.code).toBe(0);
-      expect(await gitHead(target)).not.toBe(headBefore);
-      expect(
-        (await fs.readdir(path.join(pluginRoot, "skills"))).sort(),
-      ).toEqual(["added-later", "team-wide"]);
-    }, 60_000);
+        // a later skill change lands as a new commit on the same history, so
+        // `git pull` fast-forwards instead of hitting unrelated histories
+        const headBefore = await gitHead(target);
+        await seedSkill({ organizationId: org.id, name: "Added Later" });
+        const pull = await runGit(target, ["pull", "--quiet"]);
+        expect(pull.code).toBe(0);
+        expect(await gitHead(target)).not.toBe(headBefore);
+        expect(
+          (await fs.readdir(path.join(pluginRoot, "skills"))).sort(),
+        ).toEqual(["added-later", "team-wide"]);
+      }, 60_000);
+    }
   },
 );
 

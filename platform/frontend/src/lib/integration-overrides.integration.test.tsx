@@ -4,16 +4,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@archestra/shared", async () => {
-  const actual =
-    await vi.importActual<typeof import("@archestra/shared")>(
-      "@archestra/shared",
-    );
-  return {
-    ...actual,
-    archestraApiSdk: { ...actual.archestraApiSdk, getOrganization: vi.fn() },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getOrganization: vi.fn(),
+}));
 
 import { useSession } from "@/lib/auth/auth.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";

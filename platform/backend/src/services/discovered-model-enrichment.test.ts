@@ -171,11 +171,9 @@ test("fills a price the registry omits from a model it does carry", async () => 
   expect(model?.contextLength).toBe(400000);
 });
 
-test("asserts no price for a provider that bills no per-token rate", async () => {
+test("keeps vLLM deployment prices unknown instead of borrowing vendor rates", async () => {
   // A client can name any model on any endpoint, so a vendor model reaches the
-  // self-hosted proxy. The operator runs that server: a registry price would
-  // be charged for tokens nobody bills, and a stored price outranks the
-  // zero-rate rule at read time.
+  // self-hosted proxy. Vendor rates cannot establish this deployment's costs.
   const created = await discover("gpt-4o", "vllm");
 
   await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
@@ -185,8 +183,8 @@ test("asserts no price for a provider that bills no per-token rate", async () =>
   expect(model?.completionPricePerToken).toBeNull();
   expect(ModelModel.getEffectivePricing(model ?? null, "gpt-4o")).toMatchObject(
     {
-      pricePerMillionInput: "0.00",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
     },
   );
 });
@@ -208,4 +206,27 @@ test("a second sighting reports no insert, so enrichment does not re-run", async
   await discover("gpt-4o", "bedrock");
 
   expect(await ModelModel.ensureModelExists("gpt-4o", "bedrock")).toBeNull();
+});
+
+test("enriches discovered context tiers without charging self-hosted models", async () => {
+  const data = structuredClone(MODELS_DEV);
+  data.openai.models["gpt-4o"].cost = {
+    input: 2.5,
+    output: 10,
+    tiers: [{ input: 5, output: 15, tier: { type: "context", size: 200000 } }],
+  };
+  for (const provider of ["openai", "vllm"] as const) {
+    const created = await discover("gpt-4o", provider);
+    await enrichDiscoveredModel({ model: created, modelsDevData: data });
+    const model = await ModelModel.findByProviderAndModelId(provider, "gpt-4o");
+    if (provider === "vllm") {
+      expect(model?.syncedLongContextPricing).toBeNull();
+    } else {
+      expect(model?.syncedLongContextPricing?.threshold).toBe(200000);
+      expect(
+        ModelModel.getEffectivePricing(model, undefined, undefined, 200001)
+          .pricePerMillionInput,
+      ).toBe("5");
+    }
+  }
 });

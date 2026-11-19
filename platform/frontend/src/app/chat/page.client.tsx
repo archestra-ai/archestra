@@ -103,6 +103,7 @@ import { useApp } from "@/lib/app.query";
 import { afterNextPaint } from "@/lib/app-interactive";
 import {
   useHasPermissions,
+  usePermissionsRevalidatingOnMount,
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
@@ -118,6 +119,7 @@ import {
   clearAllAppDiagnostics,
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
+import { autoModelChoice, autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import {
   fetchAgentMcpTools,
   fetchConversationEnabledTools,
@@ -184,6 +186,8 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOpenApp } from "@/lib/hooks/use-open-app";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -201,6 +205,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ViewTransition } from "@/lib/view-transition";
+import { appToReopenAsEncryptedChat } from "./app-chat-reopen";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -372,6 +377,10 @@ export function ChatPageContent({
     useHasPermissions({
       agent: ["read"],
     });
+  // The map this page opens on may have been cached under a role the viewer
+  // no longer holds: a refusal read from it stands only once the server has
+  // repeated it, and the page waits on a spinner until then.
+  const isPermissionsRevalidating = usePermissionsRevalidatingOnMount();
   // Unknown while the session and its permissions load: the page renders
   // optimistically (on a session cookie) before either answers, and assumes
   // the common case until told otherwise rather than flashing a refusal.
@@ -543,6 +552,11 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
+  // Which auto routers can be picked, and which one the organization default
+  // runs on, which a new chat on an agent without a model of its own starts
+  // on. While its router cannot route, a chat on one shows the normal tier it
+  // runs on.
+  const organizationDefaultModel = useOrganizationDefaultModel();
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -556,12 +570,29 @@ export function ChatPageContent({
   useEffect(() => {
     setInitialModelPoolChoice(undefined);
   }, [initialAgentId, routeConversationId]);
+  // The agent's own router, or the organization default's for an agent with
+  // no model of its own; only a router that can route right now.
+  const offeredAutoRouterId = (id: string | null | undefined) =>
+    id &&
+    organizationDefaultModel.autoRouters.some((router) => router.id === id)
+      ? id
+      : null;
+  const initialAutoRouterId =
+    initialModelSource !== "user" && initialRuntimeCandidate?.runtime === null
+      ? initialRuntimeCandidate.autoRouterId
+        ? offeredAutoRouterId(initialRuntimeCandidate.autoRouterId)
+        : initialModelSource !== "agent" && !initialRuntimeCandidate.modelPoolId
+          ? offeredAutoRouterId(organizationDefaultModel.defaultAutoRouterId)
+          : null
+      : null;
   const initialModelPoolId =
     initialModelPoolChoice !== undefined
       ? initialModelPoolChoice
-      : initialModelSource === "agent"
-        ? (initialRuntimeCandidate?.modelPoolId ?? null)
-        : null;
+      : initialAutoRouterId
+        ? autoModelChoice(initialAutoRouterId)
+        : initialModelSource === "agent"
+          ? (initialRuntimeCandidate?.modelPoolId ?? null)
+          : null;
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1021,6 +1052,13 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
+  const initialPoolSelected = Boolean(
+    initialModelPoolId && !autoRouterIdOfChoice(initialModelPoolId),
+  );
+  const conversationPoolSelected = Boolean(conversation?.modelPoolId);
+  const activePoolSelected = conversationId
+    ? conversationPoolSelected
+    : initialPoolSelected;
   const suggestionPreview = resolveSuggestionPreview(
     initialSuggestedPrompts,
     hoveredSuggestionPrompt,
@@ -1051,6 +1089,9 @@ export function ChatPageContent({
   // Unknown while the usable list loads, so the visible list (restored on
   // refresh) still decides the first paint.
   const hasAnyApiKey =
+    // A configured pool can supply a shared key through agent access even
+    // when the viewer has no directly granted keys of their own.
+    activePoolSelected ||
     // Until the permissions and then the keys arrive, keep the composer: the
     // no-provider screen shows only once the list has said there are none.
     // "No data yet", not "fetching": the render that enables the queries is
@@ -1065,10 +1106,12 @@ export function ChatPageContent({
         // until the roster has answered.
         Boolean(selectedAgentSummary?.llmApiKeyId) ||
         (hasChatAccess && isLoadingAgents)));
-  const isAgentSubscriptionMetadataPending = Boolean(
-    (selectedAgentSummary && !selectedAgentDetail) ||
-      (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
-  );
+  const isAgentSubscriptionMetadataPending =
+    !activePoolSelected &&
+    Boolean(
+      (selectedAgentSummary && !selectedAgentDetail) ||
+        (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
+    );
   // An unconnected per-user subscription is stored as a null conversation
   // model/key pair. In that state the agent's pinned model remains the effective
   // UI selection until the viewer connects or deliberately chooses an override.
@@ -1109,6 +1152,7 @@ export function ChatPageContent({
       needsConnect: agentRequiresPerUserConnect({
         agent: initialAgent,
         selectedModelId: initialModel,
+        modelPoolSelected: initialPoolSelected,
         selectedModel: chatModels.find((m) => m.dbId === initialModel),
         requiresPerUserCredential: activeAgentSubscription.requiresConnection,
         isCredentialConnected: activeAgentSubscription.isConnected,
@@ -1117,13 +1161,20 @@ export function ChatPageContent({
       provider: initialAgent?.resolvedLlmProvider,
       agentName: initialAgent?.name,
     };
-  }, [initialAgent, initialModel, chatModels, activeAgentSubscription]);
+  }, [
+    initialAgent,
+    initialModel,
+    initialPoolSelected,
+    chatModels,
+    activeAgentSubscription,
+  ]);
 
   const conversationPerUserConnect = useMemo(() => {
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent: conversationAgent,
         selectedModelId: conversationModelId,
+        modelPoolSelected: conversationPoolSelected,
         selectedModel: chatModels.find((m) => m.dbId === conversationModelId),
         requiresPerUserCredential: activeAgentSubscription.requiresConnection,
         isCredentialConnected: activeAgentSubscription.isConnected,
@@ -1135,6 +1186,7 @@ export function ChatPageContent({
   }, [
     conversationAgent,
     conversationModelId,
+    conversationPoolSelected,
     chatModels,
     activeAgentSubscription,
   ]);
@@ -1422,10 +1474,12 @@ export function ChatPageContent({
   const handleConversationModelPoolChange = useCallback(
     (modelPoolId: string | null) => {
       if (!conversation) return;
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        modelPoolId,
-      });
+      const autoRouterId = autoRouterIdOfChoice(modelPoolId);
+      updateConversationMutateRef.current(
+        autoRouterId
+          ? { id: conversation.id, autoRouterId }
+          : { id: conversation.id, modelPoolId },
+      );
     },
     [conversation],
   );
@@ -1694,6 +1748,23 @@ export function ChatPageContent({
   // an oversight view never briefly flashes an editable composer before we know.
   const isResolvingOversightApp =
     oversightAppId !== null && oversightApp.isPending;
+  // Opening an app creates its chat at once, so the new-chat lock never shows
+  // for it. Until the user writes, the chat is only the app's opening render,
+  // so the composer keeps the lock and turning it on reopens the same app as a
+  // new encrypted chat. The unencrypted one is an app-open draft, which the
+  // sidebar hides until someone writes in it.
+  const appToReopenEncrypted = useMemo(
+    () => appToReopenAsEncryptedChat({ conversation, messages, apps: mcpApps }),
+    [conversation, messages, mcpApps],
+  );
+  const { open: openApp } = useOpenApp();
+  const reopenAppAsEncryptedChat = useStableCallback(
+    (encryptedChat: boolean) => {
+      if (encryptedChat && appToReopenEncrypted) {
+        void openApp(appToReopenEncrypted, { encryptedChat: true });
+      }
+    },
+  );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const isAwaitingScheduledStream =
@@ -2506,6 +2577,11 @@ export function ChatPageContent({
   }, [organization?.playwrightMcpEnabled]);
   const isRightPanelOpen =
     isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
+  // On mobile an open app shares the screen with the thread instead of
+  // replacing it: the user chats with the app, so hiding the replies would
+  // leave a composer that sends into a thread nobody can see.
+  const isMobileAppSplit =
+    isMobile && isRightPanelOpen && activeRightTab === "apps";
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
@@ -3101,6 +3177,7 @@ export function ChatPageContent({
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
+    if (isPermissionsRevalidating) return <LoadingState variant="fill" />;
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -3160,6 +3237,11 @@ export function ChatPageContent({
     // A runtime agent chats without a key, and the config says whether the
     // runtime is on: until it does, an empty key list is not yet the answer.
     if (!config) return <LoadingState variant="fill" />;
+    // Without the grants the key lists are never asked for, so "no keys" is
+    // the permission map's answer, not the server's.
+    if (isPermissionsRevalidating && !canLoadApiKeys) {
+      return <LoadingState variant="fill" />;
+    }
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -3338,7 +3420,12 @@ export function ChatPageContent({
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+                <div
+                  className={cn(
+                    "flex flex-col min-h-0 overflow-hidden md:hidden",
+                    isMobileAppSplit ? "flex-[3]" : "flex-1",
+                  )}
+                >
                   {activeRightTab === "runs" && scheduledRun && (
                     <MobileScheduleRuns
                       triggerId={scheduledRun.triggerId}
@@ -3390,14 +3477,18 @@ export function ChatPageContent({
 
               {conversationId ? (
                 <>
-                  {/* Chat content - hidden on mobile when panels are open.
+                  {/* Chat content - hidden on mobile when a panel is open,
+                      except an app, which splits the screen with it.
                       The ViewTransition eases the thread in when the splash
                       (or another page) hands off to a conversation. */}
                   <ViewTransition enter="chat-thread-enter" default="none">
                     <div
                       className={cn(
-                        "flex-1 min-h-0 relative",
-                        isRightPanelOpen && "hidden md:block",
+                        "min-h-0 relative",
+                        isMobileAppSplit ? "flex-[2] border-t" : "flex-1",
+                        isRightPanelOpen &&
+                          !isMobileAppSplit &&
+                          "hidden md:block",
                       )}
                     >
                       {isReadOnlyConversation && isScheduledRunInProgress ? (
@@ -3626,6 +3717,12 @@ export function ChatPageContent({
                               contextWindow={contextWindow}
                               lastCompaction={contextCompaction?.lastCompaction}
                               inputModalities={selectedModelInputModalities}
+                              encryptedChat={false}
+                              onEncryptedChatChange={
+                                appToReopenEncrypted
+                                  ? reopenAppAsEncryptedChat
+                                  : undefined
+                              }
                               agentLlmApiKeyId={
                                 conversation?.agent?.llmApiKeyId ?? null
                               }
@@ -3687,13 +3784,20 @@ export function ChatPageContent({
                               onThinkingEffortChange={
                                 handleThinkingEffortChange
                               }
-                              modelPoolId={conversation?.modelPoolId ?? null}
+                              modelPoolId={
+                                offeredAutoRouterId(conversation?.autoRouterId)
+                                  ? autoModelChoice(
+                                      conversation?.autoRouterId ?? "",
+                                    )
+                                  : (conversation?.modelPoolId ?? null)
+                              }
                               onModelPoolChange={
                                 handleConversationModelPoolChange
                               }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
+                                conversationPoolSelected ||
                                 conversationModelSource === "agent" ||
                                 conversationPerUserConnect.needsConnect
                               }
@@ -3848,7 +3952,11 @@ export function ChatPageContent({
                                   />
                                 )}
                               {isInitialRuntimeMode &&
-                                runtimePreflight.data?.ready === false && (
+                                runtimePreflight.data != null &&
+                                (!runtimePreflight.data.ready ||
+                                  runtimePreflight.data.missing.length > 0 ||
+                                  runtimePreflight.data.misconfigured.length >
+                                    0) && (
                                   <AgentRuntimeCredentialPrompt
                                     agentId={initialAgentId ?? ""}
                                     missing={[
@@ -3980,6 +4088,7 @@ export function ChatPageContent({
                               onModelPoolChange={setInitialModelPoolChoice}
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
+                                initialPoolSelected ||
                                 initialModelSource === "agent" ||
                                 initialPerUserConnect.needsConnect
                               }

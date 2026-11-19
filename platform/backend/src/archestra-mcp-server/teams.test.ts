@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
-import { TeamLabelModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -311,6 +311,25 @@ describe("team tool execution", () => {
   });
 
   // === edit_team ===
+
+  test("a child lead cannot remove inherited budget authority through edit_team", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const parent = await makeTeam(organizationId, adminUserId);
+    const child = await makeTeam(organizationId, adminUserId, {
+      parentId: parent.id,
+    });
+    await makeTeamMember(child.id, adminUserId, { role: "admin" });
+    await MemberModel.updateRole(adminUserId, organizationId, "member");
+    const result = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: child.id, parent_id: null },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((await TeamModel.findById(child.id))?.parentId).toBe(parent.id);
+  });
 
   test("edit_team returns error when no fields provided", async ({
     makeTeam,
@@ -681,6 +700,37 @@ describe("team tool execution", () => {
   });
 
   // === RBAC ===
+
+  test("team creation permission cannot promote a member of an existing team", async ({
+    makeTeam,
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const user = await makeUser({ email: "team-creator@test.com" });
+    const role = await makeCustomRole(organizationId, {
+      permission: { team: ["read", "create"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    await makeTeamMember(team.id, user.id, { role: "member" });
+    const context: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId,
+    };
+
+    const result = await executeArchestraTool(
+      toolName("update_team_member_role"),
+      { team_id: team.id, user_id: user.id, role: "admin" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("must be a team admin");
+    expect(await TeamModel.getMemberRole(team.id, user.id)).toBe("member");
+  });
 
   test("create_team is denied without team:create permission", async ({
     makeUser,

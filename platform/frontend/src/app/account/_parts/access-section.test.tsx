@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
+import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { AccessSection } from "./access-section";
@@ -11,9 +12,7 @@ import { AccessSection } from "./access-section";
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
-vi.mock("@/lib/auth/permission-sources.query", () => ({
-  usePermissionSources: () => ({ data: [] }),
-}));
+vi.mock("@/lib/auth/permission-sources.query");
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -38,6 +37,19 @@ function mockRole(role: string | undefined, isPending = false) {
   } as unknown as ReturnType<typeof useActiveMemberRole>);
 }
 
+function mockSources(
+  sources: Array<{
+    role: string;
+    team: { id: string; name: string } | null;
+    permissions: Record<string, string[]>;
+  }>,
+) {
+  vi.mocked(usePermissionSources).mockReturnValue({
+    data: sources,
+    isPending: false,
+  } as unknown as ReturnType<typeof usePermissionSources>);
+}
+
 function mockSession(activeOrganizationId: string | null) {
   vi.mocked(useSession).mockReturnValue({
     data: {
@@ -54,8 +66,9 @@ describe("AccessSection", () => {
     mockSession("org-1");
     mockRole("member");
     mockMyTeams({ data: [] });
+    mockSources([]);
     vi.mocked(useAllPermissions).mockReturnValue({
-      data: { agent: ["read", "update"], mcpServer: ["read"] },
+      data: { agent: ["read", "create"], skill: ["read"] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useAllPermissions>);
@@ -91,7 +104,7 @@ describe("AccessSection", () => {
 
     render(<AccessSection />);
 
-    const roleRow = screen.getByText("Role").closest("li") as HTMLElement;
+    const roleRow = screen.getByText("Roles").closest("li") as HTMLElement;
     expect(within(roleRow).getByText("None")).toBeVisible();
   });
 
@@ -117,9 +130,14 @@ describe("AccessSection", () => {
     render(<AccessSection />);
 
     const teams = screen.getByRole("list", { name: "Your teams" });
-    // A team you merely belong to needs no role note; one you admin says so.
-    expect(teams).toHaveTextContent("Platform· admin");
-    expect(teams).toHaveTextContent("Design");
+    // A team you merely belong to needs no role note; one you admin carries a
+    // marker that says so.
+    const platform = within(teams).getByText("Platform").closest("li");
+    expect(
+      within(platform as HTMLElement).getByText("Team admin"),
+    ).toBeInTheDocument();
+    const design = within(teams).getByText("Design").closest("li");
+    expect(within(design as HTMLElement).queryByText("Team admin")).toBeNull();
     expect(teams).not.toHaveTextContent("member");
   });
 
@@ -139,18 +157,125 @@ describe("AccessSection", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
-  it("sums what the user is granted and opens the full matrix on demand", async () => {
+  it("sums what the user is granted and unfolds the list in place", async () => {
     render(<AccessSection />);
 
-    expect(screen.getByText("granted").closest("span")).toHaveTextContent(
-      "3 granted",
-    );
+    expect(
+      (await screen.findByText("granted")).closest("span"),
+    ).toHaveTextContent("3 granted");
+    expect(screen.queryByText("View agents")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show" }));
+
+    const panel = screen.getByRole("list", { name: "Access" });
+    expect(within(panel).getByText("View agents")).toBeVisible();
+    expect(within(panel).getByText("Create agents")).toBeVisible();
+    expect(within(panel).getByText("View skills")).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "View" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hide" }));
+    expect(screen.queryByText("View agents")).toBeNull();
+  });
 
+  it("says under each permission which role grants it, and through which team", async () => {
+    mockRole("member");
+    mockSources([
+      { role: "member", team: null, permissions: { agent: ["read"] } },
+      {
+        role: "agent_editor",
+        team: { id: "t1", name: "Platform" },
+        permissions: { agent: ["read", "create"] },
+      },
+      {
+        role: "reviewer",
+        team: { id: "t2", name: "Security" },
+        permissions: { skill: ["read"] },
+      },
+    ]);
+
+    render(<AccessSection />);
+
+    // Team-granted roles show up in the Roles row too, with their team.
+    const roles = screen.getByRole("list", { name: "Assigned roles" });
+    expect(roles).toHaveTextContent("Member");
+    expect(roles).toHaveTextContent("via Platform");
+    expect(roles).toHaveTextContent("via Security");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Show" }));
     expect(
-      screen.getByRole("dialog", { name: "Your permissions" }),
+      screen.getByTitle("From Member and agent editor (through Platform)"),
     ).toBeVisible();
+    expect(
+      screen.getByTitle("From agent editor, through the Platform team"),
+    ).toBeVisible();
+    expect(
+      screen.getByTitle("From reviewer, through the Security team"),
+    ).toBeVisible();
+  });
+
+  it("waits for the team-granted roles before saying there are none", () => {
+    mockRole("");
+    vi.mocked(usePermissionSources).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isLoadingError: false,
+    } as unknown as ReturnType<typeof usePermissionSources>);
+
+    render(<AccessSection />);
+
+    const roleRow = screen.getByText("Roles").closest("li") as HTMLElement;
+    expect(within(roleRow).queryByText("None")).toBeNull();
+  });
+
+  it("offers a retry when the team-granted roles fail to load", async () => {
+    mockRole("");
+    const refetch = vi.fn();
+    vi.mocked(usePermissionSources).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isLoadingError: true,
+      refetch,
+    } as unknown as ReturnType<typeof usePermissionSources>);
+
+    render(<AccessSection />);
+
+    const roleRow = screen.getByText("Roles").closest("li") as HTMLElement;
+    expect(within(roleRow).queryByText("None")).toBeNull();
+    await userEvent.click(
+      within(roleRow).getByRole("button", { name: /retry/i }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("offers a retry when the permissions fail to load", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useAllPermissions).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    } as unknown as ReturnType<typeof useAllPermissions>);
+
+    render(<AccessSection />);
+
+    const row = screen.getByText("Permissions").closest("li") as HTMLElement;
+    await userEvent.click(
+      await within(row).findByRole("button", { name: /retry/i }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("hides the toggle when nothing is granted", async () => {
+    vi.mocked(useAllPermissions).mockReturnValue({
+      data: {},
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAllPermissions>);
+
+    render(<AccessSection />);
+
+    const row = screen.getByText("Permissions").closest("li") as HTMLElement;
+    expect(await within(row).findByText("None")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show" })).toBeNull();
   });
 });

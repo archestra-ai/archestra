@@ -2,11 +2,12 @@ import {
   type EnvironmentVariableSchema,
   type ImagePullPolicy,
   MCP_ORCHESTRATOR_DEFAULTS,
+  type McpServerResources,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
-import config from "@/config";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
@@ -17,6 +18,8 @@ const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
  */
 interface DeploymentYamlContext {
   serverId: string;
+  catalogId?: string;
+  resources?: McpServerResources;
   serverName: string;
   namespace: string;
   dockerImage: string;
@@ -117,21 +120,7 @@ export function generateDeploymentYamlTemplate(
     }),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
-    // Ephemeral-storage governance keeps the scheduler disk-aware and
-    // prevents DiskPressure eviction cascades on over-packed nodes.
-    resources: {
-      requests: {
-        memory: config.orchestrator.mcpServerResources.requests.memory,
-        cpu: config.orchestrator.mcpServerResources.requests.cpu,
-        "ephemeral-storage":
-          config.orchestrator.mcpServerResources.requests.ephemeralStorage,
-      },
-      limits: {
-        memory: config.orchestrator.mcpServerResources.limits.memory,
-        "ephemeral-storage":
-          config.orchestrator.mcpServerResources.limits.ephemeralStorage,
-      },
-    },
+    resources: resolveMcpServerResources(context.resources, context.catalogId),
   };
 
   if (needsHttp) {
@@ -423,6 +412,29 @@ export function resolvePlaceholders(
     // An empty document fails parsing at the deployment boundary, preserving
     // the existing default-deployment fallback without forwarding unsafe YAML.
     return "";
+  }
+}
+
+/**
+ * The name of the container in a custom deployment YAML whose image is the
+ * `${archestra.docker_image}` placeholder, i.e. the container that runs the
+ * catalog's image. Null when no container uses the placeholder (the YAML names
+ * its own image) or the YAML does not parse.
+ */
+export function findDockerImagePlaceholderContainer(
+  yamlString: string,
+): string | null {
+  try {
+    const parsed = yaml.load(yamlString) as k8s.V1Deployment | undefined;
+    const containers = parsed?.spec?.template?.spec?.containers;
+    if (!Array.isArray(containers)) return null;
+    const container = containers.find(
+      (candidate) =>
+        candidate?.image === placeholder("archestra", "docker_image"),
+    );
+    return typeof container?.name === "string" ? container.name : null;
+  } catch {
+    return null;
   }
 }
 

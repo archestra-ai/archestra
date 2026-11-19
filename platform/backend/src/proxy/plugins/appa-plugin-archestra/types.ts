@@ -2,7 +2,10 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
-import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import type {
+  GatewayToolIdentity,
+  ToolNameResolution,
+} from "@/routes/proxy/utils/gateway-tool-names";
 import type { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
 
@@ -10,11 +13,31 @@ export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
   "archestra.appa.trusted-context",
 );
 
+export const APPA_PLUGIN_RETAINED_SHAPE: unique symbol = Symbol(
+  "archestra.appa.retained-shape",
+);
+
 export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
 
+export const GROK_DEFERRED_TOOLS = Symbol("grok-deferred-tools");
+
+/** Admission verified a waived child; withdraw old guidance without governing it. */
+export const APPA_WITHDRAWN_CHILD_RETURN = Symbol(
+  "archestra.appa.withdrawn-child-return",
+);
+
+/** The route supplies a turn-scoped recovery budget without exposing its catalog. */
+export type GrokDeferredToolRecovery = {
+  recoverySearch(call: {
+    name: string;
+    arguments: string;
+  }): boolean | undefined;
+};
+
 export type AppaChildTrajectoryReceiptOutput = {
+  compactSession?: OpenAppaSession;
   footer: string;
   inHistory: boolean;
 };
@@ -46,8 +69,15 @@ export type AppaTrustedContext = {
   runtimeSessionId?: string;
   /** Current task from the authenticated runtime credential, not a request header. */
   runtimeTaskId?: string;
+  /**
+   * The request is an Agent Runtime run's, proven by its runtime credential
+   * and binding whatever image it runs. Not set for an in-process subagent.
+   */
+  agentRuntimeRun?: true;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
+  /** The platform's own compaction summary: its tools are read-only context, never calls. */
+  summaryRequest?: true;
   /**
    * Activation captured for this request. Later phases must not re-read the
    * switch, so a change between requests does not land mid-stream.
@@ -62,6 +92,13 @@ export type AppaTrustedContext = {
   thread?: "create" | "continue";
   /** Deferred until the adapter has authenticated the unchanged session lineage. */
   childReturnRefusal?: ApiError;
+};
+
+/** What a waived session's request needs to keep its governed shape. */
+export type AppaRetainedShape = {
+  adapter: AppaClientAdapter | undefined;
+  identity: AppaTrustedContext["toolIdentity"];
+  request: AppaPreparedRequest;
 };
 
 export type AppaMatchContext = {
@@ -94,6 +131,16 @@ export type AppaChildTrajectory = {
 };
 
 /**
+ * The session a side review assesses, by native id: the agent that asked for
+ * the review, and the root of that agent's tree. The proxy adds the caller
+ * scope and finds the session the runtime recorded under that root.
+ */
+export type AppaReviewedSession = {
+  rootId: string;
+  requesterId: string;
+};
+
+/**
  * The argument of a spawn call that carries the child's opening prompt, and
  * how a delegation marker joins it: appended to the text, or pushed onto the
  * item list as a text item of its own.
@@ -114,15 +161,33 @@ export type AppaSpawnModel =
   | { stamp: Record<string, unknown> }
   | { refusal: string };
 
+/** A native `<prefix><id><suffix>` file that holds raw child output. */
+export type AppaChildTranscriptPath = {
+  prefix: string;
+  suffix: string;
+  /**
+   * Anchored shape of ids in the same directory that hold the caller's own
+   * non-agent output, such as a background command's.
+   */
+  ownOutputId?: RegExp;
+};
+
 export type AppaClientAdapter = {
   readonly id: string;
   /** Prefix for this client's native spawn/child namespace. */
   readonly trajectoryPrefix: string;
   /** Client signals select tool syntax, not authority; they may be spoofed. */
   matches(context: AppaMatchContext): boolean;
+  /** Explicit native headless signal, equivalent to the client's unattended header. */
+  isUnattended?(headers: IncomingHttpHeaders): boolean;
   /** `namespace` is the tool group the request declared the name under, if any. */
   classifyToolName(name: string, namespace?: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
+  nativeDispatch?: ToolNameResolution["nativeDispatch"];
+  blockedToolReason?(
+    name: string,
+    args: string | Record<string, unknown>,
+  ): string | undefined;
   /**
    * The client's own question tool. Its results need the same decision
    * guidance as ask_user. Clients without MCP forms may also provide an
@@ -130,10 +195,23 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
+    /** Gateway questions need this form when the client has no MCP elicitation. */
+    requiresNativeForm?: boolean;
     /** False when the client would refuse the tool, from its headers or request. */
     isAvailable?(headers: IncomingHttpHeaders, requestBody?: unknown): boolean;
     supportsMultiple?: boolean;
+    /** Keep questions with more choices on the gateway; never discard options. */
+    maxOptions?: number;
+    /** Total gateway choices a converter can show across bounded native cards. */
+    maxConvertedOptions?: number;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
+    /** Repairs an oversized ordinary native question before host validation. */
+    fromNativeQuestion?(args: unknown): AskUserArguments | undefined;
+    /** Reads an ordinary converted question, never an approval review. */
+    ordinaryResultFromAskUser?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): string;
     /**
      * Approve or Deny from the tool's result. `asked` is the question the
      * platform wrote for the review; the ruling is read against it, never
@@ -172,6 +250,11 @@ export type AppaClientAdapter = {
    * can carry a denial while the gateway notice tool is not declared yet.
    */
   readonly pendingServersTool?: string;
+  /** Native catalog search used once to load deferred gateway remedy tools. */
+  gatewayToolsSearch?(serverName: string): {
+    name: string;
+    arguments: string;
+  };
   /**
    * On the Anthropic Messages wire, the client answers a call to a tool it
    * never declared with an error result and goes on with its turn. A denial
@@ -210,13 +293,33 @@ export type AppaClientAdapter = {
    * marker closes that prompt, so its digest is taken over this text.
    */
   childOpeningPrompt?(text: string): string;
+  /**
+   * False for a client whose body fields carry no known session meaning:
+   * when `extractSessionIdentity` finds nothing, the request binds the
+   * credential's fallback root instead of a generic body field.
+   */
+  readonly genericSessionFallback?: false;
   /** Native parent named by a spawn-prepared child request, if any. */
   nativeSpawnParentId?(
     context: AppaMatchContext,
     sessionId: string,
   ): string | undefined;
+  /**
+   * For a side review, the session it assesses. A side review is a model call
+   * that the client makes by itself to assess another session's action, such
+   * as an approval review. It runs in a thread of its own and copies that
+   * session's history. It is not a child, so it has no parent. Returns
+   * undefined for any other request.
+   */
+  reviewedSession?(context: AppaMatchContext): AppaReviewedSession | undefined;
   /** True when this local tool starts a delegated child run. */
-  isSpawnTool(name: string, namespace?: string): boolean;
+  isSpawnTool(name: string, namespace?: string, args?: unknown): boolean;
+  /** A continuation that still needs host lineage checks, even under a waiver. */
+  isChildContinuationTool?(
+    name: string,
+    namespace?: string,
+    args?: unknown,
+  ): boolean;
   /**
    * Classifies a native spawn launch result. A successful launch stays
    * pending until the child binds the prepared fork. A failed launch closes
@@ -229,6 +332,11 @@ export type AppaClientAdapter = {
   isChildCompletionResult?(result: CommonToolResult): boolean;
   /** Returns bounded launch metadata and strips arbitrary acknowledgment text. */
   normalizeChildLaunchResult?(result: CommonToolResult): string | undefined;
+  /** Rebuilds a native completion using only the verified identity and value. */
+  formatChildReturn?(params: {
+    childNativeId: string | undefined;
+    value: string;
+  }): string;
   /**
    * The client resumes the parent's conversation by itself when a child it
    * launched in the background finishes, and hands the parent its return
@@ -240,18 +348,31 @@ export type AppaClientAdapter = {
    */
   readonly resumesForBackgroundReturns?: true;
   /**
+   * Automatic notifications and explicit polls can repeat the same ended
+   * value. Reuse a retained crossing only with an exact native child ID and
+   * value match; a client's envelope alone never proves a return.
+   */
+  readonly repeatsChildReturns?: true;
+  /**
    * Reads a native message between agents of one session, such as a
    * teammate writing to its lead. `to` is the recipient as the client names
-   * it; `value` is the message text the runtime checks and retains.
+   * it; `value` is the message text the runtime checks and retains. The
+   * request the call came back for tells a client that names agents by path
+   * who the sender is.
    */
-  relayMessage?(call: {
-    name: string;
-    arguments: unknown;
-  }): AppaRelayMessage | undefined;
+  relayMessage?(
+    call: { name: string; arguments: unknown; namespace?: string },
+    requestBody?: unknown,
+  ): AppaRelayMessage | undefined;
   /** True for the local tool that sends messages between agents. */
-  isRelayTool?(name: string): boolean;
+  isRelayTool?(name: string, namespace?: string): boolean;
   /** True when a message call's result is only the client's delivery receipt. */
   isRelayReceipt?(content: unknown): boolean;
+  /**
+   * A failed message call's result is admitted like any other report: the
+   * client's error text is not the only text such a result can carry.
+   */
+  readonly admitsFailedRelayReports?: true;
   /**
    * Admits the report a message call returned from an agent it resumed,
    * against the values this session's children are on record for returning.
@@ -261,7 +382,11 @@ export type AppaClientAdapter = {
     records: readonly string[],
   ): { content: unknown; withheld: boolean };
   /** Rewrites a native message call so the recipient gets `value` instead. */
-  rewriteRelayMessage?(args: unknown, value: string): string;
+  rewriteRelayMessage?(
+    args: unknown,
+    value: string,
+    context?: { senderSessionId: string },
+  ): string;
   /**
    * The messages that arrived in this request's history from other agents,
    * each with a setter that replaces the message text the model reads.
@@ -327,12 +452,19 @@ export type AppaClientAdapter = {
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
   /**
+   * The id a claim on one whole conversation is kept under, such as the one
+   * conversation a connect or disconnect reference exempts. Only a client
+   * whose session id changes within a conversation names another id here;
+   * for every other client the session id is that id.
+   */
+  conversationClaimId?(context: AppaMatchContext): string | undefined;
+  /**
    * Identifies child trajectories named in tool arguments.
    * Uses the same namespace that bindChildTrajectory generates.
    */
   namesChildren(params: { rootId: string; arguments: unknown }): string[];
   /** File paths that contain raw child transcript or output data. */
-  childTranscriptPaths?: ReadonlyArray<{ prefix: string; suffix: string }>;
+  childTranscriptPaths?: ReadonlyArray<AppaChildTranscriptPath>;
   /**
    * Binds a child request to a server-minted trajectory.
    * Returns undefined for root requests. Resolves lineage from a verified
@@ -359,7 +491,17 @@ export type AppaRelayMessage = {
 
 export type AppaRelayRecipient =
   | { kind: "lead" }
-  | { kind: "teammate"; name: string }
+  /** An exact native child identity, never a name, prefix, or display alias. */
+  | { kind: "native-child"; id: string }
+  | {
+      kind: "teammate";
+      name: string;
+      /**
+       * Where the name is: among the sender's own children or among its
+       * siblings. Without it, the sender's children are looked in first.
+       */
+      among?: "children" | "siblings";
+    }
   | { kind: "session"; id: string }
   | { kind: "broadcast" };
 
@@ -380,6 +522,15 @@ export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
   from: string;
+  /** Envelope hint only; the persisted family and runtime release verify it. */
+  senderSessionId?: string;
+  /**
+   * For a client that names its agents by place, whether the sender is one
+   * of this agent's children or one of its siblings. Without it, the sender
+   * is looked for among the children first, and the parent's envelope names
+   * name the parent.
+   */
+  sender?: "child" | "sibling";
   /** The message as its envelope carries it. */
   body: string;
   /**
@@ -412,6 +563,8 @@ export type AskUserArguments = {
    */
   shortQuestion?: string;
   callPreview?: string;
+  /** Complete, unwrapped server-held review for plain-text native previews. */
+  plainCallPreview?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
   /** A server-held review's option `preview` replaces its `callPreview`. */

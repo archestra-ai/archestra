@@ -25,13 +25,13 @@ import {
   agentQueryKey,
   chatAgentsQueryKey,
 } from "@/lib/agent-query-keys";
-import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
+import { authQueryKeys, awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { defaultMcpGatewayQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
@@ -94,6 +94,7 @@ export function useCloneAgent() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
       if (data.id) {
         queryClient.setQueryData(["agents", data.id], data);
       }
@@ -457,6 +458,7 @@ export function useCreateProfile() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
       // Invalidate profile tokens for the new profile
       if (data?.id) {
         queryClient.invalidateQueries({
@@ -483,6 +485,44 @@ export function useTransferAgentOwnership() {
       queryClient.invalidateQueries({ queryKey: ["profileTokens"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       toast.success("Ownership transferred");
+    },
+  });
+}
+
+/**
+ * Gives each agent its own provider key and model, one request per agent, and
+ * refreshes the agents that still follow the organization's default model.
+ * Resolves with the ids it saved; stops at the first failure.
+ */
+export function useUpdateAgentModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      assignments: Array<{
+        agentId: string;
+        llmApiKeyId: string;
+        modelId: string;
+      }>,
+    ) => {
+      const saved: string[] = [];
+      try {
+        for (const { agentId, llmApiKeyId, modelId } of assignments) {
+          const { error } = await updateAgent({
+            path: { id: agentId },
+            body: { llmApiKeyId, modelId },
+          });
+          if (error) throw reportApiError(error);
+          saved.push(agentId);
+        }
+      } finally {
+        if (saved.length > 0) {
+          queryClient.invalidateQueries({
+            queryKey: organizationKeys.defaultModelRuntimeDependents(),
+          });
+          queryClient.invalidateQueries({ queryKey: ["agents"] });
+        }
+      }
+      return saved;
     },
   });
 }
@@ -982,6 +1022,7 @@ export function useImportAgent() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
 
       const warningCount = data.warnings.length;
       if (warningCount > 0) {
@@ -1114,4 +1155,16 @@ function agentCredentialReadinessQuery(requestedIds: string[]) {
       return rows;
     },
   };
+}
+
+/**
+ * A new agent is written with its author's grants on it (read, update,
+ * delete, ...), which the cached capability list predates. Edit buttons and
+ * row actions read that list, so without a refetch a creator whose update
+ * comes from the grant could not edit what they had just made.
+ */
+function invalidateCapabilitiesForNewAgent(queryClient: QueryClient) {
+  queryClient.invalidateQueries({
+    queryKey: authQueryKeys.scopedCapabilities(),
+  });
 }

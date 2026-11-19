@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { Gemini, OpenAi } from "@/types";
 import {
+  createOpenaiToGeminiStreamTranslator,
   geminiResponseToOpenai,
+  geminiToOpenai,
+  openaiResponseToGemini,
   openaiToGemini,
 } from "./gemini-openai-translator";
 
@@ -196,7 +199,7 @@ describe("openaiToGemini — multimodal user content", () => {
     ]);
   });
 
-  test("drops an http image URL Gemini cannot inline, keeping the text", () => {
+  test("rejects an http image URL Gemini cannot inline", () => {
     const request = req({
       messages: [
         {
@@ -213,11 +216,9 @@ describe("openaiToGemini — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { geminiBody } = openaiToGemini(request);
-
-    // Gemini's fileData accepts only Files API / gs:// URIs, so a plain web URL
-    // is dropped rather than forwarded as an invalid fileData reference.
-    expect(geminiBody.contents[0].parts).toEqual([{ text: "look at this" }]);
+    expect(() => openaiToGemini(request)).toThrow(
+      "remote URLs cannot be translated",
+    );
   });
 
   test("forwards base64 input_audio as inlineData", () => {
@@ -448,7 +449,7 @@ describe("Gemini 3 thought signature round-trip", () => {
     ).toEqual(["call-1", "call-2"]);
   });
 
-  test("unsigned tool calls keep plain ids in both directions", () => {
+  test("unsigned tool calls keep plain ids and use the imported-history marker", () => {
     const response = geminiResponseToOpenai(
       {
         candidates: [
@@ -472,6 +473,7 @@ describe("Gemini 3 thought signature round-trip", () => {
     } as unknown as Parameters<typeof openaiToGemini>[0]);
     expect(geminiBody.contents[0].parts[0]).toEqual({
       functionCall: { id: "call-1", name: "fn", args: {} },
+      thoughtSignature: "skip_thought_signature_validator",
     });
   });
 });
@@ -630,3 +632,281 @@ function firstToolCall(response: ReturnType<typeof geminiResponseToOpenai>) {
   if (!toolCall) throw new Error("expected a tool call");
   return toolCall;
 }
+
+describe("native Gemini mixed-provider translation", () => {
+  const request: Gemini.Types.GenerateContentRequest = {
+    contents: [{ role: "user", parts: [{ text: "hello" }] }],
+  };
+  test("preserves parallel repeated-name results by id and retains inline media", () => {
+    const translated = geminiToOpenai({
+      ...request,
+      contents: [
+        ...request.contents,
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: "first", name: "lookup", args: { x: 1 } },
+              thoughtSignature: "private-signature",
+            },
+            { functionCall: { id: "second", name: "lookup", args: { x: 2 } } },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: "second",
+                name: "lookup",
+                response: { value: 2 },
+              },
+            },
+            {
+              functionResponse: {
+                id: "first",
+                name: "lookup",
+                response: { value: 1 },
+              },
+            },
+            { inlineData: { mimeType: "image/png", data: "cG5n" } },
+          ],
+        },
+      ],
+    });
+    expect(translated.messages.slice(2)).toEqual([
+      { role: "tool", tool_call_id: "call_1_1", content: '{"value":2}' },
+      { role: "tool", tool_call_id: "call_1_0", content: '{"value":1}' },
+      {
+        role: "user",
+        content: [
+          {
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,cG5n" },
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(translated)).not.toContain("private-signature");
+  });
+  test.each([
+    { cachedContent: "cached/test" },
+    { tools: [{ googleSearch: {} }] },
+    { tools: [{ functionDeclarations: [], codeExecution: {} }] },
+    { generationConfig: { candidateCount: 2 } },
+    { generationConfig: { responseMimeType: "application/json" } },
+    { generationConfig: { responseModalities: ["IMAGE"] } },
+    {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              fileData: { fileUri: "gs://private/file", mimeType: "image/png" },
+            },
+          ],
+        },
+      ],
+    },
+  ])("rejects unrepresentable features rather than dropping them: %j", (extra) => {
+    expect(() =>
+      geminiToOpenai({
+        ...request,
+        ...extra,
+      } as Gemini.Types.GenerateContentRequest),
+    ).toThrow("cannot translate");
+  });
+  test("maps system, schema, tool choice, sampling and output limit", () => {
+    expect(
+      geminiToOpenai({
+        ...request,
+        systemInstruction: { parts: [{ text: "system" }] },
+        generationConfig: {
+          maxOutputTokens: 37,
+          temperature: 0.2,
+          topP: 0.9,
+          stopSequences: ["END"],
+          thinkingConfig: { includeThoughts: true, thinkingBudget: -1 },
+        },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "lookup",
+                description: "Lookup",
+                parameters: {
+                  type: "OBJECT",
+                  properties: { x: { type: "STRING" } },
+                },
+              },
+            ],
+          },
+        ],
+        toolConfig: {
+          functionCallingConfig: {
+            mode: "ANY",
+            allowedFunctionNames: ["lookup"],
+          },
+        },
+      }),
+    ).toMatchObject({
+      max_tokens: 37,
+      temperature: 0.2,
+      top_p: 0.9,
+      stop: ["END"],
+      tool_choice: "required",
+      tools: [
+        {
+          function: {
+            name: "lookup",
+            parameters: {
+              type: "object",
+              properties: { x: { type: "string" } },
+            },
+          },
+        },
+      ],
+      messages: [{ role: "system", content: "system" }, { role: "user" }],
+    });
+  });
+  test("does not claim an interrupted or malformed tool stream completed", () => {
+    const translator = createOpenaiToGeminiStreamTranslator();
+    expect(() => translator.finish()).toThrow("ended before it finished");
+    translator.translate({
+      id: "reply",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "other",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "one",
+                type: "function",
+                function: { name: "lookup", arguments: '{"x":' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    });
+    expect(() => translator.finish()).toThrow("invalid function arguments");
+  });
+  test("marks only translated foreign tool calls for subsequent Gemini validation", () => {
+    const response = openaiResponseToGemini({
+      id: "reply",
+      object: "chat.completion",
+      created: 1,
+      model: "other",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "one",
+                type: "function",
+                function: { name: "lookup", arguments: '{"x":1}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+          logprobs: null,
+        },
+      ],
+    } as OpenAi.Types.ChatCompletionsResponse);
+    expect(response.candidates?.[0]?.content?.parts).toEqual([
+      {
+        functionCall: { id: "one", name: "lookup", args: { x: 1 } },
+        thoughtSignature: "skip_thought_signature_validator",
+      },
+    ]);
+  });
+});
+
+test("foreign parallel tool history reaches Gemini with its inline image and import markers", () => {
+  const { geminiBody } = openaiToGemini(
+    req({
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "foreign-one",
+              type: "function",
+              function: { name: "lookup", arguments: "{}" },
+            },
+            {
+              id: "foreign-two",
+              type: "function",
+              function: { name: "lookup", arguments: "{}" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "foreign-one",
+          content: [
+            { type: "text", text: "one" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,cG5n" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "foreign-two", content: "two" },
+      ],
+    } as unknown as Partial<OpenAiRequest>),
+  );
+  expect(geminiBody.contents[0].parts).toEqual([
+    {
+      functionCall: { id: "foreign-one", name: "lookup", args: {} },
+      thoughtSignature: "skip_thought_signature_validator",
+    },
+    {
+      functionCall: { id: "foreign-two", name: "lookup", args: {} },
+      thoughtSignature: "skip_thought_signature_validator",
+    },
+  ]);
+  expect(geminiBody.contents[1].parts).toEqual([
+    {
+      functionResponse: {
+        id: "foreign-one",
+        name: "lookup",
+        response: { content: "one" },
+      },
+    },
+    {
+      functionResponse: {
+        id: "foreign-two",
+        name: "lookup",
+        response: { content: "two" },
+      },
+    },
+    { inlineData: { mimeType: "image/png", data: "cG5n" } },
+  ]);
+});
+
+test("rejects provider file references instead of dropping them on Gemini fallback", () => {
+  expect(() =>
+    openaiToGemini({
+      model: "pool",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read this" },
+            { type: "file", file: { file_id: "file-source-provider" } },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof openaiToGemini>[0]),
+  ).toThrow("inline file data");
+});

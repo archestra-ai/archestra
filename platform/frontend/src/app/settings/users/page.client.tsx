@@ -1,8 +1,8 @@
 "use client";
 
-import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
+import { E2eTestId } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import {
   Copy,
   Eye,
@@ -16,6 +16,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AssignedRoles } from "@/components/assigned-roles";
 import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
@@ -470,12 +471,8 @@ function MembersTab({
     },
     {
       id: "role",
-      header: "Role",
-      cell: ({ row }) => (
-        <Badge variant="outline" className="capitalize">
-          {getRoleDisplayName(row.original.role)}
-        </Badge>
-      ),
+      header: "Roles",
+      cell: ({ row }) => <AssignedRoles role={row.original.role} />,
     },
     ...(showTwoFactorColumn
       ? [
@@ -930,12 +927,8 @@ function InvitationsTab({
     },
     {
       id: "role",
-      header: "Role",
-      cell: ({ row }) => (
-        <Badge variant="outline" className="capitalize">
-          {getRoleDisplayName(row.original.role ?? "member")}
-        </Badge>
-      ),
+      header: "Roles",
+      cell: ({ row }) => <AssignedRoles role={row.original.role ?? "member"} />,
     },
     {
       id: "status",

@@ -5,6 +5,7 @@
  * sync, the real gateway route over a socket, and the SDK client, which
  * validates results against the advertised schema.
  */
+
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -30,7 +31,10 @@ import {
 } from "@/models";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import { afterEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 const FORECAST_OUTPUT_SCHEMA = {
   type: "object",

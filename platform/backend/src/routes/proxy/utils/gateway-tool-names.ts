@@ -30,6 +30,11 @@ export type ToolNameCanonicalizer = (
 
 export type ToolNameResolution = {
   canonicalize: ToolNameCanonicalizer;
+  nativeDispatch?: (call: {
+    name: string;
+    arguments: string | object;
+    namespace?: string;
+  }) => { toolCallName: string; toolCallArgs: string } | undefined;
   /**
    * True only in compat mode, where a `run_tool` wrapper may be recognized
    * behind a client label nothing proves is ours.

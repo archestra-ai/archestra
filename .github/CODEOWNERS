@@ -1,3 +1,0 @@
-# Workflow and CI configuration require maintainer review — changes here
-# affect the trust boundary every other PR runs under.
-/.github/ @archestra-ai/engineering

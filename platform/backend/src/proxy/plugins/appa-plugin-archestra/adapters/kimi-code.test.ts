@@ -279,9 +279,9 @@ describe("Kimi Code human review", () => {
   ])("selects a card label from %s as %j", (content, selection) => {
     expect(
       adapter.nativeQuestion.selectionFromResult({ content }, asked.question, [
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]),
     ).toEqual(selection);
   });

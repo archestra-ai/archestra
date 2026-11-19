@@ -1,14 +1,13 @@
 "use client";
 
+import { Waypoints } from "lucide-react";
 import {
-  isModelRouterSupportedProvider,
-  LLM_PROXY_OAUTH_SCOPE,
-  type SupportedProvider,
-  VIRTUAL_KEY_HEADER,
-} from "@archestra/shared";
-import { Check, Eye, EyeOff, Loader2, Waypoints } from "lucide-react";
-import Link from "next/link";
-import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
+  type RefObject,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   getProxyEndpointProviders,
   type ProxyEndpointProvider,
@@ -20,66 +19,21 @@ import {
   type AuthMethodOption,
   AuthMethodPicker,
   ConnectStep,
-  type ConnectStepProps,
-  CreateNewLink,
-  CredentialSelect,
-  OauthTokenRequest,
 } from "@/components/connect-rail";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import {
-  type CreatedVirtualKey,
-  CreateVirtualKeyDialogWithData,
-  type VirtualKeyType,
-} from "@/components/create-virtual-key-dialog";
-import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
+  type LlmAuthMethod,
+  LlmConnectSteps,
+} from "@/components/llm-connect-steps";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
-import {
-  type CreatedCredentials,
-  OAuthClientCreatedDialog,
-} from "@/components/oauth-client-created-dialog";
-import { ProviderIcon } from "@/components/provider-icon";
-import { SecretCopyButton } from "@/components/secret-copy-button";
-import {
-  TerminalCard,
-  terminalActionClass,
-  terminalCodeClass,
-  terminalRaisedClass,
-} from "@/components/terminal-surface";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { terminalRaisedClass } from "@/components/terminal-surface";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  RequestExample,
-  type RevealableSecret,
-} from "@/components/virtual-key-connection-guide";
-import type {
-  RequestCredential,
-  RequestTarget,
-} from "@/components/virtual-key-request-example";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
-import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  useAllVirtualApiKeys,
-  useFetchVirtualApiKeyValue,
-} from "@/lib/virtual-api-keys.query";
 
 /**
  * The LLM Proxy connection page, read top to bottom: pick the endpoint, pick
@@ -93,15 +47,15 @@ export default function LlmProxyPage() {
   const [selected, setSelected] = useState<
     "model-router" | ProxyEndpointProvider
   >("model-router");
-  const [auth, setAuth] = useState<AuthMethod>("standard");
+  const [auth, setAuth] = useState<LlmAuthMethod>("standard");
   const providers = getProxyEndpointProviders(organization);
-  // Passthrough has no Model Router route; picking the router falls back to
+  // Passthrough has no Unified Model API route; picking the router falls back to
   // a standard key, and the choice returns when a provider is picked again.
   const effectiveAuth =
     selected === "model-router" && auth === "passthrough" ? "standard" : auth;
   const targetLabel =
     selected === "model-router"
-      ? "Model Router"
+      ? "Unified Model API"
       : providerCatalog.label(selected);
 
   return (
@@ -132,7 +86,7 @@ export default function LlmProxyPage() {
           }
         />
       </ConnectStep>
-      <ConnectSteps
+      <LlmConnectSteps
         // Selections belong to one endpoint and auth method; start over
         // when either changes.
         key={`${selected}:${effectiveAuth}`}
@@ -141,6 +95,8 @@ export default function LlmProxyPage() {
         selected={selected}
         auth={effectiveAuth}
         targetLabel={targetLabel}
+        showKeyPools
+        offerAutoModel
       />
     </ol>
   );
@@ -158,6 +114,90 @@ const PRIMARY_PROVIDERS: ProxyEndpointProvider[] = [
   "groq",
 ];
 
+/**
+ * How many provider tabs fit on one line beside the Unified Model API tab,
+ * leaving room for "More providers" whenever any provider is left out. Widths
+ * come from the measure row: Unified tab, one tab per candidate, More trigger
+ * (measured at its widest, since it grows to show a chosen provider).
+ */
+function useTabsThatFit({
+  rowRef,
+  measureRef,
+  candidates: candidateList,
+  hasRest,
+}: {
+  rowRef: RefObject<HTMLDivElement | null>;
+  measureRef: RefObject<HTMLDivElement | null>;
+  candidates: ProxyEndpointProvider[];
+  hasRest: boolean;
+}): number {
+  const [count, setCount] = useState(candidateList.length);
+  // A stable copy: callers rebuild the array every render.
+  const key = candidateList.join(",");
+  const candidates = useMemo(
+    () => (key ? (key.split(",") as ProxyEndpointProvider[]) : []),
+    [key],
+  );
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+
+    const compute = () => {
+      // No layout yet (or none at all, as in jsdom): keep every tab.
+      if (row.clientWidth === 0) {
+        setCount(candidates.length);
+        return;
+      }
+      const widths = Array.from(
+        measure.children,
+        (el) => el.getBoundingClientRect().width,
+      );
+      const unified = widths[0] ?? 0;
+      const more = widths[widths.length - 1] ?? 0;
+      const tabWidth = new Map(
+        candidates.map((provider, i) => [provider, widths[i + 1] ?? 0]),
+      );
+      const style = getComputedStyle(row);
+      const gap = Number.parseFloat(style.columnGap) || 0;
+      const moreMargin =
+        Number.parseFloat(
+          getComputedStyle(measure.children[widths.length - 1]).marginLeft,
+        ) || 0;
+      const available =
+        row.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+
+      const fits = (n: number, withMore: boolean) => {
+        const used =
+          unified +
+          candidates
+            .slice(0, n)
+            .reduce((sum, p) => sum + (tabWidth.get(p) ?? 0) + gap, 0) +
+          (withMore ? gap + moreMargin + more : 0);
+        // Sub-pixel slack so rounding never pushes the last item to a new line.
+        return used <= available - 1;
+      };
+
+      let n = candidates.length;
+      if (hasRest || !fits(n, false)) {
+        while (n > 0 && !fits(n, true)) n--;
+      }
+      setCount(n);
+    };
+
+    compute();
+    const observer = new ResizeObserver(compute);
+    observer.observe(row);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [candidates, hasRest, rowRef, measureRef]);
+
+  return Math.min(count, candidates.length);
+}
+
 /** Tab button in the endpoint terminal card. */
 function endpointTabClass(active: boolean) {
   return cn(
@@ -169,10 +209,10 @@ function endpointTabClass(active: boolean) {
 }
 
 /**
- * A terminal block with a Model Router tab and per-provider tabs (primary
+ * A terminal block with a Unified Model API tab and per-provider tabs (primary
  * providers inline, the rest behind a searchable "More providers"). URLs are
  * id-less — the proxy is a singleton, so the path is just `/v1/<provider>` or
- * `/v1/model-router`.
+ * `/v1/unified-model`.
  */
 function ProxyEndpointCard({
   baseUrl,
@@ -199,12 +239,45 @@ function ProxyEndpointCard({
     ),
   ].slice(0, Math.max(PRIMARY_PROVIDERS.length, configured.length));
   const rest = providers.filter((p) => !primary.includes(p));
-  const selectedFromRest =
-    selected !== "model-router" && rest.includes(selected) ? selected : null;
-  const tabProviders = selectedFromRest
-    ? [...primary, selectedFromRest]
-    : primary;
-  const moreCount = rest.length - (selectedFromRest ? 1 : 0);
+
+  // The tabs stay on one line: those that don't fit go behind "More providers".
+  // Picking from it never changes the tabs; the select shows the choice instead.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const fitCount = useTabsThatFit({
+    rowRef,
+    measureRef,
+    candidates: primary,
+    hasRest: rest.length > 0,
+  });
+  const tabProviders = primary.slice(0, fitCount);
+  const moreProviders = providers.filter((p) => !tabProviders.includes(p));
+  const moreSelected =
+    selected !== "model-router" && moreProviders.includes(selected)
+      ? selected
+      : "";
+
+  // The measure row draws its labels as CSS content, so they take up the same
+  // width without adding a second copy of each label to the page's text.
+  const tabLabel = (text: string, measure = false) =>
+    measure ? (
+      <span data-label={text} className="before:content-[attr(data-label)]" />
+    ) : (
+      text
+    );
+  const providerTab = (provider: ProxyEndpointProvider, measure = false) => (
+    <>
+      <img
+        src={PROVIDER_CONFIG[provider].icon}
+        alt=""
+        className="size-3.5 rounded-sm dark:invert"
+      />
+      {tabLabel(providerCatalog.label(provider), measure)}
+    </>
+  );
+  // Bounded width: a long provider name truncates instead of crowding the tabs.
+  const moreClassName =
+    "ml-1 h-auto w-auto min-w-36 max-w-48 shrink-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis";
 
   const url = endpointUrl(baseUrl, selected);
 
@@ -231,14 +304,41 @@ function ProxyEndpointCard({
     <TerminalBlock
       rows={rows}
       header={
-        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5">
+        <div
+          ref={rowRef}
+          className="relative flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5"
+        >
+          {/* Off-screen copy of every candidate tab, measured to decide which fit. */}
+          <div
+            ref={measureRef}
+            aria-hidden
+            inert
+            className="pointer-events-none invisible absolute top-0 left-0 flex h-0 w-max items-center overflow-hidden"
+          >
+            <span className={endpointTabClass(true)}>
+              <Waypoints className="size-3.5" />
+              {tabLabel("Unified Model API", true)}
+            </span>
+            {primary.map((provider) => (
+              <span key={provider} className={endpointTabClass(true)}>
+                {providerTab(provider, true)}
+              </span>
+            ))}
+            <SearchableSelect
+              value=""
+              onValueChange={() => {}}
+              placeholder={`More providers (${providers.length})`}
+              items={[]}
+              className={cn(moreClassName, "w-48")}
+            />
+          </div>
           <UnstyledButton
             type="button"
             onClick={() => onSelect("model-router")}
             className={endpointTabClass(selected === "model-router")}
           >
             <Waypoints className="size-3.5" />
-            Model Router
+            Unified Model API
           </UnstyledButton>
           {tabProviders.map((provider) => (
             <UnstyledButton
@@ -247,25 +347,20 @@ function ProxyEndpointCard({
               onClick={() => onSelect(provider)}
               className={endpointTabClass(selected === provider)}
             >
-              <img
-                src={PROVIDER_CONFIG[provider].icon}
-                alt=""
-                className="size-3.5 rounded-sm dark:invert"
-              />
-              {providerCatalog.label(provider)}
+              {providerTab(provider)}
             </UnstyledButton>
           ))}
-          {moreCount > 0 && (
+          {moreProviders.length > 0 && (
             <SearchableSelect
-              value=""
+              value={moreSelected}
               onValueChange={(value) =>
                 onSelect(value as ProxyEndpointProvider)
               }
-              placeholder={`More providers (${moreCount})`}
+              placeholder={`More providers (${moreProviders.length})`}
               ariaLabel="More providers"
               searchPlaceholder="Search providers..."
               emptyMessage="No providers found."
-              items={rest.map((provider) => {
+              items={moreProviders.map((provider) => {
                 const label = providerCatalog.label(provider);
                 return {
                   value: provider,
@@ -276,9 +371,25 @@ function ProxyEndpointCard({
                       name={label}
                     />
                   ),
+                  selectedContent: (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <img
+                        src={PROVIDER_CONFIG[provider].icon}
+                        alt=""
+                        className="size-3.5 shrink-0 rounded-sm dark:invert"
+                      />
+                      <span className="truncate">{label}</span>
+                    </span>
+                  ),
                 };
               })}
-              className="ml-1 h-auto w-auto min-w-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis"
+              // Pinned right, so leftover room sits between the tabs and More.
+              className={cn(
+                moreClassName,
+                "ml-auto",
+                moreSelected &&
+                  cn("border-solid font-semibold", terminalRaisedClass),
+              )}
               contentClassName="w-64"
             />
           )}
@@ -292,9 +403,7 @@ function ProxyEndpointCard({
 // 2 · Authentication
 // =========================================================================
 
-type AuthMethod = "standard" | "passthrough" | "oauth" | "idp";
-
-const AUTH_METHODS: AuthMethodOption<AuthMethod>[] = [
+const AUTH_METHODS: AuthMethodOption<LlmAuthMethod>[] = [
   {
     value: "standard",
     title: "Standard virtual key",
@@ -337,860 +446,7 @@ const AUTH_METHODS: AuthMethodOption<AuthMethod>[] = [
 ];
 
 const PASSTHROUGH_ROUTER_REASON =
-  "The Model Router calls providers with your organization's provider keys, so it can't take your own. Pick a provider endpoint to use passthrough.";
-
-// =========================================================================
-// 3 · Connect
-// =========================================================================
-
-/**
- * The steps for one endpoint and auth method, each showing what exists:
- * the provider keys behind the endpoint, the credential to connect with
- * (create one, or pick an existing one), and the request to send.
- */
-function ConnectSteps({
-  firstNumber,
-  baseUrl,
-  selected,
-  auth,
-  targetLabel,
-}: {
-  /** The page rail's number for the first of these steps. */
-  firstNumber: number;
-  baseUrl: string;
-  selected: "model-router" | ProxyEndpointProvider;
-  auth: AuthMethod;
-  targetLabel: string;
-}) {
-  const providerCatalog = useModelProviderCatalog({ fresh: true });
-  const isRouter = selected === "model-router";
-  const servesTarget = (provider: SupportedProvider) =>
-    isRouter ? isModelRouterSupportedProvider(provider) : provider === selected;
-
-  const { data: providerApiKeys = [], isPending: providerKeysPending } =
-    useLlmProviderApiKeys();
-  const targetProviderKeys = providerApiKeys.filter((key) =>
-    servesTarget(key.provider),
-  );
-
-  const { data: organization } = useOrganization();
-  const { data: canManageLlmSettings } = useHasPermissions({
-    organizationSettings: ["update"],
-  });
-  const allowsUnauthenticated =
-    organization?.allowUnauthenticatedLlmProxyRequests ?? false;
-
-  const { data: virtualKeys } = useAllVirtualApiKeys({
-    keyType: auth === "passthrough" ? "passthrough" : "standard",
-    limit: 100,
-    offset: 0,
-    enabled: auth === "standard" || auth === "passthrough",
-    toastOnError: false,
-  });
-  const { data: oauthClients } = useLlmOauthClients({
-    limit: 100,
-    enabled: auth === "oauth",
-    toastOnError: false,
-  });
-  const { data: session } = useSession();
-  const { data: canCreateKey } = useHasPermissions({
-    llmVirtualKey: ["create"],
-  });
-  const { data: canCreateOauth } = useHasPermissions({
-    oauthClient: ["create"],
-  });
-
-  const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
-    null,
-  );
-  const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
-  const [created, setCreated] = useState<CreatedVirtualKey | null>(null);
-  // undefined: nothing picked yet; null: "None" picked.
-  const [pickedId, setPickedId] = useState<string | null | undefined>();
-
-  // A standard key or OAuth client is usable here only if it maps a provider
-  // key behind this endpoint; a passthrough key carries none and always fits.
-  const keyOptions = (virtualKeys?.data ?? []).filter(
-    (key) =>
-      auth === "passthrough" ||
-      key.providerApiKeys.some((mapping) => servesTarget(mapping.provider)),
-  );
-  const clientOptions = (oauthClients?.data ?? []).filter((client) =>
-    client.providerApiKeys.some((mapping) => servesTarget(mapping.provider)),
-  );
-  const allOptions =
-    auth === "oauth"
-      ? clientOptions.map((client) => ({
-          id: client.id,
-          authorId: client.authorId,
-          tokenStart: null,
-          name: client.name,
-          label: client.name,
-          mappings: client.providerApiKeys,
-          oauth: { clientId: client.clientId, grantType: client.grantType },
-        }))
-      : keyOptions.map((key) => ({
-          id: key.id,
-          authorId: key.authorId,
-          tokenStart: key.tokenStart,
-          name: key.name,
-          // The key's start shows in the key field; the picker stays short.
-          label: key.name,
-          mappings: key.providerApiKeys,
-          oauth: null,
-        }));
-  // The reader's own credentials come first, so the default pick is one they
-  // can reveal; anyone else's follow under their own heading.
-  const noun = auth === "oauth" ? "clients" : "keys";
-  const isOwn = (option: { authorId: string | null }) =>
-    !!session?.user && option.authorId === session.user.id;
-  const options = [
-    ...allOptions
-      .filter(isOwn)
-      .map((option) => ({ ...option, group: `Your ${noun}` })),
-    ...allOptions
-      .filter((option) => !isOwn(option))
-      .map((option) => ({ ...option, group: `Other ${noun}` })),
-  ];
-  // Like a standard key, the first fits until another is picked. Passthrough
-  // attribution is optional, so "None" (an explicit null) stays none.
-  const picked =
-    pickedId === null
-      ? undefined
-      : (options.find((option) => option.id === pickedId) ?? options[0]);
-  // The chosen key goes into the request masked, revealed or copied on
-  // request — but only for keys the reader may read (their own, or one just
-  // created here); anyone else's key is read from an env var.
-  const isVirtualKey = auth === "standard" || auth === "passthrough";
-  const fetchKeyValue = useFetchVirtualApiKeyValue();
-  const createdHere = created && picked?.id === created.id ? created : null;
-  const [revealed, setRevealed] = useState<string | null>(null);
-  const secret: RevealableSecret | undefined =
-    isVirtualKey &&
-    picked &&
-    (createdHere || (session?.user && picked.authorId === session.user.id))
-      ? {
-          resolve: async () =>
-            createdHere
-              ? createdHere.value
-              : await fetchKeyValue.mutateAsync(picked.id),
-          revealed,
-          onRevealedChange: setRevealed,
-        }
-      : undefined;
-  const pickKey = (id: string | null) => {
-    setPickedId(id);
-    setRevealed(null);
-  };
-  const keyField = picked && isVirtualKey && (
-    <KeyField
-      masked={`${picked.tokenStart ?? "arch_"}••••••••••••`}
-      secret={secret}
-    />
-  );
-
-  const hasProviderKey = targetProviderKeys.length > 0;
-  const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
-  // A new key starts with the primary key of each provider this target
-  // serves; the create dialog shows and changes them.
-  const primaryKeyPerProvider = primaryKeyMappings(targetProviderKeys);
-  const idpStep = useIdentityProviderStep();
-
-  // Which provider key a request uses belongs to the credential, so the
-  // provider-key step only appears when there is none to use yet.
-  const providerKeyStep: ConnectStepProps | null =
-    hasProviderKey || providerKeysPending
-      ? null
-      : {
-          done: false,
-          title: `${isRouter ? "Provider" : targetLabel} key`,
-          detail: `No ${isRouter ? "provider" : targetLabel} key yet. The proxy needs one to call the provider.`,
-          actions: (
-            <Button size="sm" onClick={() => setAddProviderKeyOpen(true)}>
-              Add {isRouter ? "provider" : targetLabel} key
-            </Button>
-          ),
-        };
-  const blockedDetail = "Add the provider key first.";
-  const mappingChips = (
-    mappings: Array<{
-      provider: SupportedProvider;
-      providerApiKeyId: string;
-      providerApiKeyName: string;
-    }>,
-  ) => (
-    <span className="flex flex-wrap gap-1.5">
-      {mappings
-        .filter((mapping) => servesTarget(mapping.provider))
-        .map((mapping) => (
-          <span
-            key={mapping.providerApiKeyId}
-            className="inline-flex items-center gap-1.5 rounded-full border bg-muted py-0.5 pr-2 pl-1.5 text-xs text-foreground"
-          >
-            <span aria-hidden className="shrink-0">
-              <ProviderIcon provider={mapping.provider} size={14} />
-            </span>
-            <span>
-              {providerCatalog.label(mapping.provider)} ·{" "}
-              {mapping.providerApiKeyName}
-            </span>
-          </span>
-        ))}
-    </span>
-  );
-  const target: RequestTarget = isRouter
-    ? { kind: "model-router" }
-    : { kind: "provider", provider: selected };
-
-  let credentialSteps: RailRow[];
-  let credential: RequestCredential;
-  let credentialEnvVar: string;
-  let ready: boolean;
-  let mappedProviderKeys: Array<{
-    provider: SupportedProvider;
-    providerApiKeyId: string;
-  }> = [];
-
-  if (auth === "standard") {
-    credential = "standard";
-    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
-    ready = hasProviderKey && !!picked;
-    mappedProviderKeys = picked?.mappings ?? [];
-    credentialSteps = [
-      {
-        done: !!picked,
-        title: "Set up virtual key",
-        titleAction: hasProviderKey && options.length > 0 && canCreateKey && (
-          <CreateNewLink
-            label="Create new virtual key"
-            onCreate={() => setCreateKeyType("standard")}
-          />
-        ),
-        detail: !hasProviderKey
-          ? blockedDetail
-          : picked
-            ? mappingChips(picked.mappings)
-            : "Create one, or pick one you already have.",
-        actions: hasProviderKey && (
-          <CredentialSelect
-            label="Virtual key"
-            createLabel="Create new virtual key"
-            canCreate={!!canCreateKey}
-            onCreate={() => setCreateKeyType("standard")}
-            options={options}
-            value={picked?.id}
-            onChange={pickKey}
-          />
-        ),
-        children: keyField,
-      },
-    ];
-  } else if (auth === "passthrough") {
-    credential = "passthrough";
-    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
-    // Requests need a passthrough key unless the org allows unauthenticated
-    // LLM proxy requests, so the step is only complete once one is picked.
-    ready = allowsUnauthenticated || !!picked;
-    credentialSteps = [
-      {
-        done: !!picked,
-        title: "Passthrough key",
-        render: (number) => (
-          <PassthroughKeyStep
-            number={number}
-            targetLabel={targetLabel}
-            picked={picked}
-            options={options}
-            required={!allowsUnauthenticated}
-            canCreate={!!canCreateKey}
-            canManageLlmSettings={!!canManageLlmSettings}
-            onPick={pickKey}
-            onCreate={() => setCreateKeyType("passthrough")}
-          />
-        ),
-      },
-    ];
-  } else if (auth === "oauth") {
-    credential = "token";
-    credentialEnvVar = "ARCHESTRA_LLM_ACCESS_TOKEN";
-    ready = hasProviderKey && !!picked;
-    mappedProviderKeys = picked?.mappings ?? [];
-    credentialSteps = [
-      {
-        done: !!picked,
-        title: "OAuth client",
-        titleAction: hasProviderKey && options.length > 0 && canCreateOauth && (
-          <CreateNewLink
-            label="Create new OAuth client"
-            onCreate={() => setOauthCreateOpen(true)}
-          />
-        ),
-        detail: !hasProviderKey
-          ? blockedDetail
-          : picked
-            ? mappingChips(picked.mappings)
-            : "Create one, or pick one you already have.",
-        actions: hasProviderKey && (
-          <CredentialSelect
-            label="OAuth client"
-            createLabel="Create new OAuth client"
-            canCreate={!!canCreateOauth}
-            onCreate={() => setOauthCreateOpen(true)}
-            options={options}
-            value={picked?.id}
-            onChange={pickKey}
-          />
-        ),
-        children: picked?.oauth && (
-          <OauthTokenRequest {...picked.oauth} scope={LLM_PROXY_OAUTH_SCOPE} />
-        ),
-      },
-    ];
-  } else {
-    credential = "token";
-    credentialEnvVar = "ARCHESTRA_LLM_IDP_TOKEN";
-    ready = hasProviderKey && idpStep.configured;
-    credentialSteps = [idpStep.row];
-  }
-
-  const request = ready && (
-    <RequestExample
-      key={`${picked?.id ?? "none"}:${secret ? "secret" : "env"}`}
-      connectionBaseUrl={baseUrl}
-      target={target}
-      keyType={credential}
-      secret={secret}
-      // Passthrough with "None": the request carries only the provider key.
-      keyValue={auth === "passthrough" && !picked ? "" : undefined}
-      // A virtual key shows in its own step above, so no env-var hint here.
-      credentialField={
-        isVirtualKey ? (
-          false
-        ) : auth === "oauth" ? (
-          <p className="text-sm text-muted-foreground">
-            <code className="font-mono text-xs">
-              $ARCHESTRA_LLM_ACCESS_TOKEN
-            </code>{" "}
-            is the <code className="font-mono text-xs">access_token</code> from
-            the token request above.
-          </p>
-        ) : undefined
-      }
-      credentialEnvVar={credentialEnvVar}
-      routerProviders={
-        mappedProviderKeys.length > 0
-          ? mappedProviderKeys
-              .map((mapping) => mapping.provider)
-              .filter(isModelRouterSupportedProvider)
-          : targetProviderKeys
-              .map((key) => key.provider)
-              .filter(isModelRouterSupportedProvider)
-      }
-      mappedProviderKeys={mappedProviderKeys}
-    />
-  );
-
-  const rows: RailRow[] = [
-    // Passthrough calls the provider with the caller's own key.
-    ...(providerKeyStep && auth !== "passthrough" ? [providerKeyStep] : []),
-    ...credentialSteps,
-    {
-      done: false,
-      title: "Send a request",
-      detail: ready
-        ? undefined
-        : "The request appears here once the steps above are done.",
-      children: request,
-    },
-  ];
-
-  return (
-    <>
-      {rows.map(({ render, ...row }, index) =>
-        render ? (
-          <Fragment key={row.title}>{render(firstNumber + index)}</Fragment>
-        ) : (
-          <ConnectStep key={row.title} number={firstNumber + index} {...row} />
-        ),
-      )}
-
-      <CreateVirtualKeyDialogWithData
-        open={createKeyType !== null}
-        onOpenChange={(open) => {
-          if (!open) setCreateKeyType(null);
-        }}
-        keyType={createKeyType ?? "standard"}
-        initialProviderApiKeys={primaryKeyPerProvider}
-        targetLabel={targetLabel}
-        onCreated={(key) => {
-          setCreated(key);
-          pickKey(key.id);
-        }}
-      />
-      <OauthClientCreateFlow
-        open={oauthCreateOpen}
-        onOpenChange={setOauthCreateOpen}
-      />
-      <CreateLlmProviderApiKeyDialog
-        open={addProviderKeyOpen}
-        onOpenChange={setAddProviderKeyOpen}
-        title={`Add ${isRouter ? "provider" : targetLabel} key`}
-        description="The proxy uses this key to call the provider."
-        allowedProviders={isRouter ? undefined : [selected]}
-        credentialMode="api-key"
-        showConsoleLink
-      />
-    </>
-  );
-}
-
-/**
- * The passthrough key picker as a card: "None" and each key as a row, the
- * chosen one checked, with create at the foot. Replaces the native dropdown.
- */
-function PassthroughKeyPicker({
-  options,
-  selectedId,
-  allowNone,
-  canCreate,
-  onSelect,
-  onCreate,
-  onCancel,
-}: {
-  options: Array<{
-    id: string;
-    label: string;
-    group?: string;
-    tokenStart?: string | null;
-  }>;
-  selectedId: string | null;
-  /** Offer "No passthrough key"; false when the organization requires one. */
-  allowNone: boolean;
-  canCreate: boolean;
-  onSelect: (id: string | null) => void;
-  onCreate: () => void;
-  onCancel: () => void;
-}) {
-  const rowClass = (selected: boolean) =>
-    cn(
-      "flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted",
-      selected && "bg-primary/5",
-    );
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          Choose a passthrough key
-        </span>
-        <UnstyledButton
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          Cancel
-        </UnstyledButton>
-      </div>
-      {allowNone && (
-        <UnstyledButton
-          type="button"
-          onClick={() => onSelect(null)}
-          className={rowClass(selectedId === null)}
-        >
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-semibold text-foreground">
-              No passthrough key
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Requests aren't linked to a user
-            </span>
-          </span>
-          {selectedId === null && (
-            <Check className="size-4 shrink-0 text-primary" aria-hidden />
-          )}
-        </UnstyledButton>
-      )}
-      {options.map((option, index) => {
-        const selected = option.id === selectedId;
-        return (
-          <UnstyledButton
-            key={option.id}
-            type="button"
-            onClick={() => onSelect(option.id)}
-            className={cn(
-              rowClass(selected),
-              (allowNone || index > 0) && "border-t border-border",
-            )}
-          >
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-[13px] font-semibold text-foreground">
-                {option.label}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {`${option.tokenStart ?? "arch_"}••••••••••••`}
-              </span>
-            </span>
-            {selected && (
-              <Check className="size-4 shrink-0 text-primary" aria-hidden />
-            )}
-          </UnstyledButton>
-        );
-      })}
-      {canCreate && (
-        <div className="border-t border-border px-4 py-2.5">
-          <UnstyledButton
-            type="button"
-            onClick={onCreate}
-            className="text-[13px] font-medium text-primary hover:text-primary/80"
-          >
-            + Create new key
-          </UnstyledButton>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A step row that renders itself, instead of the shared rail's layout. */
-type RailRow = ConnectStepProps & { render?: (number: number) => ReactNode };
-
-/**
- * The passthrough step as the design draws it: the header name, a required or
- * optional badge, the chosen key as a card, or an empty state that offers to
- * create one. Choosing another key opens the picker in place.
- */
-function PassthroughKeyStep({
-  number,
-  targetLabel,
-  picked,
-  options,
-  required,
-  canCreate,
-  canManageLlmSettings,
-  onPick,
-  onCreate,
-}: {
-  number: number;
-  targetLabel: string;
-  picked: { id: string; label: string; tokenStart?: string | null } | undefined;
-  options: Array<{ id: string; label: string; group?: string }>;
-  required: boolean;
-  canCreate: boolean;
-  canManageLlmSettings: boolean;
-  onPick: (id: string | null) => void;
-  onCreate: () => void;
-}) {
-  const [changing, setChanging] = useState(false);
-  const chooseLabel = options.length > 0 ? "Choose existing" : null;
-
-  return (
-    <li className="relative flex gap-5 pb-10 before:absolute before:top-8 before:bottom-1 before:left-4 before:w-px before:bg-border last:pb-0 last:before:hidden">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 bg-card text-[13px] font-semibold text-muted-foreground tabular-nums">
-        {number}
-      </span>
-      <section className="min-w-0 flex-1 space-y-4">
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-semibold text-foreground">
-            Passthrough key
-          </h2>
-          <span
-            className={
-              required
-                ? "rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-[3px] text-xs font-semibold text-amber-800 dark:text-amber-300"
-                : "rounded-full bg-muted px-2.5 py-[3px] text-xs font-semibold text-muted-foreground"
-            }
-          >
-            {required ? "Required" : "Optional"}
-          </span>
-        </div>
-        <p className="text-sm leading-[22px] text-muted-foreground">
-          Send your own {targetLabel} key, and this passthrough key in the{" "}
-          <code className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-xs text-foreground">
-            {VIRTUAL_KEY_HEADER}
-          </code>{" "}
-          header.
-        </p>
-
-        {changing ? (
-          <PassthroughKeyPicker
-            options={options}
-            selectedId={picked?.id ?? null}
-            allowNone={!required}
-            canCreate={canCreate}
-            onSelect={(id) => {
-              onPick(id);
-              setChanging(false);
-            }}
-            onCreate={onCreate}
-            onCancel={() => setChanging(false)}
-          />
-        ) : picked ? (
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3.5">
-            <div className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-[13px] font-semibold text-foreground">
-                {picked.label}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {`${picked.tokenStart ?? "arch_"}••••••••••••`}
-              </span>
-            </div>
-            <UnstyledButton
-              type="button"
-              onClick={() => setChanging(true)}
-              className="shrink-0 text-[13px] font-medium text-foreground underline underline-offset-2 hover:text-primary"
-            >
-              Change
-            </UnstyledButton>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-border bg-card p-6 text-center">
-            <span className="text-sm font-semibold text-foreground">
-              No passthrough key yet
-            </span>
-            <span className="max-w-[400px] text-[13px] leading-5 text-muted-foreground">
-              {required
-                ? "Create one, then send it in the"
-                : "Without one, requests aren't linked to a user. Create one, then send it in the"}{" "}
-              <code className="font-mono text-xs">{VIRTUAL_KEY_HEADER}</code>{" "}
-              header with your provider key.
-            </span>
-            <div className="mt-1.5 flex items-center gap-2">
-              {canCreate && (
-                <Button type="button" size="sm" onClick={onCreate}>
-                  + Create new key
-                </Button>
-              )}
-              {chooseLabel && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setChanging(true)}
-                >
-                  {chooseLabel}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs leading-[18px] text-muted-foreground">
-            {required
-              ? "Requests without a passthrough key are rejected."
-              : "Requests without a passthrough key are accepted, but not linked to a user."}
-            {canManageLlmSettings && (
-              <>
-                {" "}
-                Admins can change this in{" "}
-                <Link
-                  href="/settings/llm"
-                  className="underline hover:text-foreground"
-                >
-                  LLM settings
-                </Link>
-                .
-              </>
-            )}
-          </p>
-          {picked && canCreate && (
-            <Button type="button" size="sm" onClick={onCreate}>
-              + Create new key
-            </Button>
-          )}
-        </div>
-      </section>
-    </li>
-  );
-}
-
-/**
- * The chosen key on its own line, masked like the MCP gateway's token: the eye
- * reveals it (with the request below), and copying is an explicit choice
- * between the real key and a placeholder. Someone else's key stays masked —
- * only its author can read it.
- */
-function KeyField({
-  masked,
-  secret,
-}: {
-  masked: string;
-  secret: RevealableSecret | undefined;
-}) {
-  const [isRevealing, setIsRevealing] = useState(false);
-  const revealed = secret?.revealed ?? null;
-  return (
-    <TerminalCard className="relative">
-      {secret && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
-          <UnstyledButton
-            type="button"
-            disabled={isRevealing}
-            aria-label={revealed ? "Hide key" : "Show key"}
-            aria-pressed={revealed !== null}
-            className={cn(terminalActionClass, "size-7")}
-            onClick={async () => {
-              if (revealed) {
-                secret.onRevealedChange(null);
-                return;
-              }
-              setIsRevealing(true);
-              try {
-                secret.onRevealedChange(await secret.resolve());
-              } finally {
-                setIsRevealing(false);
-              }
-            }}
-          >
-            {isRevealing ? (
-              <Loader2 className="animate-spin" />
-            ) : revealed ? (
-              <EyeOff />
-            ) : (
-              <Eye />
-            )}
-          </UnstyledButton>
-          <SecretCopyButton
-            variant="terminal"
-            getSecretText={async () => revealed ?? (await secret.resolve())}
-            placeholderText="$ARCHESTRA_LLM_VIRTUAL_KEY"
-          />
-        </div>
-      )}
-      <pre
-        className={cn(
-          "m-0 overflow-x-auto px-4 py-2.5 pr-20 text-xs",
-          terminalCodeClass,
-        )}
-      >
-        {revealed ?? masked}
-      </pre>
-      {!secret && (
-        <p className="px-4 pb-2.5 text-xs text-terminal-muted">
-          Only its author can reveal this key.
-        </p>
-      )}
-    </TerminalCard>
-  );
-}
-
-/**
- * The identity provider the proxy trusts for JWTs. The roster is an enterprise
- * feature — `useIdentityProviders` stays disabled without it, so only the setup
- * link shows.
- */
-const NONE_VALUE = "__none__";
-
-function useIdentityProviderStep(): {
-  configured: boolean;
-  row: ConnectStepProps;
-} {
-  const { data: proxy } = useLlmProxy();
-  const { data: identityProviders } = useIdentityProviders();
-  const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
-  const updateProxy = useUpdateLlmProxy();
-  const selectId = useId();
-
-  const idpId = proxy?.identityProviderId ?? null;
-  const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
-  const orgHasIdps = (identityProviders?.length ?? 0) > 0;
-
-  return {
-    configured: !!idpId,
-    row: {
-      done: !!idpId,
-      title: "Identity provider",
-      detail: idpId
-        ? `Trusting ${idpName ?? "the selected identity provider"}. Send its JWT as the bearer token.`
-        : "Not configured.",
-      actions: !canUpdate ? null : orgHasIdps ? (
-        <>
-          <Label htmlFor={selectId} className="sr-only">
-            Identity provider
-          </Label>
-          <Select
-            value={idpId ?? NONE_VALUE}
-            disabled={updateProxy.isPending}
-            onValueChange={(value) =>
-              updateProxy.mutate({
-                identityProviderId: value === NONE_VALUE ? null : value,
-              })
-            }
-          >
-            <SelectTrigger id={selectId} className="w-64">
-              <SelectValue placeholder="No identity provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>No identity provider</SelectItem>
-              {identityProviders?.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </>
-      ) : (
-        <Button asChild size="sm">
-          <Link href="/settings/identity-providers">
-            Set up identity provider
-          </Link>
-        </Button>
-      ),
-    },
-  };
-}
-
-/**
- * The shared create dialog preset to an LLM client, followed by the one-time
- * credentials reveal.
- */
-function OauthClientCreateFlow({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { data: providerApiKeys = [] } = useLlmProviderApiKeys({
-    enabled: open,
-  });
-  const llmCreate = useCreateOauthClient();
-  const [createdCredentials, setCreatedCredentials] =
-    useState<CreatedCredentials | null>(null);
-
-  return (
-    <>
-      <CreateManagedOAuthClientDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        defaultClientType="llm"
-        providerApiKeys={providerApiKeys}
-        onSubmit={async (values) => {
-          const result = await llmCreate.mutateAsync(values);
-          if (result) {
-            setCreatedCredentials({
-              clientId: result.clientId,
-              clientSecret: result.clientSecret,
-              grantType: result.grantType,
-              oauthScope: result.scopes.join(" "),
-            });
-            onOpenChange(false);
-          }
-        }}
-        isSubmitting={llmCreate.isPending}
-      />
-      <OAuthClientCreatedDialog
-        open={!!createdCredentials}
-        onOpenChange={(open) => {
-          if (!open) setCreatedCredentials(null);
-        }}
-        title="OAuth Client Created"
-        credentials={createdCredentials}
-      />
-    </>
-  );
-}
+  "The Unified Model API calls providers with your organization's provider keys, so it can't take your own. Pick a provider endpoint to use passthrough.";
 
 // =========================================================================
 // Internal helpers
@@ -1219,7 +475,7 @@ function endpointUrl(
   baseUrl: string,
   selected: "model-router" | ProxyEndpointProvider,
 ) {
-  if (selected === "model-router") return `${baseUrl}/model-router`;
+  if (selected === "model-router") return `${baseUrl}/unified-model`;
   if (selected === "jev") return `${baseUrl}/jev/decisions`;
   return `${baseUrl}/${selected}`;
 }
@@ -1229,7 +485,7 @@ function endpointHint(
   label: string,
 ) {
   if (selected === "model-router") {
-    return "OpenAI-compatible. Prefix the model with its provider, like openai:gpt-5.4.";
+    return "OpenAI-compatible. Prefix the model with its provider, like openai:gpt-5.4, or ask for a model pool by its name.";
   }
   if (selected === "jev") return "Decisions only: one endpoint, no chat.";
   return `Keep your ${label} SDK and change only the base URL.`;

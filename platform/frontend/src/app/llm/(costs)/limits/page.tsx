@@ -107,8 +107,8 @@ import {
 } from "@/lib/limits.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useLlmModelOptions } from "@/lib/llm-models.query";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
@@ -129,7 +129,7 @@ type UsageSummary = {
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
 const ORG_SET_LIMIT_HINT =
-  "Set by your organization. Ask someone who manages organization limits to change it.";
+  "Your team’s ceiling is managed by an organization limit manager or a parent team admin.";
 
 type LimitFormState = {
   behavior: "hard" | "soft";
@@ -276,9 +276,20 @@ export default function LimitsPage() {
     includeRelations: false,
     enabled: access.globalCreate || access.globalRead,
   });
-  const teams =
-    access.globalCreate || access.globalRead ? allTeams : access.teams;
-  const createTeams = access.globalCreate ? allTeams : access.teams;
+  // Limits permission does not imply organization-wide team access. Keep
+  // administered descendants even when the team list only has memberships.
+  const teams = useMemo(
+    () => [
+      ...new Map(
+        [
+          ...access.teams,
+          ...(access.globalCreate || access.globalRead ? allTeams : []),
+        ].map((team) => [team.id, team]),
+      ).values(),
+    ],
+    [access.teams, access.globalCreate, access.globalRead, allTeams],
+  );
+  const createTeams = access.globalCreate ? teams : access.managedTeams;
   const { data: organization } = useOrganization();
   const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits
@@ -293,8 +304,9 @@ export default function LimitsPage() {
     enabled: access.globalRead,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
-  const { data: oauthClientsData } = useLlmOauthClients({
+  const { data: oauthClientsData } = useOauthClients({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    capability: "llm:proxy",
     enabled: access.globalRead,
   });
   const oauthClients = oauthClientsData?.data ?? [];
@@ -422,11 +434,11 @@ export default function LimitsPage() {
     setFormState({
       ...DEFAULT_FORM_STATE,
       entityType: access.globalCreate ? "organization" : "team",
-      entityId: access.globalCreate ? "" : (access.teams[0]?.id ?? ""),
+      entityId: access.globalCreate ? "" : (access.managedTeams[0]?.id ?? ""),
       labels: [],
     });
     setIsCreateDialogOpen(true);
-  }, [closeEditDialog, access.globalCreate, access.teams[0]?.id]);
+  }, [closeEditDialog, access.globalCreate, access.managedTeams[0]?.id]);
 
   useEffect(() => {
     setActionButton(
@@ -671,7 +683,7 @@ export default function LimitsPage() {
                   {access.isLocked(limit) && (
                     <EntityNote
                       icon={Lock}
-                      label="Set by your organization"
+                      label="Managed ceiling"
                       text={ORG_SET_LIMIT_HINT}
                     />
                   )}

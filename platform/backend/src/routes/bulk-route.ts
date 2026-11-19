@@ -137,16 +137,22 @@ export async function runBulk<TItem>({
    * Assigning it to `auditBefore` bypasses the hook's sanitizer, so a snapshot
    * must carry only what is safe to store: ids, names, and the fields the route
    * actually changes. Never the whole row.
+   *
+   * The snapshot before the write also gets the rows `load` just returned, so
+   * a route can build it from them instead of reading them again.
    */
   audit?: {
     target: { auditBefore?: unknown; auditAfter?: unknown };
-    snapshot: (ids: string[]) => Promise<Record<string, unknown>>;
+    snapshot: (
+      ids: string[],
+      loaded?: Map<string, TItem>,
+    ) => Promise<Record<string, unknown>>;
   };
 }): Promise<BulkOutcome> {
   const requested = [...new Set(ids)];
   const visible = await load(requested);
   if (audit) {
-    audit.target.auditBefore = await audit.snapshot(requested);
+    audit.target.auditBefore = await audit.snapshot(requested, visible);
   }
 
   const succeeded: BulkOutcome["succeeded"] = [];

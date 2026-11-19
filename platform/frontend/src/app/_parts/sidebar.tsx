@@ -27,7 +27,6 @@ import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
-  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -66,14 +65,13 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useConnectNavigation } from "@/lib/hooks/use-connect-navigation";
 import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
@@ -516,18 +514,8 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
-  // Connect is useful with either half: MCP-only (tools) or proxy-only
-  // (inference). Org settings can hide a section without hiding the page.
-  const { data: canReadLlmProxy } = useHasPermissions({
-    llmProxy: ["read"],
-  });
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
-  const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
+  const { visible: showConnect } = useConnectNavigation();
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
-  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -541,11 +529,11 @@ export function AppSidebar() {
   const showChatsDot = !docsScreenshotMode && onboarding.showChatsDot;
   const showStudioDot = !docsScreenshotMode && onboarding.showStudioDot;
 
-  // Connect is offered when either MCP gateway or LLM proxy is readable.
+  // Connect respects both organization visibility and the user's permissions.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter((item) => {
-        if (item.title === "Connect") return showConnect;
+        if (item.url === "/connection") return showConnect;
         return true;
       }),
     [showConnect],
@@ -559,13 +547,6 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          // Model pools are a beta feature, off unless this deployment's flag
-          // is on, so the row waits for the answer rather than flashing.
-          .filter(
-            (item) =>
-              (item.url !== "/llm/model-pools" || modelPoolsEnabled) &&
-              (item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true),
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -589,7 +570,9 @@ export function AppSidebar() {
               permissionMap &&
               !permissionMap["/openappa"]
             ) {
-              return { ...item, url: "/openappa/yells" };
+              // Without the Overview, the item opens what the reader has:
+              // Yells, or the Policy page for their MCP servers' rules.
+              return { ...item, url: "/openappa/policy" };
             }
             if (item.url === "/llm/costs") {
               return {
@@ -611,12 +594,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [
-      guardrailsDeployment?.enabled,
-      modelPoolsEnabled,
-      permissionMap,
-      autoRoutingEnabled,
-    ],
+    [guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (

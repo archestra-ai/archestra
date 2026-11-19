@@ -29,7 +29,7 @@
  * restored history must name it too, while the released retry stays the
  * wrapper the client can execute.
  *
- * This spec requires a stack booted with `ARCHESTRA_BETA=true`.
+ * This spec turns deployment-wide enforcement on.
  * It lives in the `openappa` Playwright project for exactly that reason and
  * must never be added to another project's testMatch — see the note on
  * `testPatterns.openappa` in playwright.config.ts. The second switch —
@@ -150,10 +150,10 @@ test("denies a tool call, rules on it, and releases it after the model executes 
 
   try {
     // --- deployment switch -------------------------------------------------
-    // Enforcement needs two switches: the container's ARCHESTRA_BETA
-    // and this deployment-wide one, which lives in the database and is off
-    // until an operator turns it on. A freshly booted stack has no row, so the
-    // flag alone enforces nothing. Flip it the way an operator does.
+    // Enforcement needs the deployment-wide switch, which lives in the
+    // database and is off until an operator turns it on. A freshly booted
+    // stack has no row, so nothing is enforced. Flip it the way an operator
+    // does.
     const deploymentResponse = await makeApiRequest({
       request,
       method: "get",
@@ -165,7 +165,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     };
     expect(
       deployment.featureEnabled,
-      "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
+      "OpenAPPA is not active on this stack — the openappa Playwright project requires it",
     ).toBe(true);
     deploymentWasEnabled = deployment.enabled;
     if (!deployment.enabled) {
@@ -435,7 +435,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     };
     expect(
       deployment.featureEnabled,
-      "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
+      "OpenAPPA is not active on this stack — the openappa Playwright project requires it",
     ).toBe(true);
     deploymentWasEnabled = deployment.enabled;
     if (!deployment.enabled) {
@@ -641,16 +641,14 @@ async function expectOnePeelForGuardedCall(page: Page): Promise<void> {
   await expect(peel).toHaveCount(1);
   await expect(
     page.getByRole("button", {
-      name: /^(get remedy plans|execute remedy plan)/,
+      name: /^(Checked what's allowed|Guardrails step)/,
     }),
   ).toHaveCount(0);
 
   await peel.click();
   await expect(page.getByText("Guardrails", { exact: true })).toBeVisible();
-  const steps = page.getByText(
-    new RegExp(`^(${NOTICE_TOOL}|${CONTROL_TOOL})$`),
-  );
-  await expect(steps).toHaveText([NOTICE_TOOL, CONTROL_TOOL]);
+  const steps = page.getByText(/^(Checked what's allowed|Guardrails step)$/);
+  await expect(steps).toHaveText(["Checked what's allowed", "Guardrails step"]);
 }
 
 // === The scripted provider turns =============================================

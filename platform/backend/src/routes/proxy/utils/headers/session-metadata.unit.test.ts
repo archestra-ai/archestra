@@ -3,6 +3,7 @@ import {
   SESSION_ID_HEADER,
 } from "@archestra/shared/consts";
 import {
+  CHATGPT_CLIENT_ID,
   CODEX_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
@@ -115,6 +116,63 @@ describe("extractAutoRoutingSessionMetadata", () => {
       sessionSource: "header",
       client: null,
     });
+  });
+
+  // The ChatGPT desktop app reads Codex's config.toml, so it sends the agent id
+  // the Codex setup wrote there; its originator names the app.
+  test.each([
+    {
+      name: "a Work thread",
+      headers: {
+        originator: "codex_work_desktop",
+        "user-agent": "Codex Desktop/0.163.0 (Windows 10.0.26200; x86_64)",
+      },
+    },
+    {
+      name: "the Codex tab",
+      headers: {
+        originator: "Codex Desktop",
+        "user-agent": "Codex Desktop/0.163.0 (Mac OS 15.6.0; arm64)",
+      },
+    },
+    {
+      name: "a CLI thread the app resumed",
+      headers: {
+        originator: "codex_cli_rs",
+        "user-agent": "Codex Desktop/0.163.0 (Windows 10.0.26200; x86_64)",
+      },
+    },
+  ])("names ChatGPT for $name of the desktop app", ({ headers }) => {
+    for (const agentId of [undefined, CODEX_CLIENT_ID]) {
+      expect(
+        extractAutoRoutingSessionMetadata({
+          headers: {
+            ...headers,
+            ...(agentId ? { "x-archestra-agent-id": agentId } : {}),
+          },
+          body: {
+            ...responsesBody,
+            client_metadata: { thread_id: CODEX_THREAD },
+          },
+        }),
+      ).toEqual({
+        sessionId: CODEX_THREAD,
+        sessionSource: "chatgpt_session",
+        client: CHATGPT_CLIENT_ID,
+      });
+    }
+  });
+
+  test("keeps a caller's own agent id on a desktop app request", () => {
+    expect(
+      extractAutoRoutingSessionMetadata({
+        headers: {
+          originator: "codex_work_desktop",
+          "x-archestra-agent-id": "nightly-bot",
+        },
+        body: responsesBody,
+      }),
+    ).toMatchObject({ client: "nightly-bot" });
   });
 
   test("an explicit agent id header names the client", () => {

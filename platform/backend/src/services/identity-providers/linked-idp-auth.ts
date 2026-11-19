@@ -3,13 +3,11 @@ import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { z } from "zod";
 import { type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import {
-  AccountModel,
-  MemberModel,
-  SessionModel,
-  UserModel,
-  VerificationModel,
-} from "@/models";
+import AccountModel from "@/models/account";
+import MemberModel from "@/models/member";
+import SessionModel from "@/models/session";
+import UserModel from "@/models/user";
+import VerificationModel from "@/models/verification";
 import { ApiError } from "@/types";
 
 const LINKED_IDP_INTENT_TTL_MS = 10 * 60 * 1000;

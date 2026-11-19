@@ -3,7 +3,7 @@ title: Jira
 description: Connect a Jira service account to an Archestra agent and answer issue comments
 order: 6
 beta: "Jira messaging channels are in Beta."
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-09
 ---
 
 Mention the bot in a Jira issue comment, and its Archestra agent answers in the issue. Each bot connects one Jira account to one agent. Give each connected project its own instructions.
@@ -85,7 +85,7 @@ The **Review the model session** link opens the issue's logged requests, respons
 
 ## Receive Webhooks Instead
 
-Use incoming events when Jira can reach Archestra at a stable public HTTPS address. Both options use the **Webhook URL** shown on the Jira page and a secret separate from the bot's API token.
+Use incoming events when Jira can reach Archestra at a stable public HTTPS address; [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints) shows how to expose only the webhook. Both options use the **Webhook URL** shown on the Jira page and a secret separate from the bot's API token.
 
 | Event Delivery | Configure in Archestra | Configure in Jira |
 | --- | --- | --- |

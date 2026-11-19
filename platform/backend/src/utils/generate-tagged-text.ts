@@ -1,5 +1,5 @@
+import type { LanguageModel } from "ai";
 import { generateText, type SystemModelMessage } from "ai";
-import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 
 /**
@@ -27,15 +27,21 @@ export const TRUNCATION_RETRY_FACTOR = 2;
  * Returns `null` when no tagged content was produced.
  */
 export async function generateTaggedText(params: {
-  model: LLMModel;
+  model: LanguageModel;
   /** Tag the answer must be wrapped in, e.g. `description`. */
   tag: string;
   /** A message form carries provider options such as a cache breakpoint. */
   system: string | SystemModelMessage;
   prompt: string;
   maxOutputTokens?: number;
+  /**
+   * The model's real output cap. The truncation retry never asks for more,
+   * and is skipped when `maxOutputTokens` already reaches it.
+   */
+  maxOutputCeiling?: number;
   temperature?: number;
   abortSignal?: AbortSignal;
+  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
   /** Normalize the extracted text. Defaults to trimming. */
   sanitize?: (text: string) => string;
 }): Promise<string | null> {
@@ -46,6 +52,7 @@ export async function generateTaggedText(params: {
     maxOutputTokens: params.maxOutputTokens,
     temperature: params.temperature,
     abortSignal: params.abortSignal,
+    providerOptions: params.providerOptions,
   };
 
   const first = await generateText({ model, system, prompt, ...options });
@@ -64,10 +71,22 @@ export async function generateTaggedText(params: {
     // — showing it its own reply — does fix. A reply with no visible text
     // has nothing to show, and providers reject an empty assistant turn, so
     // it is re-asked instead.
+    const budget = params.maxOutputTokens;
     const roomier =
-      first.finishReason === "length" && params.maxOutputTokens !== undefined
-        ? params.maxOutputTokens * TRUNCATION_RETRY_FACTOR
+      first.finishReason === "length" && budget !== undefined
+        ? Math.min(
+            budget * TRUNCATION_RETRY_FACTOR,
+            params.maxOutputCeiling ?? Number.POSITIVE_INFINITY,
+          )
         : null;
+    // No more room to give: the same ceiling buys the same truncation.
+    if (roomier !== null && budget !== undefined && roomier <= budget) {
+      logger.warn(
+        { tag, maxOutputTokens: params.maxOutputTokens },
+        "generateTaggedText: truncated at the model's output cap, returning null",
+      );
+      return null;
+    }
     const correctable = roomier === null && first.text.trim() !== "";
     logger.info(
       {

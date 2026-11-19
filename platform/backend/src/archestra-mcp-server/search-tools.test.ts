@@ -16,11 +16,16 @@ import {
 } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
 import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  ConversationEnabledToolModel,
+  ToolModel,
+  ToolSearchTextModel,
+} from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
+import { hashToolDefinition } from "./search-text";
 import { __test } from "./search-tools";
 
 const {
@@ -54,6 +59,7 @@ type SearchToolsStructuredContent = {
   total: number;
   matchCount: number;
   truncated: boolean;
+  nextOffset: number | null;
   hint: string | null;
   tools: Array<{
     toolName: string;
@@ -71,6 +77,123 @@ describe("search_tools", () => {
     // Search ranking tests control their candidate set; OpenAPPA tests opt in.
     config.openappa.enabled = false;
   });
+
+  describe("generated search text", () => {
+    test("finds a tool through a term only its generated text contains", () => {
+      expect(
+        rank(
+          [
+            {
+              toolName: "calendar__check_slots",
+              description: "List open slots.",
+              generatedText: "Booking reservation",
+            },
+            { toolName: "calendar__delete", description: "Remove a slot." },
+          ],
+          "booking",
+        ),
+      ).toEqual(["calendar__check_slots"]);
+    });
+
+    test("adds no weight for terms the tool's own fields already contain", () => {
+      const plain = { toolName: "a__tool", description: "Send invoice." };
+      const padded = {
+        toolName: "b__tool",
+        description: "Send invoice.",
+        generatedText: "INVOICE invoice",
+      };
+
+      // Ties break by name, so an inflated b__tool would come first if reversed.
+      expect(rank([padded, plain], "invoice")).toEqual(["a__tool", "b__tool"]);
+    });
+
+    test("does not report a generated-only term as unmatched", () => {
+      expect(
+        findUnmatchedQueryTerms(
+          [
+            makeRankingCandidate({
+              toolName: "calendar__check_slots",
+              generatedText: "booking",
+            }),
+          ],
+          prepareSearchQuery("booking zebra"),
+        ),
+      ).toEqual(["zebra"]);
+    });
+
+    test("ranks stored text for a catalog tool and leaves others on source fields", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      await seedAndAssignArchestraTools(agent.id);
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const parameters = { type: "object", properties: {} };
+      const enriched = await makeTool({
+        name: "calendar__check_slots",
+        description: "List open slots.",
+        catalogId: catalog.id,
+        parameters,
+      });
+      const stale = await makeTool({
+        name: "calendar__stale",
+        description: "Current description.",
+        catalogId: catalog.id,
+        parameters,
+      });
+      await makeAgentTool(agent.id, enriched.id);
+      await makeAgentTool(agent.id, stale.id);
+      await ToolSearchTextModel.recordAttempt({
+        definitionHash: hashToolDefinition({
+          name: "calendar__check_slots",
+          description: "List open slots.",
+          parameters,
+        }),
+        promptVersion: 1,
+        generator: "openai/test",
+        result: { status: "ready", searchText: "booking zebrafish" },
+      });
+      await ToolSearchTextModel.recordAttempt({
+        definitionHash: hashToolDefinition({
+          name: "calendar__stale",
+          description: "Previous description.",
+          parameters,
+        }),
+        promptVersion: 1,
+        generator: "openai/test",
+        result: { status: "ready", searchText: "zebrafish" },
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "zebrafish" },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(
+        (result.structuredContent as SearchToolsStructuredContent).tools.map(
+          ({ toolName }) => toolName,
+        ),
+      ).toEqual(["calendar__check_slots"]);
+    });
+  });
+
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -497,6 +620,73 @@ describe("search_tools", () => {
     expect(truncatedContent.tools[0].toolName).toBe("installed__do_thing");
   });
 
+  test("a desktop MCP tool is available only to a user who added the server to their own computer", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const anna = await makeUser();
+    const ben = await makeUser();
+    await makeMember(anna.id, org.id, { role: "admin" });
+    await makeMember(ben.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Desktop Agent",
+      organizationId: org.id,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Desk",
+      serverType: "desktop_mcp",
+      desktopConfig: { command: "/opt/desk/mcp" },
+    });
+    const tool = await makeTool({
+      name: "desk__open_drawing",
+      description: "open a drawing on the desk",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    // Only Anna added it: her installation runs on her computer, not on Ben's.
+    await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "desktop_mcp",
+      scope: "personal",
+      ownerId: anna.id,
+    });
+
+    const search = async (userId: string) => {
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "open drawing", limit: 5 },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId,
+        },
+      );
+      const content = result.structuredContent as SearchToolsStructuredContent;
+      return content.tools.find(
+        (found) => found.toolName === "desk__open_drawing",
+      );
+    };
+
+    expect(await search(anna.id)).toMatchObject({
+      available: true,
+      unavailableReason: null,
+    });
+    const forBen = await search(ben.id);
+    expect(forBen?.available).toBe(false);
+    expect(forBen?.unavailableReason).toContain(
+      "has not added it to their computer",
+    );
+  });
+
   test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -676,12 +866,12 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "guardrails policy" matches only the guardrails policy tools, all of
+    // "guardrails" matches only the guardrails tools, all of
     // which require permissions this agent:read role lacks, so RBAC filters
     // them all out before ranking.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "guardrails policy", limit: 10 },
+      { query: "guardrails", limit: 10 },
       context,
     );
 
@@ -690,7 +880,8 @@ describe("search_tools", () => {
       total: 0,
       matchCount: 0,
       truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails, policy.",
+      nextOffset: null,
+      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails.",
       tools: [],
     });
   });
@@ -1788,7 +1979,10 @@ describe("search_tools", () => {
       expect(structured.total).toBe(1);
       expect(structured.matchCount).toBe(3);
       expect(structured.truncated).toBe(true);
-      expect(structured.hint).toContain("top 1 of 3");
+      expect(structured.nextOffset).toBe(1);
+      expect(structured.hint).toBe(
+        "Showing the top 1 of 3 matches. For the remaining 2, raise limit (max 20) or repeat the query with offset 1.",
+      );
     });
 
     test("caps a limit above the maximum instead of rejecting the call", async ({
@@ -1836,9 +2030,152 @@ describe("search_tools", () => {
       expect(structured.total).toBe(20);
       expect(structured.matchCount).toBe(21);
       expect(structured.truncated).toBe(true);
-      // Already at the cap: point at narrowing, not at a larger limit.
-      expect(structured.hint).toContain("top 20 of 21");
-      expect(structured.hint).not.toContain("raise limit");
+      // Already at the cap: point at the next page, not at a larger limit.
+      expect(structured.hint).toBe(
+        "Showing the top 20 of 21 matches. For the remaining 1, repeat the query with offset 20.",
+      );
+      expect(structured.nextOffset).toBe(20);
+    });
+
+    test("pages through every match with offset", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ name: "Pages", organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "Widgets MCP",
+      });
+      const names = Array.from(
+        { length: 24 },
+        (_, index) => `widgets__action_${String(index).padStart(2, "0")}`,
+      );
+      for (const name of names) {
+        const tool = await makeTool({
+          name,
+          description: "widget action",
+          catalogId: catalog.id,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const search = async (args: Record<string, unknown>) => {
+        const result = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "^widgets__", mode: "regex", ...args },
+          context,
+        );
+        expect(result.isError).toBeFalsy();
+        return result.structuredContent as SearchToolsStructuredContent;
+      };
+
+      // A model that wants the whole catalog asks for more than one page.
+      const first = await search({ limit: 100 });
+      expect(first.total).toBe(20);
+      expect(first.nextOffset).toBe(20);
+      expect(first.hint).toBe(
+        "Showing the top 20 of 24 matches. For the remaining 4, repeat the query with offset 20.",
+      );
+
+      const second = await search({ limit: 100, offset: first.nextOffset });
+      expect(second).toMatchObject({
+        total: 4,
+        matchCount: 24,
+        truncated: false,
+        nextOffset: null,
+        hint: null,
+      });
+      expect(
+        [...first.tools, ...second.tools].map((tool) => tool.toolName),
+      ).toEqual(names);
+
+      // A middle page names its range and the next offset.
+      const middle = await search({ limit: 5, offset: 10 });
+      expect(middle.tools.map((tool) => tool.toolName)).toEqual(
+        names.slice(10, 15),
+      );
+      expect(middle.hint).toBe(
+        "Showing matches 11 to 15 of 24. For the remaining 9, raise limit (max 20) or repeat the query with offset 15.",
+      );
+
+      const past = await search({ offset: 30 });
+      expect(past).toMatchObject({
+        total: 0,
+        matchCount: 24,
+        truncated: false,
+        nextOffset: null,
+        hint: "This query has 24 matches, so offset 30 returns none. Use an offset below 24.",
+      });
+    });
+
+    test("accepts a regex that lists the names of many tools", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ name: "Long", organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "Widgets MCP",
+      });
+      const names = Array.from(
+        { length: 21 },
+        (_, index) => `widgets__long_action_name_${index}`,
+      );
+      for (const name of names) {
+        const tool = await makeTool({
+          name,
+          description: "widget action",
+          catalogId: catalog.id,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      // The shape a model writes to exclude the tools it has already seen.
+      const seen = names
+        .slice(0, 20)
+        .map((name) => name.replace("widgets__", ""));
+      const query = `^widgets__(?!(${seen.join("|")})$)`;
+      expect(query.length).toBeGreaterThan(400);
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query, mode: "regex", limit: 20 },
+        context,
+      );
+      expect(result.isError).toBeFalsy();
+      const structured =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structured.tools.map((tool) => tool.toolName)).toEqual([
+        "widgets__long_action_name_20",
+      ]);
     });
 
     test("zero results return an actionable hint naming available servers", async ({

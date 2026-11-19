@@ -13,6 +13,15 @@ export class FakeGitlab {
   readonly requests: { method: string; path: string }[] = [];
   /** Branches a direct commit is refused on, as GitLab does for protected branches. */
   readonly protectedBranches = new Set<string>();
+  /** Commit statuses posted, in order. */
+  readonly statuses: {
+    sha: string;
+    state: string;
+    name: string;
+    description?: string;
+  }[] = [];
+  /** The most entries a keyset tree page returns, to test paging with few files. */
+  treePageSize = 100;
   private nextId = 1;
 
   constructor(
@@ -25,6 +34,8 @@ export class FakeGitlab {
     path: string;
     files?: Record<string, string>;
     branch?: string;
+    /** Paths among `files` that are symbolic links (mode 120000). */
+    symlinks?: string[];
   }): FakeProject {
     const project: FakeProject = {
       id: this.nextId++,
@@ -32,6 +43,9 @@ export class FakeGitlab {
       defaultBranch: null,
       branches: new Map(),
       commits: new Map(),
+      parents: new Map(),
+      authors: new Map(),
+      symlinks: new Set(params.symlinks ?? []),
       mergeRequests: [],
     };
     this.projects.set(params.path, project);
@@ -39,10 +53,54 @@ export class FakeGitlab {
       const branch = params.branch ?? "main";
       const sha = commitSha(params.files);
       project.commits.set(sha, new Map(Object.entries(params.files)));
+      project.parents.set(sha, null);
       project.branches.set(branch, sha);
       project.defaultBranch = branch;
     }
     return project;
+  }
+
+  /** A commit on `branch` that sets `files` over its tip; returns its sha. */
+  commit(
+    path: string,
+    branch: string,
+    files: Record<string, string>,
+    author = FAKE_USER.email,
+  ): string {
+    const project = this.mustProject(path);
+    const parent = project.branches.get(branch) ?? null;
+    const next = new Map(parent ? project.commits.get(parent) : []);
+    for (const [file, content] of Object.entries(files))
+      next.set(file, content);
+    const sha = commitSha(Object.fromEntries(next), parent);
+    project.commits.set(sha, next);
+    project.parents.set(sha, parent);
+    project.authors.set(sha, author);
+    project.branches.set(branch, sha);
+    return sha;
+  }
+
+  /** A branch's tip. */
+  branchHead(path: string, branch: string): string {
+    const sha = this.mustProject(path).branches.get(branch);
+    if (!sha) throw new Error(`No branch ${branch}`);
+    return sha;
+  }
+
+  /** Point a branch at a commit it had before, as a force push would. */
+  setBranch(path: string, branch: string, sha: string) {
+    const project = this.mustProject(path);
+    if (!project.commits.has(sha)) throw new Error(`No commit ${sha}`);
+    project.branches.set(branch, sha);
+  }
+
+  /** A merge request's source branch. */
+  sourceBranch(path: string, iid: number): string {
+    const request = this.mustProject(path).mergeRequests.find(
+      (entry) => entry.iid === iid,
+    );
+    if (!request) throw new Error(`No merge request !${iid}`);
+    return request.sourceBranch;
   }
 
   addGroup(fullPath: string) {
@@ -56,6 +114,14 @@ export class FakeGitlab {
     return sha ? Object.fromEntries(project.commits.get(sha) ?? []) : {};
   }
 
+  /** Remove a merge request's source branch, as GitLab does after a merge. */
+  deleteSourceBranch(path: string, iid: number) {
+    const project = this.mustProject(path);
+    const request = project.mergeRequests.find((entry) => entry.iid === iid);
+    if (!request) throw new Error(`No merge request !${iid}`);
+    project.branches.delete(request.sourceBranch);
+  }
+
   /** Merge a merge request: its branch's files land on the target branch. */
   merge(path: string, iid: number) {
     const project = this.mustProject(path);
@@ -65,6 +131,8 @@ export class FakeGitlab {
     if (!sha) throw new Error("Merge request branch is gone");
     project.branches.set(request.targetBranch, sha);
     request.state = "merged";
+    // A fast-forward: the head itself lands, with no merge commit.
+    request.mergedSha = sha;
   }
 
   handlers() {
@@ -105,6 +173,7 @@ export class FakeGitlab {
     const [resource, id, ...rest] = segments;
     if (resource === "personal_access_tokens" && id === "self")
       return HttpResponse.json({ scopes: ["api"], active: true });
+    if (resource === "user" && !id) return HttpResponse.json(FAKE_USER);
     if (resource === "groups" && method === "GET")
       return HttpResponse.json(this.groups);
     if (resource !== "projects") return notFound();
@@ -135,6 +204,30 @@ export class FakeGitlab {
     if (!project) return notFound();
     if (rest.length === 0) return HttpResponse.json(projectJson(project));
     const [area, kind, name, raw] = rest;
+    if (area === "statuses" && kind && method === "POST") {
+      const body = (await request.json()) as {
+        state: string;
+        name: string;
+        description?: string;
+      };
+      this.statuses.push({ sha: kind, ...body });
+      return HttpResponse.json({ id: this.statuses.length }, { status: 201 });
+    }
+    if (area === "merge_requests" && !kind && method === "GET") {
+      const state = url.searchParams.get("state");
+      const target = url.searchParams.get("target_branch");
+      const source = url.searchParams.get("source_branch");
+      return HttpResponse.json(
+        project.mergeRequests
+          .filter(
+            (entry) =>
+              (!state || entry.state === state) &&
+              (!target || entry.targetBranch === target) &&
+              (!source || entry.sourceBranch === source),
+          )
+          .map((entry) => mergeRequestJson(this.webUrl, project, entry)),
+      );
+    }
     if (area === "merge_requests") {
       if (method === "POST") {
         const body = (await request.json()) as {
@@ -146,6 +239,7 @@ export class FakeGitlab {
           iid: project.mergeRequests.length + 1,
           sourceBranch: body.source_branch,
           targetBranch: body.target_branch,
+          baseSha: project.branches.get(body.target_branch) ?? null,
           title: body.title,
           state: "opened",
         };
@@ -160,9 +254,23 @@ export class FakeGitlab {
       const found = project.mergeRequests.find(
         (entry) => entry.iid === Number(kind),
       );
-      return found
-        ? HttpResponse.json(mergeRequestJson(this.webUrl, project, found))
-        : notFound();
+      if (!found) return notFound();
+      if (name === "commits") {
+        // The source branch's commits past the target's, newest first.
+        const base = found.baseSha;
+        const commits: { id: string; author_email: string }[] = [];
+        for (
+          let at = found.mergedSha ?? project.branches.get(found.sourceBranch);
+          at && at !== base;
+          at = project.parents.get(at) ?? undefined
+        )
+          commits.push({
+            id: at,
+            author_email: project.authors.get(at) ?? FAKE_USER.email,
+          });
+        return HttpResponse.json(commits);
+      }
+      return HttpResponse.json(mergeRequestJson(this.webUrl, project, found));
     }
     if (area !== "repository") return notFound();
     const ref = url.searchParams.get("ref");
@@ -202,6 +310,7 @@ export class FakeGitlab {
         body.start_sha ??
         project.branches.get(body.start_branch ?? body.branch) ??
         null;
+      const parentOf = parent;
       const files = new Map(parent ? project.commits.get(parent) : []);
       for (const action of body.actions) {
         if (action.action === "delete") files.delete(action.file_path);
@@ -214,6 +323,8 @@ export class FakeGitlab {
       }
       const sha = commitSha(Object.fromEntries(files), parent);
       project.commits.set(sha, files);
+      project.parents.set(sha, parentOf);
+      project.authors.set(sha, FAKE_USER.email);
       project.branches.set(body.branch, sha);
       project.defaultBranch ??= body.branch;
       return HttpResponse.json({ id: sha }, { status: 201 });
@@ -226,13 +337,32 @@ export class FakeGitlab {
       const sha = project.branches.get(name ?? "");
       return sha ? HttpResponse.json({ commit: { id: sha } }) : notFound();
     }
+    if (kind === "merge_base") {
+      const [first, second] = url.searchParams
+        .getAll("refs[]")
+        .map((target) => resolve(target));
+      if (!first || !second) return notFound();
+      const history = (sha: string) => {
+        const seen: string[] = [];
+        for (
+          let at: string | null = sha;
+          at;
+          at = project.parents.get(at) ?? null
+        )
+          seen.push(at);
+        return seen;
+      };
+      const ofFirst = new Set(history(first));
+      const base = history(second).find((sha) => ofFirst.has(sha));
+      return base ? HttpResponse.json({ id: base }) : notFound();
+    }
     const sha = resolve(ref);
     if (!sha) return notFound();
     const files = project.commits.get(sha) ?? new Map<string, string>();
     if (kind === "tree") {
       const prefix = url.searchParams.get("path");
       const recursive = url.searchParams.get("recursive") === "true";
-      const entries = treeEntries(files).filter((entry) =>
+      const entries = treeEntries(files, project.symlinks).filter((entry) =>
         prefix
           ? entry.path.startsWith(`${prefix}/`) &&
             (recursive || !entry.path.slice(prefix.length + 1).includes("/"))
@@ -240,7 +370,26 @@ export class FakeGitlab {
       );
       // Like GitLab, a path that is a file or missing is "404 Tree Not Found".
       if (prefix && entries.length === 0) return notFound();
-      return HttpResponse.json(entries);
+      if (url.searchParams.get("pagination") !== "keyset")
+        return HttpResponse.json(entries);
+      // Keyset pages, each naming the next in its Link header.
+      const size = Math.min(
+        Number(url.searchParams.get("per_page") ?? 20),
+        this.treePageSize,
+      );
+      const after = url.searchParams.get("page_token");
+      const start = after
+        ? entries.findIndex((entry) => entry.path === after) + 1
+        : 0;
+      const page = entries.slice(start, start + size);
+      const last = page.at(-1);
+      if (start + size >= entries.length || !last)
+        return HttpResponse.json(page);
+      const next = new URL(url);
+      next.searchParams.set("page_token", last.path);
+      return HttpResponse.json(page, {
+        headers: { Link: `<${next.href}>; rel="next"` },
+      });
     }
     if (kind === "files" && name) {
       const content = files.get(name);
@@ -264,6 +413,12 @@ export interface FakeProject {
   defaultBranch: string | null;
   branches: Map<string, string>;
   commits: Map<string, Map<string, string>>;
+  /** Each commit's parent, null for a first commit. */
+  parents: Map<string, string | null>;
+  /** Each commit's author email; the token's user unless a test says otherwise. */
+  authors: Map<string, string>;
+  /** Paths that are symbolic links, in every commit. */
+  symlinks: Set<string>;
   mergeRequests: FakeMergeRequest[];
 }
 
@@ -273,7 +428,18 @@ interface FakeMergeRequest {
   targetBranch: string;
   title: string;
   state: "opened" | "merged" | "closed";
+  /** The target branch's tip when the request was opened. */
+  baseSha: string | null;
+  /** What merging put on the target branch. */
+  mergedSha?: string;
 }
+
+/** Who the fake's token acts as. */
+const FAKE_USER = {
+  username: "sync-bot",
+  name: "Sync Bot",
+  email: "sync-bot@example.test",
+};
 
 function commitSha(files: Record<string, string>, parent?: string | null) {
   return createHash("sha1")
@@ -281,19 +447,29 @@ function commitSha(files: Record<string, string>, parent?: string | null) {
     .digest("hex");
 }
 
-function treeEntries(files: Map<string, string>) {
+function treeEntries(files: Map<string, string>, symlinks?: Set<string>) {
   const folders = new Set<string>();
   for (const path of files.keys()) {
     const parts = path.split("/");
     for (let index = 1; index < parts.length; index++)
       folders.add(parts.slice(0, index).join("/"));
   }
+  const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
   return [
-    ...[...folders].map((path) => ({ path, type: "tree", mode: "040000" })),
-    ...[...files.keys()].map((path) => ({
+    ...[...folders].map((path) => ({
+      id: createHash("sha1").update(`tree ${path}`).digest("hex"),
+      name: nameOf(path),
+      path,
+      type: "tree",
+      mode: "040000",
+    })),
+    ...[...files].map(([path, content]) => ({
+      // Like a blob id, the same content keeps the same id.
+      id: createHash("sha1").update(`blob ${content}`).digest("hex"),
+      name: nameOf(path),
       path,
       type: "blob",
-      mode: "100644",
+      mode: symlinks?.has(path) ? "120000" : "100644",
     })),
   ];
 }
@@ -318,7 +494,11 @@ function mergeRequestJson(
     web_url: `${webUrl}/${project.path}/-/merge_requests/${request.iid}`,
     state: request.state,
     source_branch: request.sourceBranch,
+    target_branch: request.targetBranch,
     detailed_merge_status: "mergeable",
+    sha: request.mergedSha ?? project.branches.get(request.sourceBranch),
+    merge_commit_sha: null,
+    squash_commit_sha: null,
   };
 }
 

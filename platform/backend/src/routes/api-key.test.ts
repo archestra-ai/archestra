@@ -1,24 +1,16 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { vi } from "vitest";
+import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const { createApiKeyMock, deleteApiKeyMock } = vi.hoisted(() => ({
-  createApiKeyMock: vi.fn(),
-  deleteApiKeyMock: vi.fn(),
-}));
+vi.mock("@/auth/better-auth");
 
-vi.mock("@/auth/better-auth", () => ({
-  auth: {
-    api: {
-      createApiKey: createApiKeyMock,
-      deleteApiKey: deleteApiKeyMock,
-    },
-  },
-}));
+const createApiKeyMock = vi.mocked(auth.api.createApiKey);
+const deleteApiKeyMock = vi.mocked(auth.api.deleteApiKey);
 
 describe("api key routes", () => {
   let app: FastifyInstanceWithZod;
@@ -269,9 +261,9 @@ describe("api key routes", () => {
       requestCount: 0,
       remaining: null,
       lastRequest: null,
-      expiresAt: "2026-03-15T01:00:00.000Z",
-      createdAt: "2026-03-15T00:00:00.000Z",
-      updatedAt: "2026-03-15T00:00:00.000Z",
+      expiresAt: new Date("2026-03-15T01:00:00.000Z"),
+      createdAt: new Date("2026-03-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-15T00:00:00.000Z"),
       metadata: { scope: "cli" },
       permissions: { apiKey: ["read"] },
       key: tokenValue,
@@ -320,8 +312,8 @@ describe("api key routes", () => {
       remaining: null,
       lastRequest: null,
       expiresAt: null,
-      createdAt: "2026-03-15T00:00:00.000Z",
-      updatedAt: "2026-03-15T00:00:00.000Z",
+      createdAt: new Date("2026-03-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-15T00:00:00.000Z"),
       metadata: null,
       permissions: null,
       key: tokenValue,

@@ -1,5 +1,9 @@
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 
 /**
  * Bedrock Converse API request/response types
@@ -128,6 +132,16 @@ class BedrockConverseInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsUsed);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    const responseContent = this.response.output?.message?.content;
+    if (!Array.isArray(responseContent)) return [];
+    return responseContent.flatMap((block) =>
+      block.toolUse?.name && block.toolUse.toolUseId
+        ? [{ id: block.toolUse.toolUseId, name: block.toolUse.name }]
+        : [],
+    );
   }
 
   getToolNamesRequested(): string[] {

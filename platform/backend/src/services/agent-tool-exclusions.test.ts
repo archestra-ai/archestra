@@ -13,28 +13,32 @@ import {
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import { AgentExcludedToolModel, AgentToolModel, ToolModel } from "@/models";
+import { onAgentToolSurfaceChange } from "@/models/agent-tool-surface";
 import {
   agentToolExclusionsService,
   hasAnyExclusions,
   isToolIdentityExcluded,
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
-
-vi.mock("@/clients/chat-mcp-client", () => ({
-  clearChatMcpClient: vi.fn(),
-}));
 
 describe("agentToolExclusionsService", () => {
   let organizationId: string;
   let agent: Agent;
+  // The notice the chat MCP client listens for to drop the agent's cache.
+  const toolSurfaceChanged = vi.fn();
+  let stopListening: () => void = () => {};
+
+  afterEach(() => {
+    stopListening();
+  });
 
   beforeEach(async ({ makeAgent, makeOrganization }) => {
     vi.clearAllMocks();
+    stopListening = onAgentToolSurfaceChange(toolSurfaceChanged);
     const org = await makeOrganization();
     organizationId = org.id;
     agent = await makeAgent({
@@ -140,7 +144,7 @@ describe("agentToolExclusionsService", () => {
       excludedToolIds: [tool.id],
     });
 
-    expect(clearChatMcpClient).toHaveBeenCalledWith(agent.id);
+    expect(toolSurfaceChanged).toHaveBeenCalledWith(agent.id);
   });
 
   test("a failed replace leaves prior exclusions intact and does not evict", async ({
@@ -170,7 +174,7 @@ describe("agentToolExclusionsService", () => {
     expect(await agentToolExclusionsService.getExclusions(agent.id)).toEqual({
       excludedToolIds: [tool.id],
     });
-    expect(clearChatMcpClient).not.toHaveBeenCalled();
+    expect(toolSurfaceChanged).not.toHaveBeenCalled();
   });
 
   test("maps a validate-then-delete race (FK violation) to a 400, not a 500", async ({
@@ -216,7 +220,7 @@ describe("agentToolExclusionsService", () => {
     expect(await agentToolExclusionsService.getExclusions(agent.id)).toEqual({
       excludedToolIds: [],
     });
-    expect(clearChatMcpClient).not.toHaveBeenCalled();
+    expect(toolSurfaceChanged).not.toHaveBeenCalled();
   });
 
   describe("write validation", () => {

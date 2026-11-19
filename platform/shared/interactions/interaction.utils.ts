@@ -8,7 +8,11 @@ import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
-import type { Interaction, InteractionUtils } from "./llmProviders/common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
@@ -51,6 +55,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
+  "github-copilot:messages": (i) => new AnthropicMessagesInteraction(i),
   "bedrock:converse": (i) => new BedrockConverseInteraction(i),
   // Bedrock InvokeModel carries the Anthropic Messages wire format.
   "bedrock:invoke": (i) => new AnthropicMessagesInteraction(i),
@@ -248,6 +253,13 @@ export class DynamicInteraction implements InteractionUtils {
       return [];
     }
     return this.interactionClass.getToolNamesRequested();
+  }
+
+  /** The requested tool calls with their provider ids; [] where the wire has none. */
+  getToolCallsRequested(): RequestedToolCall[] {
+    if (this.contentUnavailable) return [];
+    if (this.getErrorResponseText() !== null) return [];
+    return this.interactionClass.getToolCallsRequested?.() ?? [];
   }
 
   getToolNamesUsed(): string[] {

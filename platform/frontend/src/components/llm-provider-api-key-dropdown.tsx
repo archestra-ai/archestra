@@ -12,6 +12,7 @@ import {
   Key,
   LayersIcon,
   Plus,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import Image from "next/image";
@@ -60,6 +61,7 @@ type DropdownLlmProviderApiKey = Pick<
       | "requiresReauthentication"
       | "isGithubAppKey"
       | "githubOrganization"
+      | "githubOrganizationName"
     >
   > & {
     connectRequired?: boolean;
@@ -103,6 +105,19 @@ interface LlmProviderApiKeyDropdownProps {
   pools?: AvailableModelPool[];
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
+  /**
+   * The auto routers, offered first while auto routing is on: each picks a
+   * fast, normal or smart model per session. A picked router replaces the key.
+   */
+  autoRouters?: Array<{
+    id: string;
+    /** "Auto", or "Auto · support" for a named router. */
+    label: string;
+    selected: boolean;
+    /** The tiers it routes across. */
+    description?: string;
+    onSelect: () => void;
+  }>;
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -134,7 +149,9 @@ export function LlmProviderApiKeyDropdown({
   pools = [],
   selectedPoolId = null,
   onSelectPool,
+  autoRouters = [],
 }: LlmProviderApiKeyDropdownProps) {
+  const { enterprisePlanName } = useModelProviderCatalog();
   const selectableKeys = useMemo(
     () =>
       availableKeys.filter(
@@ -170,11 +187,16 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
-  const selectedKey = selectedPool
+  const selectedAutoRouter = autoRouters.find((router) => router.selected);
+  const autoSelected = !!selectedAutoRouter;
+  const selectedPool = autoSelected
     ? undefined
-    : availableKeys.find((key) => key.id === selectedApiKeyId);
-  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
+    : pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey =
+    selectedPool || autoSelected
+      ? undefined
+      : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool || autoSelected ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -202,7 +224,14 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {selectedPool ? (
+              {autoSelected ? (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">
+                    {selectedAutoRouter?.label}
+                  </span>
+                </>
+              ) : selectedPool ? (
                 <>
                   <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate font-medium">
@@ -217,7 +246,10 @@ export function LlmProviderApiKeyDropdown({
                   />
                   <span className="truncate font-medium">
                     {isOrganizationSubscription(selectedKey)
-                      ? organizationSubscriptionName(selectedKey)
+                      ? organizationSubscriptionName(
+                          selectedKey,
+                          enterprisePlanName,
+                        )
                       : selectedKey.name}
                   </span>
                   {selectedKeyIsSubscription && (
@@ -297,6 +329,31 @@ export function LlmProviderApiKeyDropdown({
                     <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
                   )}
                 </CommandItem>
+              </CommandGroup>
+            )}
+            {autoRouters.length > 0 && (
+              <CommandGroup>
+                {autoRouters.map((router) => (
+                  <CommandItem
+                    key={router.id}
+                    value={`auto-router-${router.id}`}
+                    keywords={[router.label, "auto", "auto routing"]}
+                    onSelect={router.onSelect}
+                    className="cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span>{router.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {router.description ??
+                          "Picks a fast, normal or smart model per session"}
+                      </span>
+                    </div>
+                    {router.selected && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
               </CommandGroup>
             )}
             {allowOrganizationDefault && onSelectOrganizationDefault && (
@@ -418,6 +475,7 @@ export function LlmProviderApiKeyDropdown({
                       key.provider,
                       key.name,
                       key.githubOrganization ?? "",
+                      key.githubOrganizationName ?? "",
                       "enterprise plan",
                     ]}
                     disabled={providerFilter?.(key.provider) === false}
@@ -431,7 +489,10 @@ export function LlmProviderApiKeyDropdown({
                       />
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate">
-                          {organizationSubscriptionName(key)}
+                          {organizationSubscriptionName(
+                            key,
+                            enterprisePlanName,
+                          )}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                           {organizationSubscriptionSubtitle(key)}

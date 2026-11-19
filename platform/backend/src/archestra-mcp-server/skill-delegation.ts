@@ -114,6 +114,10 @@ export async function handleSkillDelegation(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  if (context.suppressContentLogging) {
+    return errorResult("Agent delegation is not available in encrypted chats.");
+  }
+
   const { agentId, organizationId, tokenAuth } = context;
 
   const message = args?.message as string;
@@ -378,6 +382,7 @@ async function findDelegationTargetsBySlug(params: {
     excludeAgentId: agentId,
     environmentId,
     lookups,
+    includeDetails: false,
   });
 
   const bySlug = new Map<string, { id: string; name: string }>();

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -14,7 +15,10 @@ const {
 } = archestraApiSdk;
 
 type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
-type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
+type RolesPaginatedParams = Pick<
+  RolesQuery,
+  "limit" | "offset" | "name" | "kind"
+>;
 type Role = archestraApiTypes.GetRolesResponses["200"]["data"][number];
 
 /**
@@ -118,6 +122,7 @@ export function useCreateRole() {
       return response.data;
     },
     onSuccess: () => {
+      toast.success("Role created");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },
@@ -148,6 +153,7 @@ export function useUpdateRole() {
       return response.data;
     },
     onSuccess: (_data, variables) => {
+      toast.success("Role updated");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({
@@ -189,7 +195,10 @@ export function useAllMatchingRoles(
     queryKey: [...roleKeys.lists(), "all-matching", params],
     enabled: options?.enabled,
     fetchPage: async ({ limit, offset }) => {
-      const response = await getRoles({ query: { ...params, limit, offset } });
+      // Bulk actions only ever apply to custom roles.
+      const response = await getRoles({
+        query: { name: params.search, kind: "custom", limit, offset },
+      });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data?.data ?? [];
     },
@@ -209,6 +218,7 @@ export function useDeleteRole() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      toast.success("Role deleted");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },

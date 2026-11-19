@@ -45,6 +45,8 @@ export interface TokenPrices {
 }
 
 export interface PricedComponent extends BillableComponent {
+  /** Trusted aliases assigned after verifying the selected provider endpoint. */
+  modelAliases?: string[];
   provider: SupportedProvider;
   prices: TokenPrices;
   cost: string;
@@ -69,6 +71,8 @@ export interface PricingQuote {
   model: string;
   provider: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   /** The request model at the top-level usage's prompt size. */
   request: QuotedPrices;
   /** Billable components by id, each at its own prompt size. */

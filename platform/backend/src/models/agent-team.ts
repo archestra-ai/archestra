@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ScopedResource } from "@archestra/shared";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  inArray,
+  isNull,
+  or,
+  type SQLWrapper,
+  sql,
+} from "drizzle-orm";
 import { canUseAgent } from "@/auth/permission-gated";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -395,8 +403,15 @@ class AgentTeamModel {
     });
   }
 
-  /** Object-local team read assignments, with EXISTS set semantics. */
-  static readAssignments(organizationId: string) {
+  /**
+   * Object-local team read assignments, with EXISTS set semantics. Every agent's
+   * policy is expanded unless narrowed: `agentIds` (a subquery of agent ids) or
+   * `teamIds`, which the grants index answers without reading every policy.
+   */
+  static readAssignments(
+    organizationId: string,
+    options: { agentIds?: SQLWrapper; teamIds?: string[] } = {},
+  ) {
     const agent = schema.agentsTable;
     const policy = schema.resourcePermissionPoliciesTable;
     return db
@@ -425,7 +440,14 @@ class AgentTeamModel {
         eq(schema.teamsTable.id, sql`team_grant->'subject'->>'id'`),
       )
       .where(
-        and(eq(agent.organizationId, organizationId), isNull(agent.deletedAt)),
+        and(
+          eq(agent.organizationId, organizationId),
+          isNull(agent.deletedAt),
+          options.agentIds ? inArray(agent.id, options.agentIds) : undefined,
+          options.teamIds
+            ? teamGrantContainment(policy.grants, options.teamIds)
+            : undefined,
+        ),
       )
       .as("agent_team_read_assignments");
   }
@@ -435,6 +457,21 @@ class AgentTeamModel {
 export type AgentTeamSource = {
   agentTeamIds(agentId: string): Promise<string[]>;
 };
+
+/**
+ * Policies naming any of `teamIds` as a subject, in a form the grants GIN index
+ * answers. A pre-filter only: the grant join still checks the read action.
+ */
+function teamGrantContainment(grants: SQLWrapper, teamIds: string[]) {
+  if (teamIds.length === 0) return sql`false`;
+  return sql`${grants} @> ANY(ARRAY[${sql.join(
+    teamIds.map(
+      (id) =>
+        sql`${JSON.stringify([{ subject: { type: "team", id } }])}::jsonb`,
+    ),
+    sql`, `,
+  )}])`;
+}
 
 function withTeamNames(
   teamIds: string[],

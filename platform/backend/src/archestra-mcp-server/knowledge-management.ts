@@ -60,7 +60,9 @@ import {
   KnowledgeBaseModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import { canAccessKnowledgeBase } from "@/services/knowledge-base-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -114,6 +116,14 @@ const KnowledgeBaseCreateToolArgsSchema = z
 const KnowledgeBaseUpdateToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe("Knowledge base ID."),
+    uploadedFilesEnvironmentId: z
+      .string()
+      .uuid()
+      .nullable()
+      .optional()
+      .describe(
+        "Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.",
+      ),
     name: UpdateKnowledgeBaseSchema.shape.name
       .optional()
       .describe("New knowledge base name."),
@@ -578,6 +588,13 @@ async function handleQueryKnowledgeSources(params: {
             organizationId,
           })
         : null;
+    const oauthPrincipal =
+      !access && context.tokenAuth?.oauthClientId && organizationId
+        ? await ResourcePermissionSubjectModel.resolveOauthClientPrincipal({
+            oauthClientId: context.tokenAuth.oauthClientId,
+            organizationId,
+          })
+        : null;
 
     // Dynamic tool access: when the agent's "access all tools" setting is on,
     // the query spans every connector visible to the user — a superset of the
@@ -621,6 +638,33 @@ async function handleQueryKnowledgeSources(params: {
             : "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
         );
       }
+    } else if (
+      !access &&
+      context.userId !== "system" &&
+      (await AgentModel.getAccessAllTools(contextAgent.id))
+    ) {
+      const excludedConnectorIds =
+        await AgentExcludedConnectorModel.findConnectorIdsByAgent(
+          contextAgent.id,
+        );
+      const { connectors, queryableCount } =
+        await knowledgeSourceAccessControlService.findQueryableOrganizationConnectorsForNonUser(
+          {
+            organizationId,
+            environmentId: agentEnvironmentId,
+            excludedConnectorIds,
+            principal: oauthPrincipal ?? undefined,
+          },
+        );
+      connectorIds = connectors.map((connector) => connector.id);
+
+      if (connectorIds.length === 0) {
+        return errorResult(
+          queryableCount > 0
+            ? "Every knowledge source reachable here is disabled for this agent. Re-enable one in the agent's Tools & Knowledge settings."
+            : "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
+        );
+      }
     } else {
       const agent = await AgentModel.findById(contextAgent.id);
 
@@ -651,6 +695,7 @@ async function handleQueryKnowledgeSources(params: {
               resource: "knowledgeBase",
               sources: validKbs,
               action: "use",
+              principal: oauthPrincipal ?? undefined,
             },
           );
 
@@ -676,7 +721,8 @@ async function handleQueryKnowledgeSources(params: {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
                   viewerUserId: access?.userId,
-                  viewerPrincipal: access?.principal,
+                  viewerPrincipal:
+                    access?.principal ?? oauthPrincipal ?? undefined,
                   visibilityScope: "query",
                   environmentId: agentEnvironmentId,
                 }),
@@ -700,6 +746,7 @@ async function handleQueryKnowledgeSources(params: {
               organizationId,
               connectors,
               knowledgeBaseIds: visibleKbs.map((kb) => kb.id),
+              principal: oauthPrincipal ?? undefined,
             },
           );
       // SPDX-SnippetEnd
@@ -755,7 +802,30 @@ async function handleQueryKnowledgeSources(params: {
       }
     }
 
-    if (context.userId) userAcl.push(`principal:${context.userId}`);
+    if (context.userId) {
+      userAcl.push(`principal:${context.userId}`);
+    } else {
+      if (oauthPrincipal?.authorId && oauthPrincipal.authorEmail) {
+        const accessTokens = await findAccessTokensForUserCached({
+          memberEmail: oauthPrincipal.authorEmail,
+          userId: oauthPrincipal.authorId,
+          connectorIds,
+        });
+        userAcl = [
+          ...new Set([
+            ...userAcl,
+            ...(oauthPrincipal.upstreamTokens ?? []),
+            ...accessTokens,
+          ]),
+        ];
+      }
+      const oauthClientSubject = oauthPrincipal?.subjects.find(
+        (subject) => subject.type === "oauthClient",
+      );
+      if (oauthClientSubject) {
+        userAcl.push(`oauth_client:${oauthClientSubject.id}`);
+      }
+    }
 
     const bypassAcl = access?.canReadAll ?? false;
     const documentFilter = args.documentFilter;
@@ -975,9 +1045,13 @@ async function handleGetKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.id);
     }
+    const result = {
+      ...kb,
+      ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(kb.id)),
+    };
     return structuredSuccessResult(
-      { knowledgeBase: kb },
-      JSON.stringify(kb, null, 2),
+      { knowledgeBase: result },
+      JSON.stringify(result, null, 2),
     );
   } catch (error) {
     return catchError(error, "getting knowledge base");
@@ -998,6 +1072,24 @@ async function handleUpdateKnowledgeBase(params: {
     const updates: Record<string, unknown> = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
+    if (args.uploadedFilesEnvironmentId !== undefined) {
+      if (!context.userId)
+        return errorResult("User context is required to assign an environment");
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeBase",
+        scope: args.id,
+        action: "update",
+      });
+      await assertCanAssignEnvironment({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        environmentId: args.uploadedFilesEnvironmentId,
+        resource: "knowledgeSource",
+      });
+      updates.uploadedFilesEnvironmentId = args.uploadedFilesEnvironmentId;
+    }
     if (Object.keys(updates).length === 0) {
       return errorResult("At least one field to update is required");
     }
@@ -1017,9 +1109,13 @@ async function handleUpdateKnowledgeBase(params: {
     if (!kb) {
       return knowledgeBaseNotFound(args.id);
     }
+    const result = {
+      ...kb,
+      ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(kb.id)),
+    };
     return structuredSuccessResult(
-      { knowledgeBase: kb },
-      `Knowledge base updated successfully.\n\n${JSON.stringify(kb, null, 2)}`,
+      { knowledgeBase: result },
+      `Knowledge base updated successfully.\n\n${JSON.stringify(result, null, 2)}`,
     );
   } catch (error) {
     return catchError(error, "updating knowledge base");
@@ -1112,11 +1208,16 @@ async function handleCreateKnowledgeConnector(params: {
       nextConfig: { type: args.connector_type, ...args.config },
     });
     if (salesforceViolation) return errorResult(salesforceViolation);
-    if (args.connector_type === "salesforce") {
-      const validation = await getConnector("salesforce").validateConfig({
-        type: args.connector_type,
-        ...args.config,
-      });
+    if (
+      args.connector_type === "salesforce" ||
+      args.connector_type === "github"
+    ) {
+      const validation = await getConnector(args.connector_type).validateConfig(
+        {
+          type: args.connector_type,
+          ...args.config,
+        },
+      );
       if (!validation.valid)
         return errorResult(
           `Invalid connector configuration: ${validation.error}`,
@@ -1374,10 +1475,14 @@ async function handleUpdateKnowledgeConnector(params: {
       existingConfig: existingConnector.config,
     });
     if (salesforceViolation) return errorResult(salesforceViolation);
-    if (existingConnector.connectorType === "salesforce" && updates.config) {
-      const validation = await getConnector("salesforce").validateConfig(
-        updates.config,
-      );
+    if (
+      (existingConnector.connectorType === "salesforce" ||
+        existingConnector.connectorType === "github") &&
+      updates.config
+    ) {
+      const validation = await getConnector(
+        existingConnector.connectorType,
+      ).validateConfig(updates.config);
       if (!validation.valid)
         return errorResult(
           `Invalid connector configuration: ${validation.error}`,
@@ -1498,6 +1603,15 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     });
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
+    }
+    if (context.userId) {
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeConnector",
+        scope: args.connector_id,
+        action: "manage-permissions",
+      });
     }
     const knowledgeBase = await KnowledgeBaseModel.findById(
       args.knowledge_base_id,

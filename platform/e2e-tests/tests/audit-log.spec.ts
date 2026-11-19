@@ -35,10 +35,12 @@ test.describe("Audit log UI", {
     await goToAdminPage(AUDIT_LOGS_PATH);
     await adminPage.waitForLoadState("domcontentloaded");
 
-    // Page heading and filter controls are part of the audit log table contract.
-    await expect(
-      adminPage.getByRole("combobox", { name: "Filter by action" }),
-    ).toBeVisible({ timeout: 15_000 });
+    // The filter pickers are part of the audit log table contract.
+    for (const filter of ["Event", "Actor", "Resource"]) {
+      await expect(
+        adminPage.getByRole("button", { name: `${filter} filter:` }),
+      ).toBeVisible({ timeout: 15_000 });
+    }
 
     // Column headers are stable and part of the visual contract.
     for (const column of ["Event", "Actor", "Status", "Time"]) {
@@ -98,7 +100,7 @@ test.describe("Audit log UI", {
     }
   });
 
-  test("clicking a row opens the event detail dialog", async ({
+  test("clicking a row opens the event drawer", async ({
     adminPage,
     goToAdminPage,
   }) => {
@@ -121,15 +123,15 @@ test.describe("Audit log UI", {
     test.skip(!hasRow, "no audit rows in the test environment");
 
     await firstRow.click();
-    await expect(adminPage.getByRole("dialog")).toBeVisible({
-      timeout: 10_000,
-    });
-    // Detail dialog contract: identifies the actor and the action.
-    await expect(adminPage.getByRole("dialog")).toContainText(/When/i);
-    await expect(adminPage.getByRole("dialog")).toContainText(/Actor/i);
+    const drawer = adminPage.getByRole("dialog");
+    await expect(drawer).toBeVisible({ timeout: 10_000 });
+    // Drawer contract: the Overview names the actor and the time.
+    await drawer.getByRole("tab", { name: "Overview" }).click();
+    await expect(drawer).toContainText(/When/i);
+    await expect(drawer).toContainText(/Actor/i);
   });
 
-  test("deep link with ?event=<id> opens the event detail dialog", async ({
+  test("deep link with ?event=<id> opens the event drawer", async ({
     adminPage,
     goToAdminPage,
     makeRandomString,
@@ -169,12 +171,15 @@ test.describe("Audit log UI", {
 
       await goToAdminPage(`${AUDIT_LOGS_PATH}?event=${eventId}`);
 
-      const dialog = adminPage.getByRole("dialog");
-      await expect(dialog).toBeVisible({ timeout: 15_000 });
-      await expect(dialog).toContainText("Event details");
-      // The dialog shows the deep-linked event: the created team's id
-      // appears as the resource id.
-      await expect(dialog).toContainText(team.id);
+      const drawer = adminPage.getByRole("dialog");
+      await expect(drawer).toBeVisible({ timeout: 15_000 });
+      await expect(
+        drawer.getByRole("heading", { name: "Team created" }),
+      ).toBeVisible();
+      // The drawer shows the deep-linked event: the created team's id
+      // appears as the resource id on the Overview.
+      await drawer.getByRole("tab", { name: "Overview" }).click();
+      await expect(drawer).toContainText(team.id);
     } finally {
       await deleteTeam(adminPage.request, team.id);
     }

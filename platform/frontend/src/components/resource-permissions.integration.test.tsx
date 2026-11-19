@@ -317,6 +317,116 @@ it("revokes a service account's direct grant", async () => {
   );
 });
 
+it("narrows an environment's Can use to the kinds of object chosen, and stores every kind as plain use", async () => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  const environmentEndpoint = `${origin}/api/resource-permissions/environment`;
+  policy = {
+    ...policy,
+    resource: "environment",
+    name: "Launch",
+    inheritedGrants: [],
+    // Whoever may deploy every kind holds each kind's own action too.
+    effectiveActions: [
+      "read",
+      "use",
+      "update",
+      "delete",
+      "manage-permissions",
+      "deploy-agent",
+      "deploy-mcp-gateway",
+      "deploy-mcp-registry",
+      "deploy-skill",
+      "deploy-app",
+      "deploy-knowledge-source",
+    ],
+  };
+  let submitted: { grants: Policy["grants"] } | undefined;
+  server.use(
+    http.get(`${environmentEndpoint}/:scope`, ({ params }) =>
+      HttpResponse.json(
+        params.scope === policy.scope
+          ? policy
+          : { ...policy, scope: "*", grants: [], effectiveActions: [] },
+      ),
+    ),
+    http.get(`${environmentEndpoint}/:scope/subjects`, () =>
+      HttpResponse.json([]),
+    ),
+    // Saving refreshes the caller's own capabilities.
+    http.get(`${origin}/api/resource-permissions`, () => HttpResponse.json([])),
+    http.put(`${environmentEndpoint}/:scope`, async ({ request }) => {
+      submitted = (await request.json()) as { grants: Policy["grants"] };
+      policy = {
+        ...policy,
+        revision: policy.revision + 1,
+        // The API answers with each recipient's name beside their grant.
+        grants: submitted.grants.map((grant) => ({
+          ...grant,
+          name: "Build automation",
+        })),
+      };
+      return HttpResponse.json(policy);
+    }),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+
+  // "Can use" deploys every kind until some are cleared beneath it.
+  const access = () =>
+    screen.findByRole("button", { name: "Permission for Build automation" });
+  expect(await access()).toHaveTextContent("Can use");
+  await user.click(await access());
+  expect(await screen.findByRole("radio", { name: "Can use" })).toBeChecked();
+  for (const name of [
+    "MCP gateways",
+    "MCP servers",
+    "Skills",
+    "Knowledge connectors",
+  ])
+    await user.click(await screen.findByRole("checkbox", { name }));
+  // The last kind left cannot be cleared: deploying nothing is "Can read".
+  await user.click(await screen.findByRole("checkbox", { name: "Agents" }));
+  expect(
+    await screen.findByRole("checkbox", { name: "MCP Apps" }),
+  ).toBeDisabled();
+  await user.click(await screen.findByRole("checkbox", { name: "Agents" }));
+  await user.keyboard("{Escape}");
+  expect(await access()).toHaveTextContent("Can use · Agents, MCP Apps");
+
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(submitted?.grants[0].actions).toEqual([
+      "read",
+      "deploy-agent",
+      "deploy-app",
+    ]),
+  );
+
+  // Choosing "Can use" again keeps the kinds it is narrowed to.
+  await user.click(await access());
+  await user.click(await screen.findByRole("radio", { name: "Can use" }));
+  expect(await access()).toHaveTextContent("Can use · Agents, MCP Apps");
+
+  // Checking every kind is plain "Can use", stored as the level.
+  await user.click(await access());
+  for (const name of [
+    "MCP gateways",
+    "MCP servers",
+    "Skills",
+    "Knowledge connectors",
+  ])
+    await user.click(await screen.findByRole("checkbox", { name }));
+  await user.keyboard("{Escape}");
+  await waitFor(async () =>
+    expect((await access()).textContent).toBe("Can use"),
+  );
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(submitted?.grants[0].actions).toEqual(["read", "use"]),
+  );
+});
+
 it("saves embedded permissions without submitting the surrounding settings form", async () => {
   let parentSubmissions = 0;
   let saved = false;

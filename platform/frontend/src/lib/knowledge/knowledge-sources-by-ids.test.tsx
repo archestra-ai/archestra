@@ -5,20 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetConnectors = vi.fn();
 const mockGetKnowledgeBases = vi.fn();
 
-vi.mock("@archestra/shared", async () => {
-  const actual =
-    await vi.importActual<typeof import("@archestra/shared")>(
-      "@archestra/shared",
-    );
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getConnectors: (...args: unknown[]) => mockGetConnectors(...args),
-      getKnowledgeBases: (...args: unknown[]) => mockGetKnowledgeBases(...args),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getConnectors: (...args: unknown[]) => mockGetConnectors(...args),
+  getKnowledgeBases: (...args: unknown[]) => mockGetKnowledgeBases(...args),
+}));
 
 import { useConnectorsByIds } from "./connector.query";
 import { useKnowledgeBasesByIds } from "./knowledge-base.query";

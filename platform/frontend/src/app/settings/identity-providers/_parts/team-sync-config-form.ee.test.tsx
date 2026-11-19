@@ -78,9 +78,11 @@ describe("TeamSyncConfigForm", () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
     expect(await screen.findByText("1 groups extracted")).toBeInTheDocument();
     const template = screen.getByLabelText("Groups Handlebars Template");
-    await user.type(template, "custom-group");
+    // Assert evaluated output, not the same text in the template code sample.
+    await user.click(template);
+    await user.paste("custom-{{groups.[0]}}");
     expect(
-      await screen.findByText("custom-group", { selector: "span" }),
+      await screen.findByText("custom-engineering", { selector: "span" }),
     ).toBeInTheDocument();
     await user.clear(template);
     expect(

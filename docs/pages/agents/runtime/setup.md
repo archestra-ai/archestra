@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-13
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -35,7 +35,7 @@ kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-sys
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
-Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
+Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtimes → Runtime backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
 
 The controller does not install a container isolation runtime. Check image architecture and admission policies before starting workloads.
 
@@ -52,6 +52,42 @@ The controller does not install a container isolation runtime. Check image archi
 
 Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
 
+To keep runs off the node's kernel, use a [sandboxed runtime](#sandboxed-runtime).
+
+## Sandboxed Runtime
+
+A run executes code an agent wrote, so give it a kernel of its own. With a sandboxed runtime, each run gets a user-space kernel (gVisor) or a lightweight VM (Kata Containers) instead of sharing the node's kernel, so an escape from the container does not reach the node. Use one in production.
+
+Archestra does not install the runtime. Set it up in the cluster, then point Archestra at its RuntimeClass:
+
+:::tabs
+@tab AWS
+EKS has no managed sandbox. Install [gVisor](https://gvisor.dev/docs/user_guide/containerd/quick_start/) or [Kata Containers](https://github.com/kata-containers/kata-containers/tree/main/docs/install) on a dedicated node group, and create a RuntimeClass for its handler, such as `runsc` for gVisor. Taint the node group and set the RuntimeClass's `scheduling` so runs land only on those nodes.
+@tab Google Cloud
+Create a [GKE Sandbox](https://cloud.google.com/kubernetes-engine/docs/how-to/sandbox-pods) node pool with `gcloud container node-pools create <pool> --cluster=<cluster> --sandbox=type=gvisor`. GKE creates the `gvisor` RuntimeClass, taints the pool, and adds the matching toleration to every pod that uses it. Autopilot clusters support `gvisor` with no node pool.
+@tab Azure
+Add an AKS [Pod Sandboxing](https://learn.microsoft.com/en-us/azure/aks/use-pod-sandboxing) node pool with `az aks nodepool add --os-sku AzureLinux --workload-runtime KataVmIsolation`. It needs a VM size with nested virtualization. Use the `kata-vm-isolation` RuntimeClass.
+:::
+
+Then set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME):
+
+```yaml
+archestra:
+  env:
+    ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+```
+
+New runs then start on the sandboxed runtime. To check, list the runtime pods in their namespace. Each shows its RuntimeClass. With gVisor, `kubectl exec <pod> -- uname -r` also reports a different kernel version than the node's:
+
+```bash
+kubectl get pods -n <namespace> -l archestra.io/agent-workspace \
+  -o custom-columns=NAME:.metadata.name,RUNTIME:.spec.runtimeClassName
+```
+
+- Archestra checks that the RuntimeClass exists, at startup and before each run, by asking Kubernetes to admit a test pod as a dry run (nothing is created). If the class is missing, the platform logs an error and runs fail at once with a reason that names it. If the test pod is rejected for another reason, such as an admission policy, Archestra logs that it cannot check and runs start unchecked.
+- With [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) set, give the sandbox nodes that label too.
+- [Privileged runs](#privileged-containers) ignore the RuntimeClass and share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker.
+
 ## EKS With Fargate
 
 Fargate-only clusters cannot host Agent Runtime's storage. [AWS Fargate](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html) does not support EBS mounts or dynamic persistent-volume provisioning.
@@ -66,13 +102,17 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 
 ## Runtime Tiers
 
-Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtime tiers**.
+Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtimes → Runtime tiers**.
 
 ![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
-Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit is twice the memory request, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+Set **Memory request (GiB)** and **Memory limit (GiB)** independently of CPU for memory-heavy workloads. For example, set the CPU request to `0.5` and both memory fields to `8` for an 8 GiB request and limit.
 
-**Workspace** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
+![A runtime tier with 0.5 CPU and an 8 GiB memory request and limit](/docs/automated_screenshots/agents-runtime-setup_tier-memory.webp)
+
+Blank memory fields use defaults in GiB: the request is `2 × CPU request`, and the limit is `max(2 × memory request, 2 × CPU request, 2 × CPU limit)`. The limit uses the effective memory request, including an explicit request override. An explicit memory limit overrides that formula. A blank CPU limit leaves CPU uncapped; the memory-limit formula uses the CPU request in its place. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+
+**Disk** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
 
 Agents do not configure CPU, memory, or storage directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Disable autoscaling** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
 
@@ -86,7 +126,7 @@ After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_
 
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
-Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
+Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtimes → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
@@ -94,9 +134,9 @@ Archestra maintains the configured pool replica count. An HPA targeting these po
 
 ## Privileged Containers
 
-Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
+Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace, and put privileged runs on their own tainted node pool with [`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR).
 
-After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
+Privileged runs ignore the [sandboxed runtime](#sandboxed-runtime). After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 
 <!-- SPDX-SnippetBegin -->
 <!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
@@ -117,13 +157,13 @@ Upgrading Archestra moves every agent made from a catalog template onto the new 
 - **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
 - **A turn already running** keeps its image until it ends.
 
-A custom image, or a maintained image pinned by digest, runs exactly as saved.
+A custom image, or a maintained image you pinned by digest alone (`…/agent-codex@sha256:…`, no tag), runs exactly as saved.
 
 ## Troubleshooting
 
 When runs do not start:
 
-- **Runtime unavailable:** check **Settings → Agents → Runtime Backend**, and confirm the Agent Sandbox controller is healthy.
+- **Runtime unavailable:** check **Settings → Agents → Runtimes → Runtime backend**, and confirm the Agent Sandbox controller is healthy.
 - **Run waits on storage:** check the storage class and its capacity.
 - **Image pull fails:** check the image name, registry access, and pull credentials.
 

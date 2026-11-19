@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
+import { syncDesktopMcpTools } from "@/services/desktop-mcp/desktop-mcp-tools";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -11,6 +12,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import type {
   InternalMcpCatalog,
@@ -291,6 +293,7 @@ export function onlyForwardCompatibleEnvDiff(
       deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
       oauthConfig: cat.oauthConfig ?? null,
       enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
+      awsIamConfig: cat.awsIamConfig ?? null,
       // localConfig minus environment (covered by steps 1, 1b, 2 above).
       localConfig: cat.localConfig
         ? {
@@ -510,9 +513,32 @@ async function syncToolsForServer(
     ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
 
-  const toolNamePrefix = catalogItem.name;
+  // The installations of a desktop MCP server run on different computers:
+  // one of them adds to the shared tools, and never rewrites or deletes them.
+  if (catalogItem.serverType === "desktop_mcp") {
+    const { created, unchanged } = await syncDesktopMcpTools({
+      mcpServerId: server.id,
+      catalogItem,
+      tools,
+    });
+    if (created.length > 0) {
+      await refreshMcpSkillMetadata({
+        catalogId: catalogItem.id,
+        mcpServerId: server.id,
+      });
+      trackBackgroundWork(
+        openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+      );
+    }
+    return { created, updated: [], unchanged, deleted: [] };
+  }
+
+  const toolNameFor = await mintCatalogToolNames({
+    catalogId: catalogItem.id,
+    rawToolNames: tools.map((tool) => tool.name),
+  });
   const toolsToSync = tools.map((tool) => ({
-    name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+    name: toolNameFor(tool.name),
     description: tool.description,
     parameters: tool.inputSchema,
     meta: {
@@ -874,6 +900,7 @@ type ComparableLocalConfig = Pick<
   | "httpPath"
   | "serviceAccount"
   | "imagePullPolicy"
+  | "runtimeTier"
 >;
 
 /**
@@ -978,6 +1005,7 @@ function getLocalExecutionConfig(
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",
     imagePullPolicy: catalog.localConfig?.imagePullPolicy,
+    runtimeTier: catalog.localConfig?.runtimeTier,
   };
 }
 

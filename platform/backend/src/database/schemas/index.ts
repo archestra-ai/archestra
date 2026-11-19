@@ -61,6 +61,7 @@ export { default as agentExcludedConnectorsTable } from "./agent-excluded-connec
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";
 export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
+export { default as agentIdentityBindingsTable } from "./agent-identity-binding";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentPinsTable } from "./agent-pin";
@@ -95,6 +96,10 @@ export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
+export { default as autoRoutersTable } from "./auto-router";
+export { default as autoRouterVirtualApiKeysTable } from "./auto-router-virtual-api-key";
+export { default as autoRoutingTiersTable } from "./auto-routing-tier";
+export { default as blobProvidersTable } from "./blob-provider";
 export { default as browserStorageStatesTable } from "./browser-storage-state";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
@@ -124,6 +129,10 @@ export {
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
+export { default as costExportsTable } from "./cost-export";
+export { default as desktopDevicesTable } from "./desktop-device";
+export { default as desktopDeviceServersTable } from "./desktop-device-server";
+export { default as desktopMcpRequestsTable } from "./desktop-mcp-request";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
@@ -131,6 +140,7 @@ export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
 export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
+export { default as githubAppAccountsTable } from "./github-app-account";
 export { default as guardrailsDeploymentTable } from "./guardrails-deployment";
 export { guardrailsPolicyRevisionsTable } from "./guardrails-policy";
 export { default as hookFilesTable } from "./hook-file";
@@ -191,6 +201,12 @@ export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyLabelsTable } from "./llm-provider-api-key-label";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
+export {
+  llmUsageDailyTable,
+  llmUsageHourlyTable,
+  llmUsageRollupDirtyTable,
+  llmUsageRollupStateTable,
+} from "./llm-usage-hourly";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogSkillsTable } from "./mcp-catalog-skill";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
@@ -228,7 +244,6 @@ export {
   openappaPolicyTestSuitesTable,
 } from "./openappa-policy-tests";
 export { openappaYellsTable } from "./openappa-yell";
-export { default as orgTrioPendingNormalTierTable } from "./org-trio-pending-normal-tier";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";
@@ -263,6 +278,7 @@ export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
 export { default as serviceAccountsTable } from "./service-account";
+export { default as serviceAccountFederatedCredentialsTable } from "./service-account-federated-credential";
 export { default as serviceAccountLabelsTable } from "./service-account-label";
 export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
@@ -289,6 +305,7 @@ export { default as skillUsageEventsTable } from "./skill-usage-event";
 export { default as skillUsersTable } from "./skill-user";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
+export { default as spiffeSigningKeysTable } from "./spiffe-signing-key";
 export { default as startupMigrationsTable } from "./startup-migration";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
@@ -297,6 +314,7 @@ export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
 export { default as toolsTable } from "./tool";
 export { default as toolObservationsTable } from "./tool-observation";
+export { default as toolSearchTextsTable } from "./tool-search-text";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
 export { default as userCredentialsTable } from "./user-credential";

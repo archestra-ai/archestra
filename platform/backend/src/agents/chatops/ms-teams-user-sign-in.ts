@@ -14,10 +14,11 @@ import { errorMessage } from "./utils";
 
 /**
  * The bot's Entra app, acting as an OAuth client on behalf of a Teams user.
- * Teams keeps a file sent in a group chat in the sender's own OneDrive, which
- * no app-level permission narrower than tenant-wide `Files.Read.All` reaches.
- * Instead each sender signs in once and the bot reads their files with their
- * own delegated `Files.Read`.
+ * Teams keeps a file sent in a group chat in the sender's own OneDrive, and a
+ * file sent in a channel in that team's SharePoint site. No app-level
+ * permission narrower than tenant-wide `Files.Read.All` reaches every one of
+ * those without a per-site grant, so each sender signs in once and the bot
+ * reads their files with their own delegated access.
  */
 export interface MsTeamsOAuthClient {
   tenantId: string;
@@ -25,13 +26,13 @@ export interface MsTeamsOAuthClient {
   clientSecret: string;
 }
 
-/** Delegated scopes requested at sign-in. `Files.Read` is the user's own files only. */
-const MS_TEAMS_USER_SCOPES = [
-  "openid",
-  "profile",
-  "offline_access",
-  "https://graph.microsoft.com/Files.Read",
-];
+/**
+ * Which files a sign-in lets the bot read with the person's access:
+ * - `own`: their own OneDrive (`Files.Read`), enough for group-chat files.
+ * - `all`: every file they can open (`Files.Read.All`), which a channel's
+ *   files in its team's SharePoint site need.
+ */
+type MsTeamsFileAccess = "own" | "all";
 
 /**
  * The exact string to register as a Web redirect URI on the bot's Entra app.
@@ -57,6 +58,7 @@ class MsTeamsUserSignIn {
   async createPendingSignIn(params: {
     tenantId: string;
     message: IncomingChatMessage;
+    access: MsTeamsFileAccess;
   }): Promise<string> {
     const key = randomUUID();
     const pending: PendingSignIn = {
@@ -64,6 +66,7 @@ class MsTeamsUserSignIn {
       aadObjectId: params.message.senderId,
       senderName: params.message.senderName,
       loginHint: params.message.senderEmail,
+      access: params.access,
       message: serializeMessage(params.message),
     };
     await cacheManager.set(
@@ -110,7 +113,7 @@ class MsTeamsUserSignIn {
     url.searchParams.set("response_type", "code");
     url.searchParams.set("redirect_uri", getMsTeamsSignInRedirectUri());
     url.searchParams.set("response_mode", "query");
-    url.searchParams.set("scope", MS_TEAMS_USER_SCOPES.join(" "));
+    url.searchParams.set("scope", scopesFor(pending.access).join(" "));
     url.searchParams.set("state", state);
     url.searchParams.set("code_challenge", sha256Base64Url(codeVerifier));
     url.searchParams.set("code_challenge_method", "S256");
@@ -143,6 +146,7 @@ class MsTeamsUserSignIn {
     try {
       grant = await requestTokens({
         client: params.client,
+        scopes: scopesFor(pending.access),
         body: {
           grant_type: "authorization_code",
           code: params.code,
@@ -189,21 +193,30 @@ class MsTeamsUserSignIn {
 
   /**
    * A current access token for a Teams user who signed in, refreshed when
-   * close to expiry. Null when they never signed in, or when Microsoft no
-   * longer honours their sign-in (revoked, password reset, consent removed):
-   * that connection is dropped so the next file asks them again.
+   * close to expiry. Null when they never signed in, when their sign-in does
+   * not cover the `access` asked for (a group-chat sign-in reading a channel
+   * file), or when Microsoft no longer honours their sign-in (revoked,
+   * password reset, consent removed): that connection is dropped so the next
+   * file asks them again.
    */
   async getAccessToken(params: {
     tenantId: string;
     aadObjectId: string;
     client: MsTeamsOAuthClient;
+    access: MsTeamsFileAccess;
   }): Promise<string | null> {
-    const connection = await ChatOpsMsTeamsUserConnectionModel.find(params);
+    const { tenantId, aadObjectId } = params;
+    const connection = await ChatOpsMsTeamsUserConnectionModel.find({
+      tenantId,
+      aadObjectId,
+    });
     if (!connection) return null;
+    const grantedAccess = accessOf(connection.scope);
+    if (params.access === "all" && grantedAccess !== "all") return null;
     const tokens =
       await ChatOpsMsTeamsUserConnectionModel.getTokens(connection);
     if (!tokens) {
-      await ChatOpsMsTeamsUserConnectionModel.delete(params);
+      await ChatOpsMsTeamsUserConnectionModel.delete({ tenantId, aadObjectId });
       return null;
     }
     if (
@@ -216,6 +229,7 @@ class MsTeamsUserSignIn {
     try {
       const grant = await requestTokens({
         client: params.client,
+        scopes: scopesFor(grantedAccess),
         body: {
           grant_type: "refresh_token",
           refresh_token: tokens.refreshToken,
@@ -234,7 +248,10 @@ class MsTeamsUserSignIn {
           { reason: error.message },
           "[MSTeamsSignIn] A Teams user's sign-in is no longer valid; dropping it",
         );
-        await ChatOpsMsTeamsUserConnectionModel.delete(params);
+        await ChatOpsMsTeamsUserConnectionModel.delete({
+          tenantId,
+          aadObjectId,
+        });
       } else {
         logger.warn(
           { error: errorMessage(error) },
@@ -265,6 +282,8 @@ interface PendingSignIn {
   aadObjectId: string;
   senderName: string;
   loginHint?: string;
+  /** Absent on sign-ins started before channel sign-in existed. */
+  access?: MsTeamsFileAccess;
   message: SerializedMessage;
 }
 
@@ -308,6 +327,35 @@ const REPLAY_MESSAGE_SUFFIX = ":signed-in";
 
 class SignInRevokedError extends Error {}
 
+const GRAPH_RESOURCE = "https://graph.microsoft.com/";
+
+/** The delegated Graph permission behind each kind of file access. */
+const FILE_SCOPES: Record<MsTeamsFileAccess, string> = {
+  own: "Files.Read",
+  all: "Files.Read.All",
+};
+
+/** Delegated scopes requested at sign-in and on every refresh. */
+function scopesFor(access: MsTeamsFileAccess = "own"): string[] {
+  return [
+    "openid",
+    "profile",
+    "offline_access",
+    `${GRAPH_RESOURCE}${FILE_SCOPES[access]}`,
+  ];
+}
+
+/**
+ * The file access a stored sign-in grants, from the scopes Microsoft
+ * returned. Microsoft may list them with or without the Graph prefix.
+ */
+function accessOf(scope: string): MsTeamsFileAccess {
+  const granted = scope
+    .split(/\s+/)
+    .map((s) => s.replace(GRAPH_RESOURCE, "").toLowerCase());
+  return granted.includes(FILE_SCOPES.all.toLowerCase()) ? "all" : "own";
+}
+
 function serializeMessage(message: IncomingChatMessage): SerializedMessage {
   const metadata = Object.fromEntries(
     Object.entries(message.metadata ?? {}).filter(
@@ -337,6 +385,7 @@ function deserializeMessage(message: SerializedMessage): IncomingChatMessage {
 
 async function requestTokens(params: {
   client: MsTeamsOAuthClient;
+  scopes: string[];
   body: Record<string, string>;
   fallbackRefreshToken?: string;
 }): Promise<TokenGrant> {
@@ -348,7 +397,7 @@ async function requestTokens(params: {
       body: new URLSearchParams({
         client_id: params.client.clientId,
         client_secret: params.client.clientSecret,
-        scope: MS_TEAMS_USER_SCOPES.join(" "),
+        scope: params.scopes.join(" "),
         ...params.body,
       }),
     },

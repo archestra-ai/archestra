@@ -145,18 +145,26 @@ function ContainerCommandField({
   );
 }
 
-function ContainerArgumentsField({
+/**
+ * The arguments of a command, one per line. `argumentsFromText` and
+ * `argumentsToText` (container-deployment-fields.utils) turn its text into
+ * the list of arguments and back.
+ */
+export function ContainerArgumentsField({
   id,
   value,
   onChange,
   placeholder,
   labelAddon,
+  description,
   error,
   autoComplete,
-}: Omit<ContainerFieldProps, "description">) {
+  disabled,
+}: ContainerFieldProps & { disabled?: boolean }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>Arguments (one per line){labelAddon}</Label>
+      <FieldDescription description={description} />
       <Textarea
         id={id}
         value={value}
@@ -164,6 +172,8 @@ function ContainerArgumentsField({
         placeholder={placeholder}
         className="min-h-20 font-mono"
         autoComplete={autoComplete}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
       />
       <FieldDescription error={error} />
     </div>

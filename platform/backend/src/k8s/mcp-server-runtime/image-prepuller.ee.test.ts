@@ -17,7 +17,7 @@ import { vi } from "vitest";
 
 // The 403 path's whole contract is the WARNING it produces, and the real
 // export is a Proxy no spy can intercept (see test/mocks/logging.ts).
-vi.mock("@/logging");
+spyOnLogger();
 
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -27,6 +27,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import {
   buildPrepullDaemonSet,
   McpImagePrepuller,
@@ -296,14 +297,12 @@ describe("buildPrepullDaemonSet", () => {
 describe("McpImagePrepuller.reconcileNow", () => {
   let cluster: FakeCluster;
   let prepullEnabled: boolean;
-  let betaEnabled: boolean;
   let hardDisabled: boolean;
   let helmReleaseName: string | undefined;
   let ownerRoleName: string | undefined;
 
   beforeEach(() => {
     prepullEnabled = config.orchestrator.mcpImagePrepull.enabled;
-    betaEnabled = config.orchestrator.mcpIdleHibernation.betaEnabled;
     hardDisabled = config.orchestrator.mcpIdleHibernation.hardDisabled;
     helmReleaseName = config.orchestrator.kubernetes.helmReleaseName;
     ownerRoleName = config.orchestrator.kubernetes.runtimeOwnerRoleName;
@@ -317,7 +316,6 @@ describe("McpImagePrepuller.reconcileNow", () => {
     // Pre-pulling only ever runs where hibernation runs: offered by the
     // deployment, licensed, and opted into by the organization.
     config.orchestrator.mcpImagePrepull.enabled = true;
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
     config.orchestrator.mcpIdleHibernation.hardDisabled = false;
     vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(true);
     vi.spyOn(
@@ -336,7 +334,6 @@ describe("McpImagePrepuller.reconcileNow", () => {
 
   afterEach(() => {
     config.orchestrator.mcpImagePrepull.enabled = prepullEnabled;
-    config.orchestrator.mcpIdleHibernation.betaEnabled = betaEnabled;
     config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
     config.orchestrator.kubernetes.helmReleaseName = helmReleaseName;
     config.orchestrator.kubernetes.runtimeOwnerRoleName = ownerRoleName;

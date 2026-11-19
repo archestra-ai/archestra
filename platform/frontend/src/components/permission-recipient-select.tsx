@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { Bot, Building2, ShieldCheck, UsersRound } from "lucide-react";
+import {
+  Bot,
+  Building2,
+  KeyRound,
+  ShieldCheck,
+  UsersRound,
+} from "lucide-react";
 import { buildUserSelectItem } from "@/components/user-select-option";
 import type { PermissionRecipient } from "@/lib/resource-permissions.query";
 
@@ -37,5 +43,6 @@ const recipientTypes = {
   team: { icon: UsersRound, label: "Team" },
   role: { icon: ShieldCheck, label: "Role" },
   serviceAccount: { icon: Bot, label: "Service account" },
+  oauthClient: { icon: KeyRound, label: "OAuth client" },
   organization: { icon: Building2, label: "Organization" },
 };

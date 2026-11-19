@@ -72,6 +72,7 @@ import {
 } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AgentIdentityBindingModel,
   AgentModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -85,7 +86,6 @@ import {
   UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
@@ -97,16 +97,25 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { awsIamMcpSigner } from "@/services/aws-iam/aws-iam-mcp-signer";
 import {
   filterToolsByCallerCatalogAccess,
   getCallerAccessibleCatalogIds,
   isToolCatalogAccessible,
 } from "@/services/caller-catalog-access";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
+import { resolveExchangeIdentityProviderId } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
 import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  type AgentIdentityContext,
+  agentIdentityKind,
+  assertAgentIdentityRequirement,
+  identityProviderRequiresAgentIdentity,
+} from "@/services/identity-providers/enterprise-managed/exchange";
+import { spiffeIdForAgent } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -130,6 +139,7 @@ import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  EnterpriseCredentialClientType,
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
@@ -140,6 +150,8 @@ import type {
   ToolOwner,
 } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
+import type { AwsIamMcpAuthConfig } from "@/types/aws-iam-mcp-auth";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -150,6 +162,7 @@ import {
 } from "@/utils/network-errors";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { ConnectionLimiter } from "./connection-limiter";
+import { DesktopTunnelTransport } from "./desktop-tunnel-transport";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
   configureMcpElicitation,
@@ -219,6 +232,41 @@ class McpServerUnreachableError extends Error {
     super(message);
     this.name = "McpServerUnreachableError";
   }
+}
+
+type McpDiscoveryHttpFailure = {
+  status: number;
+  authError?: "invalid_token" | "insufficient_scope" | "invalid_request";
+};
+
+function getMcpDiscoveryAuthError(
+  challenge: string | null,
+): McpDiscoveryHttpFailure["authError"] {
+  if (!challenge || !/^\s*Bearer(?:\s|$)/i.test(challenge)) return undefined;
+  const code =
+    /\berror\s*=\s*"?(invalid_token|insufficient_scope|invalid_request)(?="|,|\s|$)/i
+      .exec(challenge)?.[1]
+      ?.toLowerCase();
+  if (
+    code === "invalid_token" ||
+    code === "insufficient_scope" ||
+    code === "invalid_request"
+  ) {
+    return code;
+  }
+  return undefined;
+}
+
+function describeMcpDiscoveryHttpFailure(
+  failure: McpDiscoveryHttpFailure,
+  operation: "connecting" | "listing tools",
+): string {
+  const detail = failure.authError ? ` (${failure.authError})` : "";
+  const guidance =
+    failure.status === 401 || failure.status === 403
+      ? " Check the MCP server's credentials and provider configuration."
+      : " Check the MCP server URL and configuration.";
+  return `Upstream MCP server returned HTTP ${failure.status}${detail} while ${operation}.${guidance}`;
 }
 
 /**
@@ -371,7 +419,12 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 
 /** The caller fields that decide which installation a tool call runs through. */
 export type TargetInstallCaller = InstallCallerContext &
-  Partial<Pick<TokenAuthContext, "isOrganizationToken" | "isExternalIdp">>;
+  Partial<
+    Pick<
+      TokenAuthContext,
+      "tokenId" | "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+    >
+  >;
 
 /** The installation a tool call resolved to. */
 type TargetInstall = {
@@ -402,6 +455,11 @@ type TargetInstallRefusal =
  * only ever persisted, never returned.
  */
 type ToolCallAuthInfo = {
+  /** Client the call's enterprise-managed credential was issued to. */
+  credentialClientId?: string;
+  credentialClientType?: EnterpriseCredentialClientType;
+  /** Agent the credential exchange named as the actor (RFC 8693 `act`). */
+  credentialActorClientId?: string;
   serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
@@ -413,7 +471,7 @@ type ToolCallAuthInfo = {
   llmToolCallId?: string;
 };
 
-type TransportKind = "stdio" | "http";
+type TransportKind = "stdio" | "http" | "desktop";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
 const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
@@ -881,6 +939,21 @@ class McpClient {
           })
         : null;
 
+      if (enterpriseTransportCredential?.issuedTo) {
+        authInfo = {
+          ...authInfo,
+          credentialClientId: enterpriseTransportCredential.issuedTo.clientId,
+          credentialClientType:
+            enterpriseTransportCredential.issuedTo.clientType,
+        };
+      }
+      if (enterpriseTransportCredential?.actor) {
+        authInfo = {
+          ...authInfo,
+          credentialActorClientId: enterpriseTransportCredential.actor.clientId,
+        };
+      }
+
       if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
         const authError =
           await this.buildEnterpriseManagedIdentityProviderAuthMessage(
@@ -901,6 +974,41 @@ class McpClient {
           startedAt,
         });
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM server is called as the agent: assume its role now, so a
+      // refusal reaches the model as a clear error rather than a failed
+      // request. Apps have no agent to assume it as.
+      const awsIamIdentity: AwsIamIdentity | undefined =
+        owner.type === "agent" ? { agentId: owner.id } : undefined;
+      if (catalogItem.awsIamConfig) {
+        const awsIamError = !awsIamIdentity
+          ? "This MCP server signs in with AWS IAM as the calling agent, so only agents can call its tools."
+          : await awsIamMcpSigner
+              .assumeRole({
+                config: catalogItem.awsIamConfig,
+                agentId: owner.id,
+              })
+              .then(
+                () => null,
+                (error: unknown) =>
+                  error instanceof Error ? error.message : String(error),
+              );
+        if (awsIamError) {
+          return this.createErrorResult({
+            toolCall,
+            owner,
+            error: awsIamError,
+            mcpServerName,
+            authInfo,
+            encryptedChatContent,
+            startedAt,
+          });
+        }
+      }
+      // SPDX-SnippetEnd
 
       const secretsResult = await this.getSecretsForMcpServer({
         targetMcpServerId: targetMcpServerId,
@@ -987,6 +1095,18 @@ class McpClient {
       if (externalIdpUserId) {
         connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM connection signs as one agent's role session: never share
+      // it with another agent, even without a conversation.
+      if (catalogItem.awsIamConfig) {
+        connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+          config: catalogItem.awsIamConfig,
+          ownerKey: `${owner.type}:${owner.id}`,
+        })}`;
+      }
+      // SPDX-SnippetEnd
       if (options?.elicitationHandler) {
         // Elicitation support is declared during MCP initialize. Keep these
         // clients separate so a connection opened without the capability is not
@@ -1494,6 +1614,8 @@ class McpClient {
                   connectionKey,
                   tokenAuth,
                   enterpriseTransportCredential ?? undefined,
+                  undefined,
+                  awsIamIdentity,
                 ),
               resetSecrets,
               true,
@@ -1591,6 +1713,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             ),
           secrets,
         );
@@ -1637,6 +1761,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             );
           }, secrets),
       );
@@ -1769,9 +1895,13 @@ class McpClient {
       // A client whose transport already closed (the SDK clears it on close)
       // cannot answer; its ping fails at once, so the catch replaces it.
       try {
+        // A desktop transport holds no connection between messages, and it
+        // checks the device for each one: a ping through the tunnel would
+        // only add a trip to the user's computer.
         if (
           !reusableClient.transport ||
-          this.shouldValidateActiveConnection(connectionKey)
+          (!(reusableClient.transport instanceof DesktopTunnelTransport) &&
+            this.shouldValidateActiveConnection(connectionKey))
         ) {
           await reusableClient.ping();
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
@@ -2453,11 +2583,15 @@ class McpClient {
           catalogId,
           tokenAuth,
         ))
-          ? this.buildAuthRequiredMessage(
-              catalogDisplayName,
-              catalogId,
-              tokenAuth,
-            )
+          ? // A desktop MCP server has no credentials to set up: the caller
+            // adds it to their own computer.
+            catalogItem.serverType === "desktop_mcp"
+            ? this.buildAddToComputerMessage(catalogDisplayName, catalogId)
+            : this.buildAuthRequiredMessage(
+                catalogDisplayName,
+                catalogId,
+                tokenAuth,
+              )
           : this.buildConnectionUnavailableMessage(
               catalogDisplayName,
               catalogId,
@@ -2509,6 +2643,33 @@ class McpClient {
       return { refusal: "browser_runtime_unavailable" };
     }
 
+    // A desktop MCP server runs on the caller's own computer: the call goes
+    // through the caller's personal installation, whatever installation the
+    // assignment or the catalog item is pinned to. A pin would let one user's
+    // agent run tools on another user's computer.
+    if (catalogItem.serverType === "desktop_mcp") {
+      const callerId = tokenAuth?.userId;
+      const own = !callerId
+        ? null
+        : serverLookup
+          ? (serverLookup.byCatalogId
+              .get(catalogItem.id)
+              ?.find(
+                (install) =>
+                  install.scope === "personal" && install.ownerId === callerId,
+              ) ?? null)
+          : await McpServerModel.getUserPersonalServerForCatalog(
+              callerId,
+              catalogItem.id,
+            );
+      if (!own) return { refusal: "no_install" };
+      return {
+        targetMcpServerId: own.id,
+        mcpServerName: own.name,
+        resolvedServer: own,
+      };
+    }
+
     // Static credential case: tool has a bound MCP server credential to use.
     if (tool.credentialResolutionMode === "static") {
       if (!tool.mcpServerId) {
@@ -2520,7 +2681,11 @@ class McpClient {
         const installs = serverLookup
           ? (serverLookup.byCatalogId.get(catalogItem.id) ?? [])
           : await McpServerModel.findByCatalogId(catalogItem.id);
-        const resolved = await this.pickInstallForCaller(installs, tokenAuth);
+        const resolved = await this.pickInstallForCaller(
+          installs,
+          tokenAuth,
+          serverLookup,
+        );
         if (resolved) {
           return {
             targetMcpServerId: resolved.id,
@@ -2639,6 +2804,7 @@ class McpClient {
     const resolvedServer = await this.pickInstallForCaller(
       allServers,
       tokenAuth,
+      serverLookup,
     );
     if (resolvedServer) {
       logger.info(
@@ -2706,6 +2872,7 @@ class McpClient {
   private async pickInstallForCaller(
     allServers: McpServer[],
     tokenAuth: InstallCallerContext | undefined,
+    serverLookup?: ListingServerLookup,
   ): Promise<McpServer | undefined> {
     if (tokenAuth?.userId) {
       const userServer = allServers.find(
@@ -2713,13 +2880,22 @@ class McpClient {
       );
       if (userServer) return userServer;
 
-      const userTeamIds = new Set(
-        await TeamModel.getUserTeamIds(tokenAuth.userId),
-      );
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
-      );
-      if (teamServer) return teamServer;
+      // Only team-owned installs require membership. Share that lookup across
+      // this listing's catalogs, never across calls or authenticated callers.
+      if (allServers.some((server) => server.teamId)) {
+        let membership = serverLookup?.userTeamIds.get(tokenAuth.userId);
+        if (!membership) {
+          membership = TeamModel.getUserTeamIds(tokenAuth.userId);
+          const userId = tokenAuth.userId;
+          serverLookup?.userTeamIds.set(userId, membership);
+          membership.catch(() => serverLookup?.userTeamIds.delete(userId));
+        }
+        const userTeamIds = new Set(await membership);
+        const teamServer = allServers.find(
+          (s) => s.teamId && userTeamIds.has(s.teamId),
+        );
+        if (teamServer) return teamServer;
+      }
 
       const orgServer = allServers.find((s) => s.scope === "org");
       if (orgServer) return orgServer;
@@ -2786,6 +2962,9 @@ class McpClient {
     if (catalogItem.serverType === "remote") {
       return "http";
     }
+    if (catalogItem.serverType === "desktop_mcp") {
+      return "desktop";
+    }
 
     const usesStreamableHttp =
       await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
@@ -2804,6 +2983,8 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     await assertMayConnect(catalogItem.id, caller);
     // Also covers queued calls and retry paths that bypass getTransport().
@@ -2812,6 +2993,9 @@ class McpClient {
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");
+    }
+    if (transportKind === "desktop") {
+      return this.getDesktopTunnelTransport(catalogItem, targetMcpServerId);
     }
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -2874,6 +3058,7 @@ class McpClient {
             enterpriseTransportCredential,
           );
         } else if (
+          !catalogItem.awsIamConfig &&
           !staticCredentialsProvideAuthorization({ catalogItem, secrets }) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
@@ -2940,10 +3125,36 @@ class McpClient {
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, headers);
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const baseFetch = catalogItem.awsIamConfig
+          ? awsIamMcpSigner.signingFetch({
+              config: catalogItem.awsIamConfig,
+              agentId: requireAwsIamIdentity(awsIamIdentity),
+            })
+          : undefined;
+        // SPDX-SnippetEnd
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
           {
             requestInit: { headers: new Headers(headers) },
+            // Discovery diagnostics are deliberately limited to status and a
+            // known Bearer error code. Never retain an upstream body or header.
+            fetch: onHttpFailure
+              ? async (url, init) => {
+                  const response = await (baseFetch ?? fetch)(url, init);
+                  if (!response.ok) {
+                    onHttpFailure({
+                      status: response.status,
+                      authError: getMcpDiscoveryAuthError(
+                        response.headers.get("www-authenticate"),
+                      ),
+                    });
+                  }
+                  return response;
+                }
+              : baseFetch,
           },
         );
       }
@@ -2988,6 +3199,29 @@ class McpClient {
     }
 
     throw new Error(`Unsupported transport kind: ${transportKind}`);
+  }
+
+  /**
+   * Transport to a desktop MCP server. The server runs on the computer of the
+   * user who owns the install, so that user's device takes the messages.
+   */
+  private async getDesktopTunnelTransport(
+    catalogItem: InternalMcpCatalog,
+    targetMcpServerId: string,
+  ): Promise<Transport> {
+    const [install] = await McpServerModel.findByIdsBasic([targetMcpServerId]);
+    if (!install?.ownerId) {
+      throw new Error(
+        `"${catalogItem.name}" runs on a user's own computer, and this installation has no owner.`,
+      );
+    }
+    // The transport finds the owner's device for each message, and says so
+    // when there is none or it is offline.
+    return new DesktopTunnelTransport({
+      userId: install.ownerId,
+      channel: catalogItem.id,
+      serverName: catalogItem.name,
+    });
   }
 
   private async resolveSecretsForTransport(params: {
@@ -3162,6 +3396,8 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     if (
       PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
@@ -3197,6 +3433,8 @@ class McpClient {
       connectionKey,
       tokenAuth,
       enterpriseTransportCredential,
+      onHttpFailure,
+      awsIamIdentity,
     );
   }
 
@@ -3777,6 +4015,33 @@ class McpClient {
   }
 
   /**
+   * The refusal for a tool of a desktop MCP server that the caller has not
+   * added to their computer. The link opens the registry on the dialog that
+   * adds it. Same typed shape as buildAuthRequiredMessage, with its own
+   * action so clients word it as adding to a computer, not as credentials.
+   */
+  private buildAddToComputerMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    const addUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `"${catalogDisplayName}" is not connected from your device`,
+        detail: `"${catalogDisplayName}" runs on your own device, and you have not connected it yet.`,
+        actionLabel: `connect "${catalogDisplayName}" from your device`,
+        url: addUrl,
+        postAction: `Once "${catalogDisplayName}" is connected from your device, retry this tool call.`,
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "add_desktop_mcp_server",
+      actionUrl: addUrl,
+    };
+  }
+
+  /**
    * Like buildAuthRequiredMessage but worded for a retained tool whose MCP
    * connection was uninstalled (no install remains for its catalog). Same typed
    * shape/action so clients handle it identically; only the human-readable
@@ -4141,13 +4406,19 @@ class McpClient {
               : Math.max(0, Math.round(performance.now() - params.startedAt)),
           toolCall: storedToolCall,
           toolResult: storedToolResult,
-          userId: authInfo?.userId ?? null,
+          userId: authInfo?.serviceAccountId
+            ? null
+            : (authInfo?.userId ?? null),
           runId: authInfo?.runId ?? null,
           sessionId: authInfo?.llmSessionId ?? null,
           llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          serviceAccountId: authInfo?.serviceAccountId ?? null,
           source: authInfo?.source ?? null,
+          credentialClientId: authInfo?.credentialClientId ?? null,
+          credentialClientType: authInfo?.credentialClientType ?? null,
+          credentialActorClientId: authInfo?.credentialActorClientId ?? null,
         },
         audit,
       );
@@ -4252,6 +4523,8 @@ class McpClient {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       let client: Client | undefined;
+      let operation: "connecting" | "listing tools" = "connecting";
+      let httpFailure: McpDiscoveryHttpFailure | undefined;
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
@@ -4263,6 +4536,10 @@ class McpClient {
           undefined,
           undefined,
           enterpriseTransportCredential ?? undefined,
+          (failure) => {
+            httpFailure = failure;
+          },
+          "platform",
         );
 
         // No `roots` — see the identical omission above.
@@ -4288,15 +4565,13 @@ class McpClient {
         // server through the normal tool-assignment path.
         let tools: Tool[];
         try {
+          operation = "listing tools";
           tools = await this.discoverToolsOrResourceTools(client);
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
           // nor resources/list. Its declared extension is enough to keep the
           // installation; the companion metadata pass will call skills/list.
-          if (
-            config.mcpGateway.skillsEnabled &&
-            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
-          ) {
+          if (Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)) {
             tools = [];
           } else {
             throw error;
@@ -4317,6 +4592,18 @@ class McpClient {
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
+        const httpStatus =
+          error instanceof StreamableHTTPError ? error.code : undefined;
+        const safeHttpFailure =
+          httpStatus && httpStatus > 0
+            ? {
+                status: httpStatus,
+                authError:
+                  httpFailure?.status === httpStatus
+                    ? httpFailure.authError
+                    : undefined,
+              }
+            : undefined;
 
         // Only the success path closed the client; a failure after connect
         // (e.g. tool discovery threw) would otherwise leak its transport.
@@ -4343,7 +4630,11 @@ class McpClient {
 
         // Last attempt failed, throw error
         throw new McpServerUnreachableError(
-          `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
+          `Failed to connect to MCP server ${catalogItem.name}: ${
+            safeHttpFailure
+              ? describeMcpDiscoveryHttpFailure(safeHttpFailure, operation)
+              : lastError.message
+          }`,
         );
       }
     }
@@ -4431,6 +4722,8 @@ class McpClient {
         undefined,
         undefined,
         enterpriseTransportCredential,
+        undefined,
+        "platform",
       );
 
       const client = new Client(buildMcpClientInfo("archestra-inspector"), {
@@ -4570,6 +4863,8 @@ class McpClient {
         undefined,
         options?.tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        awsIamIdentityFor(options),
       );
       const client = new Client(
         buildMcpClientInfo(options?.clientName ?? "archestra-app-runner"),
@@ -5295,8 +5590,15 @@ class McpClient {
         undefined,
         tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        { agentId },
       );
-      const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+      const connectionKey = catalogItem.awsIamConfig
+        ? `${catalogItem.id}:${server.id}:${agentId}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`
+        : `${catalogItem.id}:${server.id}:${agentId}`;
       const client = await this.getOrCreateClient(
         connectionKey,
         transport,
@@ -5555,6 +5857,17 @@ class McpClient {
         if (externalIdpUserId) {
           connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
         }
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Signed as this agent's role session: never shared across agents.
+        if (catalogItem.awsIamConfig) {
+          connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`;
+        }
+        // SPDX-SnippetEnd
         clients.push({
           execute: async <T>(operation: (client: Client) => Promise<T>) => {
             const connectAndRun = async () => {
@@ -5567,6 +5880,8 @@ class McpClient {
                 connectionKey,
                 tokenAuth,
                 enterpriseTransportCredential ?? undefined,
+                undefined,
+                { agentId },
               );
               const client = await this.getOrCreateClient(
                 connectionKey,
@@ -5754,7 +6069,21 @@ class McpClient {
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
-    const cacheKey = this.buildEnterpriseCredentialCacheKey(params);
+    // Read before the cache key, and checked before the cache, so rebinding
+    // the agent or turning on "require an agent identity" takes effect on the
+    // next call rather than when tokens expire. `null` for an app or an
+    // unbound agent: both are callers, so a provider that requires agent
+    // identities refuses them.
+    const agentIdentity = params.enterpriseManagedConfig
+      ? await this.resolveCallerAgentIdentity({
+          owner: params.owner,
+          enterpriseManagedConfig: params.enterpriseManagedConfig,
+        })
+      : null;
+    const cacheKey = this.buildEnterpriseCredentialCacheKey({
+      ...params,
+      agentIdentity,
+    });
     if (cacheKey) {
       const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
       if (cachedCredential) {
@@ -5762,7 +6091,10 @@ class McpClient {
       }
     }
 
-    const credential = await resolveEnterpriseTransportCredential(params);
+    const credential = await resolveEnterpriseTransportCredential({
+      ...params,
+      agentIdentity,
+    });
     if (cacheKey && credential) {
       this.enterpriseCredentialCache.set(
         cacheKey,
@@ -5774,10 +6106,57 @@ class McpClient {
     return credential;
   }
 
+  /**
+   * The identity the calling agent acts as at the identity provider this
+   * tool's token exchange runs at: its SPIFFE ID when the provider takes
+   * those, else its binding there. Null for an app or an agent bound to none.
+   * Refuses a caller without one when the provider requires it.
+   */
+  private async resolveCallerAgentIdentity(params: {
+    owner: ToolOwner;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+  }): Promise<AgentIdentityContext | null> {
+    const identityProviderId = await resolveExchangeIdentityProviderId({
+      owner: params.owner,
+      identityProviderId: params.enterpriseManagedConfig.identityProviderId,
+    });
+    if (!identityProviderId) {
+      return null;
+    }
+    const identityProvider =
+      await findExternalIdentityProviderById(identityProviderId);
+    const externalId =
+      params.owner.type !== "agent"
+        ? null
+        : identityProvider && agentIdentityKind(identityProvider) === "spiffe"
+          ? spiffeIdForAgent(params.owner.id)
+          : await AgentIdentityBindingModel.findExternalId({
+              agentId: params.owner.id,
+              identityProviderId,
+            });
+    const agentIdentity = externalId
+      ? { identityProviderId, externalId }
+      : null;
+    // Passthrough forwards the person's own token: no shared client acts.
+    if (
+      !agentIdentity &&
+      params.enterpriseManagedConfig.assertionMode !== "passthrough"
+    ) {
+      assertAgentIdentityRequirement({
+        agentIdentity,
+        requireAgentIdentity:
+          !!identityProvider &&
+          identityProviderRequiresAgentIdentity(identityProvider),
+      });
+    }
+    return agentIdentity;
+  }
+
   private buildEnterpriseCredentialCacheKey(params: {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+    agentIdentity: AgentIdentityContext | null;
   }): string | null {
     if (!params.enterpriseManagedConfig || !params.tokenAuth) {
       return null;
@@ -5796,6 +6175,8 @@ class McpClient {
       responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
       audience: params.enterpriseManagedConfig.audience,
       scopes: params.enterpriseManagedConfig.scopes ?? [],
+      clientIdOverride: params.enterpriseManagedConfig.clientIdOverride ?? null,
+      agentIdentity: params.agentIdentity,
       tokenId: params.tokenAuth.tokenId,
       userId: params.tokenAuth.userId ?? null,
       teamId: params.tokenAuth.teamId,
@@ -6536,9 +6917,7 @@ function mcpClientExtensionCapabilities() {
   return {
     ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...(config.mcpGateway.skillsEnabled
-      ? MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES
-      : {}),
+    ...MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
   } as const;
 }
 
@@ -6577,6 +6956,7 @@ function buildDefaultAuthorizationHeaders(
 }
 
 type ListingServerLookup = {
+  userTeamIds: Map<string, Promise<string[]>>;
   byId: ReadonlyMap<string, McpServer>;
   byCatalogId: ReadonlyMap<string, McpServer[]>;
 };
@@ -6594,6 +6974,7 @@ function buildListingServerLookup(
     byCatalogId.set(server.catalogId, siblings);
   }
   return {
+    userTeamIds: new Map(),
     byId: new Map(
       [...catalogServers, ...pinnedServers].map((server) => [
         server.id,
@@ -6613,3 +6994,64 @@ function fingerprintHeaders(headers: Record<string, string>): string {
     .update(JSON.stringify(canonicalHeaders))
     .digest("base64url");
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Who assumes an AWS IAM server's role: the agent making a tool call, or the
+ * platform itself when it lists the server's tools.
+ */
+type AwsIamIdentity = { agentId: string } | "platform";
+
+/**
+ * The agent an AWS IAM server's role is assumed as, or null for the platform.
+ * A path that names neither fails closed rather than falling back to the
+ * platform's own session.
+ */
+/**
+ * The connection-key part for an AWS IAM server: the owner whose role session
+ * signs it, and the signing settings, so an edited role or region never
+ * reuses a connection that signs with the old ones.
+ */
+function awsIamConnectionSegment(params: {
+  config: AwsIamMcpAuthConfig;
+  ownerKey: string;
+}) {
+  const { roleArn, region, service, audience } = params.config;
+  const settings = createHash("sha256")
+    .update(JSON.stringify([roleArn, region, service, audience ?? null]))
+    .digest("hex")
+    .slice(0, 16);
+  return `aws:${params.ownerKey}:${settings}`;
+}
+
+/**
+ * Who a direct server session to an AWS IAM server signs as: the agent that
+ * owns it, or the platform for maintenance that only reads what the server
+ * advertises. Anything else has no identity, so its transport fails closed.
+ */
+function awsIamIdentityFor(options: {
+  caller: GatedCaller;
+  owner?: ToolOwner;
+}): AwsIamIdentity | undefined {
+  if (options.owner?.type === "agent") return { agentId: options.owner.id };
+  if (
+    options.caller.kind === "internal" &&
+    (options.caller.purpose === "tool-discovery" ||
+      options.caller.purpose === "skills-discovery")
+  ) {
+    return "platform";
+  }
+  return undefined;
+}
+
+function requireAwsIamIdentity(identity: AwsIamIdentity | undefined) {
+  if (!identity) {
+    throw new Error(
+      "This MCP server signs in with AWS IAM as the calling agent, and this call has no agent.",
+    );
+  }
+  return identity === "platform" ? null : identity.agentId;
+}
+// SPDX-SnippetEnd

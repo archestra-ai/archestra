@@ -4,6 +4,13 @@ import { NewChatComposer } from "./new-chat-composer";
 
 const state = vi.hoisted(() => ({
   promptProps: null as Record<string, unknown> | null,
+  preflightData: {
+    ready: true,
+    missing: [] as Array<Record<string, unknown>>,
+    misconfigured: [] as Array<Record<string, unknown>>,
+    incompatible: null as string | null,
+  },
+  credentials: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("@/app/chat/prompt-input", () => ({
@@ -39,7 +46,7 @@ vi.mock("@/components/agent-runtime-credential-prompt", () => ({
 vi.mock("@/lib/agent-runtime.query", () => ({
   runtimePreflightDisabledReason: () => undefined,
   useAgentRuntimePreflight: () => ({
-    data: { ready: true, missing: [], misconfigured: [] },
+    data: state.preflightData,
     isPending: false,
     refetch: vi.fn(),
   }),
@@ -52,7 +59,7 @@ vi.mock("@/lib/agent.query", () => ({
       {
         id: "runtime-agent",
         name: "Builder",
-        runtime: { credentials: [] },
+        runtime: { credentials: state.credentials },
         llmApiKeyId: null,
       },
     ],
@@ -108,6 +115,45 @@ vi.mock("@/lib/view-transition", () => ({
 describe("NewChatComposer", () => {
   beforeEach(() => {
     state.promptProps = null;
+    state.preflightData = {
+      ready: true,
+      missing: [],
+      misconfigured: [],
+      incompatible: null,
+    };
+    state.credentials = [];
+  });
+
+  it("shows the optional reconnect notice while keeping Send enabled when preflight is ready", () => {
+    state.preflightData = {
+      ready: true,
+      missing: [
+        {
+          key: "GITHUB_TOKEN",
+          label: "GitHub",
+          reconnect: true,
+          canConnect: true,
+        },
+      ],
+      misconfigured: [],
+      incompatible: null,
+    };
+    state.credentials = [
+      {
+        key: "GITHUB_TOKEN",
+        label: "GitHub",
+        scope: "per_user",
+        required: false,
+      },
+    ];
+    render(<NewChatComposer onSubmit={vi.fn()} />);
+
+    expect(screen.getByText("GitHub needs to be reconnected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    expect(state.promptProps).toMatchObject({
+      runtimeMode: true,
+      sendDisabled: false,
+    });
   });
 
   it("submits an Agent Runtime agent with its files and runtime mode", () => {

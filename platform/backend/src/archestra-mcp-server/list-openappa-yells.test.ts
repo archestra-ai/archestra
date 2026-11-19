@@ -43,7 +43,7 @@ describe("list_openappa_yells", () => {
       await seedAndAssignArchestraTools(agent.id);
       const user = await makeUser();
       const role = await makeCustomRole(organizationId, {
-        permission: { log: ["read"] },
+        permission: { guardrailsYell: ["read"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
       context = {
@@ -58,11 +58,16 @@ describe("list_openappa_yells", () => {
     config.openappa.enabled = originalEnabled;
   });
 
-  test("lists every caller's yells newest first and filters by status and session", async () => {
+  test("lists the caller's own yells newest first and filters by status and session", async () => {
     const oldest = await seedYell({
       sessionId: "chat-a",
       toolCallId: "call-1",
       createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await seedYell({
+      sessionId: "chat-a",
+      toolCallId: "call-other",
+      createdAt: new Date("2026-01-04T00:00:00Z"),
       callerId: "user:someone-else",
     });
     const middle = await seedYell({
@@ -104,6 +109,30 @@ describe("list_openappa_yells", () => {
     ).toEqual([]);
   });
 
+  test("lists every caller's yells for a log admin", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const own = await seedYell({ sessionId: "chat", toolCallId: "own" });
+    const other = await seedYell({
+      sessionId: "chat",
+      toolCallId: "other",
+      callerId: "user:someone-else",
+    });
+    expect((await list({})).yells.map((yell) => yell.id)).toEqual([own]);
+
+    const admin = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { guardrailsYell: ["read", "admin"] },
+    });
+    await makeMember(admin.id, organizationId, { role: role.role });
+    context = { ...context, userId: admin.id };
+    expect((await list({})).yells.map((yell) => yell.id).sort()).toEqual(
+      [own, other].sort(),
+    );
+  });
+
   test("shortens long messages and pages at a fixed limit", async () => {
     for (let index = 0; index < 21; index++)
       await seedYell({
@@ -126,14 +155,14 @@ describe("list_openappa_yells", () => {
     ).toBe(21);
   });
 
-  test("refuses a caller without log:read", async ({
+  test("refuses a caller without guardrailsYell:read, even a log admin", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const user = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { guardrailsPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"], log: ["read", "admin"] },
     });
     await makeMember(user.id, organizationId, { role: role.role });
     await seedYell({ sessionId: "chat", toolCallId: "call" });

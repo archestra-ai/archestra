@@ -1,5 +1,6 @@
 import {
   extractMcpToolError,
+  type InteractionSource,
   type LogContentMode,
   type LogContentNotStored,
   logContentNotStored,
@@ -21,9 +22,16 @@ import { InteractionErrorResponseSchema } from "@/types/interaction";
  * `ARCHESTRA_LOGS_CONTENT_MODE`. The single place the decision is made, so a
  * later per-agent or per-team override (which may only ever be stricter) has
  * one spot to land.
+ *
+ * A guardrail sanitizer's call is always metadata only: its prompt is the raw
+ * tool result the policy withheld, and its answer restates that result.
  */
-export function resolveLogContentMode(): LogContentMode {
-  return config.logs.contentMode;
+export function resolveLogContentMode(
+  source?: InteractionSource | null,
+): LogContentMode {
+  return source === "guardrail:sanitizer"
+    ? "metadata_only"
+    : config.logs.contentMode;
 }
 
 /**

@@ -60,6 +60,7 @@ const nextConfig: NextConfig = {
       "@archestra/shared/access-control": "../shared/access-control.ts",
       "@archestra/shared/api-error": "../shared/api-error.ts",
       "@archestra/shared/consts": "../shared/consts.ts",
+      "@archestra/shared/error-reporting": "../shared/error-reporting.ts",
     },
   },
   logging: {

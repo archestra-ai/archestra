@@ -564,7 +564,7 @@ describe("summarizeHitlReview", () => {
       ...ACCEPTED_POLICY_LINES,
     ];
     const NATIVE_REVIEW_TEXT = [
-      "[OpenAPPA] Approve this call?",
+      "Approve this call?",
       'APPA asks you to rule as the authority "hitl".',
       "",
       "What this ruling would cover:",

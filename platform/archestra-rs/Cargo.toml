@@ -1,10 +1,10 @@
 [workspace]
 members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs", "openappa-rs", "router-core", "router-rs"]
-exclude = ["vendor/dagger-sdk-0.21.9"]
+exclude = ["vendor/dagger-sdk-0.21.11"]
 resolver = "2"
 
 [patch.crates-io]
-dagger-sdk = { path = "vendor/dagger-sdk-0.21.9" }
+dagger-sdk = { path = "vendor/dagger-sdk-0.21.11" }
 
 # No LTO: for these NAPI shims it measured slower to build AND a larger binary
 # (little cross-crate hot code to inline), so it was pure cost.
@@ -18,7 +18,12 @@ debug = "line-tables-only"
 # Fast local build of the NAPI addons: inherits release (which carries no LTO)
 # but adds codegen units so rebuilds parallelize across cores, plus incremental
 # for quick edit->rebuild. Used by `pnpm build:dev`; CI/publish still use `release`.
+#
+# Unstripped: on macOS 27.2, dyld refuses a stripped openappa-rs addon
+# ("mis-aligned LINKEDIT string pool"), with `strip` set to "symbols" or
+# "debuginfo" alike. Leaving symbols in costs ~7 MB per addon.
 [profile.release-fast]
 inherits = "release"
 codegen-units = 256
 incremental = true
+strip = false

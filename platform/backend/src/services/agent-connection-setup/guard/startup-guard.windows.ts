@@ -141,9 +141,44 @@ $GuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 # Remotes this guard's own disconnect action already removed from ${client.label},
 # one kind per line. They are skipped below; connect clears the file.
 $SkipFile = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+# Proof that a removal landed. The vendor CLI is invoked with its output
+# silenced and its exit status is not a reliable signal — \`mcp remove\` of a
+# missing server exits 0 — so the check reads the config back instead. Clients
+# that ship no verifier keep the previous assume-success behaviour.
+function Test-ArchDisconnected([string]$Kind) {${
+    ctx.proxy && client.windows.proxyDisconnectVerify
+      ? `
+  if ($Kind -eq 'proxy') { ${client.windows.proxyDisconnectVerify} }`
+      : ""
+  }${
+    ctx.mcp && client.windows.mcpDisconnectVerify
+      ? `
+  if ($Kind -eq 'mcp') {
+${client.windows.mcpDisconnectVerify}
+  }`
+      : ""
+  }${
+    ctx.skills && client.windows.skillsDisconnectVerify
+      ? `
+  if ($Kind -eq 'skills') {
+${client.windows.skillsDisconnectVerify}
+  }`
+      : ""
+  }
+  return $true
+}
+
 $DisconnectedKinds = @()
 if (Test-Path $SkipFile) { $DisconnectedKinds = @(Get-Content -Path $SkipFile | Where-Object { $_ }) }
-${client.atomicDisconnect ? "$DisconnectedKinds = @()" : ""}
+${client.atomicDisconnect ? "$DisconnectedKinds = @()" : ""}${
+  ctx.mcp && ctx.skills?.connectionPlugin
+    ? `
+# Recheck skips saved by older launchers that could restore a removed plugin.
+if ($DisconnectedKinds -contains 'mcp' -and -not (Test-ArchDisconnected 'mcp')) {
+  $DisconnectedKinds = @($DisconnectedKinds | Where-Object { $_ -ne 'mcp' })
+}`
+    : ""
+}
 $ActiveRemotes = @($Remotes | Where-Object { $DisconnectedKinds -notcontains $_.Kind })
 
 function Add-ArchDisconnected([string]$Kind) { ${client.atomicDisconnect ? "return;" : ""} try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
@@ -541,33 +576,6 @@ ${client.windows.skillsDisconnect}
   }
   }
   return (Test-ArchDisconnected $Kind)
-}
-
-# Proof that a removal landed. The vendor CLI is invoked with its output
-# silenced and its exit status is not a reliable signal — \`mcp remove\` of a
-# missing server exits 0 — so the check reads the config back instead. Clients
-# that ship no verifier keep the previous assume-success behaviour.
-function Test-ArchDisconnected([string]$Kind) {${
-    ctx.proxy && client.windows.proxyDisconnectVerify
-      ? `
-  if ($Kind -eq 'proxy') { ${client.windows.proxyDisconnectVerify} }`
-      : ""
-  }${
-    ctx.mcp && client.windows.mcpDisconnectVerify
-      ? `
-  if ($Kind -eq 'mcp') {
-${client.windows.mcpDisconnectVerify}
-  }`
-      : ""
-  }${
-    ctx.skills && client.windows.skillsDisconnectVerify
-      ? `
-  if ($Kind -eq 'skills') {
-${client.windows.skillsDisconnectVerify}
-  }`
-      : ""
-  }
-  return $true
 }
 
 # Reversing a connect step animates the same way the probes do: the dots
@@ -1389,6 +1397,9 @@ function renderWindowsMarketplaceRefreshProfileBlock(
   // white-label-ok: PowerShell function and cache names are stable wire identifiers.
   return `function Invoke-Archestra${client.binary}MarketplaceRefresh {
   param([object[]]$ClientArgs)
+  if (-not (Test-Path (Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}))) { return $true }
+  $archRefreshSkip = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+  if ((Test-Path $archRefreshSkip) -and ${psq(ctx.mcp && ctx.skills.connectionPlugin ? "mcp" : "skills")} -in @(Get-Content -Path $archRefreshSkip)) { return $true }
   foreach ($archArg in $ClientArgs) {
     if (@(${nonInteractiveArgs}) -contains [string]$archArg) { return $true } # white-label-ok: generated PowerShell uses stable wire identifiers
   }
@@ -1539,15 +1550,19 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   if (ctx.mcp) {
+    const label = ctx.skills?.connectionPlugin
+      ? "Connection plugin"
+      : "MCP gateway";
     resources.push({
-      label: `MCP gateway (${ctx.mcp.serverName})`,
+      label: `${label} (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
-      failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
+      failName: `${label} (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
   }
-  if (ctx.skills) {
+  // One verified disconnect records the entire connection plugin as removed.
+  if (ctx.skills && !(ctx.mcp && ctx.skills.connectionPlugin)) {
     const label = `${describeMarketplaceContents(ctx.skills).label} (${ctx.skills.marketplaceName})`;
     resources.push({
       label,

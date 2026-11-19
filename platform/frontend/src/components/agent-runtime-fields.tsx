@@ -4,9 +4,12 @@ import {
   buildCustomAgentRuntime,
   findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
+  isClaudeCodeRuntimeCommand,
+  resolveAgentCatalogId,
   summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
+import { LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
@@ -22,6 +25,11 @@ import {
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { FieldDescription } from "@/components/ui/field-description";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -87,12 +95,36 @@ export function defaultAgentRuntime(): AgentRuntimeConfig {
   return buildCustomAgentRuntime({ image: "" });
 }
 
+export function supportsClaudeCodeSubscription(
+  runtime: Pick<AgentRuntimeConfig, "command"> | null | undefined,
+): boolean {
+  return isClaudeCodeRuntimeCommand(runtime?.command?.[0]);
+}
+
+export function isClaudeCodeRuntimeConfig(
+  runtime:
+    | Pick<AgentRuntimeConfig, "command" | "claudeCode" | "inferenceProtocol">
+    | null
+    | undefined,
+): boolean {
+  if (!runtime) return false;
+  const catalogId = resolveAgentCatalogId(runtime);
+  if (catalogId === "claude-code") return true;
+  if (catalogId !== null) return false;
+  return (
+    Boolean(runtime.claudeCode) || runtime.inferenceProtocol === "anthropic"
+  );
+}
+
 export function AgentRuntimeFields({
   value,
   onChange,
+  locked = false,
 }: {
   value: AgentRuntimeConfig | null;
   onChange: (value: AgentRuntimeConfig | null) => void;
+  /** Its Agent Runtime sets the container and limits: shown read-only. */
+  locked?: boolean;
 }) {
   const enabledId = useId();
   const credentialsHref = useCredentialsPageHref();
@@ -137,20 +169,22 @@ export function AgentRuntimeFields({
               title="Container"
               description="The image and client each run starts. It inherits this agent's network egress policy and image pull settings."
             >
-              <AgentRuntimeImageFields value={config} onChange={onChange} />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AgentRuntimeProtocolField
-                  value={config}
-                  onChange={onChange}
-                  constrainToHarness
-                  compact
-                />
-                <AgentRuntimeSteeringField
-                  value={config}
-                  onChange={onChange}
-                  compact
-                />
-              </div>
+              <fieldset disabled={locked} className="space-y-4">
+                <AgentRuntimeImageFields value={config} onChange={onChange} />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <AgentRuntimeProtocolField
+                    value={config}
+                    onChange={onChange}
+                    constrainToHarness
+                    compact
+                  />
+                  <AgentRuntimeSteeringField
+                    value={config}
+                    onChange={onChange}
+                    compact
+                  />
+                </div>
+              </fieldset>
             </SettingsSection>
             <SettingsSection
               title="Environment"
@@ -179,8 +213,9 @@ export function AgentRuntimeFields({
               title="Limits"
               description="Run lifetime, spend and container size. Blank fields use installation defaults."
             >
-              <AgentRuntimeRunLimits value={config} onChange={onChange} />
-              <AgentRuntimeTierFields value={config} onChange={onChange} />
+              <fieldset disabled={locked}>
+                <AgentRuntimeLimitFields value={config} onChange={onChange} />
+              </fieldset>
             </SettingsSection>
             <SettingsSection
               title="Access"
@@ -195,10 +230,36 @@ export function AgentRuntimeFields({
   );
 }
 
+/**
+ * Says which Agent Runtime sets the settings shown read-only: the reader may
+ * use it but not configure it.
+ */
+export function RuntimeSettingsNotice({ name }: { name: string }) {
+  return (
+    <InlineNotice variant="info">
+      <LockKeyhole className="size-4 shrink-0" />
+      <InlineNoticeBody>
+        <span className="font-medium">Set by the {name} runtime</span>
+        <InlineNoticeText>
+          Changing its launch command, protocol, follow-up delivery, limits,
+          tiers or Claude account needs <code>agentRuntime:configure</code> on
+          it. Environment, credentials and ports stay this agent's own.
+        </InlineNoticeText>
+      </InlineNoticeBody>
+    </InlineNotice>
+  );
+}
+
 type RuntimeSectionProps = {
   value: AgentRuntimeConfig;
   onChange: (value: AgentRuntimeConfig) => void;
 };
+
+/** Section descriptions shared by the agent form and the runtime dialog. */
+export const agentRuntimeSectionDescriptions = (appName: string) => ({
+  inference: `How the coding agent calls models, always through the ${appName} LLM proxy.`,
+  followUps: "How a message you send while the coding agent works reaches it.",
+});
 
 export const AGENT_RUNTIME_PROTOCOL_LABELS = {
   openai_responses: "OpenAI Responses",
@@ -415,8 +476,6 @@ export function AgentRuntimeProtocolField({
   compact?: boolean;
 }) {
   const config = value;
-  const update = (patch: Partial<AgentRuntimeConfig>) =>
-    onChange({ ...config, ...patch });
   const appName = useAppName();
   const allowedProtocols = getAgentRuntimeAllowedProtocols(
     constrainToHarness ? value.command : null,
@@ -429,7 +488,7 @@ export function AgentRuntimeProtocolField({
       >
         Inference API
       </Label>
-      {!compact && (
+      {!compact && !hideLabel && (
         <FieldDescription>
           Choose the API protocol the container&apos;s Agent client expects.
           Every option stays behind the {appName} LLM proxy.
@@ -446,14 +505,24 @@ export function AgentRuntimeProtocolField({
         value={config.inferenceProtocol}
         onValueChange={(
           inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic",
-        ) => update({ inferenceProtocol })}
+        ) => {
+          const { claudeCode: _claudeCode, ...withoutClaudeCode } = config;
+          onChange({
+            ...(inferenceProtocol === "anthropic" ? config : withoutClaudeCode),
+            inferenceProtocol,
+          });
+        }}
       >
         <SelectTrigger id="agent-runtime-inference-protocol" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {allowedProtocols.map((protocol) => (
-            <SelectItem key={protocol} value={protocol}>
+            <SelectItem
+              key={protocol}
+              value={protocol}
+              description={PROTOCOL_DESCRIPTIONS[protocol]}
+            >
               {AGENT_RUNTIME_PROTOCOL_LABELS[protocol]}
             </SelectItem>
           ))}
@@ -462,8 +531,8 @@ export function AgentRuntimeProtocolField({
       {compact && (
         <FieldDescription>
           {allowedProtocols.length === 1 && constrainToHarness
-            ? "Fixed by the client in this image."
-            : `What the client speaks to the ${appName} LLM proxy.`}
+            ? "Fixed by the coding agent in this image."
+            : `What the coding agent speaks to the ${appName} LLM proxy.`}
         </FieldDescription>
       )}
     </div>
@@ -487,12 +556,6 @@ export function AgentRuntimeSteeringField({
       >
         Steering
       </Label>
-      {!compact && (
-        <FieldDescription>
-          Turn boundary delivers follow-up instructions between Agent turns.
-          Terminal input types directly into an interactive CLI.
-        </FieldDescription>
-      )}
       <Select
         value={config.steerMode}
         onValueChange={(steerMode: "pipe" | "tmux_keys") =>
@@ -503,14 +566,24 @@ export function AgentRuntimeSteeringField({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="pipe">Turn boundary</SelectItem>
-          <SelectItem value="tmux_keys">Terminal input</SelectItem>
+          <SelectItem
+            value="pipe"
+            description="Delivers follow-up instructions between Agent turns."
+          >
+            Turn boundary
+          </SelectItem>
+          <SelectItem
+            value="tmux_keys"
+            description="Types follow-ups directly into an interactive CLI."
+          >
+            Terminal input
+          </SelectItem>
         </SelectContent>
       </Select>
       {compact && (
         <FieldDescription>
           {config.steerMode === "tmux_keys"
-            ? "Follow-ups are typed into the client's terminal."
+            ? "Follow-ups are typed into the coding agent's terminal."
             : "Follow-ups are delivered between turns."}
         </FieldDescription>
       )}
@@ -518,8 +591,8 @@ export function AgentRuntimeSteeringField({
   );
 }
 
-/** Limits, tiers and access, for surfaces with no section of their own. */
-export function AgentRuntimeRunControls({
+/** Limits and tiers: what an Agent Runtime's settings set for its runs. */
+export function AgentRuntimeLimitFields({
   value,
   onChange,
 }: RuntimeSectionProps) {
@@ -527,7 +600,6 @@ export function AgentRuntimeRunControls({
     <div className="space-y-5">
       <AgentRuntimeRunLimits value={value} onChange={onChange} />
       <AgentRuntimeTierFields value={value} onChange={onChange} />
-      <AgentRuntimeAccessFields value={value} onChange={onChange} />
     </div>
   );
 }
@@ -663,7 +735,10 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
 }
 
 /** The ports people can open on a run, and host access. */
-function AgentRuntimeAccessFields({ value, onChange }: RuntimeSectionProps) {
+export function AgentRuntimeAccessFields({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
   return (
@@ -899,3 +974,9 @@ function installationDefaultPlaceholder(
 ): string {
   return value === undefined ? "Loading default…" : `${value} (default)`;
 }
+
+const PROTOCOL_DESCRIPTIONS = {
+  openai_responses: "/v1/responses, used by Codex and OpenCode.",
+  openai_chat: "/v1/chat/completions, used by most OpenAI-compatible clients.",
+  anthropic: "/v1/messages, used by Claude Code.",
+};

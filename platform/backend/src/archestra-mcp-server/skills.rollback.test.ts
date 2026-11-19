@@ -206,6 +206,144 @@ describe("skill tool execution", () => {
     expect(textOf(result)).toContain("pdf-processing");
   });
 
+  describe("list_skills query", () => {
+    const listedNames = (text: string) =>
+      [...text.matchAll(/<skill name="([^"]+)"/g)].map(([, name]) => name);
+
+    const listSkills = (args: { query?: string }) =>
+      executeArchestraTool(TOOL_LIST_SKILLS_FULL_NAME, args, context);
+
+    async function seedOversizedCatalog() {
+      await seedSkill({
+        skill: { name: "oversized", description: "x ".repeat(50_001) },
+      });
+      await seedSkill();
+    }
+
+    test("ranks the matching skill first and shows its full description", async () => {
+      await seedSkill();
+      await seedSkill({
+        skill: {
+          name: "release-notes",
+          description: "Write release notes from merged changes.",
+        },
+      });
+      const result = await listSkills({ query: "write release notes" });
+      expect(result.isError).toBe(false);
+      expect(listedNames(textOf(result))).toEqual(["release-notes"]);
+      expect(textOf(result)).toContain(
+        "Write release notes from merged changes.",
+      );
+    });
+
+    test("caps the matches and reports how many there were", async () => {
+      for (let index = 0; index < 22; index++) {
+        await seedSkill({
+          skill: {
+            name: `invoice-${String(index).padStart(2, "0")}`,
+            description: "Handle invoices.",
+          },
+        });
+      }
+      const result = await listSkills({ query: "invoice" });
+      expect(listedNames(textOf(result))).toHaveLength(20);
+      expect(textOf(result)).toMatch(/\b20\b.*\b22\b/);
+    });
+
+    test("stops adding results once their descriptions fill the budget", async () => {
+      for (const name of ["ledger-a", "ledger-b"]) {
+        await seedSkill({
+          skill: { name, description: `ledger ${"x".repeat(60_000)}` },
+        });
+      }
+      const result = await listSkills({ query: "ledger" });
+      expect(listedNames(textOf(result))).toEqual(["ledger-a"]);
+    });
+
+    test("refuses a search whose best match alone is over the budget", async () => {
+      await seedSkill({
+        skill: {
+          name: "huge-ledger",
+          description: `ledger ${"x".repeat(100_000)}`,
+        },
+      });
+      const result = await listSkills({ query: "ledger" });
+      expect(result.isError).toBe(true);
+      expect(listedNames(textOf(result))).toEqual([]);
+    });
+
+    test("returns no skills for a query with no match", async () => {
+      await seedSkill();
+      const result = await listSkills({ query: "zebra" });
+      expect(result.isError).toBe(false);
+      expect(listedNames(textOf(result))).toEqual([]);
+    });
+
+    test("never returns a skill the agent's policy hides", async () => {
+      await seedSkill();
+      await AgentModel.setActivationSkillPolicyState({
+        id: agent.id,
+        mode: "manual",
+        revision: 1,
+      });
+      const result = await listSkills({ query: "pdf" });
+      expect(listedNames(textOf(result))).toEqual([]);
+    });
+
+    test("never returns a skill outside the user's scope", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      await seedSkill();
+      const owner = await makeUser();
+      await seedSkill({
+        access: "personal",
+        skill: {
+          name: "private-pdf-notes",
+          description: "Private notes about PDF files.",
+          authorId: owner.id,
+        },
+      });
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+      const result = await executeArchestraTool(
+        TOOL_LIST_SKILLS_FULL_NAME,
+        { query: "pdf" },
+        { ...context, userId: member.id },
+      );
+      expect(listedNames(textOf(result))).toEqual(["pdf-processing"]);
+    });
+
+    test("an unqualified call needs a query only when the catalog is over budget", async () => {
+      await seedSkill();
+      expect((await listSkills({})).isError).toBe(false);
+      await seedSkill({
+        skill: { name: "oversized", description: "x ".repeat(50_001) },
+      });
+      const result = await listSkills({});
+      expect(result.isError).toBe(true);
+      expect(listedNames(textOf(result))).toEqual([]);
+    });
+
+    test("the wildcard returns the whole catalog with descriptions at any size", async () => {
+      await seedOversizedCatalog();
+      const result = await listSkills({ query: "*" });
+      expect(result.isError).toBe(false);
+      expect(listedNames(textOf(result)).sort()).toEqual([
+        "oversized",
+        "pdf-processing",
+      ]);
+      expect(textOf(result)).toContain("Extract text from PDF files.");
+    });
+
+    test("search still works over budget", async () => {
+      await seedOversizedCatalog();
+      const result = await listSkills({ query: "pdf" });
+      expect(result.isError).toBe(false);
+      expect(listedNames(textOf(result))).toEqual(["pdf-processing"]);
+    });
+  });
+
   test("manual policy hides unselected skills from discovery and direct loading", async () => {
     await seedSkill();
     await AgentModel.setActivationSkillPolicyState({
@@ -385,8 +523,6 @@ describe("skill tool execution", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "remote",
@@ -411,26 +547,20 @@ describe("skill tool execution", () => {
       ],
     });
 
-    try {
-      const result = await executeArchestraTool(
-        TOOL_LIST_SKILLS_FULL_NAME,
-        {},
-        context,
-      );
-      expect(textOf(result)).toContain('name="release"');
-      expect(textOf(result)).toContain("Release safely.");
-      expect(textOf(result)).toContain('trust="untrusted"');
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    const result = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(result)).toContain('name="release"');
+    expect(textOf(result)).toContain("Release safely.");
+    expect(textOf(result)).toContain('trust="untrusted"');
   });
 
   test("load_skill counts an external activation but not a supporting-file read", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
     await seedSkill({
       skill: {
         name: "release",
@@ -498,43 +628,39 @@ describe("skill tool execution", () => {
     );
     const projectedName = "release-from-mcp";
 
-    try {
-      const listed = await executeArchestraTool(
-        TOOL_LIST_SKILLS_FULL_NAME,
-        {},
-        context,
-      );
-      expect(textOf(listed)).toContain(`name="${projectedName}"`);
+    const listed = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(listed)).toContain(`name="${projectedName}"`);
 
-      const activation = await executeArchestraTool(
-        TOOL_LOAD_SKILL_FULL_NAME,
-        { name: projectedName },
-        context,
-      );
-      expect(activation.isError).toBe(false);
-      expect(textOf(activation)).toContain(`name="${projectedName}"`);
-      expect(textOf(activation)).toContain("Release carefully.");
-      await drainBackgroundWork();
-      let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
-        { mcpServerId: server.id, uri },
-      ]);
-      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: projectedName },
+      context,
+    );
+    expect(activation.isError).toBe(false);
+    expect(textOf(activation)).toContain(`name="${projectedName}"`);
+    expect(textOf(activation)).toContain("Release carefully.");
+    await drainBackgroundWork();
+    let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+      { mcpServerId: server.id, uri },
+    ]);
+    expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
 
-      const fileRead = await executeArchestraTool(
-        TOOL_LOAD_SKILL_FULL_NAME,
-        { name: projectedName, path: "guide.md" },
-        context,
-      );
-      expect(fileRead.isError).toBe(false);
-      expect(textOf(fileRead)).toContain(`name="${projectedName}"`);
-      await drainBackgroundWork();
-      usage = await ExternalMcpSkillUsageEventModel.getSummaries([
-        { mcpServerId: server.id, uri },
-      ]);
-      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    const fileRead = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: projectedName, path: "guide.md" },
+      context,
+    );
+    expect(fileRead.isError).toBe(false);
+    expect(textOf(fileRead)).toContain(`name="${projectedName}"`);
+    await drainBackgroundWork();
+    usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+      { mcpServerId: server.id, uri },
+    ]);
+    expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
   });
 
   test("list_skills reports when the org has no skills", async () => {
@@ -566,7 +692,6 @@ describe("skill tool execution", () => {
   });
 
   test("list_skills and load_skill activate a plugin skill without copying it", async () => {
-    config.beta = false;
     const input: CreatePlugin = {
       displayName: "Portable bundle",
       description: "Portable skills",
@@ -654,6 +779,12 @@ describe("skill tool execution", () => {
       context,
     );
     expect(textOf(catalog)).toContain('name="release-guide"');
+    const search = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      { query: "release guide" },
+      context,
+    );
+    expect(textOf(search)).toContain('name="release-guide"');
 
     const activation = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
@@ -721,7 +852,6 @@ describe("skill tool execution", () => {
   });
 
   test("suffixes a plugin skill name when a native skill uses it", async () => {
-    config.beta = false;
     await seedSkill({
       skill: {
         name: "release-guide",
@@ -776,7 +906,6 @@ describe("skill tool execution", () => {
   });
 
   test("uses the XML-safe listed name to load a projected skill", async () => {
-    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -836,7 +965,6 @@ describe("skill tool execution", () => {
   });
 
   test("assigns duplicate projected names by stable source identity", async () => {
-    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -879,7 +1007,6 @@ describe("skill tool execution", () => {
   });
 
   test("keeps legacy references ahead of colliding projected names", async () => {
-    config.beta = false;
     const original = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,

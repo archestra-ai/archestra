@@ -6,9 +6,12 @@ import {
   createCursorPaginatedResponseSchema,
   getArchestraMcpServerName,
   isModelSelectionComplete,
+  McpRuntimeTierSettingsSchema,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
+  ResolvedMcpRuntimeTiersSchema,
   RouteId,
+  resolveMcpRuntimeTiers,
   type StoredAgentRuntimeTierSettings,
 } from "@archestra/shared";
 import {
@@ -20,14 +23,13 @@ import { and, desc, eq, inArray, like, notExists, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { assertModelTrioTiers } from "@/agents/subagent-tiers";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
 import { describeOrganizationDefaultModel } from "@/auto-routing/organization-default";
-import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import {
   enterpriseTier,
   // SPDX-SnippetBegin
@@ -57,15 +59,25 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import AutoRouterModel from "@/models/auto-router";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
+import {
+  assertRuntimeAgentsSupportOrganizationDefault,
+  countHiddenAgentsBlockingDefault,
+  listRuntimeAgentsInheritingOrganizationDefault,
+} from "@/services/agent-runtime/model-compatibility";
 import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-tier-settings";
 import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
+import {
+  organizationMcpRuntimeTiers,
+  prepareMcpRuntimeTierChange,
+} from "@/services/mcp-runtime-tier-settings";
 import { removeMemberTarget } from "@/services/member-removal";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { syncBuiltInSkillsForOrganization } from "@/services/seed";
 import {
   AgentRuntimeTiersResponseSchema,
   ApiError,
@@ -90,7 +102,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
+import { trackBackgroundWork } from "@/utils/background-work";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -334,12 +346,64 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/organization/mcp-runtime-tiers",
+    {
+      schema: {
+        operationId: RouteId.GetMcpRuntimeTiers,
+        description: "The organization's independent MCP CPU/RAM tiers",
+        tags: ["Organization"],
+        response: constructResponseSchema(ResolvedMcpRuntimeTiersSchema),
+      },
+    },
+    async ({ organizationId }, reply) =>
+      reply.send(await organizationMcpRuntimeTiers(organizationId)),
+  );
+
+  fastify.patch(
+    "/api/organization/mcp-runtime-tiers",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpRuntimeTiers,
+        description: "Manage independent MCP CPU/RAM tiers",
+        tags: ["Organization"],
+        body: McpRuntimeTierSettingsSchema.nullable(),
+        response: constructResponseSchema(ResolvedMcpRuntimeTiersSchema),
+      },
+    },
+    async ({ organizationId, body, user }, reply) => {
+      if (!(await isGlobalAdmin(user.id, organizationId)))
+        throw new ApiError(
+          403,
+          "Only administrators can change MCP runtime tiers",
+        );
+      const settings = await withDbTransaction(async (tx) => {
+        const prepared = await prepareMcpRuntimeTierChange({
+          organizationId,
+          input: body,
+          tx,
+        });
+        await prepared.write(tx);
+        const organization = await OrganizationModel.patchInTransaction({
+          id: organizationId,
+          data: { mcpRuntimeTiers: prepared.settings },
+          tx,
+        });
+        if (!organization) throw new ApiError(404, "Organization not found");
+        return prepared.settings;
+      }).finally(() =>
+        OrganizationModel.invalidateSettingsCaches(organizationId),
+      );
+      return reply.send(resolveMcpRuntimeTiers(settings));
+    },
+  );
+
+  fastify.get(
     "/api/organization/agent-runtime-tiers",
     {
       schema: {
         operationId: RouteId.GetAgentRuntimeTiers,
         description:
-          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier",
+          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, memory, the spares it keeps ready, and the default tier",
         tags: ["Organization"],
         response: constructResponseSchema(AgentRuntimeTiersResponseSchema),
       },
@@ -352,13 +416,62 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/organization/agent-settings/default-model-dependents",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultModelRuntimeDependents,
+        description:
+          "Agent Runtime agents the caller can read that run on the organization's default model (no usable model of their own), with the runtime each one uses and whether the caller may give it a model",
+        tags: ["Organization"],
+        querystring: z.object({
+          /** A candidate default (models.id) to count hidden blockers for. */
+          modelId: z.string().uuid().optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            agents: z.array(
+              RuntimeDependentSchema.extend({
+                id: z.string(),
+                name: z.string(),
+                /** Whether the caller may give this agent a model of its own. */
+                canUpdate: z.boolean(),
+              }),
+            ),
+            /**
+             * How many agents the caller can't read couldn't run `modelId`
+             * (0 without one): the only thing it learns about them.
+             */
+            hiddenBlockingCount: z.number().int(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, user, query }, reply) => {
+      const [{ agents }, hiddenBlockingCount] = await Promise.all([
+        listRuntimeAgentsInheritingOrganizationDefault({
+          organizationId,
+          userId: user.id,
+        }),
+        query.modelId
+          ? countHiddenAgentsBlockingDefault({
+              organizationId,
+              userId: user.id,
+              modelId: query.modelId,
+            })
+          : 0,
+      ]);
+      return reply.send({ agents, hiddenBlockingCount });
+    },
+  );
+
   fastify.patch(
     "/api/organization/agent-settings",
     {
       schema: {
         operationId: RouteId.UpdateAgentSettings,
         description:
-          "Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)",
+          "Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)",
         tags: ["Organization"],
         body: UpdateAgentSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -445,6 +558,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
+          userId: user.id,
           modelId: merged.modelId,
         });
       }
@@ -456,6 +570,16 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertModelTrioTiers(merged);
       }
 
+      if (
+        body.defaultAutoRouterId &&
+        !(await AutoRouterModel.findInOrganization(
+          organizationId,
+          body.defaultAutoRouterId,
+        ))
+      ) {
+        throw new ApiError(400, "The selected auto router no longer exists.");
+      }
+
       if (body.defaultAgentId) {
         const agent = await AgentModel.findById(body.defaultAgentId);
         if (!agent || agent.organizationId !== organizationId) {
@@ -463,19 +587,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // The trio is also auto routing's tiers: a change must keep it routable
-      // and re-plans it, merged and checked against the row under the lock.
-      const trioPatch = {
-        ...(body.defaultFastModelId !== undefined && {
-          fastModelId: body.defaultFastModelId,
-        }),
-        ...(body.defaultModelId !== undefined && {
-          normalModelId: body.defaultModelId,
-        }),
-        ...(body.defaultSmartModelId !== undefined && {
-          smartModelId: body.defaultSmartModelId,
-        }),
-      };
       const write = async (tx: Transaction) => {
         await writeTierChanges?.(tx);
         return OrganizationModel.patchInTransaction({
@@ -484,20 +595,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
         });
       };
-      const organization =
-        Object.keys(trioPatch).length > 0
-          ? await writeOrganizationTrio({
-              organizationId,
-              patch: trioPatch,
-              write,
-            }).finally(() =>
-              OrganizationModel.invalidateSettingsCaches(organizationId),
-            )
-          : writeTierChanges
-            ? await withDbTransaction(write).finally(() =>
-                OrganizationModel.invalidateSettingsCaches(organizationId),
-              )
-            : await OrganizationModel.patch(organizationId, data);
+      const organization = writeTierChanges
+        ? await withDbTransaction(write).finally(() =>
+            OrganizationModel.invalidateSettingsCaches(organizationId),
+          )
+        : await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -745,6 +847,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
           organization,
           currentOrganization?.defaultEnvironmentNamespace ?? null,
+        );
+        // Unbound agents with their own network policy run their engine in
+        // the default namespace too; move them along in the background, as a
+        // move waits for each old engine to stop.
+        trackBackgroundWork(
+          daggerEnvironmentRuntimeManager.reconcileAgentEngines({
+            organizationId,
+          }),
         );
       }
 
@@ -1572,6 +1682,14 @@ async function assertOrganizationDefaultModelSelection(params: {
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/** An inheriting Agent Runtime agent's runtime, as far as a default model goes. */
+const RuntimeDependentSchema = z.object({
+  runtimeCommand: z.array(z.string()).nullable(),
+  inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
+  /** Absent when Claude Code picks the authentication automatically. */
+  claudeCodeAuthentication: z.enum(["provider", "subscription"]).optional(),
+});
 
 /**
  * Every mapped key must belong to the organization, match its provider, and

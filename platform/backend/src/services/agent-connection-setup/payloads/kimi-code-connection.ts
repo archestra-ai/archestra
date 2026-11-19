@@ -272,16 +272,14 @@ const KimiCodeConnection = (() => {
   }
   function unlock() { fs.rmSync(path.join(stateRoot, "lock"), { recursive: true, force: true }); }
 
-  // Keeps only the named marketplace's checkout, and only when this origin
-  // made it, so a connection to another deployment makes its own.
-  function pruneSkills(name, origin) {
+  // Called only after sync verified the selected checkout's ownership.
+  // Keep its actual directory name, including a scoped or legacy name.
+  function pruneSkills(name) {
     safe(skillsRoot);
     let entries;
     try { entries = fs.readdirSync(skillsRoot); } catch (error) { if (error.code === "ENOENT") return; throw error; }
     for (const entry of entries) {
-      let owner = null;
-      try { owner = JSON.parse(fs.readFileSync(path.join(skillsRoot, entry, ".git", "archestra-skills.json"), "utf8")); } catch {}
-      if (entry !== name || owner?.origin !== origin) fs.rmSync(path.join(skillsRoot, entry), { recursive: true, force: true, maxRetries: 3 });
+      if (entry !== name) fs.rmSync(path.join(skillsRoot, entry), { recursive: true, force: true, maxRetries: 3 });
     }
   }
   function removeSkills() { safe(skillsRoot); fs.rmSync(skillsRoot, { recursive: true, force: true, maxRetries: 3 }); }

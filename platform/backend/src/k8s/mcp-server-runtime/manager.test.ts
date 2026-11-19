@@ -1070,9 +1070,13 @@ describe("McpServerRuntimeManager", () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockK8sDeploymentInstances.length = 0;
     });
 
-    test("tears down shared Deployment for all siblings then recreates via startServer", async () => {
+    test.each([
+      true,
+      false,
+    ])("restores distinct sibling deployments after shared reinstall (awaitReady=%s)", async (awaitReady) => {
       const mockLoadFromDefault = vi
         .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
         .mockImplementation(() => {});
@@ -1163,13 +1167,16 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sNetworkPolicy: vi.fn(),
       });
 
-      // Spy startServer so we don't exercise the full pod-creation flow —
-      // we only care that it was called for the representative install.
+      // Mirror startServer registering the new representative, without creating pods.
+      const representative = { waitForDeploymentReady };
       const startServerSpy = vi
         .spyOn(manager, "startServer")
-        .mockResolvedValue(undefined);
+        .mockImplementation(async () => {
+          // @ts-expect-error - accessing private property for testing
+          manager.mcpServerIdToDeploymentMap.set(tenantAId, representative);
+        });
 
-      await manager.reinstallSharedDeployment(catalogId);
+      await manager.reinstallSharedDeployment(catalogId, { awaitReady });
 
       // Stale HTTP sessions were dropped for both siblings.
       expect(
@@ -1186,11 +1193,22 @@ describe("McpServerRuntimeManager", () => {
       expect(deleteDockerRegistrySecrets).not.toHaveBeenCalled();
       expect(deleteK8sNetworkPolicy).not.toHaveBeenCalled();
 
-      // Tenant B's stale entry is cleared; tenant A is reloaded after recreate.
+      // Every sibling is reloaded without waiting for its next tool call.
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(true);
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(true);
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(false);
+      const tenantB = manager.mcpServerIdToDeploymentMap.get(tenantBId);
+      expect(
+        mockK8sDeploymentInstances.some(
+          (deployment) =>
+            (deployment.options.mcpServer as { id: string }).id === tenantBId,
+        ),
+      ).toBe(true);
+      // Distinct install identity must not alias the representative's object.
+      expect(tenantB).not.toBe(representative);
+      expect(tenantB).toMatchObject({
+        options: { mcpServer: { id: tenantBId } },
+      });
 
       // Recreate happened via startServer for the representative.
       expect(startServerSpy).toHaveBeenCalledTimes(1);
@@ -3242,25 +3260,18 @@ describe("McpServerRuntimeManager idle hibernation", () => {
   }
 
   /**
-   * A manager with idle hibernation ON (beta flag on, organization opted in,
-   * licence active, operator kill switch off) and the given idle window. Pass
-   * `{ hardDisabled: true }` for the operator's kill switch or
-   * `{ betaEnabled: false }` for a deployment that does not offer the feature.
+   * A manager with idle hibernation ON (organization opted in, licence
+   * active, operator kill switch off) and the given idle window. Pass
+   * `{ hardDisabled: true }` for the operator's kill switch.
    */
   async function makeManager(
-    options: {
-      windowSeconds?: number;
-      hardDisabled?: boolean;
-      betaEnabled?: boolean;
-    } = {},
+    options: { windowSeconds?: number; hardDisabled?: boolean } = {},
   ) {
     const config = (await import("@/config")).default;
     config.orchestrator.mcpIdleHibernation.windowSeconds =
       options.windowSeconds ?? IDLE_WINDOW_SECONDS;
     config.orchestrator.mcpIdleHibernation.hardDisabled =
       options.hardDisabled ?? false;
-    config.orchestrator.mcpIdleHibernation.betaEnabled =
-      options.betaEnabled ?? true;
     const managerModule = await import("./manager");
     const manager = new managerModule.McpServerRuntimeManager();
     return {
@@ -3281,7 +3292,6 @@ describe("McpServerRuntimeManager idle hibernation", () => {
     // factory defaults so a shuffled test order can't leak them.
     const config = (await import("@/config")).default;
     config.orchestrator.mcpIdleHibernation.hardDisabled = true;
-    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
     vi.mocked(OrganizationModel.getMcpIdleHibernationEnabled).mockReset();
     vi.mocked(OrganizationModel.getMcpIdleHibernationEnabled).mockResolvedValue(
       true,
@@ -3722,12 +3732,6 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       expect(internals.idleHibernationSweepTimer).toBeUndefined();
     });
 
-    test("the beta flag off installs no sweeper timer at all", async () => {
-      const { internals } = await makeManager({ betaEnabled: false });
-      internals.startIdleHibernationSweeper();
-      expect(internals.idleHibernationSweepTimer).toBeUndefined();
-    });
-
     test("the timer runs while only the org toggle is off, so flipping it on needs no restart", async () => {
       // The organization toggle is re-read on every tick; latching the timer
       // on it would mean an administrator turning hibernation on had to wait
@@ -3865,7 +3869,24 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       vi.mocked(
         OrganizationModel.getMcpIdleHibernationEnabledSync,
       ).mockReturnValue(false);
-      const { manager, internals } = await makeManager({ betaEnabled: false });
+      const { manager, internals } = await makeManager({ hardDisabled: true });
+      const deployment = makeDeployment({ state: "running" });
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      await manager.ensureAwake("server-1");
+
+      expect(deployment.refreshState).not.toHaveBeenCalled();
+      expect(deployment.readLiveDeployment).not.toHaveBeenCalled();
+    });
+
+    test("cached running state remains zero-cost without an enterprise licence", async () => {
+      vi.mocked(
+        OrganizationModel.getMcpIdleHibernationEnabledSync,
+      ).mockReturnValue(false);
+      // Idle hibernation is generally available, so the deployment offers it
+      // by default; an unlicensed one still cannot put anything to sleep.
+      vi.mocked(enterpriseTier.isCoreActive).mockReturnValue(false);
+      const { manager, internals } = await makeManager();
       const deployment = makeDeployment({ state: "running" });
       internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
 
@@ -3970,7 +3991,7 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       vi.mocked(
         OrganizationModel.getMcpIdleHibernationEnabledSync,
       ).mockReturnValue(false);
-      const { manager, internals } = await makeManager({ betaEnabled: false });
+      const { manager, internals } = await makeManager({ hardDisabled: true });
       internals.mcpServerIdToDeploymentMap.set(
         "asleep",
         makeDeployment({ state: "hibernated" }),

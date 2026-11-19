@@ -44,9 +44,30 @@ export function getAzureModelKind(underlyingModelName: string): AzureModelKind {
   return "text";
 }
 
+/**
+ * Whether a deployment's backing model is Claude. Pass only what the resource
+ * reports about the deployment (its backing model name, or the management
+ * plane's model format), never the deployment name: aliases are free-form.
+ *
+ * Microsoft Foundry serves Claude over the Anthropic Messages API and the
+ * OpenAI Responses API, but answers OpenAI Chat Completions with
+ * `404 api_not_supported`.
+ */
+export function isAzureAnthropicBackingModel(params: {
+  underlyingModelName?: string | null;
+  modelFormat?: string | null;
+}): boolean {
+  return (
+    params.modelFormat?.trim().toLowerCase() === "anthropic" ||
+    /^claude-/i.test(params.underlyingModelName?.trim() ?? "")
+  );
+}
+
 /** Missing backing identity never falls back to a deployment alias. */
 export function azureModelEvidence(params: {
   underlyingModelName?: string | null;
+  /** The management plane's `properties.model.format`, e.g. `OpenAI`, `Anthropic`. */
+  modelFormat?: string | null;
   source: AzureModelEvidence["source"];
   capabilities?: Record<string, unknown>;
 }): AzureModelEvidence | null {
@@ -54,6 +75,19 @@ export function azureModelEvidence(params: {
   const flags = params.capabilities;
   const enabled = (key: string) =>
     flags?.[key] === true || flags?.[key] === "true";
+  if (isAzureAnthropicBackingModel(params)) {
+    // Claude reports `chat_completion: true`, yet Foundry rejects it on Chat
+    // Completions. Responses is the only OpenAI-wire surface it serves.
+    return {
+      kind: "text",
+      underlyingModelName: name || null,
+      operations:
+        flags?.responses === false || flags?.responses === "false"
+          ? []
+          : ["responses"],
+      source: params.source,
+    };
+  }
   const kind = enabled("image_generation")
     ? "image"
     : enabled("embeddings")

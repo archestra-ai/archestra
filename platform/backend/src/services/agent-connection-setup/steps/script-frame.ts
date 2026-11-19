@@ -69,9 +69,9 @@ err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }
 cli() { "$@" </dev/null 2>&1 | cat; }
 # Same, for a command handed a URL that carries a credential (the shared skills
 # clone URL). Client CLIs echo that URL when they report a registration and in
-# their git errors, so mask URL userinfo before it lands on the terminal, in
-# scrollback, or in a screenshot of a failed setup.
-cli_redacted() { "$@" </dev/null 2>&1 | sed -E 's#://[^/@[:space:]]+@#://***@#g'; }`;
+# their git errors, so mask URL userinfo and share-link tokens before they land
+# on the terminal, in scrollback, or in a screenshot of a failed setup.
+cli_redacted() { "$@" </dev/null 2>&1 | sed -E 's#://[^/@[:space:]]+@#://***@#g; s#archestra_skl_[A-Za-z0-9_-]+#archestra_skl_***#g'; }`;
 
 /** What the banner says the setup covers, in the ending's words. */
 function setupParts(ctx: SetupScriptContext): string[] {
@@ -203,10 +203,10 @@ function Ok($m)   { if ($ArchUseColor) { Write-Host ('==> ' + $m) -ForegroundCol
 function Warn($m) { if ($ArchUseColor) { Write-Host ('warning: ' + $m) -ForegroundColor Yellow } else { Write-Host ('warning: ' + $m) } }
 function Err($m)  { if ($ArchUseColor) { Write-Host ('error: ' + $m) -ForegroundColor Red } else { Write-Host ('error: ' + $m) } }
 # Client CLIs echo a credential-bearing URL (the shared skills clone URL) when
-# they report a registration and in their git errors. Mask URL userinfo before
-# printing. Invoke-ArchRedacted keeps the command's stderr non-terminating (5.1
+# they report a registration and in their git errors. Mask URL userinfo and
+# share-link tokens before printing. Invoke-ArchRedacted keeps the command's stderr non-terminating (5.1
 # would otherwise abort on its first stderr line); callers read $LASTEXITCODE.
-function Hide-ArchUrlCredentials($Text) { ([string]$Text) -replace '://[^/@\\s]+@', '://***@' }
+function Hide-ArchUrlCredentials($Text) { (([string]$Text) -replace '://[^/@\\s]+@', '://***@') -replace 'archestra_skl_[A-Za-z0-9_-]+', 'archestra_skl_***' }
 function Invoke-ArchRedacted([scriptblock]$Command) {
   $ErrorActionPreference = 'Continue'
   & $Command 2>&1 | ForEach-Object { Write-Host (Hide-ArchUrlCredentials $_) }

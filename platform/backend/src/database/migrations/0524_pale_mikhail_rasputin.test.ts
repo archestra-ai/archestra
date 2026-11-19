@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { syncBuiltInAgents } from "@/database/seed";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -10,6 +9,7 @@ import {
   InteractionModel,
   ToolModel,
 } from "@/models";
+import { syncBuiltInAgents } from "@/services/seed";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(

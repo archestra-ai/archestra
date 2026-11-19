@@ -20,6 +20,8 @@ const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseOauthClients = vi.fn();
 const mockDeleteApiKey = vi.fn();
+const mockUpdateApiKey = vi.fn();
+const mockSavePermissions = vi.fn();
 const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   () => ({
     useDataTableQueryParamsMock: vi.fn(),
@@ -70,7 +72,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: (...args: unknown[]) =>
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockUpdateApiKey,
     isPending: false,
   }),
 }));
@@ -275,17 +277,36 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogBody: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DialogForm: ({ children }: { children: React.ReactNode }) => (
-    <form>{children}</form>
-  ),
+  DialogForm: ({
+    children,
+    onSubmit,
+  }: {
+    children: React.ReactNode;
+    onSubmit?: React.FormEventHandler<HTMLFormElement>;
+  }) => <form onSubmit={onSubmit}>{children}</form>,
   DialogStickyFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
 
-vi.mock("@/components/resource-access-section", () => ({
-  ResourceAccessSection: () => null,
-}));
+vi.mock("@/components/resource-access-section", async () => {
+  const { useEffect } = await import("react");
+  return {
+    // Registers its save with the dialog, as the real section does, so a
+    // test can see whether the dialog's Save commits the access edits.
+    ResourceAccessSection: ({
+      registerSave,
+    }: {
+      registerSave?: (save: (() => Promise<void>) | null) => void;
+    }) => {
+      useEffect(() => {
+        registerSave?.(mockSavePermissions);
+        return () => registerSave?.(null);
+      }, [registerSave]);
+      return null;
+    },
+  };
+});
 
 vi.mock("@/components/ui/permission-button", () => ({
   // `permissions`/`tooltip` are the component's own; everything else (notably
@@ -623,6 +644,76 @@ describe("ApiKeysPage", () => {
     expect(screen.queryByText("Enterprise plans")).toBeNull();
   });
 
+  it("drops only the personal GitHub Copilot card when personal subscriptions are off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("GitHub Copilot")).toBeNull();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
+    expect(screen.getByText("Enterprise plans")).toBeInTheDocument();
+  });
+
+  it("drops only the enterprise plans when they are off, keeping the personal card", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { enterprise: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(screen.queryByText("Enterprise plans")).toBeNull();
+    expect(personalCards().getByText("GitHub Copilot")).toBeInTheDocument();
+  });
+
+  it("moves a connected enterprise plan into the table once enterprise plans are off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { enterprise: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "copilot-plan-key",
+          name: "Org Copilot plan",
+          provider: "github-copilot",
+          scope: "org",
+          isGithubAppKey: true,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    // No card stands for it now, so the table keeps it deletable.
+    expect(screen.getByText("Org Copilot plan")).toBeInTheDocument();
+  });
+
   it("keeps a turned-off provider's connected subscription key in the table", () => {
     // The card is withdrawn with the provider, so the key it stood for has to
     // fall back to a table row — otherwise an admin can no longer see or
@@ -834,6 +925,49 @@ describe("ApiKeysPage", () => {
     await waitFor(() => {
       expect(formProps.form.getValues("authMethod")).toBe("subscription");
     });
+  });
+
+  it("edits who can reach a system key without touching its credentials", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("edit=system-gemini") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: {
+        id: "system-gemini",
+        name: "System Gemini",
+        provider: "gemini",
+        scope: "org",
+        isSystem: true,
+        secretId: null,
+        baseUrl: null,
+        inferenceBaseUrl: null,
+        extraHeaders: null,
+        teamId: null,
+        userId: null,
+        isPrimary: false,
+      },
+    });
+    mockSavePermissions.mockResolvedValue(undefined);
+
+    render(<ApiKeysPage />);
+
+    expect(
+      await screen.findByText("Configured through environment variables"),
+    ).toBeInTheDocument();
+    expect(mockLlmProviderApiKeyForm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mockSavePermissions).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUpdateApiKey).not.toHaveBeenCalled();
   });
 
   it("points both 'View all' links at the credentials of the key being deleted", async () => {

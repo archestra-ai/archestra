@@ -5,28 +5,37 @@ import {
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
   isRunControlArchestraToolShortName,
+  isSkillTool,
   isYellToolShortName,
   type ModelSelection,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
 import { z } from "zod";
-import type { TargetInstallCaller } from "@/clients/mcp-client";
+import type {
+  TargetInstallCaller,
+  TokenAuthContext,
+} from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentModel,
   ConversationEnabledToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  ToolSearchTextModel,
 } from "@/models";
 import {
   isAppaDelegatedRun,
@@ -34,6 +43,8 @@ import {
   openappaYellEnabled,
 } from "@/openappa/service";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
+import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -61,6 +72,19 @@ import {
 } from "./helpers";
 import { isOpenappaTool, tools as openappaMcpTools } from "./openappa";
 import { filterToolNamesByPermission } from "./rbac";
+import {
+  type KeywordSearchText,
+  type PreparedSearchQuery,
+  prepareSearchQuery,
+  rankByKeyword,
+} from "./search-ranking";
+import {
+  hashToolDefinition,
+  normalizeSearchText as normalizeText,
+  tokenizeNormalizedText as tokenize,
+  tokenizeSearchText,
+} from "./search-text";
+import pregeneratedSearchTexts from "./search-texts.generated.json";
 import { getSkillDelegationTools } from "./skill-delegation";
 import { tools as runtimeMcpTools } from "./tasks";
 
@@ -70,13 +94,18 @@ import { tools as runtimeMcpTools } from "./tasks";
 // that checks input against it would refuse the call before it arrives.
 const MAX_SEARCH_LIMIT = 20;
 
+// Room for a regex alternation that names a few dozen tools. The bound only
+// stops runaway input; paging with offset, not a longer query, is how a model
+// sees matches past one page.
+const MAX_QUERY_LENGTH = 1000;
+
 const SearchToolsArgsSchema = z
   .object({
     query: z
       .string()
       .trim()
       .min(1)
-      .max(200)
+      .max(MAX_QUERY_LENGTH)
       .describe(
         "Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match.",
       ),
@@ -89,6 +118,15 @@ const SearchToolsArgsSchema = z
       .default(8)
       .describe(
         `Maximum number of matching tools to return, at most ${MAX_SEARCH_LIMIT}. A larger value returns ${MAX_SEARCH_LIMIT}.`,
+      ),
+    offset: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(0)
+      .describe(
+        "Number of ranked matches to skip. To see the matches after a truncated result, repeat the same query with offset set to the result's nextOffset.",
       ),
     mode: z
       .enum(["keyword", "regex"])
@@ -139,18 +177,26 @@ const SearchToolsOutputSchema = z.object({
     .int()
     .nonnegative()
     .describe(
-      "Total tools matching the query before the limit was applied (>= total).",
+      "Total tools matching the query before offset and limit were applied (>= total).",
     ),
   truncated: z
     .boolean()
     .describe(
-      "True when matchCount exceeds the returned tools (results cut by limit).",
+      "True when more matches follow this page (results cut by limit).",
+    ),
+  nextOffset: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .describe(
+      "The offset that returns the next page of matches, or null when no matches follow this page.",
     ),
   hint: z
     .string()
     .nullable()
     .describe(
-      "Actionable guidance when results were truncated or empty (an empty result also names which query terms matched no tool text).",
+      "Actionable guidance when results were truncated or empty (a truncated result names the offset of the next page; an empty result also names which query terms matched no tool text).",
     ),
   tools: z.array(
     z.object({
@@ -208,14 +254,12 @@ type SearchCandidate = {
   server: string | null;
   catalogName: string | null;
   available: boolean;
+  /** Why a tool that is not available cannot run, in words for the model. */
+  unavailableReason: string | null;
   inputParameters: InputParameterSummary[];
-  searchText: {
-    name: string;
-    title: string;
-    description: string;
-    argNames: string;
-    argDescriptions: string;
-  };
+  // Keys the stored generated text; null when the candidate has none to look up.
+  definitionHash: string | null;
+  searchText: KeywordSearchText;
 };
 
 const registry = defineArchestraTools([
@@ -241,6 +285,7 @@ const registry = defineArchestraTools([
         delegationChain: context.delegationChain,
         parentLlm: context.parentLlm,
         tokenAuth: context.tokenAuth,
+        suppressContentLogging: context.suppressContentLogging,
       });
 
       let matches: SearchCandidate[];
@@ -253,11 +298,9 @@ const registry = defineArchestraTools([
         matches = result.matches;
       } else {
         const preparedQuery = prepareSearchQuery(args.query);
-        matches = rankCandidatesByKeyword(searchableTools, preparedQuery);
-        unmatchedTerms = findUnmatchedQueryTerms(
-          searchableTools,
-          preparedQuery,
-        );
+        const candidates = await withStoredSearchTexts(searchableTools);
+        matches = rankCandidatesByKeyword(candidates, preparedQuery);
+        unmatchedTerms = findUnmatchedQueryTerms(candidates, preparedQuery);
       }
 
       const matchCount = matches.length;
@@ -269,8 +312,16 @@ const registry = defineArchestraTools([
         ...matches.filter((candidate) => candidate.available),
         ...matches.filter((candidate) => !candidate.available),
       ];
-      const tools = ranked.slice(0, args.limit).map(toSearchResult);
-      const truncated = matchCount > tools.length;
+      // Both rankings break ties by tool name, so the same query pages
+      // through one stable order.
+      const tools = ranked
+        .slice(args.offset, args.offset + args.limit)
+        .map(toSearchResult);
+      const nextOffset =
+        args.offset + tools.length < matchCount
+          ? args.offset + tools.length
+          : null;
+      const truncated = nextOffset !== null;
       // Only relevant to the zero-match hint, so resolve it lazily to avoid an
       // extra permission/assignment lookup on every successful search.
       const sandboxAvailable =
@@ -283,7 +334,9 @@ const registry = defineArchestraTools([
           : false;
       const hint = buildSearchHint({
         matchCount,
-        truncated,
+        offset: args.offset,
+        returned: tools.length,
+        nextOffset,
         limit: args.limit,
         searchableTools,
         unmatchedTerms,
@@ -294,6 +347,7 @@ const registry = defineArchestraTools([
         total: tools.length,
         matchCount,
         truncated,
+        nextOffset,
         hint,
         tools,
       };
@@ -303,6 +357,7 @@ const registry = defineArchestraTools([
           agentId: context.agentId,
           mode: args.mode,
           queryLength: args.query.length,
+          offset: args.offset,
           matchCount,
           returned: tools.length,
           zeroResult: matchCount === 0,
@@ -336,6 +391,7 @@ export const __test = {
     title?: string | null;
     description?: string | null;
     parameters?: Record<string, unknown>;
+    generatedText?: string;
   }): SearchCandidate {
     return {
       toolName: input.toolName,
@@ -345,12 +401,15 @@ export const __test = {
       server: null,
       catalogName: null,
       available: true,
+      unavailableReason: null,
       inputParameters: [],
+      definitionHash: null,
       searchText: buildSearchText({
         name: input.toolName,
         title: input.title ?? "",
         description: input.description ?? null,
         schema: input.parameters ?? {},
+        generatedText: input.generatedText ?? null,
       }),
     };
   },
@@ -360,6 +419,7 @@ export const __test = {
 
 async function openappaSearchTools(
   exclusionSets: AgentToolExclusionSets,
+  options?: { includeImplicitPolicyReads?: boolean },
 ): Promise<
   Array<{
     name: string;
@@ -369,12 +429,17 @@ async function openappaSearchTools(
   }>
 > {
   if (!openappaEnabled()) return [];
+  const includeImplicitPolicyReads =
+    options?.includeImplicitPolicyReads ?? true;
   const deployment = await getGuardrailsDeployment();
   const remediesActive = deployment.active;
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (
-      !isImplicitOpenAppaReadToolShortName(shortName) &&
+      !(
+        includeImplicitPolicyReads &&
+        isImplicitOpenAppaReadToolShortName(shortName)
+      ) &&
       !isRequiredOpenAppaToolShortName(shortName ?? "")
     )
       return [];
@@ -416,9 +481,16 @@ async function getSearchableTools(params: {
   conversationId?: string;
   delegationChain?: string;
   parentLlm?: ModelSelection;
-  tokenAuth?: TargetInstallCaller;
+  tokenAuth?: TokenAuthContext;
+  suppressContentLogging?: boolean;
 }): Promise<SearchCandidate[]> {
-  const { agentId, conversationId, organizationId, userId } = params;
+  const {
+    agentId,
+    conversationId,
+    organizationId,
+    suppressContentLogging,
+    userId,
+  } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
   const agent = await AgentModel.findGatewayAgentById(agentId);
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
@@ -446,6 +518,7 @@ async function getSearchableTools(params: {
     assignedToolNames: assignedNames,
     agentId,
     userId,
+    oauthClientId: params.tokenAuth?.oauthClientId,
     organizationId,
     exclusionSets,
   });
@@ -457,15 +530,24 @@ async function getSearchableTools(params: {
     tokenAuth: params.tokenAuth,
   });
   // OpenAPPA runtime and policy read tools are reachable on every agent when
-  // the feature is on; policy writes come only from assignment or Auto mode.
+  // the feature is on, except single-agent-scoped Agent Runtime OAuth tokens
+  // with accessAllTools off; policy writes come only from assignment or Auto mode.
+  const includeImplicitPolicyReads =
+    !isAgentRunGatewayToken(params.tokenAuth) || Boolean(agent?.accessAllTools);
   const injectedOpenappaTools = delegatedRun
     ? []
-    : await openappaSearchTools(exclusionSets);
+    : await openappaSearchTools(exclusionSets, {
+        includeImplicitPolicyReads,
+      });
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );
+  const disallowOAuthApp = Boolean(
+    params.tokenAuth?.oauthExecution ||
+      (params.tokenAuth?.oauthClientId && !params.tokenAuth.isUserToken),
+  );
   const delegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getAgentTools({
           agentId,
           organizationId,
@@ -473,15 +555,37 @@ async function getSearchableTools(params: {
           skipAccessCheck: userId === "system",
           parentLlm: params.parentLlm,
           delegationChain: params.delegationChain,
+          disallowOAuthApp,
         })
       : [];
+  const includeImplicitStartAgentRun = Boolean(
+    !suppressContentLogging &&
+      agent &&
+      organizationId != null &&
+      (await callerUsesImplicitLoadBalancedRunStarter({
+        agent,
+        actorUserId: userId,
+        exclusionSets,
+        disallowOAuthApp,
+      })),
+  );
   const hasTaskStarter =
-    delegationTools.length > 0 ||
-    assignedTools.some(
-      (tool) =>
-        archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_AGENT_RUN_SHORT_NAME,
-    );
+    !suppressContentLogging &&
+    (includeImplicitStartAgentRun ||
+      delegationTools.length > 0 ||
+      assignedTools.some(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) ===
+          TOOL_START_AGENT_RUN_SHORT_NAME,
+      ));
+  const isEncryptedBlockedRuntimeToolShortName = (
+    shortName: string | null | undefined,
+  ): boolean =>
+    shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+    shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
+    shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME ||
+    shortName === TOOL_POST_AGENT_RUN_FILE_SHORT_NAME ||
+    shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME;
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already
@@ -491,7 +595,14 @@ async function getSearchableTools(params: {
     (isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter)
       ? runtimeMcpTools.flatMap((tool) => {
           const shortName = archestraMcpBranding.getToolShortName(tool.name);
-          return shortName && isRunControlArchestraToolShortName(shortName)
+          return shortName &&
+            !(
+              suppressContentLogging &&
+              isEncryptedBlockedRuntimeToolShortName(shortName)
+            ) &&
+            (isRunControlArchestraToolShortName(shortName) ||
+              (includeImplicitStartAgentRun &&
+                shortName === TOOL_START_AGENT_RUN_SHORT_NAME))
             ? [
                 {
                   name: archestraMcpBranding.getToolName(shortName),
@@ -524,6 +635,13 @@ async function getSearchableTools(params: {
   const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
+      !(
+        suppressContentLogging &&
+        (isEncryptedBlockedRuntimeToolShortName(
+          archestraMcpBranding.getToolShortName(tool.name),
+        ) ||
+          isSkillTool(tool.name))
+      ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,
         assignedNames,
@@ -534,13 +652,19 @@ async function getSearchableTools(params: {
 
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
+  // Encrypted chats omit them: a child run would log content outside the
+  // parent's suppression scope.
   const skillDelegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getSkillDelegationTools({ agentId, organizationId, userId })
       : [];
 
   const catalogsById = await getCatalogsById(filteredTools);
-  const catalogsWithInstalls = await getCatalogIdsWithInstalls(filteredTools);
+  const catalogsWithInstalls = await getCatalogIdsWithInstalls({
+    tools: filteredTools,
+    catalogsById,
+    userId,
+  });
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
@@ -556,7 +680,13 @@ async function getSearchableTools(params: {
     const knowledgeDescription = isKnowledge
       ? await buildKnowledgeSourcesDescription(
           agentId,
-          organizationId ? { userId, organizationId } : undefined,
+          organizationId
+            ? {
+                userId,
+                oauthClientId: params.tokenAuth?.oauthClientId,
+                organizationId,
+              }
+            : undefined,
         )
       : null;
     if (isKnowledge && !knowledgeDescription) continue;
@@ -639,12 +769,23 @@ function toAssignedToolCandidate(params: {
     server: parsedToolName.serverName ?? null,
     catalogName: source === "mcp" ? (catalog?.name ?? null) : null,
     available,
+    unavailableReason: available
+      ? null
+      : catalog?.serverType === "desktop_mcp"
+        ? `${catalog.name} runs on the user's own computer, and the user has not added it to their computer yet. Ask them to add it from the MCP registry.`
+        : "MCP connection not installed — reconnect the server to use this tool.",
     inputParameters,
+    definitionHash:
+      source === "mcp" && tool.catalogId != null
+        ? hashToolDefinition({ name: tool.name, description, parameters })
+        : null,
     searchText: buildSearchText({
       name: tool.name,
       title: title ?? "",
       description,
       schema: parameters,
+      generatedText:
+        source === "archestra" ? pregeneratedText(tool.name) : null,
     }),
   };
 }
@@ -662,14 +803,82 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
     server: null,
     catalogName: null,
     available: true,
+    unavailableReason: null,
     inputParameters,
+    definitionHash: null,
     searchText: buildSearchText({
       name: tool.name,
       title: tool.title ?? "",
       description: tool.description ?? null,
       schema: tool.inputSchema as Record<string, unknown>,
+      generatedText: null,
     }),
   };
+}
+
+function pregeneratedText(toolName: string): string | null {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  const texts: Record<string, { searchText: string } | undefined> =
+    pregeneratedSearchTexts;
+  return (shortName ? texts[shortName]?.searchText : null) ?? null;
+}
+
+// Search never generates: a candidate with no stored text, or a failed lookup,
+// ranks on its source fields alone.
+async function withStoredSearchTexts(
+  candidates: SearchCandidate[],
+): Promise<SearchCandidate[]> {
+  const hashes = new Set(
+    candidates.flatMap(({ definitionHash }) =>
+      definitionHash ? [definitionHash] : [],
+    ),
+  );
+  let texts: Map<string, string>;
+  try {
+    texts = await ToolSearchTextModel.findTextsByHashes([...hashes]);
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Tool search text lookup failed; ranking on source fields",
+    );
+    return candidates;
+  }
+  return candidates.map((candidate) => {
+    const text = candidate.definitionHash
+      ? texts.get(candidate.definitionHash)
+      : undefined;
+    return text === undefined
+      ? candidate
+      : {
+          ...candidate,
+          searchText: {
+            ...candidate.searchText,
+            generated: novelGeneratedTokens(text, candidate.searchText),
+          },
+        };
+  });
+}
+
+// Generated terms a tool's own fields already contain only inflate those terms,
+// so the field carries just the new vocabulary, once each.
+function novelGeneratedTokens(
+  text: string,
+  source: {
+    name: string;
+    title: string;
+    description: string;
+    argNames: string;
+    argDescriptions: string;
+  },
+): string {
+  const sourceTokens = new Set(
+    tokenize(
+      `${source.name} ${source.title} ${source.description} ${source.argNames} ${source.argDescriptions}`,
+    ),
+  );
+  return [...new Set(tokenizeSearchText(text))]
+    .filter((token) => !sourceTokens.has(token))
+    .join(" ");
 }
 
 type SearchCatalogMeta = { name: string; serverType: string };
@@ -700,10 +909,15 @@ async function getCatalogsById(
 }
 
 // A tool is runnable only while its catalog still has an installed connection;
-// this resolves, in one query, which of the given tools' catalogs do.
-async function getCatalogIdsWithInstalls(
-  tools: Array<{ catalogId: string | null }>,
-): Promise<Set<string>> {
+// this resolves, in one query, which of the given tools' catalogs do. A desktop
+// MCP server runs on the caller's own computer, so only the caller's own
+// installation counts for it: a colleague's does not make the tool runnable.
+async function getCatalogIdsWithInstalls(params: {
+  tools: Array<{ catalogId: string | null }>;
+  catalogsById: Map<string, SearchCatalogMeta>;
+  userId?: string;
+}): Promise<Set<string>> {
+  const { tools, catalogsById, userId } = params;
   const catalogIds = Array.from(
     new Set(
       tools
@@ -714,6 +928,12 @@ async function getCatalogIdsWithInstalls(
   const installs = await McpServerModel.findByCatalogIds(catalogIds);
   return new Set(
     installs
+      .filter(
+        (server) =>
+          catalogsById.get(server.catalogId ?? "")?.serverType !==
+            "desktop_mcp" ||
+          (server.scope === "personal" && server.ownerId === userId),
+      )
       .map((server) => server.catalogId)
       .filter((catalogId): catalogId is string => catalogId != null),
   );
@@ -724,6 +944,7 @@ function buildSearchText(params: {
   title: string;
   description: string | null;
   schema: Record<string, unknown>;
+  generatedText: string | null;
 }) {
   const flattenedSchema = flattenSchemaText(params.schema);
   const name = normalizeText(params.name);
@@ -731,13 +952,13 @@ function buildSearchText(params: {
   const description = normalizeText(params.description ?? "");
   const argNames = normalizeText(flattenedSchema.names.join(" "));
   const argDescriptions = normalizeText(flattenedSchema.descriptions.join(" "));
+  const source = { name, title, description, argNames, argDescriptions };
 
   return {
-    name,
-    title,
-    description,
-    argNames,
-    argDescriptions,
+    ...source,
+    generated: params.generatedText
+      ? novelGeneratedTokens(params.generatedText, source)
+      : "",
   };
 }
 
@@ -901,21 +1122,6 @@ function schemaHidesDetailBelow(
   );
 }
 
-type PreparedSearchQuery = {
-  normalizedQuery: string;
-  // unique query terms — deduped so a repeated query word does not multiply its
-  // own contribution (field-side tokens keep duplicates for term frequency).
-  tokens: string[];
-};
-
-function prepareSearchQuery(query: string): PreparedSearchQuery {
-  const normalizedQuery = normalizeText(query);
-  return {
-    normalizedQuery,
-    tokens: Array.from(new Set(tokenize(normalizedQuery))),
-  };
-}
-
 function toSearchResult(candidate: SearchCandidate) {
   return {
     toolName: candidate.toolName,
@@ -923,9 +1129,7 @@ function toSearchResult(candidate: SearchCandidate) {
     source: candidate.source,
     server: candidate.server,
     available: candidate.available,
-    unavailableReason: candidate.available
-      ? null
-      : "MCP connection not installed — reconnect the server to use this tool.",
+    unavailableReason: candidate.unavailableReason,
     params: formatParamsSignature(candidate.inputParameters),
   };
 }
@@ -1058,13 +1262,15 @@ function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
 }
 
 // Actionable next-step guidance (Anthropic recovery-error practice). Null when
-// results came back and were not truncated. On a zero-result search the
+// results came back and no matches follow this page. On a zero-result search the
 // vocabulary-mismatch note rides alongside the empty-result note so the model
 // learns both what happened and which terms matched nothing; a successful search
 // never carries it, since flagging extra terms on a hit only invites a re-search.
 function buildSearchHint(params: {
   matchCount: number;
-  truncated: boolean;
+  offset: number;
+  returned: number;
+  nextOffset: number | null;
   limit: number;
   searchableTools: SearchCandidate[];
   unmatchedTerms: string[];
@@ -1073,9 +1279,11 @@ function buildSearchHint(params: {
   const {
     limit,
     matchCount,
+    nextOffset,
+    offset,
+    returned,
     sandboxAvailable,
     searchableTools,
-    truncated,
     unmatchedTerms,
   } = params;
   const parts: string[] = [];
@@ -1093,13 +1301,26 @@ function buildSearchHint(params: {
     parts.push(
       `No tools matched. Try broader or different keywords, or switch mode.${serverHint}${sandboxHint}`,
     );
-  } else if (truncated) {
+  } else if (returned === 0) {
+    parts.push(
+      `This query has ${matchCount} matches, so offset ${offset} returns none. Use an offset below ${matchCount}.`,
+    );
+  } else if (nextOffset !== null) {
+    // Name the offset of the next page. Without it, a model that wants every
+    // match builds a query that excludes the names it already has, which
+    // grows with each page.
+    const shown =
+      offset === 0
+        ? `the top ${returned} of ${matchCount} matches`
+        : `matches ${offset + 1} to ${offset + returned} of ${matchCount}`;
     // At the cap, "raise limit" would send the model back for a larger limit
     // that returns the same page.
-    parts.push(
+    const raiseLimit =
       limit < MAX_SEARCH_LIMIT
-        ? `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max ${MAX_SEARCH_LIMIT}).`
-        : `Showing the top ${limit} of ${matchCount} matches. One search returns at most ${MAX_SEARCH_LIMIT}, so narrow the query to see the others.`,
+        ? `raise limit (max ${MAX_SEARCH_LIMIT}) or `
+        : "";
+    parts.push(
+      `Showing ${shown}. For the remaining ${matchCount - nextOffset}, ${raiseLimit}repeat the query with offset ${nextOffset}.`,
     );
   }
 
@@ -1135,10 +1356,10 @@ function findUnmatchedQueryTerms(
   const corpusTokens = new Set<string>();
   let nameTitleText = "";
   for (const candidate of candidates) {
-    const { name, title, description, argNames, argDescriptions } =
+    const { name, title, description, argNames, argDescriptions, generated } =
       candidate.searchText;
     for (const token of tokenize(
-      `${name} ${title} ${description} ${argNames} ${argDescriptions}`,
+      `${name} ${title} ${description} ${argNames} ${argDescriptions} ${generated}`,
     )) {
       corpusTokens.add(token);
     }
@@ -1167,189 +1388,16 @@ function availableServerNames(candidates: SearchCandidate[]): string[] {
   return [...sorted.slice(0, MAX_HINT_SERVERS), "…"];
 }
 
-// BM25F keyword ranking over the per-field corpus. Field weights make a name
-// hit count for more than a description hit; length normalization is disabled
-// (b=0) for the short name/title fields and kept mild for the free-text fields.
-// IDF uses the log(1 + …) variant so it stays strictly positive — the textbook
-// BM25 IDF can go negative when a term appears in most documents, a real hazard
-// on the tiny per-agent corpora this runs over. Literal whole-query name/title
-// matches get a large additive boost on top so an exact tool name always wins.
-const BM25F_FIELDS = [
-  "name",
-  "title",
-  "description",
-  "argNames",
-  "argDescriptions",
-] as const;
-type Bm25Field = (typeof BM25F_FIELDS)[number];
-
-const BM25F_FIELD_CONFIG: Record<Bm25Field, { weight: number; b: number }> = {
-  name: { weight: 10, b: 0 },
-  title: { weight: 6, b: 0 },
-  description: { weight: 3, b: 0.75 },
-  argNames: { weight: 2, b: 0.5 },
-  argDescriptions: { weight: 1, b: 0.75 },
-};
-const BM25F_K1 = 1.5;
-const EXACT_NAME_BOOST = 1000;
-const NAME_SUBSTRING_BOOST = 100;
-const EXACT_TITLE_BOOST = 600;
-const TITLE_SUBSTRING_BOOST = 60;
-
-type IndexedCandidate = {
-  candidate: SearchCandidate;
-  fieldTokens: Record<Bm25Field, string[]>;
-};
-
-type CorpusStats = {
-  avgFieldLength: Record<Bm25Field, number>;
-  docFrequency: Map<string, number>;
-  docCount: number;
-};
-
 function rankCandidatesByKeyword(
   candidates: SearchCandidate[],
   query: PreparedSearchQuery,
 ): SearchCandidate[] {
-  if (!query.normalizedQuery) {
-    return [];
-  }
-
-  const indexed: IndexedCandidate[] = candidates.map((candidate) => ({
-    candidate,
-    fieldTokens: {
-      name: tokenize(candidate.searchText.name),
-      title: tokenize(candidate.searchText.title),
-      description: tokenize(candidate.searchText.description),
-      argNames: tokenize(candidate.searchText.argNames),
-      argDescriptions: tokenize(candidate.searchText.argDescriptions),
-    },
-  }));
-
-  const corpus: CorpusStats = {
-    avgFieldLength: computeAvgFieldLength(indexed),
-    docFrequency: computeDocFrequency(indexed),
-    docCount: indexed.length,
-  };
-
-  return indexed
-    .map((entry) => ({
-      candidate: entry.candidate,
-      score: scoreCandidate(entry, query, corpus),
-    }))
-    .filter(({ score }) => score > 0)
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        left.candidate.toolName.localeCompare(right.candidate.toolName),
-    )
-    .map(({ candidate }) => candidate);
-}
-
-function computeAvgFieldLength(
-  indexed: IndexedCandidate[],
-): Record<Bm25Field, number> {
-  const totals: Record<Bm25Field, number> = {
-    name: 0,
-    title: 0,
-    description: 0,
-    argNames: 0,
-    argDescriptions: 0,
-  };
-  for (const entry of indexed) {
-    for (const field of BM25F_FIELDS) {
-      totals[field] += entry.fieldTokens[field].length;
-    }
-  }
-  const count = indexed.length || 1;
-  const averages = {} as Record<Bm25Field, number>;
-  for (const field of BM25F_FIELDS) {
-    averages[field] = totals[field] / count;
-  }
-  return averages;
-}
-
-function computeDocFrequency(indexed: IndexedCandidate[]): Map<string, number> {
-  const docFrequency = new Map<string, number>();
-  for (const entry of indexed) {
-    const seen = new Set<string>();
-    for (const field of BM25F_FIELDS) {
-      for (const token of entry.fieldTokens[field]) {
-        seen.add(token);
-      }
-    }
-    for (const token of seen) {
-      docFrequency.set(token, (docFrequency.get(token) ?? 0) + 1);
-    }
-  }
-  return docFrequency;
-}
-
-function scoreCandidate(
-  entry: IndexedCandidate,
-  query: PreparedSearchQuery,
-  corpus: CorpusStats,
-): number {
-  let score = bm25fScore(entry, query.tokens, corpus);
-
-  const { name, title } = entry.candidate.searchText;
-  const { normalizedQuery } = query;
-  if (name === normalizedQuery) {
-    score += EXACT_NAME_BOOST;
-  } else if (name.includes(normalizedQuery)) {
-    score += NAME_SUBSTRING_BOOST;
-  }
-  if (title === normalizedQuery) {
-    score += EXACT_TITLE_BOOST;
-  } else if (title?.includes(normalizedQuery)) {
-    score += TITLE_SUBSTRING_BOOST;
-  }
-  return score;
-}
-
-function bm25fScore(
-  entry: IndexedCandidate,
-  queryTokens: string[],
-  corpus: CorpusStats,
-): number {
-  let score = 0;
-  for (const term of queryTokens) {
-    const docsWithTerm = corpus.docFrequency.get(term);
-    if (!docsWithTerm) {
-      continue;
-    }
-    const idf = Math.log(
-      1 + (corpus.docCount - docsWithTerm + 0.5) / (docsWithTerm + 0.5),
-    );
-
-    let weightedTf = 0;
-    for (const field of BM25F_FIELDS) {
-      const fieldTokens = entry.fieldTokens[field];
-      const tf = countOccurrences(fieldTokens, term);
-      if (tf === 0) {
-        continue;
-      }
-      const { weight, b } = BM25F_FIELD_CONFIG[field];
-      const avgLength = corpus.avgFieldLength[field] || 1;
-      const normalization = 1 - b + (b * fieldTokens.length) / avgLength;
-      weightedTf += (weight * tf) / normalization;
-    }
-
-    if (weightedTf > 0) {
-      score += (idf * weightedTf) / (BM25F_K1 + weightedTf);
-    }
-  }
-  return score;
-}
-
-function countOccurrences(tokens: string[], term: string): number {
-  let count = 0;
-  for (const token of tokens) {
-    if (token === term) {
-      count += 1;
-    }
-  }
-  return count;
+  return rankByKeyword({
+    candidates,
+    query,
+    searchTextOf: (candidate) => candidate.searchText,
+    nameOf: (candidate) => candidate.toolName,
+  });
 }
 
 function flattenSchemaText(schema: Record<string, unknown>): {
@@ -1462,16 +1510,4 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-// splits identifiers into word subtokens: `github__search_repositories` ->
-// ["github", "search", "repositories"]. `_`/`-` are separators (unlike the
-// stored names) so snake/kebab-case tool names rank under their parts. Keeps
-// duplicates — BM25 term frequency depends on them.
-function tokenize(value: string): string[] {
-  return value.split(/[^a-z0-9]+/).filter((token) => token.length > 0);
 }

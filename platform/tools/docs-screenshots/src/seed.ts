@@ -35,7 +35,6 @@ export type SeedState = Record<string, Record<string, string>>;
  */
 export async function seedDemoData(
   api: ArchestraApi,
-  options: { onlyModelRouterKey?: boolean } = {},
 ): Promise<SeedState> {
   await api.post("/api/organization/complete-onboarding", {
     onboardingComplete: true,
@@ -57,14 +56,6 @@ export async function seedDemoData(
   record("users", "persona", ownerId);
   const own = (path: string) =>
     api.tryPost(`${path}/transfer-ownership`, { ownerId });
-
-  // This dialog needs real provider mappings, but no Kubernetes environments,
-  // knowledge indexing, or unrelated demo records.
-  if (options.onlyModelRouterKey) {
-    await seedProviderKeys(api, record);
-    writeSeedState(state);
-    return state;
-  }
 
   for (const team of TEAMS) {
     const created = await api.ensureNamed({

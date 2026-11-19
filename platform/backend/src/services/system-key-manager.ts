@@ -4,7 +4,7 @@ import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -56,7 +56,8 @@ interface KeylessProviderConfig {
  * keys.
  *
  * System keys are auto-created when a keyless provider is enabled via environment config,
- * and auto-deleted when the provider is disabled.
+ * and auto-deleted when the provider is disabled, unless
+ * ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED is off.
  */
 class SystemKeyManager {
   /**
@@ -193,7 +194,13 @@ class SystemKeyManager {
         await this.syncModelsForSystemKey(newKey.id, provider, customFetch);
       }
     } else {
-      if (existingKey) {
+      if (existingKey && !config.llmSystemKeys.autoDeleteEnabled) {
+        // Another deployment on this database may still serve the provider.
+        logger.debug(
+          { provider, apiKeyId: existingKey.id },
+          "Keeping system API key (provider disabled, ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED is off)",
+        );
+      } else if (existingKey) {
         // Provider disabled, delete system key
         logger.info(
           { provider, apiKeyId: existingKey.id },

@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +14,7 @@ import { useTeamLimitAccess } from "@/lib/limits-access";
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
+  { label: "Exports", href: "/llm/cost-exports" },
 ];
 
 const PAGE_CONFIG: Record<
@@ -23,12 +25,8 @@ const PAGE_CONFIG: Record<
     title: "Costs",
     description: (
       <>
-        Track spend, token usage and requests across your organization. View and
-        edit model token prices in{" "}
-        <Link href="/llm/models" className="text-primary hover:underline">
-          Model Settings
-        </Link>
-        .
+        Track spend, token usage and requests across your organization.{" "}
+        <ModelSettingsNote />
       </>
     ),
   },
@@ -36,7 +34,67 @@ const PAGE_CONFIG: Record<
     title: "Limits",
     description: "Set spend and rate limits for LLM traffic.",
   },
+  "/llm/cost-exports": {
+    title: "Exports",
+    description: <CostExportsDescription />,
+  },
 };
+
+/**
+ * The Costs description for a team admin without organization cost access.
+ * Team admins may not be able to open Model Settings, so the link is shown
+ * only to those who can.
+ */
+function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
+  return (
+    <>
+      Track spend, token usage and requests across the teams you administer.
+      {canReadModels && (
+        <>
+          {" "}
+          <ModelSettingsNote />
+        </>
+      )}
+    </>
+  );
+}
+
+function CostExportsDescription() {
+  return (
+    <>
+      Send cost and usage to your own object storage on a schedule, in the
+      FinOps FOCUS format. Exports write to a{" "}
+      <Link
+        href="/settings/blob-providers"
+        className="text-primary hover:underline"
+      >
+        blob provider
+      </Link>
+      .{" "}
+      <ExternalDocsLink
+        href={getDocsUrl(
+          DocsPage.PlatformCostExports,
+          "schedule-exports-to-object-storage",
+        )}
+        className="hover:underline"
+      >
+        Learn more
+      </ExternalDocsLink>
+    </>
+  );
+}
+
+function ModelSettingsNote() {
+  return (
+    <>
+      View and edit model token prices in{" "}
+      <Link href="/llm/models" className="text-primary hover:underline">
+        Model Settings
+      </Link>
+      .
+    </>
+  );
+}
 
 type CostsLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
@@ -62,6 +120,7 @@ export default function CostsLayout({
   const permissionMap: Record<string, boolean> | null = pageMap
     ? {
         ...pageMap,
+        "/llm/costs": pageMap["/llm/costs"] || limitsAccess.isTeamAdmin,
         "/llm/limits": pageMap["/llm/limits"] || limitsAccess.canRead,
       }
     : null;
@@ -75,10 +134,19 @@ export default function CostsLayout({
     return isGated ? permissionMap?.[href] === true : true;
   });
 
+  const teamScopedCosts =
+    pathname === "/llm/costs" &&
+    pageMap?.["/llm/costs"] === false &&
+    limitsAccess.isTeamAdmin;
   const config = PAGE_CONFIG[pathname] ?? {
     title: "Costs & Limits",
     description: "Monitor and manage AI model usage costs.",
   };
+  const description = teamScopedCosts ? (
+    <TeamCostsDescription canReadModels={pageMap?.["/llm/models"] === true} />
+  ) : (
+    config.description
+  );
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
@@ -90,7 +158,7 @@ export default function CostsLayout({
         description={
           pathname === "/llm/costs" && prometheusDocsUrl ? (
             <>
-              {config.description} Check{" "}
+              {description} Check{" "}
               <ExternalDocsLink
                 href={prometheusDocsUrl}
                 className="hover:underline"
@@ -101,7 +169,7 @@ export default function CostsLayout({
               to get cost-related insights at scale.
             </>
           ) : (
-            config.description
+            description
           )
         }
         tabs={tabs.length > 1 ? tabs : []}

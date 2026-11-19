@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster
 order: 1
-lastUpdated: 2026-10-23
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -64,7 +64,7 @@ Run these from `platform/`:
 - `pnpm db:generate` generates a migration after you change a Drizzle schema.
 - `tilt logs pnpm-dev-backend` prints the backend logs. Use `pnpm-dev-frontend` for the frontend.
 
-The pre-commit hook runs the type check, Biome, and Knip (unused exports) in each workspace, plus the migration checks in the backend. It blocks the commit when one fails.
+The pre-commit hook runs the type check, Biome, and Knip (unused exports), plus the migration checks in the backend, in each workspace the commit touches and the workspaces that depend on it. A change to shared tooling, such as `biome.json` or the lockfile, checks every workspace; a commit that touches only Tilt files, Helm charts, or docs runs no checks. It blocks the commit when one fails. `pnpm check:commit` runs every workspace's checks.
 
 `tilt trigger database-gui` starts Drizzle Studio at <https://local.drizzle.studio> to browse the development database. To use `psql` instead:
 

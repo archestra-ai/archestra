@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
+import { jwtVerify } from "jose";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -302,6 +303,10 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer mcp-server-access-token",
       expiresInSeconds: 300,
+      issuedTo: {
+        clientId: "resource-client",
+        clientType: "identity_provider",
+      },
     });
 
     const tokenRequest = fetchMock.mock.calls.find(
@@ -535,8 +540,197 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer mcp-server-access-token",
       expiresInSeconds: 300,
+      issuedTo: {
+        clientId: "resource-client",
+        clientType: "identity_provider",
+      },
     });
 
+    fetchMock.mockRestore();
+  });
+
+  test("runs both ID-JAG steps as the calling Okta AI agent", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "okta-agent@example.com" });
+    const agentKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "okta-ai-agents",
+      issuer: "https://example.okta.com",
+      oidcConfig: {
+        clientId: "archestra-sso",
+        clientSecret: "archestra-sso-secret",
+        tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "okta_managed",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
+          agentIdentity: {
+            privateKeyPem: agentKey.privateKey
+              .export({ format: "pem", type: "pkcs8" })
+              .toString(),
+            privateKeyId: "archestra-agents",
+          },
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-okta-ai-agent",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      idToken: createJwt({ exp: futureExpSeconds(300) }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const tokenRequests: Array<{ url: string; body: Record<string, string> }> =
+      [];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/.well-known/oauth-protected-resource")) {
+          return Response.json({
+            resource: "https://mcp.example.com/mcp",
+            authorization_servers: ["https://example.okta.com/oauth2/aus-mcp"],
+          });
+        }
+        if (url.includes("/.well-known/oauth-authorization-server")) {
+          return Response.json({
+            token_endpoint: "https://example.okta.com/oauth2/aus-mcp/v1/token",
+          });
+        }
+        tokenRequests.push({
+          url,
+          body: Object.fromEntries(new URLSearchParams(String(init?.body))),
+        });
+        return Response.json({
+          access_token:
+            url === "https://example.okta.com/oauth2/v1/token"
+              ? "agent-id-jag"
+              : "agent-access-token",
+          expires_in: 300,
+        });
+      });
+
+    const result = await resolveEnterpriseTransportCredential({
+      owner: agentOwner(agent.id),
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+        isSessionAuth: true,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "id_jag",
+        resourceType: "oauth_protected_resource",
+        resourceIdentifier: "https://mcp.example.com/mcp",
+        audience: "https://example.okta.com/oauth2/aus-mcp",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      agentIdentity: {
+        identityProviderId: identityProvider.id,
+        externalId: "wlp-agent-1",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer agent-access-token",
+      expiresInSeconds: 300,
+      issuedTo: { clientId: "wlp-agent-1", clientType: "okta_ai_agent" },
+    });
+    const [idJagRequest, accessTokenRequest] = tokenRequests;
+    expect(idJagRequest?.body).toMatchObject({
+      client_id: "wlp-agent-1",
+      requested_token_type: OAUTH_TOKEN_TYPE.IdJag,
+      resource: "https://mcp.example.com/mcp",
+    });
+    expect(accessTokenRequest).toMatchObject({
+      url: "https://example.okta.com/oauth2/aus-mcp/v1/token",
+      body: { client_id: "wlp-agent-1", assertion: "agent-id-jag" },
+    });
+    const { payload } = await jwtVerify(
+      String(accessTokenRequest?.body.client_assertion),
+      agentKey.publicKey,
+    );
+    expect(payload).toMatchObject({
+      iss: "wlp-agent-1",
+      aud: "https://example.okta.com/oauth2/aus-mcp/v1/token",
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("refuses an agent binding that belongs to another identity provider", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "wrong-idp-binding@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "keycloak-binding-check",
+      issuer: "https://keycloak.example.com/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint: "https://keycloak.example.com/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          tokenEndpoint: "https://keycloak.example.com/token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-wrong-idp-binding",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      accessToken: "keycloak-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 300_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      resolveEnterpriseTransportCredential({
+        owner: agentOwner(agent.id),
+        tokenAuth: {
+          tokenId: "session-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: user.id,
+          isSessionAuth: true,
+        },
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token",
+          resourceIdentifier: "downstream-api",
+          tokenInjectionMode: "authorization_bearer",
+        },
+        agentIdentity: {
+          identityProviderId: "some-other-identity-provider",
+          externalId: "agent-client",
+        },
+      }),
+    ).rejects.toThrow("different identity provider");
+    expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
   });
 
@@ -783,6 +977,10 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer downstream-graph-access-token",
       expiresInSeconds: 3599,
+      issuedTo: {
+        clientId: "middle-tier-client-id",
+        clientType: "identity_provider",
+      },
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];

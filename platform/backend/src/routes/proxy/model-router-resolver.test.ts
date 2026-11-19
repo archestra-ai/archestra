@@ -65,7 +65,7 @@ describe("model-router-resolver", () => {
       });
     });
 
-    test("rejects a provider not mapped to the Model Router virtual key", async () => {
+    test("rejects a provider not mapped to the Unified Model API virtual key", async () => {
       await createTextModel({
         provider: "anthropic",
         modelId: "claude-unmapped-resolver-test",
@@ -79,7 +79,7 @@ describe("model-router-resolver", () => {
         {
           statusCode: 400,
           message:
-            'Model "anthropic:claude-unmapped-resolver-test" is scoped to provider "anthropic", but the Model Router virtual key is not mapped to that provider.',
+            'Model "anthropic:claude-unmapped-resolver-test" is scoped to provider "anthropic", but the Unified Model API virtual key is not mapped to that provider.',
         },
       );
     });

@@ -10,7 +10,7 @@
 # Debian mirror.
 # TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
 # onnxruntime ship cp315 on PyPI.
-FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node-runtime
+FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS node-runtime
 
 FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e08ae2c02f3fcedf76765aebc7c9bc10c55a6bbcc1b0510be
 
@@ -18,11 +18,18 @@ FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e0
 # model is never tempted to `pip install` into a location the venv won't see).
 # libbrotli1 is listed so apt upgrades the copy the base image ships: Debian's
 # nodejs and curl decode Brotli through it. The floor fails the build if the
-# CVE-2026-111497 fix is missing.
+# CVE-2026-111497 fix is missing. zlib1g is listed for the same reason: the base
+# ships it, and the floor fails the build without the CVE-2026-85091 and
+# CVE-2026-76844 fix.
+# Upgrade inherited apt packages too; CVE-2026-109518 is fixed in 3.0.4.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 unzip zip \
+      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g unzip zip \
+ && for package in apt libapt-pkg7.0; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 3.0.4 || exit 1; \
+    done \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \

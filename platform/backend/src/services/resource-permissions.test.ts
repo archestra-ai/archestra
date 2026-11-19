@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import A2AContextModel from "@/models/a2a/context";
 import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
 import AgentRunModel from "@/models/agent-run";
 import ConversationModel from "@/models/conversation";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -576,6 +578,83 @@ describe("resource permissions", () => {
         ResourcePermissions.getPolicy({ ...key, userId: other.id }),
       ).rejects.toMatchObject({ statusCode: 403 });
     }
+  });
+
+  test("OAuth clients can be granted access on knowledge bases, connectors, and files, and are rejected elsewhere or when disabled", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const { oauthClient } = await ManagedOauthClientModel.create({
+      organizationId: org.id,
+      authorId: admin.id,
+      name: "Knowledge search client",
+      grantType: "client_credentials",
+      scopes: ["mcp"],
+      allowedGatewayIds: [],
+    });
+    const subject = { type: "oauthClient" as const, id: oauthClient.id };
+
+    for (const resource of [
+      "knowledgeBase",
+      "knowledgeConnector",
+      "knowledgeFile",
+    ] as const) {
+      await expect(
+        ResourcePermissions.validateRecipients({
+          organizationId: org.id,
+          resource,
+          grants: [{ subject, actions: ["read", "use"] }],
+        }),
+      ).resolves.toBeUndefined();
+      const recipients = await ResourcePermissions.searchInitialSubjects({
+        organizationId: org.id,
+        userId: admin.id,
+        resource,
+        query: "Knowledge search",
+      });
+      expect(recipients).toContainEqual({
+        subject,
+        name: "Knowledge search client",
+      });
+    }
+
+    await expect(
+      ResourcePermissions.validateRecipients({
+        organizationId: org.id,
+        resource: "agent",
+        grants: [{ subject, actions: ["read", "use"] }],
+      }),
+    ).rejects.toThrow(
+      "OAuth clients can only be granted access to knowledge bases, connectors, and files",
+    );
+
+    const agentRecipients = await ResourcePermissions.searchInitialSubjects({
+      organizationId: org.id,
+      userId: admin.id,
+      resource: "agent",
+      query: "Knowledge search",
+    });
+    expect(
+      agentRecipients.some(
+        (recipient) => recipient.subject.type === "oauthClient",
+      ),
+    ).toBe(false);
+
+    await db
+      .update(schema.oauthClientsTable)
+      .set({ disabled: true })
+      .where(eq(schema.oauthClientsTable.id, oauthClient.id));
+    await expect(
+      ResourcePermissions.validateRecipients({
+        organizationId: org.id,
+        resource: "knowledgeBase",
+        grants: [{ subject, actions: ["read", "use"] }],
+      }),
+    ).rejects.toThrow("disabled");
   });
 });
 

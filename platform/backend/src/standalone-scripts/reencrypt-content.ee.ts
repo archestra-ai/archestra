@@ -17,10 +17,17 @@
  * Run (prod image, from /app/backend):
  *   node dist/standalone-scripts/reencrypt-content.ee.mjs
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { initializeDatabase } from "@/database";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 async function main(): Promise<void> {
   await initializeDatabase();

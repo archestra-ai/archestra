@@ -159,14 +159,25 @@ describe("InteractionModel log labels", () => {
       summaries.data.map((row) => ({
         prompt: row.userMessagePreview,
         tools: row.responseToolNames,
+        calls: row.responseToolCalls,
         reply: row.responseTextPreview,
       })),
     ).toEqual(
       expect.arrayContaining([
-        { prompt, tools: ["Grep", "Read"], reply: null },
+        {
+          prompt,
+          tools: ["Grep", "Read"],
+          // The provider's ids tie a later tool result back to this request.
+          calls: [
+            { id: "call_1", name: "Grep" },
+            { id: "call_2", name: "Read" },
+          ],
+          reply: null,
+        },
         {
           prompt,
           tools: [],
+          calls: [],
           reply: "The retry reuses a stale idempotency key.",
         },
       ]),

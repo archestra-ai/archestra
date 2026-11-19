@@ -17,6 +17,7 @@ import {
   grantsAudience,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
+  isCodexRuntimeCommand,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
@@ -24,6 +25,7 @@ import {
   providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
+  type SubagentLoadBalancingConfig,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -61,17 +63,28 @@ import {
 } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import {
+  type AgentIdentityBindingDrafts,
+  AgentIdentityBindingsField,
+  agentIdentityBindingsToSave,
+  hasAgentIdentityProviders,
+} from "@/components/agent-identity-bindings-field";
+import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { AgentNetworkPolicyField } from "@/components/agent-network-policy-field";
 import {
   AgentChannelHowItWorks,
   AgentOtherTaskSources,
 } from "@/components/agent-other-task-sources";
+import { useAgentCatalogImages } from "@/components/agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
+  isClaudeCodeRuntimeConfig,
+  RuntimeSettingsNotice,
+  supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
@@ -92,6 +105,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
@@ -103,6 +117,7 @@ import {
   gitHubActionsAccessError,
 } from "@/components/github-actions-access-section";
 import { IdentityFields } from "@/components/identity-fields";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
@@ -120,6 +135,7 @@ import {
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
+import { SubagentLoadBalancingSection } from "@/components/subagent-load-balancing-section";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -147,13 +163,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -176,11 +185,16 @@ import {
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
+  useAgentIdentityBindings,
+  useReplaceAgentIdentityBindings,
+} from "@/lib/agent-identity-bindings.query";
+import {
   useAgentKnowledgeSourceExclusions,
   useUpdateAgentKnowledgeSourceExclusions,
 } from "@/lib/agent-knowledge-source-exclusions.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
+import { useAgentRuntimePermissions } from "@/lib/agent-runtime-templates.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -239,6 +253,7 @@ type AgentOption =
   archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
+type AgentNetworkPolicy = NonNullable<Agent["networkPolicy"]>;
 type A2aRemoteAgent =
   archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
 type A2aDelegation =
@@ -1076,9 +1091,6 @@ export function AgentForm({
   // overwriting them with the empty default.
   const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
-  const { data: canConfigureRuntime } = useHasPermissions({
-    agent: ["configure-runtime"],
-  });
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
@@ -1115,9 +1127,7 @@ export function AgentForm({
   // surface only: publishing is what an MCP gateway is for, while an agent
   // reaches skills through `load_skill` in its own runtime and has no client
   // to serve `skill://` resources to. Legacy `profile` rows are gateways under
-  // an older name, so they keep the control. Shown only where the deployment
-  // has enabled the draft extension; the API enforces the same split.
-  const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
+  // an older name, so they keep the control. The API enforces the same split.
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
   // something gateway permission alone buys. Hiding the section for a caller
@@ -1125,7 +1135,6 @@ export function AgentForm({
   // and one that 403s when they save.
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const showSkills =
-    mcpGatewaySkillsEnabled === true &&
     !!canReadSkills &&
     !agent?.builtIn &&
     (agentType === "mcp_gateway" || agentType === "profile");
@@ -1217,6 +1226,23 @@ export function AgentForm({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
+  // The bindings endpoint is a full replace: it is written only once its
+  // current set has loaded, so a failed read never becomes an empty write.
+  const { data: persistedIdentityBindings, isSuccess: identityBindingsLoaded } =
+    useAgentIdentityBindings(
+      shouldLoadIdentityProviders ? agent?.id : undefined,
+    );
+  const replaceIdentityBindings = useReplaceAgentIdentityBindings();
+  const persistedIdentityBindingDrafts = useMemo(
+    (): AgentIdentityBindingDrafts =>
+      Object.fromEntries(
+        (persistedIdentityBindings ?? []).map((binding) => [
+          binding.identityProviderId,
+          binding.externalId,
+        ]),
+      ),
+    [persistedIdentityBindings],
+  );
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -1305,6 +1331,8 @@ export function AgentForm({
   // A model pool in place of the key and model; the server stores one of its
   // members as the key and model.
   const [modelPoolId, setModelPoolId] = useState<string | null>(null);
+  // An auto router in place of the key and model.
+  const [autoRouterId, setAutoRouterId] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1316,8 +1344,17 @@ export function AgentForm({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
+  // Null until edited: the form then shows the agent's saved bindings.
+  const [identityBindingDrafts, setIdentityBindingDrafts] =
+    useState<AgentIdentityBindingDrafts | null>(null);
+  const identityBindings =
+    identityBindingDrafts ?? persistedIdentityBindingDrafts;
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
+  );
+  // The agent's own egress policy; null inherits its environment's.
+  const [networkPolicy, setNetworkPolicy] = useState<AgentNetworkPolicy | null>(
+    null,
   );
 
   // One definition of "in this record's environment", used by the Custom
@@ -1346,6 +1383,8 @@ export function AgentForm({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [githubActionsAccess, setGithubActionsAccess] =
     useState<GitHubActionsAccess | null>(null);
+  const [subagentLoadBalancing, setSubagentLoadBalancing] =
+    useState<SubagentLoadBalancingConfig | null>(null);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -1507,7 +1546,20 @@ export function AgentForm({
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const anthropicVertexAiEnabled =
     useFeature("anthropicVertexAiEnabled") === true;
-  const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
+  const supportsClaudeCodeSubscription =
+    runtimeSupportsClaudeCodeSubscription(runtime);
+  const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
+  const agentCatalogImages = useAgentCatalogImages();
+  // Who may set this agent's runtime, and whether its settings are the
+  // runtime's own (read-only). An existing agent's runtime is the saved one,
+  // never the unsaved draft.
+  const {
+    canChange: canConfigureRuntime,
+    readOnlyBy: runtimeSettingsReadOnlyBy,
+  } = useAgentRuntimePermissions(
+    agent ? agent.runtime : runtime,
+    agentCatalogImages,
+  );
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
@@ -1546,6 +1598,12 @@ export function AgentForm({
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "agent";
+  // Shown while any provider is set up for agent identities, or a binding
+  // remains to be cleared.
+  const showAgentIdentities =
+    supportsIdentityProvider &&
+    (hasAgentIdentityProviders(identityProviders) ||
+      Object.keys(identityBindings).length > 0);
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
   // Auto pins the behaviour, so the row reports what will happen rather than
@@ -1701,14 +1759,19 @@ export function AgentForm({
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             modelPoolId: agentData.modelPoolId ?? null,
+            autoRouterId: agentData.autoRouterId ?? null,
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
+            networkPolicy: agentData.networkPolicy ?? null,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
             connectorIds: agentData.connectorIds,
             scope: agentData.scope,
             initialGrants: [],
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             githubActionsAccess: agentData.githubActionsAccess ?? null,
+            subagentLoadBalancing:
+              (agentData.subagentLoadBalancing as SubagentLoadBalancingConfig | null) ??
+              null,
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
@@ -1733,14 +1796,17 @@ export function AgentForm({
             llmApiKeyId: null,
             llmModel: null,
             modelPoolId: null,
+            autoRouterId: null,
             identityProviderId: undefined,
             environmentId: undefined,
+            networkPolicy: null,
             knowledgeBaseIds: [],
             connectorIds: [],
             scope: "personal",
             initialGrants: [],
             passthroughHeaders: [],
             githubActionsAccess: null,
+            subagentLoadBalancing: null,
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
@@ -1759,17 +1825,21 @@ export function AgentForm({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setModelPoolId(nextValues.modelPoolId);
+      setAutoRouterId(nextValues.autoRouterId);
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setIdentityProviderId(nextValues.identityProviderId);
+      setIdentityBindingDrafts(null);
       setEnvironmentId(nextValues.environmentId);
+      setNetworkPolicy(nextValues.networkPolicy);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
       setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setGithubActionsAccess(nextValues.githubActionsAccess);
+      setSubagentLoadBalancing(nextValues.subagentLoadBalancing);
       setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
@@ -1910,11 +1980,25 @@ export function AgentForm({
     enabled: isInternalAgent && !runtime,
   });
   const agentModelPoolId = runtime ? null : modelPoolId;
+  // Auto is offered to agents the platform runs itself, not to runtimes or
+  // built-in agents, while auto routing is on.
+  const offeredAutoRouters =
+    isInternalAgent && !runtime && !agent?.builtIn
+      ? organizationDefaultModel.autoRouters
+      : [];
+  const agentAutoRouterId = !runtime && !agent?.builtIn ? autoRouterId : null;
+  // Null while the agent's router is no longer offered (auto routing off, or
+  // a tier missing); it still shows as selected, under the plain "Auto".
+  const agentAutoRouter = agentAutoRouterId
+    ? (organizationDefaultModel.autoRouters.find(
+        (router) => router.id === agentAutoRouterId,
+      ) ?? null)
+    : null;
   const agentModelPool = agentModelPoolId
     ? modelPools.find((pool) => pool.id === agentModelPoolId)
     : undefined;
   const requiredSubscriptionKind =
-    !agent && runtime?.command?.[0] === "archestra-codex"
+    !agent && isCodexRuntimeCommand(runtime?.command?.[0])
       ? "chatgpt"
       : undefined;
   const requiredSubscription = requiredSubscriptionKind
@@ -1984,7 +2068,7 @@ export function AgentForm({
   const effectiveLlmModelRow =
     selectedLlmModelRow ?? organizationDefaultModel.model;
   const usesClaudeSubscription =
-    isClaudeCodeRuntime &&
+    supportsClaudeCodeSubscription &&
     (runtime?.claudeCode?.authentication === "subscription" ||
       (!runtime?.claudeCode &&
         (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
@@ -2159,13 +2243,31 @@ export function AgentForm({
   const savedEnvironmentId = persistedAgent?.environmentId ?? null;
   const environmentChanged =
     !!persistedAgent && (environmentId ?? null) !== savedEnvironmentId;
+  // Writing it takes permission to update environments, so it is sent only
+  // when it changed.
+  const networkPolicyChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(persistedAgent.networkPolicy ?? null, networkPolicy);
   // Saving it asks whether the editor may use its GitHub App, so it is sent
   // only when it changed.
+  const identityBindingsToSave = agentIdentityBindingsToSave(identityBindings);
+  const identityBindingsChanged =
+    supportsIdentityProvider &&
+    hasUnsavedChanges(
+      agentIdentityBindingsToSave(persistedIdentityBindingDrafts),
+      identityBindingsToSave,
+    );
   const githubActionsAccessChanged =
     !!persistedAgent &&
     hasUnsavedChanges(
       persistedAgent.githubActionsAccess ?? null,
       githubActionsAccess,
+    );
+  const subagentLoadBalancingChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(
+      persistedAgent.subagentLoadBalancing ?? null,
+      subagentLoadBalancing,
     );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
@@ -2173,7 +2275,8 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null));
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+      agentAutoRouterId !== (persistedAgent.autoRouterId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2228,6 +2331,18 @@ export function AgentForm({
       !agent && showActivationSkills
         ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
         : undefined;
+    const runtimeToSave =
+      runtime &&
+      !supportsClaudeCodeSubscription &&
+      runtime.claudeCode?.authentication === "subscription"
+        ? {
+            ...runtime,
+            claudeCode: {
+              ...runtime.claudeCode,
+              authentication: "provider" as const,
+            },
+          }
+        : runtime;
 
     setIsSaving(true);
 
@@ -2321,11 +2436,16 @@ export function AgentForm({
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
                 ...(isClaudeCodeRuntime &&
-                  runtimeHasLocalChanges && { runtime }),
+                  (runtimeHasLocalChanges ||
+                    (canConfigureRuntime === true &&
+                      runtimeToSave !== runtime)) && {
+                    runtime: runtimeToSave,
+                  }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                   modelPoolId: agentModelPoolId,
+                  autoRouterId: agentAutoRouterId,
                 }),
               }),
             }),
@@ -2343,6 +2463,7 @@ export function AgentForm({
                 environmentChanged && {
                   environmentId: environmentId ?? null,
                 }),
+              ...(isInternalAgent && networkPolicyChanged && { networkPolicy }),
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
@@ -2355,7 +2476,7 @@ export function AgentForm({
             }),
             ...(showRuntimeSection &&
               runtimeEditable &&
-              canConfigureRuntime === true && { runtime }),
+              canConfigureRuntime === true && { runtime: runtimeToSave }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2364,6 +2485,10 @@ export function AgentForm({
               missingCredentialBehavior,
               accessAllTools,
               ...(supportsSubagents && { accessAllSubagents }),
+              ...(supportsSubagents &&
+                subagentLoadBalancingChanged && {
+                  subagentLoadBalancing,
+                }),
             }),
           },
         });
@@ -2396,6 +2521,7 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             modelPoolId: agentModelPoolId,
+            autoRouterId: agentAutoRouterId,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2405,6 +2531,7 @@ export function AgentForm({
           // resolve the org's configured landing environment for its type.
           ...(supportsEnvironment &&
             environmentId !== undefined && { environmentId }),
+          ...(isInternalAgent && networkPolicy && { networkPolicy }),
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
@@ -2413,14 +2540,17 @@ export function AgentForm({
           toolExposureMode,
           missingCredentialBehavior,
           accessAllTools,
-          ...(supportsSubagents && { accessAllSubagents }),
+          ...(supportsSubagents && {
+            accessAllSubagents,
+            ...(subagentLoadBalancing && { subagentLoadBalancing }),
+          }),
           labels: updatedLabels,
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
           ...(agentRuntimeEnabled && {
-            runtime,
+            runtime: runtimeToSave,
           }),
         });
         if (!created) return false;
@@ -2477,6 +2607,12 @@ export function AgentForm({
               });
             }
             await savePublishedSkills(savedAgentId);
+            if (identityBindingsToSave.length > 0) {
+              await replaceIdentityBindings.mutateAsync({
+                agentId: savedAgentId,
+                bindings: identityBindingsToSave,
+              });
+            }
             // Channels picked on the wizard's messaging step, which had no id
             // to be written against until a moment ago.
             if (channelAssignmentsDirty) {
@@ -2590,6 +2726,18 @@ export function AgentForm({
         });
       }
 
+      if (
+        agent &&
+        savedAgentId &&
+        identityBindingsLoaded &&
+        identityBindingsChanged
+      ) {
+        await replaceIdentityBindings.mutateAsync({
+          agentId: savedAgentId,
+          bindings: identityBindingsToSave,
+        });
+      }
+
       // Existing agents save policy changes through the revisioned endpoint.
       // Create carries the staged policy in the initial agent request above.
       if (agent) {
@@ -2638,6 +2786,10 @@ export function AgentForm({
     agentModelPoolId,
     llmSelectionChanged,
     identityProviderId,
+    identityBindingsLoaded,
+    identityBindingsChanged,
+    identityBindingsToSave,
+    replaceIdentityBindings,
     environmentId,
     environmentChanged,
     knowledgeBaseIds,
@@ -2688,6 +2840,10 @@ export function AgentForm({
     showGitHubActionsAccess,
     githubActionsAccess,
     githubActionsAccessChanged,
+    subagentLoadBalancing,
+    subagentLoadBalancingChanged,
+    networkPolicy,
+    networkPolicyChanged,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2700,7 +2856,9 @@ export function AgentForm({
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
+    supportsClaudeCodeSubscription,
     runtimeHasLocalChanges,
+    agentAutoRouterId,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2791,14 +2949,17 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     modelPoolId,
+    autoRouterId,
     identityProviderId,
     environmentId,
+    networkPolicy,
     knowledgeBaseIds,
     connectorIds,
     scope,
     initialGrants,
     passthroughHeaders,
     githubActionsAccess,
+    subagentLoadBalancing,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2811,6 +2972,7 @@ export function AgentForm({
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
       hasPendingToolChanges ||
+      (identityBindingsLoaded && identityBindingsChanged) ||
       activationSkillsDirty ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
@@ -2901,6 +3063,7 @@ export function AgentForm({
         onSelectKey={(keyId) => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoRouterId(null);
           handleLlmApiKeyChange(keyId);
           setApiKeySelectorOpen(false);
         }}
@@ -2910,11 +3073,42 @@ export function AgentForm({
           cancelPendingCreatedKeySelection();
           pendingModelAutoSelectionRef.current = null;
           setModelPoolId(poolId);
+          setAutoRouterId(null);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
+        autoRouters={[
+          ...offeredAutoRouters,
+          // A saved router that is no longer offered stays listed as the
+          // selection, so the reader can see it and move off it.
+          ...(agentAutoRouterId &&
+          !offeredAutoRouters.some((router) => router.id === agentAutoRouterId)
+            ? [
+                {
+                  id: agentAutoRouterId,
+                  label: agentAutoRouter?.label ?? "Auto",
+                  description: agentAutoRouter?.description,
+                },
+              ]
+            : []),
+        ].map((router) => ({
+          id: router.id,
+          label: router.label,
+          description: router.description,
+          selected: router.id === agentAutoRouterId,
+          onSelect: () => {
+            cancelPendingCreatedKeySelection();
+            pendingModelAutoSelectionRef.current = null;
+            setAutoRouterId(router.id);
+            setModelPoolId(null);
+            setLlmApiKeyId(null);
+            setLlmModel(null);
+            lastAutoSelectedProviderRef.current = null;
+            setApiKeySelectorOpen(false);
+          },
+        }))}
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
         providerFilter={apiKeyProviderFilter}
@@ -2925,13 +3119,16 @@ export function AgentForm({
         allowOrganizationDefault={
           !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
         }
-        organizationDefaultSelected={!llmApiKeyId && !agentModelPoolId}
+        organizationDefaultSelected={
+          !llmApiKeyId && !agentModelPoolId && !agentAutoRouterId
+        }
         organizationDefaultDescription={
           organizationDefaultModel.label ?? undefined
         }
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoRouterId(null);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
@@ -2974,38 +3171,75 @@ export function AgentForm({
           handleLlmApiKeyChange(keyId);
         }}
         onAddApiKey={onAddApiKey}
-        onUseSubscription={() => setClaudeAuthentication("subscription")}
+        onUseSubscription={
+          supportsClaudeCodeSubscription
+            ? () => setClaudeAuthentication("subscription")
+            : undefined
+        }
         disabled={readOnly}
       />
       {createApiKeyDialog}
     </>
   );
+  // The agent set to an auto router, or following an organization default
+  // that is one.
+  const autoRoutedTiers = agentAutoRouterId
+    ? (agentAutoRouter?.tiers ?? null)
+    : agentModelPoolId
+      ? null
+      : organizationDefaultModel.autoRoutedTiers;
+  const autoRoutedLabel = agentAutoRouterId
+    ? agentAutoRouter?.label
+    : (organizationDefaultModel.label ?? undefined);
+  const defaultModelPlaceholder =
+    isClaudeCodeRuntime && !agent
+      ? "Select a Claude model"
+      : (organizationDefaultModel.label ?? undefined);
   const modelControl = (
     <>
       {!llmApiKeyId ? (
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <ModelSelector
-                  selectedModel=""
-                  onModelChange={() => {}}
-                  disabled
-                  variant="outline"
-                  enabled={false}
-                  placeholder={
-                    isClaudeCodeRuntime && !agent
-                      ? "Select a Claude model"
-                      : (organizationDefaultModel.label ?? undefined)
-                  }
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Select a provider API key first
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        autoRoutedTiers ? (
+          <AutoRoutedModelTrigger
+            tiers={autoRoutedTiers}
+            label={autoRoutedLabel}
+          />
+        ) : (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: the selector inside is disabled, so this wrapper takes focus to open the tooltip with the full default name
+                  tabIndex={0}
+                  className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ModelSelector
+                    selectedModel=""
+                    onModelChange={() => {}}
+                    disabled
+                    variant="outline"
+                    enabled={false}
+                    placeholder={defaultModelPlaceholder}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="start"
+                className="w-max max-w-xs text-left text-xs text-wrap"
+              >
+                {/* The placeholder truncates, so the full name lives here. */}
+                {defaultModelPlaceholder &&
+                  defaultModelPlaceholder ===
+                    organizationDefaultModel.label && (
+                    <p className="font-medium">{defaultModelPlaceholder}</p>
+                  )}
+                <p className="text-muted-foreground">
+                  Add a provider API key to pick a model.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       ) : (
         <ModelSelector
           selectedModel={llmModel || ""}
@@ -3053,9 +3287,11 @@ export function AgentForm({
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
         ? "Select a provider and Claude model"
-        : agentModelPoolId
-          ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
-          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+        : agentAutoRouterId
+          ? (agentAutoRouter?.label ?? "Auto")
+          : agentModelPoolId
+            ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
+            : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
@@ -3117,11 +3353,13 @@ export function AgentForm({
           {isClaudeCodeRuntime ? (
             <fieldset disabled={canConfigureRuntime !== true}>
               <ClaudeCodeInferenceSettings
+                authenticationLocked={!!runtimeSettingsReadOnlyBy}
                 agentId={agent?.id ?? ""}
                 authentication={
                   usesClaudeSubscription ? "subscription" : "provider"
                 }
                 onAuthenticationChange={setClaudeAuthentication}
+                runtimeCommand={runtime?.command?.[0] ?? null}
                 model={runtime?.claudeCode?.model}
                 onModelChange={(model) => {
                   if (!runtime || canConfigureRuntime !== true) return;
@@ -3156,7 +3394,7 @@ export function AgentForm({
               />
             </fieldset>
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0">{providerKeyControl}</div>
               {!agentModelPoolId && (
                 <div className="min-w-0">{modelControl}</div>
@@ -3350,6 +3588,7 @@ export function AgentForm({
                             }
                           }}
                           onChange={setAgentRuntime}
+                          readOnlyBy={runtimeSettingsReadOnlyBy}
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
@@ -3443,11 +3682,15 @@ export function AgentForm({
                   <AgentRuntimeToolSources />
                 </SettingsSection>
               )}
-              {/* Section 3: Tools & Knowledge Sources */}
+              {/* Section 3: Tools and optional knowledge sources */}
               {showTools && (
                 <SettingsSection
-                  title="Tools &amp; Knowledge"
-                  description="What this agent can call while it works, and what it can search before answering."
+                  title={isBuiltIn ? "Tools" : "Tools & Knowledge"}
+                  description={
+                    isBuiltIn
+                      ? "Tools this agent can call while it works."
+                      : "What this agent can call while it works, and what it can search before answering."
+                  }
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">
@@ -3782,6 +4025,17 @@ export function AgentForm({
                             : "No delegation tools appear in this gateway's tool list."
                         }
                       />
+                      {supportsSubagents && (
+                        <SubagentLoadBalancingSection
+                          value={subagentLoadBalancing}
+                          onChange={setSubagentLoadBalancing}
+                          selectedAgentIds={selectedDelegationTargetIds}
+                          canReadAgents={canReadAgents === true}
+                          readOnly={readOnly}
+                          isGateway={agentType === "mcp_gateway"}
+                          isAllSubagentsMode={accessAllSubagents}
+                        />
+                      )}
                       <OutboundAgentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -3828,7 +4082,7 @@ export function AgentForm({
                   !isActiveSection("runtime") && "hidden",
                 )}
               >
-                {!canConfigureRuntime && (
+                {canConfigureRuntime === false && (
                   <InlineNotice variant="info">
                     <InfoIcon className="size-4 shrink-0" />
                     <InlineNoticeBody>
@@ -3836,16 +4090,20 @@ export function AgentForm({
                         Runtime settings are read-only
                       </span>
                       <InlineNoticeText>
-                        Configure runtime permission is required to change this
-                        agent's runtime. Existing settings are preserved.
+                        You don't have permission to use this agent's runtime.
+                        Existing settings are preserved.
                       </InlineNoticeText>
                     </InlineNoticeBody>
                   </InlineNotice>
+                )}
+                {canConfigureRuntime && runtimeSettingsReadOnlyBy && (
+                  <RuntimeSettingsNotice name={runtimeSettingsReadOnlyBy} />
                 )}
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
                     onChange={setAgentRuntime}
+                    locked={!!runtimeSettingsReadOnlyBy}
                   />
                 </fieldset>
               </div>
@@ -3865,123 +4123,6 @@ export function AgentForm({
                   </p>
                 </SettingsSection>
               )}
-              {/* Skills served over MCP (SEP-2640). Gateways only, behind the
-                  draft-extension feature flag. It sits in Advanced rather than
-                  beside Tools & Knowledge: these are resources the gateway
-                  serves out to clients, not things it calls for itself. */}
-              {showSkills && (
-                <SettingsSection
-                  title="Skills over MCP"
-                  description={
-                    <>
-                      Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
-                      serves to MCP clients as <code>skill://</code> resources,
-                      alongside the client&apos;s own.
-                    </>
-                  }
-                >
-                  {/* Nothing editable until the reads behind it succeed. The
-                      controls below are seeded from those reads and saved back
-                      as a full replace, so rendering their defaults early would
-                      show a gateway publishing everything as publishing
-                      nothing — and let an admin save that reading. */}
-                  {skillsFailed ? (
-                    <p className="text-sm text-destructive">
-                      <span>
-                        Could not load the published skills for this{" "}
-                        {agentTypeDisplayName[agentType] || "agent"}. Close and
-                        reopen to try again — the published set stays as it is,
-                        and your other changes still save.
-                      </span>
-                    </p>
-                  ) : !skillsLoaded ? (
-                    <p className="text-sm text-muted-foreground">
-                      <span>Loading published skills…</span>
-                    </p>
-                  ) : (
-                    <SkillAccessModeEditor
-                      mode={accessAllSkills ? "all" : "manual"}
-                      onModeChange={(mode) =>
-                        setAccessAllSkills(mode === "all")
-                      }
-                      allRule="Every organization-wide skill in this environment, including new ones. Exclude the ones you don't want."
-                      allStat={accessModeCountStat(
-                        excludedSkillIds.length,
-                        "excluded",
-                      )}
-                      manualStat={accessModeCountStat(
-                        assignedSkillIds.length,
-                        "assigned",
-                      )}
-                      availableSkillsView={
-                        <AvailableSkillsDialog
-                          source={{
-                            kind: "gateway",
-                            skills: availableSkillsForExclusion,
-                            excludedIds: excludedSkillIds,
-                          }}
-                        />
-                      }
-                      allEditor={
-                        <div className="space-y-2">
-                          <p className="pt-1 text-xs text-muted-foreground">
-                            Other skills need permission to share them and a
-                            manual assignment.
-                          </p>
-                          <div className="space-y-1.5">
-                            <AgentSkillsEditor
-                              availableSkills={availableSkillsForExclusion}
-                              selectedSkillIds={excludedSkillIds}
-                              onSelectionChange={setExcludedSkillIds}
-                              gateway={skillGateway}
-                              currentUserId={currentUserId}
-                              tone="exclude"
-                              onSearchChange={setSkillSearch}
-                              isSearching={skillSearchPending}
-                              placeholder="Search skills to exclude..."
-                            />
-                          </div>
-                        </div>
-                      }
-                      manualEditor={
-                        <div className="space-y-1.5">
-                          <p className="pt-1 text-xs text-muted-foreground">
-                            Only the skills you assign below are published.
-                            Templated and agent-delegated skills cannot be
-                            published, a personal skill only by its own author,
-                            and a skill restricted to other environments not at
-                            all.
-                          </p>
-                          <AgentSkillsEditor
-                            availableSkills={availableSkills}
-                            selectedSkillIds={assignedSkillIds}
-                            onSelectionChange={setAssignedSkillIds}
-                            gateway={skillGateway}
-                            currentUserId={currentUserId}
-                            onSearchChange={setSkillSearch}
-                            isSearching={skillSearchPending}
-                          />
-                        </div>
-                      }
-                    />
-                  )}
-                </SettingsSection>
-              )}
-
-              {showsEnvironmentSelector && (
-                <SettingsSection
-                  title="Environment"
-                  description={environmentHelpText}
-                >
-                  <EnvironmentSelector
-                    value={environmentId ?? null}
-                    onChange={setEnvironmentId}
-                    resource={getResourceForAgentType(agentType)}
-                    showLabel={false}
-                  />
-                </SettingsSection>
-              )}
-
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (
                 <SettingsSection
@@ -4140,6 +4281,109 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {/* Skills served over MCP (SEP-2640). Gateways only, behind the
+                  draft-extension feature flag. It sits in Advanced rather than
+                  beside Tools & Knowledge: these are resources the gateway
+                  serves out to clients, not things it calls for itself. */}
+              {showSkills && (
+                <SettingsSection
+                  title="Skills over MCP"
+                  description={
+                    <>
+                      Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
+                      serves to MCP clients as <code>skill://</code> resources,
+                      alongside the client&apos;s own.
+                    </>
+                  }
+                >
+                  {/* Nothing editable until the reads behind it succeed. The
+                      controls below are seeded from those reads and saved back
+                      as a full replace, so rendering their defaults early would
+                      show a gateway publishing everything as publishing
+                      nothing — and let an admin save that reading. */}
+                  {skillsFailed ? (
+                    <p className="text-sm text-destructive">
+                      <span>
+                        Could not load the published skills for this{" "}
+                        {agentTypeDisplayName[agentType] || "agent"}. Close and
+                        reopen to try again — the published set stays as it is,
+                        and your other changes still save.
+                      </span>
+                    </p>
+                  ) : !skillsLoaded ? (
+                    <p className="text-sm text-muted-foreground">
+                      <span>Loading published skills…</span>
+                    </p>
+                  ) : (
+                    <SkillAccessModeEditor
+                      mode={accessAllSkills ? "all" : "manual"}
+                      onModeChange={(mode) =>
+                        setAccessAllSkills(mode === "all")
+                      }
+                      allRule="Every organization-wide skill in this environment, including new ones. Exclude the ones you don't want."
+                      allStat={accessModeCountStat(
+                        excludedSkillIds.length,
+                        "excluded",
+                      )}
+                      manualStat={accessModeCountStat(
+                        assignedSkillIds.length,
+                        "assigned",
+                      )}
+                      availableSkillsView={
+                        <AvailableSkillsDialog
+                          source={{
+                            kind: "gateway",
+                            skills: availableSkillsForExclusion,
+                            excludedIds: excludedSkillIds,
+                          }}
+                        />
+                      }
+                      allEditor={
+                        <div className="space-y-2">
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Other skills need permission to share them and a
+                            manual assignment.
+                          </p>
+                          <div className="space-y-1.5">
+                            <AgentSkillsEditor
+                              availableSkills={availableSkillsForExclusion}
+                              selectedSkillIds={excludedSkillIds}
+                              onSelectionChange={setExcludedSkillIds}
+                              gateway={skillGateway}
+                              currentUserId={currentUserId}
+                              tone="exclude"
+                              onSearchChange={setSkillSearch}
+                              isSearching={skillSearchPending}
+                              placeholder="Search skills to exclude..."
+                            />
+                          </div>
+                        </div>
+                      }
+                      manualEditor={
+                        <div className="space-y-1.5">
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Only the skills you assign below are published.
+                            Templated and agent-delegated skills cannot be
+                            published, a personal skill only by its own author,
+                            and a skill restricted to other environments not at
+                            all.
+                          </p>
+                          <AgentSkillsEditor
+                            availableSkills={availableSkills}
+                            selectedSkillIds={assignedSkillIds}
+                            onSelectionChange={setAssignedSkillIds}
+                            gateway={skillGateway}
+                            currentUserId={currentUserId}
+                            onSearchChange={setSkillSearch}
+                            isSearching={skillSearchPending}
+                          />
+                        </div>
+                      }
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
               {/* Custom Header Passthrough (MCP Gateway only) */}
               {agentType === "mcp_gateway" && (
                 <SettingsSection
@@ -4218,56 +4462,88 @@ export function AgentForm({
                 />
               )}
 
-              {/* Identity Provider for JWKS auth */}
-              {supportsIdentityProvider && identityProviders.length > 0 && (
+              {/* Identity: the issuer incoming requests may authenticate
+                  with, and the identities outgoing tool calls act through. */}
+              {supportsIdentityProvider &&
+                (identityProviders.length > 0 || showAgentIdentities) && (
+                  <SettingsSection
+                    title={
+                      showAgentIdentities ? "Identity" : "Identity provider"
+                    }
+                    description={
+                      showAgentIdentities
+                        ? `Who may call this ${agentTypeDisplayName[agentType] || "agent"}, and the identities its tools act through.`
+                        : "The issuer whose JWTs incoming requests may authenticate with."
+                    }
+                    contentClassName="space-y-6"
+                  >
+                    {identityProviders.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>
+                          {agentType === "agent"
+                            ? "Identity Provider (JWKS)"
+                            : "Identity Provider (Enterprise/JWKS)"}
+                        </Label>
+                        <FieldDescription>
+                          {agentType === "agent"
+                            ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Tools that exchange the user's token use it too, unless their MCP server names another. Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                            : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                          {mcpAuthDocsUrl ? (
+                            <>
+                              {" "}
+                              <ExternalDocsLink
+                                href={mcpAuthDocsUrl}
+                                className="underline"
+                                showIcon={false}
+                              >
+                                Learn more
+                              </ExternalDocsLink>
+                            </>
+                          ) : null}
+                        </FieldDescription>
+                        <IdentityProviderSelect
+                          identityProviders={identityProviders}
+                          value={identityProviderId ?? null}
+                          onChange={setIdentityProviderId}
+                          noneLabel="No identity provider"
+                        />
+                      </div>
+                    )}
+                    {showAgentIdentities && (
+                      <AgentIdentityBindingsField
+                        agentId={persistedAgent?.id ?? null}
+                        identityProviders={identityProviders}
+                        selectedIdentityProviderId={identityProviderId}
+                        value={identityBindings}
+                        onChange={setIdentityBindingDrafts}
+                      />
+                    )}
+                  </SettingsSection>
+                )}
+
+              {(showsEnvironmentSelector || isInternalAgent) && (
                 <SettingsSection
-                  title="Identity provider"
-                  description="The issuer whose JWTs incoming requests may authenticate with."
+                  title="Environment"
+                  description={environmentHelpText}
+                  contentClassName="space-y-6"
                 >
-                  <div className="space-y-2">
-                    <Label>
-                      {agentType === "agent"
-                        ? "Identity Provider (JWKS)"
-                        : "Identity Provider (Enterprise/JWKS)"}
-                    </Label>
-                    <FieldDescription>
-                      {agentType === "agent"
-                        ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
-                        : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
-                      {mcpAuthDocsUrl ? (
-                        <>
-                          {" "}
-                          <ExternalDocsLink
-                            href={mcpAuthDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </>
-                      ) : null}
-                    </FieldDescription>
-                    <Select
-                      value={identityProviderId ?? "none"}
-                      onValueChange={(value) =>
-                        setIdentityProviderId(value === "none" ? null : value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="No Identity Provider selected" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">
-                          No Identity Provider
-                        </SelectItem>
-                        {identityProviders.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id}>
-                            {provider.providerId} ({provider.issuer})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {showsEnvironmentSelector && (
+                    <EnvironmentSelector
+                      value={environmentId ?? null}
+                      onChange={setEnvironmentId}
+                      resource={getResourceForAgentType(agentType)}
+                      showLabel={isInternalAgent}
+                    />
+                  )}
+                  {isInternalAgent && (
+                    <AgentNetworkPolicyField
+                      value={networkPolicy}
+                      onChange={setNetworkPolicy}
+                      disabled={!!readOnly}
+                      label="Network egress"
+                      description="Outbound network access for this agent's runtime and sandbox. Inherits its environment's policy unless the agent sets its own."
+                    />
+                  )}
                 </SettingsSection>
               )}
 
@@ -4396,13 +4672,16 @@ type AgentFormFields = {
   llmApiKeyId: string | null;
   llmModel: string | null;
   modelPoolId: string | null;
+  autoRouterId: string | null;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
+  networkPolicy: AgentNetworkPolicy | null;
   knowledgeBaseIds: string[];
   connectorIds: string[];
   scope: AgentScope;
   passthroughHeaders: string[];
   githubActionsAccess: GitHubActionsAccess | null;
+  subagentLoadBalancing: SubagentLoadBalancingConfig | null;
   runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;

@@ -1,18 +1,39 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { guardrailsPolicyRevisionsTable } from "@/database/schemas/guardrails-policy";
-import { GUARDRAILS_POLICY_MAX_LENGTH } from "./guardrails-policy-proposal";
+import { GuardrailsPolicyContentSchema } from "./guardrails-policy-proposal";
 
 export const UnsupportedAppaClientActionSchema = z.enum(["bypass", "block"]);
 export type UnsupportedAppaClientAction = z.infer<
   typeof UnsupportedAppaClientActionSchema
 >;
 
+/**
+ * What happens to a call waiting for human approval: it waits for a person
+ * (`block`), or the platform lets it through and records a yell in sessions
+ * no person answers for (`unattended`: Agent Runtime runs, workloads, and any
+ * request sending the unattended header) or in every session (`everywhere`).
+ */
+export const HumanApprovalModeSchema = z.enum([
+  "block",
+  "unattended",
+  "everywhere",
+]);
+export type HumanApprovalMode = z.infer<typeof HumanApprovalModeSchema>;
+
+/**
+ * What happens to a call no remedy can lift: it is refused (`refuse`), or the
+ * platform lets it through and records a yell (`allow`). The `blocked` mark is
+ * always refused.
+ */
+export const UnapprovableBlockModeSchema = z.enum(["refuse", "allow"]);
+export type UnapprovableBlockMode = z.infer<typeof UnapprovableBlockModeSchema>;
+
 export const GuardrailsPolicySchema = createSelectSchema(
   guardrailsPolicyRevisionsTable,
 ).extend({ updatedAt: z.coerce.date().nullable() });
 export const ValidateGuardrailsPolicySchema = z.strictObject({
-  content: z.string().min(1).max(GUARDRAILS_POLICY_MAX_LENGTH),
+  content: GuardrailsPolicyContentSchema.min(1),
 });
 export const UpdateGuardrailsPolicySchema =
   ValidateGuardrailsPolicySchema.extend({

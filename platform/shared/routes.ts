@@ -1,6 +1,10 @@
 export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  ListAgentRuntimeAccess: "listAgentRuntimeAccess",
+  ApplyAgentRuntimeToAgents: "applyAgentRuntimeToAgents",
+  CountAgentsBehindRuntime: "countAgentsBehindRuntime",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
@@ -52,14 +56,23 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
+  GetAgentIdentityBindings: "getAgentIdentityBindings",
+  ReplaceAgentIdentityBindings: "replaceAgentIdentityBindings",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetLlmProxy: "getLlmProxy",
   UpdateLlmProxy: "updateLlmProxy",
-  GetAutoRoutingSettings: "getAutoRoutingSettings",
-  UpdateAutoRoutingSettings: "updateAutoRoutingSettings",
+  GetAutoRoutingState: "getAutoRoutingState",
+  UpdateAutoRoutingState: "updateAutoRoutingState",
+  GetAutoRouters: "getAutoRouters",
+  GetAvailableAutoRouters: "getAvailableAutoRouters",
+  CreateAutoRouter: "createAutoRouter",
+  GetAutoRouter: "getAutoRouter",
+  UpdateAutoRouter: "updateAutoRouter",
+  DeleteAutoRouter: "deleteAutoRouter",
   GetAutoRoutingPlans: "getAutoRoutingPlans",
+  GetAutoRoutingUsage: "getAutoRoutingUsage",
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",
@@ -199,6 +212,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
+  UpdateMcpServerDesktopArguments: "updateMcpServerDesktopArguments",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   HardResetMcpServer: "hardResetMcpServer",
@@ -261,14 +275,27 @@ export const RouteId = {
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
 
-  // Interaction Routes
+  // Legacy interaction route IDs remain for backwards-compatible URLs.
   GetInteractions: "getInteractions",
   GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
+  GetInteractionAutoRouting: "getInteractionAutoRouting",
   GetInteractionSessions: "getInteractionSessions",
   GetInteractionSessionLineage: "getInteractionSessionLineage",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
+
+  // LLM Proxy Logs
+  GetLlmProxyLogs: "getLlmProxyLogs",
+  GetLlmProxyLogSummaries: "getLlmProxyLogSummaries",
+  GetLlmProxyLog: "getLlmProxyLog",
+  GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
+  GetLlmProxyLogSessions: "getLlmProxyLogSessions",
+  GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionChatErrors: "getLlmProxyLogSessionChatErrors",
+  GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
+  GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
+  GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
@@ -362,6 +389,12 @@ export const RouteId = {
   // Proxy Routes - xAI
   XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
   XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+  XaiListModelsWithDefaultAgent: "xaiListModelsWithDefaultAgent",
+  XaiListModelsWithAgent: "xaiListModelsWithAgent",
+  XaiNativeMetadataWithDefaultAgent: "xaiNativeMetadataWithDefaultAgent",
+  XaiNativeMetadataWithAgent: "xaiNativeMetadataWithAgent",
+  XaiNativePrivacyWithDefaultAgent: "xaiNativePrivacyWithDefaultAgent",
+  XaiNativePrivacyWithAgent: "xaiNativePrivacyWithAgent",
   // Proxy Routes - xAI Responses (served over xAI's chat completions)
   XaiResponsesWithDefaultAgent: "xaiResponsesWithDefaultAgent",
   XaiResponsesWithAgent: "xaiResponsesWithAgent",
@@ -458,6 +491,12 @@ export const RouteId = {
 
   // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
   // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotMessagesWithDefaultAgent:
+    "githubCopilotMessagesWithDefaultAgent",
+  GithubCopilotMessagesWithAgent: "githubCopilotMessagesWithAgent",
+  GithubCopilotCountTokensWithDefaultAgent:
+    "githubCopilotCountTokensWithDefaultAgent",
+  GithubCopilotCountTokensWithAgent: "githubCopilotCountTokensWithAgent",
   GithubCopilotResponsesWithDefaultAgent:
     "githubCopilotResponsesWithDefaultAgent",
   GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
@@ -586,6 +625,18 @@ export const RouteId = {
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
+  GetServiceAccountFederatedCredentials:
+    "getServiceAccountFederatedCredentials",
+  CreateServiceAccountFederatedCredential:
+    "createServiceAccountFederatedCredential",
+  UpdateServiceAccountFederatedCredential:
+    "updateServiceAccountFederatedCredential",
+  DeleteServiceAccountFederatedCredential:
+    "deleteServiceAccountFederatedCredential",
+  ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
+  GetSpiffeDiscoveryDocument: "getSpiffeDiscoveryDocument",
+  GetSpiffeJwks: "getSpiffeJwks",
+  GetSpiffeTrustBundle: "getSpiffeTrustBundle",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
@@ -626,6 +677,9 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  BulkDeleteAgentRuns: "bulkDeleteAgentRuns",
+  BulkCancelAgentRuns: "bulkCancelAgentRuns",
+  BulkDeleteAgentWorkspaces: "bulkDeleteAgentWorkspaces",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -652,30 +706,12 @@ export const RouteId = {
   DeleteOauthClient: "deleteOauthClient",
   BulkDeleteOauthClients: "bulkDeleteOauthClients",
 
-  // LLM OAuth Client Routes
-  GetLlmOauthClients: "getLlmOauthClients",
-  GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
-  GetLlmOauthClientLabelKeys: "llmOauthClientLabelKeys",
-  CreateLlmOauthClient: "createLlmOauthClient",
-  UpdateLlmOauthClient: "updateLlmOauthClient",
-  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
-  DeleteLlmOauthClient: "deleteLlmOauthClient",
-  BulkDeleteLlmOauthClients: "bulkDeleteLlmOauthClients",
-
-  // MCP OAuth Client Routes
-  GetMcpOauthClients: "getMcpOauthClients",
-  GetMcpOauthClientLabelValues: "mcpOauthClientLabelValues",
-  GetMcpOauthClientLabelKeys: "mcpOauthClientLabelKeys",
-  CreateMcpOauthClient: "createMcpOauthClient",
-  UpdateMcpOauthClient: "updateMcpOauthClient",
-  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
-  DeleteMcpOauthClient: "deleteMcpOauthClient",
-
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  DeleteModel: "deleteModel",
   PreviewModelCostBackfill: "previewModelCostBackfill",
   StartModelCostBackfill: "startModelCostBackfill",
   GetModelCostBackfill: "getModelCostBackfill",
@@ -731,7 +767,10 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetMcpRuntimeTiers: "getMcpRuntimeTiers",
+  UpdateMcpRuntimeTiers: "updateMcpRuntimeTiers",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
+  GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",
@@ -771,6 +810,20 @@ export const RouteId = {
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",
   DeleteGithubPat: "deleteGithubPat",
+
+  // Blob providers (organization object storage destinations)
+  ListBlobProviders: "listBlobProviders",
+  CreateBlobProvider: "createBlobProvider",
+  UpdateBlobProvider: "updateBlobProvider",
+  DeleteBlobProvider: "deleteBlobProvider",
+  TestBlobProvider: "testBlobProvider",
+
+  // Scheduled cost exports to blob providers
+  ListCostExports: "listCostExports",
+  CreateCostExport: "createCostExport",
+  UpdateCostExport: "updateCostExport",
+  DeleteCostExport: "deleteCostExport",
+  RunCostExport: "runCostExport",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -827,6 +880,7 @@ export const RouteId = {
   GetMcpToolCallUsage: "getMcpToolCallUsage",
   GetAppUsage: "getAppUsage",
   GetSkillUsage: "getSkillUsage",
+  GetLlmUsage: "getLlmUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
@@ -976,6 +1030,11 @@ export const RouteId = {
   GetGuardrailsDeployment: "getGuardrailsDeployment",
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
+  GetAppaRepositoryProtection: "getAppaRepositoryProtection",
+  GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaSelfService: "getAppaSelfService",
+  GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
+  GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",
@@ -1021,6 +1080,7 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaGuardrailEvents: "getOpenappaGuardrailEvents",
   GetOpenappaExternalConsult: "getOpenappaExternalConsult",
   GetOpenappaLabelChanges: "getOpenappaLabelChanges",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
@@ -1114,6 +1174,26 @@ export const RouteId = {
   PollClientConnection: "pollClientConnection",
   GetClientConnection: "getClientConnection",
   DecideClientConnection: "decideClientConnection",
+  // Desktop devices: computers that run the tunnel client for desktop MCP servers
+  GetDesktopDevices: "getDesktopDevices",
+  DeleteDesktopDevice: "deleteDesktopDevice",
+  UpdateDesktopDeviceServer: "updateDesktopDeviceServer",
+  RestartDesktopDeviceServer: "restartDesktopDeviceServer",
+  TestDesktopDeviceServer: "testDesktopDeviceServer",
+  GetDesktopDeviceServerLog: "getDesktopDeviceServerLog",
+  // white-label-ok: wire identifier of the `archestra` program's download, not copy
+  DownloadArchestraCli: "downloadArchestraCli",
+  StartDesktopDeviceSignIn: "startDesktopDeviceSignIn",
+  PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",
+  GetDesktopDeviceSignIn: "getDesktopDeviceSignIn",
+  DecideDesktopDeviceSignIn: "decideDesktopDeviceSignIn",
+  CreateDesktopDeviceSetupCode: "createDesktopDeviceSetupCode",
+  GetDesktopDeviceSetupSignIn: "getDesktopDeviceSetupSignIn",
+  // Tunnel endpoints the tunnel client calls (OpenAI tunnel-client wire protocol)
+  GetDesktopTunnel: "getDesktopTunnel",
+  PollDesktopTunnel: "pollDesktopTunnel",
+  RespondDesktopTunnel: "respondDesktopTunnel",
+  DeleteDesktopTunnel: "deleteDesktopTunnel",
   CreateConnectionSetup: "createConnectionSetup",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
@@ -1122,11 +1202,13 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  ReportCursorHookEvent: "reportCursorHookEvent",
   GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
+  GetDisconnectReference: "getDisconnectReference",
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
   GetAgentAdoptionUsage: "getAgentAdoptionUsage",

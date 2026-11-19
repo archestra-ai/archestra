@@ -14,12 +14,18 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
+import { AwsIamMcpAuthConfigSchema } from "./aws-iam-mcp-auth";
 import {
   CatalogTeamAccessLevelSchema,
   CatalogTeamInputSchema,
 } from "./catalog-team-level";
-import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
+import { DesktopMcpConfigSchema } from "./desktop-mcp";
+import {
+  type EnterpriseManagedCredentialConfig,
+  EnterpriseManagedCredentialConfigResponseSchema,
+  EnterpriseManagedCredentialConfigSchema,
+} from "./enterprise-managed-credentials";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -36,6 +42,9 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
   // real mcp_server exposing an `open` launch tool, but opts out of K8s deploy /
   // install / cascade / discovery. Served in-process via the owned-app builder.
   "app",
+  // An MCP server on a user's own computer. It has no URL and no deployment:
+  // calls go through a queue that the tunnel client on the device polls.
+  "desktop_mcp",
 ]);
 
 /**
@@ -120,6 +129,7 @@ const LocalConfigSelectSchema = z.object({
     )
     .optional(),
   imagePullPolicy: ImagePullPolicySchema.optional(),
+  runtimeTier: z.string().optional(),
 });
 
 const CatalogLabelSchema = z.object({
@@ -162,8 +172,11 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     authFields: z.array(AuthFieldSchema).nullable(),
     userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
     oauthConfig: OAuthConfigSchema.nullable(),
-    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigResponseSchema.nullable(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
+    desktopConfig: DesktopMcpConfigSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
     // Serialized as a nullable string (not the enum) because the OpenAPI client
     // generator drops `null` from a `nullable` enum; the column keeps its
@@ -232,7 +245,9 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -252,6 +267,8 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     // InternalMcpCatalogModel.create / the startup adopt pass, never
     // accepted from input.
     deploymentName: true,
+    // Allocated by services/mcp-tool-names.ts, never accepted from input.
+    toolPrefix: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
     ...INTERNAL_DISCOVERY_COLUMNS_OMIT,
@@ -303,7 +320,9 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
   })
@@ -324,6 +343,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     multitenant: true,
     // Frozen at creation/adopt time — renames must never touch it
     deploymentName: true,
+    // Allocated by services/mcp-tool-names.ts, never accepted from input.
+    toolPrefix: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
     ...PRESET_COLUMNS_OMIT,
@@ -358,9 +379,15 @@ export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 // Export LocalConfig type for reuse in database schema
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
-export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
-export type ListInternalMcpCatalog = z.infer<
-  typeof ListInternalMcpCatalogSchema
+/**
+ * A catalog item as the backend holds it: unlike the API response, its
+ * `enterpriseManagedConfig` may carry the exchange client's secrets.
+ */
+export type InternalMcpCatalog = WithEnterpriseManagedSecrets<
+  z.infer<typeof SelectInternalMcpCatalogSchema>
+>;
+export type ListInternalMcpCatalog = WithEnterpriseManagedSecrets<
+  z.infer<typeof ListInternalMcpCatalogSchema>
 >;
 export type InsertInternalMcpCatalog = z.infer<
   typeof InsertInternalMcpCatalogSchema
@@ -397,16 +424,105 @@ function validateInternalMcpCatalog(
   value: {
     serverType?: InternalMcpCatalogServerType;
     enterpriseManagedConfig?: unknown;
+    oauthConfig?: unknown;
+    awsIamConfig?: unknown;
     localConfig?: {
       transportType?: "stdio" | "streamable-http";
       environment?: Array<{ key: string }>;
     } | null;
     userConfig?: Record<string, UserConfigField> | null;
+    desktopConfig?: unknown;
   },
   ctx: z.RefinementCtx,
 ): void {
   validateEnterpriseManagedTransportConfig(value, ctx);
+  validateAwsIamConfig(value, ctx);
   validateHeaderMappedUserConfig(value.userConfig, ctx);
+  validateDesktopConfigServerType(value, ctx);
+}
+
+/**
+ * Why an item's AWS IAM sign-in conflicts with the rest of its settings, or
+ * null. AWS IAM signs requests to a remote server and is the server's one
+ * sign-in: OAuth or an enterprise-managed credential would set another
+ * Authorization header on the same request. Updates check the item they
+ * would leave behind, since a partial update names only what changes.
+ */
+export function awsIamConfigConflict(value: {
+  serverType?: InternalMcpCatalogServerType | null;
+  enterpriseManagedConfig?: unknown;
+  oauthConfig?: unknown;
+  awsIamConfig?: unknown;
+}): string | null {
+  if (!value.awsIamConfig) return null;
+  if (value.serverType && value.serverType !== "remote") {
+    return "AWS IAM sign-in is only for remote MCP servers.";
+  }
+  if (value.oauthConfig || value.enterpriseManagedConfig) {
+    return "AWS IAM sign-in replaces OAuth and enterprise-managed credentials; remove them first.";
+  }
+  return null;
+}
+
+/**
+ * Settings an update leaves an item with: each submitted field replaces the
+ * stored one, and fields left out keep theirs.
+ */
+export function mergedAwsIamSettings(params: {
+  update: Partial<Record<AwsIamSettingField, unknown>>;
+  current: Partial<Record<AwsIamSettingField, unknown>>;
+}): Parameters<typeof awsIamConfigConflict>[0] {
+  const pick = (field: AwsIamSettingField) =>
+    params.update[field] !== undefined
+      ? params.update[field]
+      : params.current[field];
+  return {
+    serverType: pick("serverType") as InternalMcpCatalogServerType | null,
+    enterpriseManagedConfig: pick("enterpriseManagedConfig"),
+    oauthConfig: pick("oauthConfig"),
+    awsIamConfig: pick("awsIamConfig"),
+  };
+}
+
+type AwsIamSettingField =
+  | "serverType"
+  | "enterpriseManagedConfig"
+  | "oauthConfig"
+  | "awsIamConfig";
+
+function validateAwsIamConfig(
+  value: Parameters<typeof awsIamConfigConflict>[0],
+  ctx: z.RefinementCtx,
+): void {
+  const conflict = awsIamConfigConflict(value);
+  if (conflict) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["awsIamConfig"],
+      message: conflict,
+    });
+  }
+}
+
+/**
+ * Only a desktop MCP catalog item has a command for devices. A partial update
+ * that does not name the server type is checked against the stored item by
+ * the service.
+ */
+function validateDesktopConfigServerType(
+  value: {
+    serverType?: InternalMcpCatalogServerType;
+    desktopConfig?: unknown;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.desktopConfig || !value.serverType) return;
+  if (value.serverType === "desktop_mcp") return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["desktopConfig"],
+    message: "Only a desktop MCP server has a command for devices.",
+  });
 }
 
 function validateHeaderMappedUserConfig(
@@ -462,3 +578,7 @@ function validateHeaderMappedUserConfig(
     }
   }
 }
+
+type WithEnterpriseManagedSecrets<T> = Omit<T, "enterpriseManagedConfig"> & {
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+};

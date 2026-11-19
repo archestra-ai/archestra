@@ -12,8 +12,11 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpServerModel, UserTokenModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
 const upstream = useMswServer();

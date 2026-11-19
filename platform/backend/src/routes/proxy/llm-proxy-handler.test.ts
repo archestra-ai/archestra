@@ -26,7 +26,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -364,8 +367,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         testAgent.id,
       );
       expect(rows).toHaveLength(1);
-      // A streaming response keeps accruing time after its first chunk.
-      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 550) : 250);
+      // Four streamed chunks each add 100 ms after yielding; normal EOF
+      // includes the final interval while a failure stops after the first.
+      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 650) : 250);
     });
 
     test("streaming request increments token and cost metrics", async () => {
@@ -661,8 +665,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("maximum context length"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("streaming failure after SSE headers and content persists an error interaction", async () => {
@@ -701,8 +705,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("Simulated OpenAI stream failure"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("stream ending early without usage persists a partial interaction", async () => {
@@ -735,6 +739,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, testAgent.id));
       expect(rows).toHaveLength(1);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
+      expect(JSON.stringify(rows[0].response)).toContain("How can");
     });
 
     test("a Slack ChatOps stream without usage keeps its source and shows up in the sessions listing", async () => {
@@ -793,6 +800,46 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         { sessionId, source: "chatops:slack" },
       );
       expect(filtered.pagination.total).toBe(1);
+    });
+
+    test.each([
+      ["an external client", "api", () => ({}), true],
+      ["another in-process caller", "api", () => internalCallHeader(), true],
+      [
+        "the platform's guardrail call",
+        "guardrail:sanitizer",
+        () => guardrailCallHeader(),
+        false,
+      ],
+    ] as const)("the sanitizer source from %s is logged as %s", async (_caller, source, proof, storesContent) => {
+      // A guardrail sanitizer's rows keep no content, so only the guardrail
+      // call may claim that source; anyone else is logged as api, with content.
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+          [SOURCE_HEADER]: "guardrail:sanitizer",
+          ...proof(),
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "the-sanitizer-source-prompt" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe(source);
+      expect(
+        JSON.stringify(rows[0].request).includes("the-sanitizer-source-prompt"),
+      ).toBe(storesContent);
     });
 
     test("persists OpenCode main, title, and child-session sources", async () => {
@@ -1744,7 +1791,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       expect(texts).toEqual([
         "Let me check.",
         "Then I will summarise.",
-        "Tool get_weather is not enabled here",
+        "\n\nTool get_weather is not enabled here",
       ]);
       expect(final.content.some((block) => block.type === "tool_use")).toBe(
         false,
@@ -1837,7 +1884,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       };
       expect(logged.content.map((block) => block.text)).toEqual([
         "Let me check.Then I will summarise.",
-        "Tool get_weather is not enabled here",
+        "\n\nTool get_weather is not enabled here",
       ]);
       // The blocked call was never delivered, so it stays out of the record.
       expect(logged.content.some((block) => block.type === "tool_use")).toBe(

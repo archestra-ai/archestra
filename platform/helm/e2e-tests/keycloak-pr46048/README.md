@@ -8,7 +8,7 @@ This directory documents the custom Keycloak image used by the e2e test chart fo
 - PR URL: `https://github.com/keycloak/keycloak/pull/46048`
 - Fork branch: `Hitachi:ISSUE-43971-IDJAGReceiver`
 - Source commit: `5afbf425b19a3f4b4a1b5a37cba890fcfee977a4`
-- Published image: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/keycloak:pr46048-5afbf42`
+- Published image: `ghcr.io/archestra-ai/ci/keycloak:pr46048-5afbf42` (copied byte for byte from the original Artifact Registry build)
 - Platforms: `linux/amd64`, `linux/arm64`
 
 ## Why this image exists
@@ -94,7 +94,7 @@ docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -f quarkus/container/Dockerfile \
   --build-arg KEYCLOAK_DIST="$(basename quarkus/container/keycloak-*.tar.gz)" \
-  -t europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/keycloak:pr46048-5afbf42 \
+  -t ghcr.io/archestra-ai/ci/keycloak:pr46048-5afbf42 \
   --push \
   quarkus/container
 ```
@@ -104,15 +104,12 @@ docker buildx build \
 The build command above already pushes the multi-arch manifest. Before running it:
 
 ```bash
-gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+gh auth refresh -s write:packages
+gh auth token | docker login ghcr.io -u "$(gh api user --jq .login)" --password-stdin
 docker buildx inspect --bootstrap archestra-multiarch
 ```
 
-If `gcloud auth configure-docker` is using expired credentials, refresh them first:
-
-```bash
-gcloud auth login
-```
+A rebuild should get a new tag; pinned tags never move. Point `values.yaml` and `platform/scripts/e2e-lite.sh` at it.
 
 ## Helm wiring
 

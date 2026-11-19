@@ -9,10 +9,9 @@ geometry=""
 trap 'exit 1' HUP INT TERM
 detached=0
 emit() {
-  # Keep encoded bytes in shell variables; decode directly at each destination
-  # so NUL survives and either failed write stops this process.
+  # Decode directly into the recording so NUL survives. Keep content out of
+  # container logs; a failed recording write still stops this process.
   printf '%b' "$1" >> "$turn.log"
-  printf '%b' "$1"
 }
 record_size() {
   if [ -n "$1" ] && [ "$geometry" != "$1" ]; then

@@ -30,6 +30,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { wordToolCallId } from "../utils/tool-call-ids";
 import {
@@ -66,6 +67,7 @@ type BedrockCommandContext = {
      * dropping it silently re-enables reasoning the caller disabled.
      */
     additionalModelRequestFields: Record<string, unknown> | undefined;
+    outputConfig: BedrockRequest["outputConfig"];
     toolConfig:
       | {
           tools:
@@ -550,7 +552,9 @@ function isReasoningContentBlock(
 }
 
 /** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
-function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+export function withBedrockToolCallIds(
+  messages: BedrockMessages,
+): BedrockMessages {
   return messages.map((message) => {
     if (!Array.isArray(message.content)) return message;
     let changed = false;
@@ -1772,6 +1776,7 @@ function buildBedrockCommandContext(
       }),
       inferenceConfig: request.inferenceConfig,
       additionalModelRequestFields: request.additionalModelRequestFields,
+      outputConfig: request.outputConfig,
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) =>
@@ -1859,6 +1864,66 @@ function stripBedrockSamplingParams(
 }
 
 // =============================================================================
+// HELPER: Structured-output fallback
+// =============================================================================
+
+/**
+ * Run a Converse call and, when the model rejects `outputConfig` because it has
+ * no structured output support, run it once more without the field. The answer
+ * is then unconstrained, which is what the caller got before the proxy forwarded
+ * the constraint. A schema error from a model that supports the field is not
+ * retried.
+ *
+ * When the retry is accepted, the field is also removed from `request`: the
+ * caller stores that object as the request sent to the model, and a later
+ * attempt with it must not send the refused field again.
+ */
+async function withOutputConfigFallback<TResult>(params: {
+  request: BedrockRequest;
+  input: BedrockCommandInput;
+  run: (input: BedrockCommandInput) => Promise<TResult>;
+}): Promise<TResult> {
+  const { request, input, run } = params;
+  try {
+    return await run(input);
+  } catch (error) {
+    if (!input.outputConfig || !isUnsupportedOutputConfigError(error)) {
+      throw error;
+    }
+    logger.warn(
+      { provider: "bedrock", modelId: input.modelId },
+      "[llm-proxy] model has no structured output support; retrying without outputConfig",
+    );
+    const result = await run({ ...input, outputConfig: undefined });
+    delete request.outputConfig;
+    bedrockCommandContextCache.delete(request);
+    return result;
+  }
+}
+
+/**
+ * True only for Bedrock's refusal of the field itself: "This model doesn't
+ * support the outputConfig field." An error about the schema inside the field,
+ * such as an unsupported keyword, comes from a model that enforces schemas and
+ * must reach the caller.
+ */
+function isUnsupportedOutputConfigError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { statusCode, message, responseBody } = error as {
+    statusCode?: number;
+    message?: string;
+    responseBody?: string;
+  };
+  if (statusCode !== 400) return false;
+  return UNSUPPORTED_OUTPUT_CONFIG_PATTERN.test(
+    `${message ?? ""} ${responseBody ?? ""}`,
+  );
+}
+
+const UNSUPPORTED_OUTPUT_CONFIG_PATTERN =
+  /model (?:doesn['’]t|does not) support the outputConfig field/i;
+
+// =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
 
@@ -1926,7 +1991,10 @@ export const bedrockAdapterFactory: LLMProvider<
     return buildBedrockClient({
       apiKey: apiKey ?? null,
       baseUrl: options?.baseUrl,
-      fetch: fetchWithLlmUpstreamDispatcher,
+      fetch: fetchWithAbortSignal(
+        fetchWithLlmUpstreamDispatcher,
+        options?.abortSignal,
+      ),
     });
   },
 
@@ -1944,7 +2012,12 @@ export const bedrockAdapterFactory: LLMProvider<
       input: commandInput,
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
-      run: (input) => bedrockClient.converse(request.modelId, input),
+      run: (input) =>
+        withOutputConfigFallback({
+          request,
+          input,
+          run: (attempt) => bedrockClient.converse(request.modelId, attempt),
+        }),
     });
 
     // Convert response to our internal format with decoded tool names.
@@ -2027,7 +2100,13 @@ export const bedrockAdapterFactory: LLMProvider<
       input: commandInput,
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
-      run: (input) => bedrockClient.converseStream(request.modelId, input),
+      run: (input) =>
+        withOutputConfigFallback({
+          request,
+          input,
+          run: (attempt) =>
+            bedrockClient.converseStream(request.modelId, attempt),
+        }),
     });
   },
 
@@ -2038,8 +2117,20 @@ export const bedrockAdapterFactory: LLMProvider<
     // or "model_context_window_exceeded" on some Nova models. No structured
     // code — read the SDK error's name + message.
     if (!error || typeof error !== "object") return undefined;
-    const awsError = error as { name?: string; message?: string };
-    if (awsError.name !== BedrockErrorTypes.VALIDATION) return undefined;
+    const awsError = error as {
+      name?: string;
+      message?: string;
+      statusCode?: number;
+      responseBody?: string;
+    };
+    // The fetch-based Bedrock client throws a plain Error with statusCode and
+    // responseBody, whereas the SDK throws a named ValidationException.
+    const isValidationError =
+      awsError.name === BedrockErrorTypes.VALIDATION ||
+      (awsError.statusCode === 400 &&
+        (awsError.responseBody?.includes("ValidationException") ||
+          awsError.message?.startsWith("Bedrock API error (400):")));
+    if (!isValidationError) return undefined;
     const msg = awsError.message?.toLowerCase() ?? "";
     if (
       msg.includes("too long") ||

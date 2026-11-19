@@ -1,6 +1,5 @@
 "use client";
 
-import { ShieldOff } from "lucide-react";
 import {
   Fact,
   FactSub,
@@ -19,18 +18,19 @@ import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   BROKE_THE_GLASS_HINT,
   YellCaller,
+  YellGuardrailsMark,
   YellRowActions,
   YellSignals,
-} from "./yells-table";
+} from "./yell-row";
 
 /** One yell: its facts, its whole report, what it left behind. */
 export function YellDetail({ id }: { id: string }) {
   const yell = useOpenAppaYell(id);
   const resolve = useResolveOpenAppaYell();
-  const { data: canResolve } = useHasPermissions({ log: ["read"] });
+  const { data: canResolve } = useHasPermissions({ guardrailsYell: ["read"] });
   const back = (
-    <PageBackLink href="/openappa/yells" labelled>
-      <span>Back to yells</span>
+    <PageBackLink href="/consults/logs?type=yell" labelled>
+      <span>Back to Guardrails logs</span>
     </PageBackLink>
   );
 
@@ -99,8 +99,8 @@ export function YellDetail({ id }: { id: string }) {
           <Fact label="Guardrails">
             <FactValue>
               <span className="flex items-center gap-1.5">
-                <ShieldOff className="size-3.5" aria-hidden="true" />
-                Broke the glass
+                <YellGuardrailsMark yell={data} />
+                <span>Broke the glass</span>
               </span>
             </FactValue>
             <FactSub>{BROKE_THE_GLASS_HINT.split(": ")[1]}</FactSub>

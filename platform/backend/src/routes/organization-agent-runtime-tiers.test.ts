@@ -2,10 +2,15 @@ import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import AuditLogModel from "@/models/audit-log";
 import OrganizationModel from "@/models/organization";
-import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveRunResources,
+} from "@/services/agent-runtime/runtime-tiers";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import type { User } from "@/types";
@@ -32,6 +37,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     // The real authorization step: an endpoint missing from the permission
     // map is refused for everyone, administrators included.
     registerRoutePermissions(app);
+    registerAuditLogHook(app);
     const { default: organizationRoutes } = await import("./organization");
     await app.register(organizationRoutes);
   });
@@ -73,6 +79,154 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     ttlHours: null,
     maxCostUsd: null,
     idleTimeoutMinutes: null,
+  });
+
+  test("keeps previously saved small CPU tiers readable and runnable while rejecting new writes below 0.1", async () => {
+    const tiny = tier("Tiny", 0.05, { cpuLimit: 0.075 });
+    // Simulate settings persisted by a version that accepted smaller CPU values.
+    await OrganizationModel.patch(organizationId, {
+      agentRuntimeTiers: { tiers: [tiny], defaultTier: "Tiny" },
+    });
+    expect(await read()).toMatchObject({
+      defaultTier: "Tiny",
+      tiers: [
+        expect.objectContaining({
+          name: "Tiny",
+          cpuRequest: 0.05,
+          cpuLimit: 0.075,
+        }),
+      ],
+    });
+    const sizes = await organizationAgentRuntimeTiers(organizationId);
+    expect(resolveRunResources("Tiny", sizes)).toEqual({
+      cpuRequest: "50m",
+      cpuLimit: "75m",
+      memoryRequest: "102Mi",
+      memoryLimit: "204Mi",
+    });
+    const rejected = await patch({
+      agentRuntimeTiers: { tiers: [tiny], defaultTier: "Tiny" },
+    });
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect((await read()).tiers[0]).toMatchObject({
+      name: "Tiny",
+      cpuRequest: 0.05,
+      cpuLimit: 0.075,
+    });
+  });
+
+  test("saves independent memory, preserves overrides for older clients and renames, and resets them explicitly", async () => {
+    const settings = (
+      extra: Record<string, unknown> = {},
+      name = "Memory",
+    ) => ({
+      agentRuntimeTiers: { tiers: [tier(name, 0.5, extra)], defaultTier: name },
+    });
+    const saved = await patch(
+      settings({ memoryRequestMiB: 8192, memoryLimitMiB: 8192 }),
+    );
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect((await read()).tiers[0]).toMatchObject({
+      cpuRequest: 0.5,
+      memoryRequestMiB: 8192,
+      memoryLimitMiB: 8192,
+      memoryRequestMiBOverride: 8192,
+      memoryLimitMiBOverride: 8192,
+    });
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "organization",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(1);
+      expect(data[0]).toMatchObject({
+        action: "organization.updated",
+        outcome: "success",
+        before: { agentRuntimeTiers: null },
+        after: {
+          agentRuntimeTiers: {
+            tiers: [
+              expect.objectContaining({
+                memoryRequestMiB: 8192,
+                memoryLimitMiB: 8192,
+              }),
+            ],
+          },
+        },
+      });
+    });
+    const renamed = await patch(
+      settings({ previousName: "Memory" }, "Memory2"),
+    );
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect((await read()).tiers[0]).toMatchObject({
+      memoryRequestMiB: 8192,
+      memoryLimitMiB: 8192,
+    });
+    const cleared = await patch(
+      settings({ memoryRequestMiB: null, memoryLimitMiB: null }, "Memory2"),
+    );
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    const resolved = (await read()).tiers[0];
+    expect(resolved).toMatchObject({
+      memoryRequestMiB: 1024,
+      memoryLimitMiB: 2048,
+    });
+    expect(resolved).not.toHaveProperty("memoryRequestMiBOverride");
+    expect(resolved).not.toHaveProperty("memoryLimitMiBOverride");
+  });
+
+  test("derives the limit from a memory request override unless an explicit limit is set", async () => {
+    const save = (extra: Record<string, unknown>) =>
+      patch({
+        agentRuntimeTiers: {
+          tiers: [tier("Memory", 0.5, extra)],
+          defaultTier: "Memory",
+        },
+      });
+    expect((await save({ memoryRequestMiB: 8192 })).statusCode).toBe(200);
+    expect((await read()).tiers[0]).toMatchObject({
+      memoryRequestMiB: 8192,
+      memoryLimitMiB: 16384,
+    });
+    expect((await read()).tiers[0]).not.toHaveProperty(
+      "memoryLimitMiBOverride",
+    );
+    expect((await save({ memoryLimitMiB: 8192 })).statusCode).toBe(200);
+    expect((await read()).tiers[0]).toMatchObject({
+      memoryRequestMiB: 8192,
+      memoryLimitMiB: 8192,
+    });
+    expect((await save({ memoryLimitMiB: null })).statusCode).toBe(200);
+    expect((await read()).tiers[0]).toMatchObject({
+      memoryRequestMiB: 8192,
+      memoryLimitMiB: 16384,
+    });
+  });
+
+  test("rejects invalid memory and an explicit limit below its request without changing stored settings", async () => {
+    for (const extra of [
+      { memoryRequestMiB: 0 },
+      { memoryRequestMiB: 1.5 },
+      { memoryLimitMiB: -1 },
+      { memoryRequestMiB: "8" },
+      { memoryRequestMiB: 2 ** 52 },
+      { memoryLimitMiB: 512 },
+      { memoryRequestMiB: 8192, memoryLimitMiB: 4096 },
+    ]) {
+      const response = await patch({
+        agentRuntimeTiers: {
+          tiers: [tier("Memory", 0.5, extra)],
+          defaultTier: "Memory",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    }
+    expect(
+      (await OrganizationModel.getById(organizationId))?.agentRuntimeTiers,
+    ).toBeNull();
   });
 
   test("an organization starts with S, M and L; an administrator saves a list of its own, smallest first, and runs then get those sizes", async () => {
@@ -142,7 +296,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       warmSpares: 0,
       pooled: true,
       memoryRequestMiB: 12288,
-      memoryLimitMiB: 16384,
+      memoryLimitMiB: 24576,
       workspaceGiB: 60,
     });
     expect(
@@ -225,7 +379,33 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     expect(await workspaceOf("Kind")).toBeNull();
   });
 
-  test("refuses a CPU request above 8, a limit above 16 or below its request, a repeated name and a default that is not in the list", async () => {
+  test("saves CPU bounds and memory and disk sizes above the former caps", async () => {
+    for (const cpu of [0.1, 1.001, 256]) {
+      const response = await patch({
+        agentRuntimeTiers: {
+          tiers: [
+            tier("S", cpu, {
+              cpuLimit: cpu,
+              memoryRequestMiB: 4194304,
+              memoryLimitMiB: 4194304,
+              workspaceGiB: 2048,
+            }),
+          ],
+          defaultTier: "S",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect((await read()).tiers[0]).toMatchObject({
+        cpuRequest: cpu,
+        cpuLimit: cpu,
+        memoryRequestMiB: 4194304,
+        memoryLimitMiB: 4194304,
+        workspaceGiB: 2048,
+      });
+    }
+  });
+
+  test("refuses CPU outside 0.1–256, a limit below its request, a repeated name and a default that is not in the list", async () => {
     const refused = async (tiers: unknown[], defaultTier = "S") => {
       const response = await patch({
         agentRuntimeTiers: { tiers, defaultTier },
@@ -233,9 +413,17 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       expect(response.statusCode).toBe(400);
       return response.json().error.message as string;
     };
-    expect(await refused([tier("S", 9)])).toContain("at most 8");
-    expect(await refused([tier("S", 2, { cpuLimit: 17 })])).toContain(
-      "at most 16",
+    expect(await refused([tier("S", 257)])).toContain("at most 256");
+    expect(await refused([tier("S", 0.099)])).toContain("at least 0.1");
+    expect(await refused([tier("S", 0.1, { cpuLimit: 0.099 })])).toContain(
+      "at least 0.1",
+    );
+    for (const cpu of [0, -1, "invalid", 1.0001]) {
+      expect(await refused([tier("S", 1, { cpuRequest: cpu })])).toBeTruthy();
+      expect(await refused([tier("S", 1, { cpuLimit: cpu })])).toBeTruthy();
+    }
+    expect(await refused([tier("S", 2, { cpuLimit: 257 })])).toContain(
+      "at most 256",
     );
     expect(await refused([tier("S", 4, { cpuLimit: 2 })])).toContain(
       "Tier S: the CPU limit is below the CPU request",
@@ -382,6 +570,30 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       (await AgentRuntimeTemplateModel.getSettings(organizationId)).templates[0]
         ?.runtime,
     ).toMatchObject({ tier: "M", maxTier: "Medium" });
+  });
+
+  test("a full reset clears memory overrides before validating the default tiers", async () => {
+    const saved = await patch({
+      agentRuntimeTiers: {
+        tiers: [tier("S", 0.5, { memoryLimitMiB: 1024 })],
+        defaultTier: "S",
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const reset = await patch({ agentRuntimeTiers: null });
+    expect(reset.statusCode, reset.body).toBe(200);
+    const small = (await read()).tiers.find(
+      (entry: { name: string }) => entry.name === "S",
+    );
+    expect(small).toMatchObject({
+      cpuRequest: 2,
+      memoryRequestMiB: 4096,
+      memoryLimitMiB: 8192,
+    });
+    expect(small).not.toHaveProperty("memoryLimitMiBOverride");
+    expect(
+      (await OrganizationModel.getById(organizationId))?.agentRuntimeTiers,
+    ).toBeNull();
   });
 
   test("a reset to the default tiers is refused while an agent names a custom tier", async ({

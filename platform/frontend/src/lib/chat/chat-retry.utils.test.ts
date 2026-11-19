@@ -30,6 +30,21 @@ describe("isRetryableError", () => {
     expect(isRetryableError(new Error("Failed to fetch"))).toBe(true);
   });
 
+  it("retries Safari fetch failures without retrying arbitrary TypeErrors", () => {
+    expect(isRetryableError(new TypeError("Load failed"))).toBe(true);
+    expect(
+      isRetryableError(new TypeError("Cannot read properties of undefined")),
+    ).toBe(false);
+    expect(
+      isRetryableError(new Error("Load failed for unsupported document")),
+    ).toBe(false);
+    expect(
+      isRetryableError(
+        new DOMException("The operation was aborted.", "AbortError"),
+      ),
+    ).toBe(false);
+  });
+
   it("does not auto-retry an arbitrary unstructured error", () => {
     expect(isRetryableError(new Error("something unexpected"))).toBe(false);
   });

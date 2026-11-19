@@ -71,6 +71,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
+          humanApprovalMode: "block",
+          unapprovableBlockMode: "refuse",
+          environmentOverrides: [],
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
           featureEnabled,
@@ -134,6 +137,101 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
     await set(false);
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+  });
+
+  test("administrators can let blocked calls through with a yell, and the change is audited", async () => {
+    await set(true);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: {
+        humanApprovalMode: "everywhere",
+        unapprovableBlockMode: "allow",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+    });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          action: "organization.updated",
+          before: expect.objectContaining({
+            humanApprovalMode: "block",
+            unapprovableBlockMode: "refuse",
+          }),
+          after: expect.objectContaining({
+            humanApprovalMode: "everywhere",
+            unapprovableBlockMode: "allow",
+          }),
+        }),
+      );
+    });
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: { humanApprovalMode: "always" },
+    });
+    expect(refused.statusCode).toBe(400);
+  });
+
+  test("an environment variable overrides the stored Break the glass setting, and the API refuses to change it", async () => {
+    await set(true);
+    await GuardrailsDeploymentModel.set({ humanApprovalMode: "everywhere" });
+    const previous = config.openappa.breakTheGlassOverrides;
+    config.openappa.breakTheGlassOverrides = { humanApprovalMode: "block" };
+    try {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/guardrails-deployment",
+      });
+      expect(read.json()).toMatchObject({
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "refuse",
+        environmentOverrides: [
+          {
+            setting: "humanApprovalMode",
+            variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+          },
+        ],
+      });
+      const refused = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { humanApprovalMode: "unattended" },
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(refused.body).toContain("Unset it to edit this setting");
+      // A setting no variable sets stays editable.
+      const other = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { unapprovableBlockMode: "allow" },
+      });
+      expect(other.statusCode, other.body).toBe(200);
+      expect(other.json()).toMatchObject({
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "allow",
+      });
+    } finally {
+      config.openappa.breakTheGlassOverrides = previous;
+    }
+    // Unset, the stored setting applies again.
+    const stored = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(stored.json()).toMatchObject({
+      humanApprovalMode: "everywhere",
+      environmentOverrides: [],
+    });
   });
 
   test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {

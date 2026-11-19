@@ -18,7 +18,6 @@ import { DocsPage, resolveMcpClientServerName } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
-  ArrowDown,
   BookOpen,
   ChartColumn,
   ChevronDown,
@@ -67,6 +66,7 @@ import {
   type AfterConnectRun,
 } from "./after-connect";
 import { BrowseDialog } from "./browse-dialog";
+import { ChatgptGatewaySetup } from "./chatgpt-gateway-setup";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -94,13 +94,23 @@ import {
   approxTokens,
   fmt,
   nameOf,
+  OneOf,
   PromptRow,
   plural,
   ScriptBlock,
+  SetupNextSteps,
   sentenceNameOf,
   TextButton,
   useCopy,
 } from "./connect-page-parts";
+import {
+  Band,
+  ChipIcon,
+  Connector,
+  STEP_GAP,
+  StepHeading,
+  StepPill,
+} from "./connect-step-parts";
 import {
   type ConnectedAgent,
   DisconnectLine,
@@ -195,7 +205,7 @@ export function ConnectPage() {
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
   const tools = choices.tools ? data.totalTools : 0;
-  const skills = data.skillsEnabled ? skillsSorted : [];
+  const skills = parts.skills && data.skillsEnabled ? skillsSorted : [];
   const plugins = parts.plugins
     ? data.keptPlugins(client, picks.pluginIds)
     : [];
@@ -209,7 +219,7 @@ export function ConnectPage() {
   };
 
   const setup = setupModeFor(client);
-  const step = currentStep(client, setup);
+  const step = currentStep(client, setup, routed);
 
   const pick = (id: string) => {
     setPickedId(id);
@@ -611,29 +621,6 @@ function Tile({
 
 // === Between the steps ===
 
-// Same gap between every step.
-const STEP_GAP = 32;
-
-/** The line between the cards, fading in toward the connect card. */
-function Connector() {
-  return (
-    <div
-      aria-hidden
-      className="mx-auto w-px bg-linear-to-b from-transparent to-primary"
-      style={{ height: STEP_GAP }}
-    />
-  );
-}
-
-/** Names a step on its card's top edge, where the connector arrives. */
-function StepPill({ children }: { children: ReactNode }) {
-  return (
-    <span className="absolute top-0 left-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold whitespace-nowrap shadow-xs">
-      {children}
-    </span>
-  );
-}
-
 // === Connect area: the command, download, prompt or manual steps ===
 
 function ConnectArea({
@@ -659,12 +646,19 @@ function ConnectArea({
   useEffect(() => setOrigin(window.location.origin), []);
   // The page's OS, so the plugins it shows are the ones this command installs.
   const { windows, setWindows } = data;
-  const manual = setup === "manual";
-  const script = setup === "script";
+  const [chatgptWeb, setChatgptWeb] = useState(false);
+  const webPlugin = client.id === "chatgpt" && chatgptWeb;
+  const manual = setup === "manual" || webPlugin;
+  const script = setup === "script" && !webPlugin;
   const download = setup === "download";
   const command = script
     ? data.installerCommand(client, choices, windows, picks)
     : null;
+  // Both modes keep the terminal's footprint, just like Claude Desktop.
+  const chatgptCommand =
+    client.id === "chatgpt"
+      ? data.installerCommand(client, choices, windows, picks)
+      : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
   const keptPlugins = data.keptPlugins(client, picks.pluginIds);
@@ -758,8 +752,24 @@ function ConnectArea({
             <StepHeading step={step} />
             <StepHeading step="Run the command in your terminal" />
           </OneOf>
+        ) : client.id === "chatgpt" ? (
+          <OneOf shown={webPlugin ? 1 : 0}>
+            <StepHeading step={step} />
+            <StepHeading step="Download the plugin for ChatGPT" />
+          </OneOf>
         ) : (
           <StepHeading step={step} />
+        )}
+        {client.id === "chatgpt" && (
+          <TextButton
+            onClick={() => setChatgptWeb(!chatgptWeb)}
+            className="text-xs text-muted-foreground"
+          >
+            <OneOf inline shown={webPlugin ? 1 : 0}>
+              <span>Using ChatGPT on the web? Download the plugin</span>
+              <span>Using the desktop app? Use terminal setup</span>
+            </OneOf>
+          </TextButton>
         )}
         {download && (
           // The other way to set up Desktop belongs to the step it replaces,
@@ -825,38 +835,114 @@ function ConnectArea({
           />
           {/* The OS switch's column stays reserved without it, so the steps
               keep one width in both modes. */}
-          <div className="mt-4 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
-            <div>
-              <p className="font-semibold text-foreground">When it finishes</p>
-              <OneOf shown={!desktopTerminal ? 0 : windows ? 1 : 2}>
-                {[
-                  { terminal: false, windows },
-                  { terminal: true, windows: true },
-                  { terminal: true, windows: false },
-                ].map((variant) => (
-                  <ol
-                    key={`${variant.terminal}-${variant.windows}`}
-                    className="mt-1 list-decimal space-y-0.5 pl-4"
+          <SetupNextSteps
+            platformControl={
+              <TextButton
+                onClick={() => setWindows(!windows)}
+                aria-hidden={!desktopTerminal}
+                tabIndex={desktopTerminal ? undefined : -1}
+                className={cn("self-start", !desktopTerminal && "invisible")}
+              >
+                <OneOf inline shown={windows ? 0 : 1}>
+                  <span>Use the macOS / Linux command</span>
+                  <span>Use the Windows command</span>
+                </OneOf>
+              </TextButton>
+            }
+          >
+            <OneOf shown={!desktopTerminal ? 0 : windows ? 1 : 2}>
+              {[
+                { terminal: false, windows },
+                { terminal: true, windows: true },
+                { terminal: true, windows: false },
+              ].map((variant) => (
+                <ol
+                  key={`${variant.terminal}-${variant.windows}`}
+                  className="mt-1 list-decimal space-y-0.5 pl-4"
+                >
+                  {desktopNextSteps({ ...variant, connector }).map((line) => (
+                    <li key={line.key}>{line.content}</li>
+                  ))}
+                </ol>
+              ))}
+            </OneOf>
+          </SetupNextSteps>
+        </>
+      ) : client.id === "chatgpt" ? (
+        <>
+          <OneOf
+            shown={webPlugin ? 1 : 0}
+            className="mt-2 px-1 text-xs text-muted-foreground"
+          >
+            <p>
+              Run it on the computer where you use ChatGPT. Setup needs Node.js
+              18 or newer. Approve in your browser to install the {data.appName}{" "}
+              plugin
+              {choices.proxy && data.partsFor(client).proxy
+                ? " and configure local model routing."
+                : "."}
+            </p>
+            <p>
+              Upload the downloaded .ZIP file in ChatGPT Plugins and connect
+              your account. The plugin connects your tools for web chats and
+              dots. Local model routing requires terminal setup.
+            </p>
+          </OneOf>
+          <ChatgptGatewaySetup
+            gateway={choices.tools ? data.gateway : null}
+            baseUrl={data.baseUrl}
+            includeSkills={data.skillsEnabled && choices.skills}
+            sizingCommand={chatgptCommand ?? ""}
+            disabled={data.revalidating}
+            showTerminal={!webPlugin}
+            terminalAction={
+              <ScriptBlock
+                command={chatgptCommand ?? ""}
+                copied={copied}
+                disabled={!origin || data.revalidating || !chatgptCommand}
+                onCopy={copy}
+                onSelectionCopy={startWaiting}
+                className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+              />
+            }
+            terminalNextSteps={
+              <SetupNextSteps
+                platformControl={
+                  <TextButton
+                    onClick={() => setWindows(!windows)}
+                    className="self-start"
                   >
-                    {desktopNextSteps({ ...variant, connector }).map((line) => (
-                      <li key={line.key}>{line.content}</li>
-                    ))}
-                  </ol>
-                ))}
-              </OneOf>
-            </div>
-            <TextButton
-              onClick={() => setWindows(!windows)}
-              aria-hidden={!desktopTerminal}
-              tabIndex={desktopTerminal ? undefined : -1}
-              className={cn("self-start", !desktopTerminal && "invisible")}
-            >
-              <OneOf inline shown={windows ? 0 : 1}>
-                <span>Use the macOS / Linux command</span>
-                <span>Use the Windows command</span>
-              </OneOf>
-            </TextButton>
-          </div>
+                    <OneOf inline shown={windows ? 0 : 1}>
+                      <span>Use the macOS / Linux command</span>
+                      <span>Use the Windows command</span>
+                    </OneOf>
+                  </TextButton>
+                }
+              >
+                <OneOf shown={windows ? 0 : 1}>
+                  {[true, false].map((forWindows) => (
+                    <ol
+                      key={String(forWindows)}
+                      className="mt-1 list-decimal space-y-0.5 pl-4"
+                    >
+                      {choices.tools && data.partsFor(client).tools && (
+                        <li>Finish the gateway sign-in in your browser.</li>
+                      )}
+                      <li>
+                        {forWindows
+                          ? "Quit ChatGPT, including its system tray icon, and open it again."
+                          : "Quit ChatGPT and open it again."}
+                      </li>
+                      <li>
+                        Start a local Work or Codex conversation and select the{" "}
+                        {data.appName} plugin.
+                      </li>
+                    </ol>
+                  ))}
+                </OneOf>
+              </SetupNextSteps>
+            }
+          />
         </>
       ) : manual ? (
         // The steps start right here, in the band.
@@ -865,11 +951,7 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>
-              {client.id === "chatgpt"
-                ? "Add the gateway as a plugin in ChatGPT."
-                : `Copy each block into ${nameOf(client)}, top to bottom.`}
-            </span>
+            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
           </div>
           <ManualSteps
             client={client}
@@ -942,7 +1024,7 @@ function ConnectArea({
                   When it finishes
                 </p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                  {scriptNextSteps(client).map((line) => (
+                  {scriptNextSteps(client, data.appName).map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                   <li>
@@ -976,6 +1058,7 @@ function ConnectArea({
         welcome={
           origin
             ? welcomePrompt({
+                clientId: run.client.id,
                 origin,
                 appName: data.appName,
                 serverName: run.serverName,
@@ -1054,7 +1137,7 @@ function desktopNextSteps({
  * backend/src/services/agent-connection-setup/agents/), which prints in full at
  * the end of the output.
  */
-function scriptNextSteps(client: ConnectClient): string[] {
+function scriptNextSteps(client: ConnectClient, appName: string): string[] {
   switch (client.id) {
     case "claude-code":
       return [
@@ -1063,9 +1146,9 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "cursor":
       return [
-        "Reload Cursor.",
+        "Quit Cursor when the terminal asks, and reopen it after setup. It then loads the Guardrails hooks, the shared skills and its changed settings.",
         "Open Customize > MCPs and sign in to the gateway.",
-        "Quit and reopen Cursor to load its model settings.",
+        "Open a folder before you start a chat, and keep the chat on this computer. A Cloud chat runs on Cursor's servers, without the gateway or Guardrails.",
       ];
     case "codex":
       return [
@@ -1085,6 +1168,13 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "If you use your own Kimi key, sign in to Kimi Code first with kimi login, or set KIMI_API_KEY (MOONSHOT_API_KEY for Moonshot).",
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Press Enter when it offers to start Kimi Code, or run the kimi command it prints in a new terminal.",
+      ];
+    case "grok-build":
+      return [
+        "Open a new terminal and run grok to use the managed startup check. In the current terminal, use node ~/.archestra/grok/launch.cjs (PowerShell: node $HOME/.archestra/grok/launch.cjs). The first governed LLM reply shows its server-issued protected session receipt.",
+        `Your native SuperGrok login and model catalog are reused. Use /model or -m to select a native model; ${appName} protection stays separate in the session receipt. To renew login, use /login inside Grok or node ~/.archestra/grok/login.cjs. MCP authorization remains separate: node ~/.archestra/grok/sign-in.cjs.`,
+        "Protected foreground and background subagents are supported, including resume. Workflows, monitors and scheduled execution remain blocked. Use an interactive session for approvals.",
+        "Disconnect with node ~/.archestra/grok/disconnect.cjs; unrelated settings and logins are preserved.",
       ];
     case "copilot-cli":
       return [
@@ -1108,13 +1198,19 @@ function scriptNextSteps(client: ConnectClient): string[] {
 
 // === Connect band heading: the one instruction ===
 
-function currentStep(client: ConnectClient, setup: SetupMode): string {
+function currentStep(
+  client: ConnectClient,
+  setup: SetupMode,
+  routed: boolean,
+): string {
   const name = nameOf(client);
   switch (setup) {
     case "manual":
-      return client.id === "chatgpt"
-        ? "Install the ChatGPT plugin"
-        : `Follow the steps for ${name}`;
+      return client.id !== "chatgpt"
+        ? `Follow the steps for ${name}`
+        : routed
+          ? "Set up ChatGPT"
+          : "Install the ChatGPT plugin";
     case "script":
       return "Run the command in your terminal";
     case "download":
@@ -1122,89 +1218,6 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
     case "prompt":
       return `Paste the prompt into ${name}`;
   }
-}
-
-/**
- * Several versions of one spot, stacked in the same place with only one
- * shown: the largest sets the size, so switching between them moves nothing
- * around it.
- */
-function OneOf({
-  shown,
-  inline,
-  className,
-  children,
-}: {
-  shown: number;
-  /** Inside a button or text: spans instead of divs. */
-  inline?: boolean;
-  className?: string;
-  children: ReactNode[];
-}) {
-  const Tag = inline ? "span" : "div";
-  return (
-    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
-      {children.map((child, index) => (
-        <Tag
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
-          key={index}
-          aria-hidden={index !== shown}
-          className={cn(
-            "min-w-0 [grid-area:1/1]",
-            index !== shown && "invisible",
-          )}
-        >
-          {child}
-        </Tag>
-      ))}
-    </Tag>
-  );
-}
-
-function Band({
-  busy,
-  dim,
-  children,
-}: {
-  /** Settings are being re-read: hold actions until they land. */
-  busy?: boolean;
-  /** Connected: the next step is in the card below. */
-  dim?: boolean;
-  children: ReactNode;
-}) {
-  // Same accent as the heading's marker.
-  return (
-    <section
-      aria-label="Connect"
-      aria-busy={busy}
-      inert={busy}
-      className={cn(
-        "relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-[color,background-color,border-color,opacity] duration-300",
-        dim && "opacity-50",
-      )}
-    >
-      {children}
-    </section>
-  );
-}
-
-function StepHeading({ step }: { step: string }) {
-  return (
-    // Times the fade-in alone: a transition duration would also apply to
-    // visibility, so a heading OneOf hides would stay painted over the next.
-    <h2
-      key={step}
-      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-300"
-    >
-      <span
-        aria-hidden
-        className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground [&_svg]:size-3.5"
-      >
-        <ArrowDown strokeWidth={2.5} />
-      </span>
-      {step}
-    </h2>
-  );
 }
 
 function ManualSteps({
@@ -1217,12 +1230,6 @@ function ManualSteps({
   includeSkills: boolean;
 }) {
   const steps = useManualSteps(client, data, includeSkills);
-  if (client.id === "chatgpt")
-    return (
-      <div className="mt-4 rounded-2xl border bg-background p-6">
-        {steps[0]?.content}
-      </div>
-    );
   if (steps.length === 0)
     return (
       <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -1260,7 +1267,7 @@ function ManualSteps({
 
 /**
  * Agents OpenAPPA follows natively (the Claude Code, Claude Desktop, Codex,
- * Copilot CLI, OpenCode, Kilo Code and Pi adapters in
+ * Copilot CLI, Cursor, OpenCode, Kilo Code and Pi adapters in
  * backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts). Others
  * count as unsupported unless they send OpenAPPA session headers, which the
  * agents on this page don't.
@@ -1276,6 +1283,8 @@ function guardrailsStatus(
   data: ConnectPageData,
   client: ConnectClient,
   routed: boolean,
+  /** Setup connects this agent to the MCP gateway. */
+  gateway: boolean,
 ): {
   tone?: "ok" | "warn" | "block";
   label: string;
@@ -1291,16 +1300,36 @@ function guardrailsStatus(
       label: "Not enforced",
       detail: `Your admin hasn't turned on guardrails, so ${client.label}'s tool calls aren't checked against the policy.`,
     };
+  // Cursor's setup installs hooks that check every chat, so its guardrails
+  // do not depend on where its models run. The hooks come with the MCP
+  // gateway, which approvals also go through: a setup without it adds none.
+  if (client.id === "cursor" && !routed)
+    return gateway
+      ? {
+          tone: "ok",
+          label: "Enforced",
+          detail: `Each of ${client.label}'s tool calls is checked against your organization's policy, through hooks that setup adds to ${client.label}. ${client.label} keeps its own models and your ${client.label} plan.`,
+        }
+      : {
+          tone: "warn",
+          label: "Not enforced",
+          detail: `Guardrails reach ${client.label} through hooks that setup adds together with the MCP gateway, and the gateway is left out, so ${client.label}'s tool calls aren't checked against the policy. Turn it back on in Choose what to include.`,
+        };
   if (!routed)
     return {
       tone: "warn",
       label: "Not enforced",
       detail:
-        client.id === "chatgpt"
-          ? "This plugin does not configure model routing, so it cannot establish LLM proxy guardrail enforcement. Local Work needs separate provider configuration."
-          : client.proxy.kind === "unsupported"
-            ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
-            : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+        client.proxy.kind === "unsupported"
+          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+    };
+  if (client.id === "chatgpt")
+    return {
+      tone: "ok",
+      label: "Enforced",
+      detail:
+        "Each tool call in the desktop app's Work and Codex tabs is checked against your organization's policy. Chats and dots run on OpenAI's servers, so they aren't checked.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1389,7 +1418,7 @@ function ProfileCard({
   // Servers and skills show whenever the org offers them, even empty, so
   // the card keeps its shape; then they say so in place of a list. Plugins
   // only show once this agent has one.
-  const skillsOn = data.skillsEnabled;
+  const skillsOn = data.skillsEnabled && data.partsFor(client).skills;
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
   const guardrailsDocsUrl = getFrontendDocsUrl(
@@ -1408,15 +1437,16 @@ function ProfileCard({
   const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyReason =
-    client.id === "chatgpt" && client.proxy.kind === "unsupported"
-      ? client.proxy.reason
-      : !data.llmProxyEnabled
-        ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
-        : client.proxy.kind === "unsupported"
-          ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-          : !routed
-            ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+  const proxyReason = !data.llmProxyEnabled
+    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
+    : client.proxy.kind === "unsupported"
+      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
+      : !routed && client.id === "cursor"
+        ? `${client.label} keeps its own models and your ${client.label} plan. To use ${data.appName}'s models in ${client.label} instead, turn the LLM proxy on in Choose what to include. ${client.label}'s own models do not run while it uses ${data.appName}'s.`
+        : !routed
+          ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+          : client.id === "chatgpt"
+            ? `The desktop app's Work and Codex tabs send their model requests through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking. Chats and dots keep using OpenAI's servers.`
             : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
@@ -1432,14 +1462,17 @@ function ProfileCard({
     state: !data.llmProxyEnabled
       ? "Not active"
       : !proxyOn
-        ? client.id === "chatgpt"
-          ? "Separate setup"
-          : "Not supported"
+        ? "Not supported"
         : choices.proxy
           ? "On"
           : "Off",
   });
-  const guard = guardrailsStatus(data, client, routed);
+  const guard = guardrailsStatus(
+    data,
+    client,
+    routed,
+    choices.tools && data.partsFor(client).tools,
+  );
   if (guard)
     status.push({
       id: "guardrails",
@@ -1946,31 +1979,6 @@ function InfoTip({ label, children }: { label: string; children: ReactNode }) {
       </TooltipTrigger>
       <TooltipContent className="max-w-60">{children}</TooltipContent>
     </Tooltip>
-  );
-}
-
-function ChipIcon({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone?: "ok" | "warn" | "block";
-}) {
-  return (
-    <span
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg border [&_svg]:size-4",
-        tone === "ok"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : tone === "warn"
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-            : tone === "block"
-              ? "border-destructive/30 bg-destructive/10 text-destructive"
-              : "bg-muted/50 text-muted-foreground",
-      )}
-    >
-      {children}
-    </span>
   );
 }
 

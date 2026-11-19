@@ -13,6 +13,7 @@ interface OrganizationData {
   defaultLlmApiKeyId?: string | null;
   defaultFastModelId?: string | null;
   defaultSmartModelId?: string | null;
+  defaultAutoRouterId?: string | null;
   defaultAgentId?: string | null;
 }
 
@@ -21,6 +22,11 @@ export interface AgentSettingsState {
   /** The models.id UUID of the selected default model. */
   defaultModel: string;
   tiers: ModelTierSelection;
+  /**
+   * The auto router chats and agents on the default use, or null. The default
+   * model and key stay what built-in agents (titles, compaction) run on.
+   */
+  defaultAutoRouterId: string | null;
   defaultAgentId: string;
 }
 
@@ -46,6 +52,7 @@ export function resolveInitialState(
       fast: organization.defaultFastModelId ?? null,
       smart: organization.defaultSmartModelId ?? null,
     },
+    defaultAutoRouterId: organization.defaultAutoRouterId ?? null,
     defaultAgentId: organization.defaultAgentId ?? "",
   };
 }
@@ -53,20 +60,29 @@ export function resolveInitialState(
 export function detectChanges(
   localState: AgentSettingsState,
   savedState: AgentSettingsState,
-): { hasModelChanges: boolean; hasAgentChanges: boolean; hasChanges: boolean } {
+): {
+  hasModelChanges: boolean;
+  hasAutoChanges: boolean;
+  hasAgentChanges: boolean;
+  hasChanges: boolean;
+} {
   const hasModelChanges =
     localState.defaultModel !== savedState.defaultModel ||
     localState.tiers.fast !== savedState.tiers.fast ||
     localState.tiers.smart !== savedState.tiers.smart;
   const hasApiKeyChanges =
     localState.selectedApiKeyId !== savedState.selectedApiKeyId;
+  const hasAutoChanges =
+    localState.defaultAutoRouterId !== savedState.defaultAutoRouterId;
   const hasAgentChanges =
     localState.defaultAgentId !== savedState.defaultAgentId;
 
   return {
     hasModelChanges: hasModelChanges || hasApiKeyChanges,
+    hasAutoChanges,
     hasAgentChanges,
-    hasChanges: hasModelChanges || hasApiKeyChanges || hasAgentChanges,
+    hasChanges:
+      hasModelChanges || hasApiKeyChanges || hasAutoChanges || hasAgentChanges,
   };
 }
 
@@ -74,7 +90,7 @@ export function buildSavePayload(
   localState: AgentSettingsState,
   savedState: AgentSettingsState,
 ): Record<string, unknown> {
-  const { hasModelChanges, hasAgentChanges } = detectChanges(
+  const { hasModelChanges, hasAutoChanges, hasAgentChanges } = detectChanges(
     localState,
     savedState,
   );
@@ -89,6 +105,10 @@ export function buildSavePayload(
     payload.defaultLlmApiKeyId = complete ? localState.selectedApiKeyId : null;
     payload.defaultFastModelId = complete ? localState.tiers.fast : null;
     payload.defaultSmartModelId = complete ? localState.tiers.smart : null;
+  }
+
+  if (hasAutoChanges) {
+    payload.defaultAutoRouterId = localState.defaultAutoRouterId;
   }
 
   if (hasAgentChanges) {

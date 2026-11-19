@@ -1,7 +1,9 @@
-import config from "@/config";
+import { vi } from "vitest";
 import { ModelPoolModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
+import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { ApiError } from "@/types";
 import {
   type ModelPoolCaller,
   type ModelPoolPlan,
@@ -13,11 +15,6 @@ import {
   withMemberHealth,
 } from "./model-pool-failover";
 import type { MemberTransport } from "./model-pool-transport";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 setupTestCacheManager();
 
@@ -87,6 +84,73 @@ describe("orderPoolMembers", () => {
 });
 
 describe("planModelPool", () => {
+  test("pool grants never share personal members, including cached plans and explicit selections", async ({
+    makeOrganization,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser();
+    const personal = await makeLlmProviderApiKey(org.id, null, {
+      provider: "github-copilot",
+      userId: owner.id,
+    });
+    const shared = await makeLlmProviderApiKey(org.id, null, {
+      provider: "openai",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "subscription-pool",
+        members: [
+          member(personal.id, "gpt-4.1", 1),
+          member(shared.id, "gpt-4.1", 2),
+        ],
+      },
+    });
+    const plan = (userId?: string) =>
+      planModelPool({
+        organizationId: org.id,
+        name: pool.name,
+        inbound: "openai-chat",
+        caller: {
+          userId,
+          providerApiKeyIds: [shared.id],
+          modelPoolIds: [pool.id],
+        },
+      });
+    expect(
+      (await plan(owner.id))?.members.map((m) => m.providerApiKeyId),
+    ).toEqual([personal.id, shared.id]);
+    expect(
+      (await plan(other.id))?.members.map((m) => m.providerApiKeyId),
+    ).toEqual([shared.id]);
+    expect((await plan())?.members.map((m) => m.providerApiKeyId)).toEqual([
+      shared.id,
+    ]);
+    await ModelPoolModel.update({
+      organizationId: org.id,
+      id: pool.id,
+      input: { name: pool.name, members: [member(personal.id, "gpt-4.1", 1)] },
+    });
+    for (const bypass of [
+      {},
+      { poolId: pool.id },
+      { grantedPoolId: pool.id },
+    ]) {
+      await expect(
+        planModelPool({
+          organizationId: org.id,
+          name: pool.name,
+          inbound: "openai-chat",
+          caller: { providerApiKeyIds: [], modelPoolIds: [pool.id] },
+          ...bypass,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    }
+  });
+
   test("plans every member of the pool with that name, across providers", async ({
     makeOrganization,
     makeLlmProviderApiKey,
@@ -118,6 +182,7 @@ describe("planModelPool", () => {
     expect(plan).toEqual({
       poolId: pool.id,
       poolName: "glm-5",
+      routingStrategy: "weighted",
       members: [
         expect.objectContaining({
           providerApiKeyId: zai.id,
@@ -141,7 +206,7 @@ describe("planModelPool", () => {
     ).resolves.toBeNull();
   });
 
-  test("leaves out members the client's wire cannot reach", async ({
+  test("rejects a pool instead of silently skipping incompatible members", async ({
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
@@ -174,15 +239,14 @@ describe("planModelPool", () => {
       [zai.id, bedrock.id].sort(),
     );
     // Converse reaches only Converse members.
-    const conversePlan = await planModelPool({
-      organizationId: org.id,
-      name: "glm-5",
-      inbound: "bedrock-converse",
-      caller: { providerApiKeyIds: [zai.id] },
-    });
-    expect(conversePlan?.members.map((m) => m.providerApiKeyId)).toEqual([
-      bedrock.id,
-    ]);
+    await expect(
+      planModelPool({
+        organizationId: org.id,
+        name: "glm-5",
+        inbound: "bedrock-converse",
+        caller: { providerApiKeyIds: [zai.id] },
+      }),
+    ).rejects.toThrow("cannot serve bedrock-converse requests");
   });
 
   test("plans the pool only for callers that may use it", async ({
@@ -225,21 +289,24 @@ describe("planModelPool", () => {
         grantedPoolId,
       });
 
-    // A virtual key gets in by a grant, or by mapping a member's key, as a
-    // Connect key does.
+    // A virtual key gets in only when the pool was added to it: mapping a
+    // member's key is not enough.
     expect(
       await plan({ virtualKeyId: granted.id, providerApiKeyIds: [openai.id] }),
     ).not.toBeNull();
     expect(
       await plan({ virtualKeyId: mapsMember.id, providerApiKeyIds: [zai.id] }),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       await plan({ virtualKeyId: neither.id, providerApiKeyIds: [openai.id] }),
     ).toBeNull();
-    // An OAuth client gets in by a grant kept on the client.
+    // An OAuth client calling as the app gets in only by a pool added to it.
     expect(
       await plan({ providerApiKeyIds: [openai.id], modelPoolIds: [pool.id] }),
     ).not.toBeNull();
+    expect(
+      await plan({ providerApiKeyIds: [zai.id], modelPoolIds: [] }),
+    ).toBeNull();
     // Any other caller must already use a member's key.
     expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();
     expect(await plan({ providerApiKeyIds: [openai.id] })).toBeNull();
@@ -317,7 +384,7 @@ describe("planModelPool", () => {
       },
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(
@@ -406,6 +473,9 @@ describe("a pool's own timeouts and cooldown", () => {
           member(second.id, "claude-haiku-4-5", 2),
         ],
         cooldownSeconds,
+        // One bench to measure: a retry after the Retry-After could hit the
+        // first member again once its cooldown ends.
+        retrySettings: { numRetries: 0 },
       },
     });
     const plan = (await planModelPool({
@@ -428,7 +498,7 @@ describe("a pool's own timeouts and cooldown", () => {
       },
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     const [health] = await withMemberHealth(await ModelPoolModel.list(org.id));
@@ -451,12 +521,16 @@ describe("openThroughModelPool", () => {
         providerApiKeyId: keyA,
         provider: "zhipuai",
         modelId: "glm-5",
+        priority: 1,
+        weight: 1,
       },
       {
         memberId: "00000000-0000-4000-8000-0000000000b1",
         providerApiKeyId: keyB,
         provider: "bedrock",
         modelId: "zai.glm-5",
+        priority: 2,
+        weight: 1,
       },
     ],
   };
@@ -470,6 +544,322 @@ describe("openThroughModelPool", () => {
     },
   });
 
+  test("least-token mode reselects within the first order without changing weighted affinity", async () => {
+    const sameOrder = {
+      ...plan,
+      routingStrategy: "least-tokens" as const,
+      members: plan.members.map((member) => ({ ...member, priority: 1 })),
+    };
+    await ModelPoolUsageModel.record({
+      poolId: plan.poolId,
+      ...plan.members[0],
+      tokens: 100,
+    });
+    const run = (selected: ModelPoolPlan) =>
+      openThroughModelPool({
+        plan: selected,
+        attempt: {},
+        ...openKey(() => null),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => async () => {},
+      });
+    expect(await run(sameOrder)).toBe(`answer from ${keyB}`);
+    await ModelPoolUsageModel.record({
+      poolId: plan.poolId,
+      ...plan.members[1],
+      tokens: 200,
+    });
+    expect(await run(sameOrder)).toBe(`answer from ${keyA}`);
+    expect(await run({ ...sameOrder, members: plan.members })).toBe(
+      `answer from ${keyA}`,
+    );
+    expect(await run({ ...sameOrder, routingStrategy: "weighted" })).toBe(
+      `answer from ${keyA}`,
+    );
+  });
+
+  test("configured retry backoff doubles with jitter and caps each wait", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const delays: number[] = [];
+    let calls = 0;
+    try {
+      await expect(
+        openThroughModelPool({
+          plan: {
+            ...plan,
+            members: [plan.members[0]],
+            retrySettings: {
+              numRetries: 4,
+              initialDelayMs: 100,
+              maxDelayMs: 250,
+            },
+          },
+          attempt: {},
+          transportFor: async (m) => transport(m.providerApiKeyId),
+          open: async () => {
+            calls++;
+            throw httpError(503);
+          },
+          isRetryable: () => false,
+          shouldContinue: () => true,
+          onRetry: ({ delayMs }) => delays.push(delayMs),
+          prepareFailedAttempt: async () => async () => {},
+        }),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(delays).toEqual([88, 175, 219, 219]);
+      expect(calls).toBe(5);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  test("does not wait after the last eligible member enters cooldown", async () => {
+    // A previous request has already benched the later-order sibling.
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          members: [plan.members[1]],
+          retrySettings: { numRetries: 0 },
+        },
+        attempt: {},
+        ...openKey(() => httpError(503)),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => async () => {},
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+
+    const opened: string[] = [];
+    const delays: number[] = [];
+    const recorded: UpstreamAttempt[] = [];
+    const attempt: UpstreamAttempt = {};
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: { numRetries: 2, initialDelayMs: 100 },
+        },
+        attempt,
+        ...openKey((key) => {
+          opened.push(key);
+          return httpError(503);
+        }),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        onRetry: ({ delayMs }) => delays.push(delayMs),
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(opened).toEqual([keyA]);
+    expect(delays).toEqual([]);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+    });
+    expect(attempt.interactionRecorded).toBe(true);
+  });
+
+  test("configured retries stop after a disconnect during backoff", async () => {
+    const abort = new AbortController();
+    let dispatched = 0;
+    const recorded: UpstreamAttempt[] = [];
+    const attempt: UpstreamAttempt = {};
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: {
+            numRetries: 2,
+            initialDelayMs: 8000,
+            maxDelayMs: 60000,
+          },
+        },
+        attempt,
+        transportFor: async (m) => transport(m.providerApiKeyId),
+        open: async () => {
+          dispatched++;
+          throw httpError(429);
+        },
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        signal: abort.signal,
+        onRetry: () => {
+          abort.abort();
+        },
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(dispatched).toBe(1);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].attemptOutcome).toBe("failed");
+    expect(attempt.interactionRecorded).toBe(true);
+  });
+
+  test("hiding a member during configured backoff prevents its next dispatch", async () => {
+    let hidden = false;
+    const opened: string[] = [];
+    const recorded: UpstreamAttempt[] = [];
+    const result = await openThroughModelPool({
+      plan: { ...plan, retrySettings: { numRetries: 2, initialDelayMs: 100 } },
+      attempt: {},
+      prepareAttempt: async (m) => {
+        if (hidden && m.providerApiKeyId === keyA)
+          throw new ApiError(403, "hidden", "model_hidden");
+      },
+      transportFor: async (m) => transport(m.providerApiKeyId),
+      open: async (t) => {
+        const key = (await t.execute({})) as string;
+        opened.push(key);
+        if (key === keyA) throw httpError(503);
+        return "answer";
+      },
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      onRetry: () => {
+        hidden = true;
+      },
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
+      },
+    });
+    expect(result).toBe("answer");
+    expect(opened).toEqual([keyA, keyB]);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].attemptOutcome).toBe("failed_over");
+  });
+
+  test("a configured retry rechecks admission after settling its failed attempt", async () => {
+    const events: string[] = [];
+    let dispatched = 0;
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: { numRetries: 2, initialDelayMs: 100 },
+        },
+        attempt: {},
+        beforeAttempt: async () => {
+          events.push("admit");
+          if (dispatched) throw new ApiError(402, "Budget exhausted");
+        },
+        transportFor: async (m) => transport(m.providerApiKeyId),
+        open: async () => {
+          dispatched++;
+          throw httpError(503);
+        },
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => {
+          events.push("settle");
+          return async () => {};
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 402 });
+    expect(dispatched).toBe(1);
+    expect(events).toEqual(["admit", "settle", "admit"]);
+  });
+
+  test("a hide between selection and dispatch skips the member without recording an outage", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    const opened: string[] = [];
+    const result = await openThroughModelPool({
+      plan,
+      attempt,
+      transportFor: async (member) => transport(member.providerApiKeyId),
+      open: async (transport) => {
+        const key = (await transport.execute({})) as string;
+        if (key === keyA) throw new ApiError(403, "hidden", "model_hidden");
+        opened.push(key);
+        return "answer";
+      },
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
+      },
+    });
+    expect(result).toBe("answer");
+    expect(opened).toEqual([keyB]);
+    expect(recorded).toEqual([]);
+    expect(attempt).toMatchObject({
+      attempt: 1,
+      providerApiKeyId: keyB,
+      attemptOutcome: "answered",
+    });
+  });
+
+  test("a hidden trailing member preserves a timed-out attempt and records it once", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    await expect(
+      openThroughModelPool({
+        plan,
+        attempt,
+        prepareAttempt: async (member) => {
+          if (member.providerApiKeyId === keyB)
+            throw new ApiError(403, "hidden", "model_hidden");
+        },
+        transportFor: async (member) => transport(member.providerApiKeyId),
+        open: async () => new Promise(() => {}),
+        memberTimeoutMs: 5,
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 408 });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+      cutOff: true,
+    });
+    expect(attempt.interactionRecorded).toBe(true);
+  });
+
+  test("hiding during retry backoff preserves the dispatched member's connection failure", async () => {
+    const attempt: UpstreamAttempt = {};
+    const dropped = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+    let hidden = false;
+    let dispatched = 0;
+    await expect(
+      openThroughModelPool({
+        plan: { ...plan, members: [plan.members[0]] },
+        attempt,
+        transportFor: async (member) => transport(member.providerApiKeyId),
+        open: async () => {
+          if (hidden) throw new ApiError(403, "hidden", "model_hidden");
+          dispatched++;
+          throw dropped;
+        },
+        isRetryable: (error) => error === dropped,
+        shouldContinue: () => true,
+        onRetry: () => {
+          hidden = true;
+        },
+        prepareFailedAttempt: async () => async () => {},
+      }),
+    ).rejects.toBe(dropped);
+    expect(dispatched).toBe(1);
+    expect(attempt).toMatchObject({
+      attempt: 1,
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+      failureReason: "unreachable (502)",
+    });
+  });
+
   test("fails over before the first chunk and records the failed attempt", async () => {
     const attempt: UpstreamAttempt = {};
     const recorded: UpstreamAttempt[] = [];
@@ -480,8 +870,8 @@ describe("openThroughModelPool", () => {
       ...openKey((key) => (key === keyA ? httpError(529) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -518,7 +908,7 @@ describe("openThroughModelPool", () => {
       ...openKey((key) => (key === keyA ? httpError(401) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
     expect(attempt.providerApiKeyId).toBe(keyB);
   });
@@ -538,7 +928,7 @@ describe("openThroughModelPool", () => {
         }),
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(badRequest);
     expect(opened).toEqual([keyA]);
@@ -570,8 +960,8 @@ describe("openThroughModelPool", () => {
       memberTimeoutMs: 20,
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -606,8 +996,8 @@ describe("openThroughModelPool", () => {
         open: async () => "unexpected answer",
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async (failed) => {
-          recorded.push(failed);
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
         },
       }),
     ).rejects.toBe(refusal);
@@ -631,8 +1021,8 @@ describe("openThroughModelPool", () => {
       open: async (t) => `answer from ${await t.execute({})}`,
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -641,9 +1031,10 @@ describe("openThroughModelPool", () => {
       { providerApiKeyId: keyA, failureReason: "key_unavailable" },
     ]);
     // On the last member there is nowhere to go: its own error is returned.
+    // keyA is cooling down from the call above, so use keyB.
     await expect(
       openThroughModelPool({
-        plan: { ...plan, members: [plan.members[0]] },
+        plan: { ...plan, members: [plan.members[1]] },
         attempt: {},
         transportFor: async () => {
           throw vaultDown;
@@ -651,38 +1042,34 @@ describe("openThroughModelPool", () => {
         open: async () => "unreachable",
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(vaultDown);
   });
 
-  test("waits on the last member however slow, and retries only that one", async () => {
+  test("waits on the last member however slow", async () => {
     const attempt: UpstreamAttempt = {};
     const opened: string[] = [];
-    const dropped = Object.assign(new Error("socket hang up"), {
-      code: "ECONNRESET",
-    });
 
     const result = await openThroughModelPool({
-      plan,
+      plan: { ...plan, retrySettings: { initialDelayMs: 100 } },
       attempt,
       ...openKey(() => null),
       open: async (t) => {
         const key = (await t.execute({})) as string;
         opened.push(key);
         if (key === keyA) throw httpError(503);
-        if (opened.filter((k) => k === keyB).length === 1) throw dropped;
         await new Promise((resolve) => setTimeout(resolve, 40));
         return `answer from ${key}`;
       },
       memberTimeoutMs: 20,
-      isRetryable: (error) => error === dropped,
+      isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(result).toBe(`answer from ${keyB}`);
-    expect(opened).toEqual([keyA, keyB, keyB]);
+    expect(opened).toEqual([keyA, keyB]);
   });
 
   test("does not retry a member's dropped connection while a sibling is left", async () => {
@@ -704,7 +1091,7 @@ describe("openThroughModelPool", () => {
       },
       isRetryable: (error) => error === dropped,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(opened).toEqual([keyA, keyB]);
@@ -722,7 +1109,7 @@ describe("openThroughModelPool", () => {
         ...openKey((key) => (key === keyB ? lastError : httpError(503))),
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(lastError);
     expect(attempt).toMatchObject({
@@ -752,3 +1139,52 @@ function httpError(status: number, headers: Record<string, string> = {}) {
     headers: new Headers(headers),
   });
 }
+
+test("an explicitly selected pool excludes disabled members and cannot disappear into direct routing", async ({
+  makeOrganization,
+  makeLlmProviderApiKey,
+}) => {
+  const org = await makeOrganization();
+  const gemini = await makeLlmProviderApiKey(org.id, null, {
+    provider: "gemini",
+  });
+  const anthropic = await makeLlmProviderApiKey(org.id, null, {
+    provider: "anthropic",
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "explicit-selection",
+      members: [
+        { ...member(anthropic.id, "claude-sonnet-4-5", 1), enabled: false },
+        member(gemini.id, "gemini-3.8-flash", 2),
+      ],
+    },
+  });
+  const params = {
+    organizationId: org.id,
+    name: "gemini-3.8-flash",
+    poolId: pool.id,
+    inbound: "gemini" as const,
+    caller: { providerApiKeyIds: [gemini.id] },
+  };
+  const plan = await planModelPool(params);
+  expect(plan?.members.map((member) => member.provider)).toEqual(["gemini"]);
+  await ModelPoolModel.update({
+    organizationId: org.id,
+    id: pool.id,
+    input: {
+      name: "explicit-selection",
+      members: [
+        { ...member(gemini.id, "gemini-3.8-flash", 2), enabled: false },
+      ],
+    },
+  });
+  await expect(planModelPool(params)).rejects.toThrow("no enabled members");
+  await expect(
+    planModelPool({
+      ...params,
+      poolId: "00000000-0000-4000-8000-000000000000",
+    }),
+  ).rejects.toThrow("no longer exists");
+});

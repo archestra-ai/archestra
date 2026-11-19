@@ -112,6 +112,44 @@ afterEach(() => {
 });
 
 describe("SlackReplyStream", () => {
+  test.each([
+    "Hello",
+    "",
+  ])("a reply completed before the first flush posts once (%j)", async (preview) => {
+    const { stream, chat, postReply } = createStream();
+    if (preview) stream.push(text(preview));
+    const final = { text: "Hello there", footer: "🤖 Agent" };
+    await stream.finish(final);
+    stream.push(text("late chunk"));
+    await flush();
+    await stream.finish(final);
+    expect(postReply).toHaveBeenCalledExactlyOnceWith(final);
+    expect(chat.startStream).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    false,
+    true,
+  ])("cancellation during a pending start is not finalized afterward (keepContent=%s)", async (keepContent) => {
+    const { stream, chat, postReply } = createStream();
+    let releaseStart!: (result: { ok: boolean; ts: string }) => void;
+    chat.startStream.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseStart = resolve;
+        }),
+    );
+    stream.push(text("Partial answer"));
+    await flush();
+    const finishing = stream.finish({ text: "Complete answer" });
+    const cancelling = stream.abandon({ keepContent });
+    releaseStart({ ok: true, ts: "STREAM.1" });
+    await Promise.all([finishing, cancelling]);
+    expect(postReply).not.toHaveBeenCalled();
+    expect(chat.stopStream).toHaveBeenCalledTimes(1);
+    expect(chat.delete).toHaveBeenCalledTimes(keepContent ? 0 : 1);
+  });
+
   test("repeated input and approval updates cannot append the argument preview again", async () => {
     const { stream, chat } = createStream();
     const input = {
@@ -406,7 +444,6 @@ describe("SlackReplyStream", () => {
       input: {},
     });
     await flush();
-    expect(stream.isLive).toBe(true);
     expect(chat.startStream).toHaveBeenCalledWith({
       channel: "C1",
       thread_ts: "100.1",
@@ -459,7 +496,6 @@ describe("SlackReplyStream", () => {
       ],
     });
     expect(postReply).not.toHaveBeenCalled();
-    expect(stream.isLive).toBe(false);
   });
 
   test("names the tool a run_tool call dispatches to", async () => {
@@ -484,7 +520,6 @@ describe("SlackReplyStream", () => {
     stream.push(text("REPLY]"));
     await flush();
     expect(chat.startStream).not.toHaveBeenCalled();
-    expect(stream.isLive).toBe(false);
   });
 
   test("an unclosed thinking block is held back until it closes", async () => {
@@ -538,7 +573,6 @@ describe("SlackReplyStream", () => {
     });
     stream.push(text("Hello"));
     await flush();
-    expect(stream.isLive).toBe(false);
 
     await stream.finish({ text: "Hello there" });
     expect(postReply).toHaveBeenCalledWith({ text: "Hello there" });
@@ -551,7 +585,6 @@ describe("SlackReplyStream", () => {
 
     await stream.abandon({ keepContent: false });
     expect(chat.delete).toHaveBeenCalledWith({ channel: "C1", ts: "STREAM.1" });
-    expect(stream.isLive).toBe(false);
   });
 
   test("an approval pause shows the paused tool card as waiting, and the decision settles it", async () => {

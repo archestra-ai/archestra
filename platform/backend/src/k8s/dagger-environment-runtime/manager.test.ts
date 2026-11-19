@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy } from "@kubernetes/client-node";
+import { eq } from "drizzle-orm";
 import { describe, expect, vi } from "vitest";
 import db, { schema } from "@/database";
 import { beforeEach, test as it } from "@/test";
@@ -56,7 +57,7 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
-import type { Environment, Organization } from "@/types";
+import type { Environment, NetworkPolicy, Organization } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
@@ -92,6 +93,38 @@ async function reconcilePersistedEnvironment(environment: Environment) {
     .returning();
   return daggerEnvironmentRuntimeManager.reconcileEnvironment(row);
 }
+
+// The organization model is mocked here, so agents are inserted as plain rows.
+async function insertAgent(values: {
+  environmentId?: string;
+  networkPolicy: NetworkPolicy | null;
+}) {
+  const [row] = await db
+    .insert(schema.agentsTable)
+    .values({
+      name: `Agent ${crypto.randomUUID().slice(0, 8)}`,
+      organizationId: testOrganizationId,
+      scope: "personal",
+      ...values,
+    })
+    .returning();
+  return row;
+}
+
+// Every reconcile first applies the namespace-wide ingress deny; these tests
+// look at the engine's own egress policies.
+function egressPolicyBodies(create: ReturnType<typeof vi.fn>) {
+  return create.mock.calls
+    .map((args) => args[0].body)
+    .filter((body) => body.metadata?.name !== "dagger-engine-deny-ingress");
+}
+
+const OFF_POLICY: NetworkPolicy = {
+  egressMode: "off",
+  domainPreset: "none",
+  allowedDomains: [],
+  allowedCidrs: [],
+};
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -322,7 +355,7 @@ describe("buildEngineStatefulSet", () => {
       "dagger-engine-abcdef00-1111-2222-3333-444455556666",
     );
     const container = sts.spec?.template.spec?.containers[0];
-    expect(container?.image).toBe("registry.dagger.io/engine:v0.21.9");
+    expect(container?.image).toBe("registry.dagger.io/engine:v0.21.11");
     expect(container?.securityContext?.privileged).toBe(true);
   });
 
@@ -489,6 +522,7 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
         createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
       },
       networkingApi: {
+        createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
         deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
       },
       customObjectsApi: {
@@ -640,6 +674,11 @@ describe("reconcileOrganizationDefault", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks retains implementations; do not inherit a prior test's
+    // partial policy when Vitest shuffles the tests.
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null,
+    );
     clients = makeFakeClients();
     mockIsK8sConfigured.mockReturnValue(true);
     mockGetK8sNamespace.mockReturnValue("release-ns");
@@ -758,8 +797,9 @@ describe("reconcileOrganizationDefault", () => {
     // With no org policy the engine still gets the unrestricted-egress floor every
     // per-env engine gets: public internet allowed, private/link-local/metadata
     // ranges blocked (the 0.0.0.0/0 rule carries an `except` list, not allow-all).
-    const npBody =
-      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
     const publicRule = npBody.spec.egress.find(
       (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
@@ -784,20 +824,72 @@ describe("reconcileOrganizationDefault", () => {
     await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
 
     expect(
-      clients.networkingApi.createNamespacedNetworkPolicy,
-    ).toHaveBeenCalledTimes(1);
+      egressPolicyBodies(clients.networkingApi.createNamespacedNetworkPolicy),
+    ).toHaveLength(1);
     // Assert the org's OWN restricted policy was applied, not the unrestricted
     // floor a null policy produces: the floor allows all public egress via a
     // 0.0.0.0/0-with-except rule, so a genuinely restricted policy must NOT carry
     // one — and must still have egress rules (it isn't a no-op).
-    const npBody =
-      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
     expect(npBody.spec.egress.length).toBeGreaterThan(0);
     const hasPublicAllow = npBody.spec.egress.some(
       (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
     );
     expect(hasPublicAllow).toBe(false);
+  });
+
+  it("runs every engine in the dedicated engine namespace, closed to inbound traffic", async () => {
+    const previous = {
+      namespace: config.daggerRuntime.namespace,
+      environmentNamespaces:
+        config.orchestrator.kubernetes.environmentNamespaces,
+    };
+    (config.daggerRuntime as { namespace?: string }).namespace =
+      "archestra-sandbox";
+    config.orchestrator.kubernetes.environmentNamespaces = ["team-ns"];
+    const order: string[] = [];
+    clients.networkingApi.createNamespacedNetworkPolicy.mockImplementation(
+      async ({ body }: { body: { metadata: { name: string } } }) => {
+        order.push(`policy:${body.metadata.name}`);
+        return {};
+      },
+    );
+    clients.appsApi.createNamespacedStatefulSet.mockImplementation(async () => {
+      order.push("statefulset");
+      return {};
+    });
+    try {
+      const env = makeEnv({ namespace: "team-ns" });
+      expect(
+        daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(env)
+          ?.namespace,
+      ).toBe("archestra-sandbox");
+
+      await reconcilePersistedEnvironment(env);
+
+      expect(
+        clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].namespace,
+      ).toBe("archestra-sandbox");
+      // The ingress deny lands before the engine can start.
+      expect(order[0]).toBe("policy:dagger-engine-deny-ingress");
+      expect(order.indexOf("statefulset")).toBeGreaterThan(0);
+      const ingress =
+        clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0];
+      expect(ingress.namespace).toBe("archestra-sandbox");
+      expect(ingress.body.spec).toEqual({
+        podSelector: { matchLabels: { app: "dagger-engine" } },
+        policyTypes: ["Ingress"],
+        ingress: [],
+      });
+    } finally {
+      (config.daggerRuntime as { namespace?: string }).namespace =
+        previous.namespace;
+      config.orchestrator.kubernetes.environmentNamespaces =
+        previous.environmentNamespaces;
+    }
   });
 
   it("tears down the old namespace's engine (StatefulSet, PVC, ConfigMap, policy) when the default namespace changes", async () => {
@@ -938,6 +1030,105 @@ describe("reconcileOrganizationDefault", () => {
     expect(
       clients.customObjectsApi.deleteNamespacedCustomObject,
     ).not.toHaveBeenCalled();
+  });
+
+  it("runs an agent with its own policy on its own engine in its environment's namespace, under the agent's policy", async () => {
+    const [environment] = await db
+      .insert(schema.environmentsTable)
+      .values({
+        organizationId: testOrganizationId,
+        name: "Agent engine env",
+        namespace: "env-ns",
+        networkPolicy: {
+          egressMode: "unrestricted",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: [],
+        },
+      })
+      .returning();
+    const agent = await insertAgent({
+      environmentId: environment.id,
+      networkPolicy: OFF_POLICY,
+    });
+    const target = daggerEnvironmentRuntimeManager.agentTarget({
+      id: agent.id,
+      namespace: environment.namespace,
+    });
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    // A distinct, stable engine: never the environment's own engine id.
+    expect(target?.environmentId).not.toBe(environment.id);
+    expect(target?.environmentId).not.toBe(agent.id);
+    expect(isUuid(target?.environmentId ?? "")).toBe(true);
+    expect(target?.namespace).toBe("env-ns");
+    const stsCall =
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0];
+    expect(stsCall.namespace).toBe("env-ns");
+    expect(stsCall.body.metadata.name).toBe(
+      `dagger-engine-${target?.environmentId}`,
+    );
+    // The agent blocks all egress although its environment allows it all: no
+    // rule opens the public internet.
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
+    const hasPublicAllow = (npBody.spec.egress ?? []).some(
+      (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
+        r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    expect(hasPublicAllow).toBe(false);
+  });
+
+  it("removes an agent's engine once its policy is cleared to inherit the environment's", async () => {
+    const agent = await insertAgent({ networkPolicy: OFF_POLICY });
+    await db
+      .update(schema.agentsTable)
+      .set({ networkPolicy: null })
+      .where(eq(schema.agentsTable.id, agent.id));
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    expect(clients.appsApi.createNamespacedStatefulSet).not.toHaveBeenCalled();
+    const engineId = daggerEnvironmentRuntimeManager.agentTarget({
+      id: agent.id,
+      namespace: null,
+    })?.environmentId;
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "release-ns",
+        name: `dagger-engine-${engineId}`,
+      }),
+    );
+  });
+
+  it("runs an unbound agent's own engine in the organization's default namespace", async () => {
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null as never,
+    );
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultEnvironmentNamespace: "team-ns" })
+      .where(eq(schema.organizationsTable.id, testOrganizationId));
+    const agent = await insertAgent({
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["a.dev"],
+        allowedCidrs: [],
+      },
+    });
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    expect(
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].namespace,
+    ).toBe("team-ns");
+    // It left the release namespace, where it does not belong.
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "release-ns" }),
+    );
   });
 });
 

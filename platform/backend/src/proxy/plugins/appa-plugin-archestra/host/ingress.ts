@@ -38,6 +38,7 @@ import {
 import { parseJsonHeader } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import { APPA_CLIENT_ADAPTERS } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
+import { detectGrokClientId } from "@/routes/proxy/utils/headers/client-app";
 import { getHeaderValue } from "@/routes/proxy/utils/headers/meta-header";
 import type { SessionInfo } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
@@ -66,7 +67,7 @@ export function scrubOpenappaIngress(params: {
   });
 
   const requestWireFamily = appaWireFamily(interactionType);
-  // A Model Router route that translated the client's wire to one OpenAPPA
+  // A Unified Model API route that translated the client's wire to one OpenAPPA
   // does not read already scrubbed the client's own wire.
   const clientWire = requestWireFamily
     ? undefined
@@ -85,6 +86,7 @@ export function scrubOpenappaIngress(params: {
   return {
     clientCompaction,
     strippedReceiptCodes: scrubbed?.strippedReceiptCodes ?? [],
+    childTrajectoryReferences: scrubbed?.childTrajectoryReferences ?? [],
     trajectoryStamps,
     ...(scrubbed?.childReturnRefusal
       ? { childReturnRefusal: scrubbed.childReturnRefusal }
@@ -106,7 +108,7 @@ export function scrubOpenappaIngress(params: {
 }
 
 /**
- * Scrubs the request a client sent to a Model Router route, on the client's
+ * Scrubs the request a client sent to a Unified Model API route, on the client's
  * own wire, before the route translates it to a provider wire that OpenAPPA
  * does not read (Gemini, Bedrock Converse, Cohere). Removes the same
  * receipts, markers and child returns that ingress removes from an OpenAPPA
@@ -228,7 +230,9 @@ function scrubFamilyWire(params: {
     family === "openai:responses"
       ? unwrapCompactionCarriersFromRequest(body)
       : [];
+  const childTrajectoryReferences: string[] = [];
   const childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+    references: childTrajectoryReferences,
     family,
     body,
   });
@@ -253,6 +257,7 @@ function scrubFamilyWire(params: {
       !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
     codexMailboxReturns: nativeClient?.id === "codex",
     copilotAgentReports: nativeClient?.id === "copilot-cli",
+    grokSubagentReturns: nativeClient?.id === "grok-build",
     onRefusal: (refusal: ApiError) => {
       childReturnRefusal ??= refusal;
     },
@@ -268,6 +273,7 @@ function scrubFamilyWire(params: {
   return {
     strippedReceiptCodes,
     childTrajectoryReceipts,
+    childTrajectoryReferences,
     delegationMarkers,
     releasedSpawnCalls,
     childReturns,
@@ -294,8 +300,9 @@ export type OpenappaIngress = {
   releasedSpawnCalls?: string[];
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
+  childTrajectoryReferences?: string[];
   /**
-   * The client's own wire, when a Model Router route translated it to a
+   * The client's own wire, when a Unified Model API route translated it to a
    * provider wire OpenAPPA does not read. The client's session is read here.
    */
   clientWire?: { family: AppaWireFamily; body: unknown };
@@ -304,6 +311,7 @@ export type OpenappaIngress = {
 type ScrubbedClientWire = {
   strippedReceiptCodes: string[];
   childTrajectoryReceipts: AppaChildTrajectoryReceipt[];
+  childTrajectoryReferences: string[];
   delegationMarkers: AppaDelegationMarker[];
   releasedSpawnCalls: string[];
   childReturns: CollectedChildReturns;
@@ -336,6 +344,8 @@ function isClientCompactionRequest(params: {
   const header = (name: string) => getHeaderValue(headers, name);
   if (
     header(OPENCODE_AGENT_HEADER) === "compaction" ||
+    (detectGrokClientId(headers) !== undefined &&
+      header("x-grok-conv-id")?.startsWith("turn-summary-")) ||
     header("x-openai-subagent") === "compact"
   )
     return true;

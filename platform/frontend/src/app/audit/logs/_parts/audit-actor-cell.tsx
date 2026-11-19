@@ -133,7 +133,7 @@ export function describeAuditActor(event: AuditActorEvent): AuditActor {
       return {
         kind: "machine",
         name: "System",
-        secondary: "Automatic, no acting user",
+        secondary: "Background job",
         icon: Cpu,
         seed: "system",
         quiet: true,

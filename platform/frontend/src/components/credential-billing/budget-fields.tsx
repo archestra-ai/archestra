@@ -141,8 +141,8 @@ export function BudgetFields({
       <p className="text-xs text-muted-foreground">
         {team ? (
           <span>
-            Costs and limits count this {subject}'s usage for {team.name}. The
-            owner's personal limit does not apply.
+            This {subject}'s usage counts toward {team.name} and its parent
+            teams' budgets. The owner's personal limit does not apply.
           </span>
         ) : (
           <span>
@@ -494,15 +494,29 @@ function useBillableTeams(currentTeamId: string | null) {
     includeRelations: false,
     enabled: !!isCostManager,
   });
-  const { data: myTeams = [] } = useMyTeams({ enabled: !isCostManager });
+  const { data: myTeams = [] } = useMyTeams({
+    enabled: !isCostManager,
+    includeDescendants: true,
+  });
   return useMemo(() => {
     const candidates = isCostManager
       ? allTeams
-      : myTeams.filter(
-          (team) =>
-            team.id === currentTeamId || team.myRole === ADMIN_ROLE_NAME,
+      : myTeams.flatMap((team) =>
+          team.myRole === ADMIN_ROLE_NAME
+            ? [
+                team,
+                ...(team.descendantTeams ?? []).map((child) => ({
+                  ...child,
+                  description: null,
+                })),
+              ]
+            : team.id === currentTeamId
+              ? [team]
+              : [],
         );
-    return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
+    return [
+      ...new Map(candidates.map((team) => [team.id, team])).values(),
+    ].sort((a, b) => a.name.localeCompare(b.name));
   }, [allTeams, currentTeamId, isCostManager, myTeams]);
 }
 

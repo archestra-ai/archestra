@@ -2,7 +2,7 @@
 title: Incoming Email
 description: Give each agent an email address that runs the agent and replies in the thread
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ You need:
 
 - **A Microsoft 365 mailbox** for agent mail, such as `agents@example.com`.
 - A Microsoft Entra app registration with the Microsoft Graph application permissions `Mail.Read` and `Mail.Send`, admin consent, and a client secret.
-- **A public HTTPS URL** for Archestra, so Microsoft can tell it about new mail. A local instance can use a tunnel, such as ngrok.
+- **A public HTTPS URL** for Archestra's [mail webhook](/docs/admin/deployment/networking#public-webhook-endpoints), so Microsoft can tell it about new mail. A local instance can use a tunnel, such as ngrok.
 
 1. Set these on the backend, and restart it:
 

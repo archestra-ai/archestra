@@ -3,23 +3,28 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
+  summarizeAgentRuntimeTier,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
   Ban,
   ChevronDown,
+  Cloud,
   Code,
   ExternalLink,
   Globe,
   IdCard,
   KeyRound,
+  Laptop,
   Server,
   Sparkles,
   Trash2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -32,7 +37,9 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { BetaBadge } from "@/components/beta-badge";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
+import { DesktopMcpTargetField } from "@/components/desktop-mcp-target-field";
 import {
   AddListItemButton,
   EmptyListState,
@@ -47,6 +54,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { IdentityFields } from "@/components/identity-fields";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import {
@@ -101,7 +109,10 @@ import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-s
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useDefaultEnvironment,
+  useMcpRuntimeTiers,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type CascadeSnapshot,
@@ -120,6 +131,13 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+const AwsIamAuthFields = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("./aws-iam-auth-fields.ee").then((m) => ({
+    default: m.AwsIamAuthFields,
+  })),
+);
 
 // Markdown renderer for catalog-supplied setup instructions shown atop the form.
 const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
@@ -247,8 +265,7 @@ export function McpCatalogForm({
     "upstream-mcp-server-authentication",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
-    DocsPage.McpAuthentication,
-    "token-exchange-configuration",
+    DocsPage.McpIdpTokenExchange,
   );
   const mcpAuthJwksDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -302,6 +319,7 @@ export function McpCatalogForm({
               serviceAccount: "",
               imagePullSecrets: [],
             },
+            desktopConfig: EMPTY_DESKTOP_CONFIG,
             scope: "personal",
             teams: [],
             environmentId: null,
@@ -342,6 +360,9 @@ export function McpCatalogForm({
 
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
+  // A desktop MCP server runs on each user's own computer: none of the
+  // connection, deployment or authentication sections apply to it.
+  const isDesktopMcp = currentServerType === "desktop_mcp";
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
   const isTenancyLocked = Boolean(initialValues);
@@ -355,6 +376,13 @@ export function McpCatalogForm({
     const previousAuthMethod = form.getValues("authMethod");
     if (nextAuthMethod === previousAuthMethod) return;
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
+    if (nextAuthMethod === "aws_iam" && !form.getValues("awsIamConfig")) {
+      form.setValue(
+        "awsIamConfig",
+        { roleArn: "", region: "", service: "bedrock-agentcore" },
+        { shouldDirty: true },
+      );
+    }
 
     if (nextAuthMethod === "none" || nextAuthMethod === "auth_header") {
       form.setValue("requiresAuth", nextAuthMethod === "auth_header", {
@@ -550,7 +578,8 @@ export function McpCatalogForm({
       isReallyDirty(dirtyFields.authHeaderName) ||
       isReallyDirty(dirtyFields.includeBearerPrefix) ||
       isReallyDirty(dirtyFields.oauthConfig) ||
-      isReallyDirty(dirtyFields.enterpriseManagedConfig));
+      isReallyDirty(dirtyFields.enterpriseManagedConfig) ||
+      isReallyDirty(dirtyFields.awsIamConfig));
   // Env-var dirtiness alone isn't enough to require reinstall — adding an
   // OPTIONAL prompted env var leaves existing installs valid (they just
   // don't fill the new var). Mirror the backend's `promptedEnvVarsChanged`
@@ -590,6 +619,7 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
   const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
+  const isResourcesDirty = deploymentField("runtimeTier");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -646,9 +676,10 @@ export function McpCatalogForm({
   // environment only surfaces here, where it blocks Save until fixed.
   //
   // Only scan the fields actually live for the current server type: env vars
-  // for local, headers for remote. A local server submits no headers and a
-  // remote one submits no localConfig.environment, so scanning the inactive
-  // (and hidden) set would block Save on a field the user can't even see.
+  // for local, headers for remote, neither for desktop MCP. A local server
+  // submits no headers and a remote one submits no localConfig.environment,
+  // so scanning the inactive (and hidden) set would block Save on a field the
+  // user can't even see.
   const watchedEnvVars = form.watch("localConfig.environment");
   const watchedHeaders = form.watch("additionalHeaders");
   const envRuleViolations: string[] = [];
@@ -664,7 +695,7 @@ export function McpCatalogForm({
           envRuleViolations.push(envVar.key);
         }
       }
-    } else {
+    } else if (!isDesktopMcp) {
       for (const header of watchedHeaders ?? []) {
         if (
           !header.promptOnInstallation &&
@@ -684,7 +715,9 @@ export function McpCatalogForm({
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary = detailsOnly ? "Labels" : "Environment and labels";
+  // A desktop MCP server runs on the user's computer, not in an environment.
+  const advancedSummary =
+    detailsOnly || isDesktopMcp ? "Labels" : "Environment and labels";
   // The configuration stays in the form, so its values and checks are what
   // they always were; a details-only editor just does not see it.
   const configurationSectionClass = detailsOnly ? "hidden" : undefined;
@@ -1058,7 +1091,9 @@ export function McpCatalogForm({
                 description={
                   currentServerType === "local"
                     ? "The container that runs this server, and how the gateway talks to it."
-                    : "Where the gateway reaches this server."
+                    : isDesktopMcp
+                      ? "The gateway reaches this server through the MCP bridge on each user's device."
+                      : "Where the gateway reaches this server."
                 }
               >
                 {mode === "create" && (
@@ -1068,6 +1103,7 @@ export function McpCatalogForm({
                     onChange={(value) => form.setValue("serverType", value)}
                   />
                 )}
+                {isDesktopMcp && <DesktopMcpFields form={form} />}
                 {currentServerType === "remote" && (
                   <FormField
                     control={form.control}
@@ -1326,6 +1362,27 @@ export function McpCatalogForm({
                   </>
                 )}
               </SettingsSection>
+
+              {currentServerType === "local" && canUpdateAdvancedSettings && (
+                <SettingsSection
+                  className={configurationSectionClass}
+                  title={
+                    <>
+                      Resources
+                      <ReinstallHint show={isResourcesDirty} />
+                    </>
+                  }
+                  description={
+                    initialValues?.deploymentSpecYaml
+                      ? "Resources are configured in the custom Kubernetes deployment YAML."
+                      : "Choose an MCP runtime tier managed in Settings > MCP. Changes apply when the server is installed or reinstalled."
+                  }
+                >
+                  {!initialValues?.deploymentSpecYaml && (
+                    <McpRuntimeTierField form={form} />
+                  )}
+                </SettingsSection>
+              )}
 
               {currentServerType === "local" && (
                 <SettingsSection
@@ -1633,6 +1690,20 @@ export function McpCatalogForm({
                           customBadge: enterpriseAuthDisabledBadge,
                           available: !enterpriseAuthDisabled,
                           disabledReason: enterpriseAuthDisabledReason,
+                        },
+                        {
+                          value: "aws_iam",
+                          title: "AWS IAM (SigV4)",
+                          description:
+                            "Each agent assumes an IAM role to call AWS",
+                          icon: <Cloud className="h-4 w-4" />,
+                          available:
+                            currentServerType === "remote" &&
+                            isEnterpriseCoreEnabled,
+                          disabledReason:
+                            currentServerType === "remote"
+                              ? enterpriseAuthDisabledReason
+                              : null,
                         },
                         {
                           value: "bearer",
@@ -2079,6 +2150,10 @@ export function McpCatalogForm({
                                   </div>
                                 </div>
                               )}
+                              {authMethod === "aws_iam" && (
+                                <AwsIamAuthFields form={form} />
+                              )}
+
                               {authMethod === "oauth_client_credentials" && (
                                 <div className="space-y-4 border-t pt-5">
                                   <div>
@@ -2369,7 +2444,9 @@ export function McpCatalogForm({
                 <CollapsibleContent>
                   <SettingsSectionGroup className="border-t pt-8">
                     <SettingsSection
-                      className={configurationSectionClass}
+                      className={
+                        isDesktopMcp ? "hidden" : configurationSectionClass
+                      }
                       title="Environment"
                       description="Where this server runs and which resources it can reach."
                     >
@@ -2706,20 +2783,14 @@ function EnterpriseIdentityProviderField(params: {
             caller. This is required when the tool uses Resolve at call time or
             Identity Provider Token Exchange.
           </FormDescription>
-          <Select value={field.value ?? ""} onValueChange={field.onChange}>
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="Select an OIDC identity provider" />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              {params.identityProviders.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FormControl>
+            <IdentityProviderSelect
+              identityProviders={params.identityProviders}
+              value={field.value || null}
+              onChange={(next) => field.onChange(next ?? "")}
+              placeholder="Select an OIDC identity provider"
+            />
+          </FormControl>
           <FormMessage />
         </FormItem>
       )}
@@ -2883,17 +2954,50 @@ function withCreationAccess(
 }
 
 /**
- * Remote vs self-hosted: the choice that decides every section below it, so
- * it gets a full-width two-up control rather than a small dropdown.
+ * What a desktop MCP server tells each computer: the command that starts it or
+ * the URL where it listens. The value may stay empty: the item is then saved,
+ * and cannot be added to a computer until it has one.
+ */
+function DesktopMcpFields({
+  form,
+}: {
+  form: UseFormReturn<McpCatalogFormValues>;
+}) {
+  // A draft imported for another hosting has no desktop config yet.
+  const config = form.watch("desktopConfig") ?? EMPTY_DESKTOP_CONFIG;
+  const setConfig = (next: Partial<typeof config>) =>
+    form.setValue(
+      "desktopConfig",
+      { ...config, ...next },
+      { shouldDirty: true, shouldValidate: form.formState.isSubmitted },
+    );
+  return (
+    <DesktopMcpTargetField
+      idPrefix="desktop-mcp-target"
+      kind={config.kind}
+      value={config.value}
+      onValueChange={(value) => setConfig({ value })}
+      error={form.formState.errors.desktopConfig?.value?.message}
+      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+    />
+  );
+}
+
+const EMPTY_DESKTOP_CONFIG: NonNullable<McpCatalogFormValues["desktopConfig"]> =
+  { kind: "command", value: "" };
+
+/**
+ * Remote, self-hosted or desktop: the choice that decides every section below
+ * it, so it gets a full-width control rather than a small dropdown.
  */
 function HostingChoice({
   value,
   localEnabled,
   onChange,
 }: {
-  value: "local" | "remote";
+  value: McpCatalogFormValues["serverType"];
   localEnabled: boolean;
-  onChange: (value: "local" | "remote") => void;
+  onChange: (value: McpCatalogFormValues["serverType"]) => void;
 }) {
   const options = [
     {
@@ -2902,6 +3006,7 @@ function HostingChoice({
       description: "Connect to a server running elsewhere.",
       icon: Globe,
       disabled: false,
+      beta: false,
     },
     {
       value: "local" as const,
@@ -2911,6 +3016,15 @@ function HostingChoice({
         : LOCAL_MCP_DISABLED_MESSAGE,
       icon: Server,
       disabled: !localEnabled,
+      beta: false,
+    },
+    {
+      value: "desktop_mcp" as const,
+      title: "Desktop",
+      description: "Runs an MCP server installed on a user's device.",
+      icon: Laptop,
+      disabled: false,
+      beta: true,
     },
   ];
   return (
@@ -2919,8 +3033,13 @@ function HostingChoice({
       <RadioGroup
         aria-labelledby="server-hosting-label"
         value={value}
-        onValueChange={(next) => onChange(next as "local" | "remote")}
-        className="grid gap-3 sm:grid-cols-2"
+        onValueChange={(next) =>
+          onChange(next as McpCatalogFormValues["serverType"])
+        }
+        className={cn(
+          "grid gap-3",
+          options.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+        )}
       >
         {options.map((option) => {
           const Icon = option.icon;
@@ -2944,8 +3063,9 @@ function HostingChoice({
                 className="mt-0.5 size-4 shrink-0 text-muted-foreground"
               />
               <span className="min-w-0 space-y-0.5">
-                <span className="block text-sm font-medium">
-                  {option.title}
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <span>{option.title}</span>
+                  {option.beta && <BetaBadge />}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {option.description}
@@ -3008,5 +3128,64 @@ function OAuthOverrides({
         {children}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function McpRuntimeTierField({
+  form,
+}: {
+  form: UseFormReturn<McpCatalogFormValues>;
+}) {
+  const { data: resolved } = useMcpRuntimeTiers();
+  const tiers = resolved?.tiers ?? [];
+  return (
+    <FormField
+      control={form.control}
+      name="localConfig.runtimeTier"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Runtime tier</FormLabel>
+          <Select
+            value={
+              !resolved
+                ? ""
+                : field.value
+                  ? `tier:${findMcpRuntimeTier(tiers, field.value)?.name ?? field.value}`
+                  : "default"
+            }
+            disabled={!resolved}
+            onValueChange={(tier) =>
+              field.onChange(tier === "default" ? undefined : tier.slice(5))
+            }
+          >
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Loading tiers…" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              <SelectItem value="default">Deployment defaults</SelectItem>
+              {resolved &&
+                field.value &&
+                !findMcpRuntimeTier(tiers, field.value) && (
+                  <SelectItem value={`tier:${field.value}`}>
+                    {field.value} (unavailable)
+                  </SelectItem>
+                )}
+              {tiers.map((tier) => (
+                <SelectItem key={tier.name} value={`tier:${tier.name}`}>
+                  {tier.name}:{" "}
+                  {summarizeAgentRuntimeTier({ ...tier, workspaceGiB: null })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormDescription>
+            Manage MCP runtime tiers in Settings → MCP.
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }

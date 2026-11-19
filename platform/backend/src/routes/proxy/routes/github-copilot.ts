@@ -1,19 +1,30 @@
-import { RouteId } from "@archestra/shared";
+import AnthropicProvider from "@anthropic-ai/sdk";
+import { RouteId, stripClaudeContextVariantSuffix } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { sanitizeForwardedRequest } from "@/openappa/request";
 import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
-import { constructResponseSchema, GithubCopilot, UuidIdSchema } from "@/types";
+import {
+  Anthropic,
+  constructResponseSchema,
+  GithubCopilot,
+  UuidIdSchema,
+} from "@/types";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
 } from "../adapters";
+import { githubCopilotMessagesAdapterFactory } from "../adapters/github-copilot-messages";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 import {
+  extractAnthropicToken,
   extractBearerToken,
   OpenAiModelsHeadersSchema,
   OpenAiModelsListResponseSchema,
@@ -26,6 +37,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/github-copilot`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
+  const MESSAGES_SUFFIX = "/v1/messages";
 
   logger.debug("[UnifiedProxy] Registering unified GitHub Copilot routes");
 
@@ -35,7 +47,12 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
-      endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
+      endpointSuffix: [
+        CHAT_COMPLETIONS_SUFFIX,
+        RESPONSES_SUFFIX,
+        MESSAGES_SUFFIX,
+        `${MESSAGES_SUFFIX}/count_tokens`,
+      ],
       upstream: config.llm["github-copilot"].baseUrl,
       providerName: "GitHubCopilot",
       // Copilot's API only accepts the exchanged short-lived bearer, so never
@@ -106,6 +123,122 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  // Native Anthropic wire format: no model pool or Chat Completions translation.
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${MESSAGES_SUFFIX}`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.GithubCopilotMessagesWithAgent
+            : RouteId.GithubCopilotMessagesWithDefaultAgent,
+          description:
+            "Create a native Anthropic Messages response with GitHub Copilot",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Anthropic.API.MessagesRequestSchema,
+          headers: Anthropic.API.MessagesHeadersSchema,
+          response: constructResponseSchema(
+            Anthropic.API.MessagesResponseWireSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(
+          request.body as Anthropic.Types.MessagesRequest,
+          request,
+          reply,
+          githubCopilotMessagesAdapterFactory,
+        ),
+    );
+  }
+
+  // Counting is a non-generation operation: authorize it, but do not reserve
+  // generation budgets or persist estimated tokens as billed model usage.
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${MESSAGES_SUFFIX}/count_tokens`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.GithubCopilotCountTokensWithAgent
+            : RouteId.GithubCopilotCountTokensWithDefaultAgent,
+          description:
+            "Count native Anthropic Messages input tokens with GitHub Copilot",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Anthropic.API.MessagesRequestSchema.omit({
+            max_tokens: true,
+            stream: true,
+          }),
+          headers: Anthropic.API.MessagesHeadersSchema,
+          response: constructResponseSchema(
+            z.object({ input_tokens: z.number().int().nonnegative() }),
+          ),
+        },
+      },
+      async (request, reply) => {
+        const { apiKey, baseUrl, extraHeaders, providerApiKeyId } =
+          await resolveProxyModelsApiKey({
+            request,
+            agentId: (request.params as { agentId?: string }).agentId,
+            provider: "github-copilot",
+            token: extractAnthropicToken(request.headers),
+            requestedModel: request.body.model,
+          });
+        const client = githubCopilotMessagesAdapterFactory.createClient(
+          apiKey,
+          {
+            source: "api",
+            baseUrl,
+            llmProviderApiKeyId: providerApiKeyId,
+            abortSignal: clientDisconnectSignal({ request, reply }),
+            defaultHeaders: {
+              ...extraHeaders,
+              ...(request.headers["anthropic-beta"]
+                ? { "anthropic-beta": request.headers["anthropic-beta"] }
+                : {}),
+              ...(request.headers["anthropic-version"]
+                ? { "anthropic-version": request.headers["anthropic-version"] }
+                : {}),
+            },
+          },
+        ) as AnthropicProvider;
+        try {
+          // Count requests bypass inference preparation. Apply the same
+          // provider-bound cleaning as catch-all token-count endpoints without
+          // mutating the validated request used by authentication/observers.
+          const countBody = structuredClone(request.body);
+          removeMarkersFromBody(countBody);
+          sanitizeForwardedRequest(countBody);
+          return await client.messages.countTokens({
+            ...countBody,
+            model: stripClaudeContextVariantSuffix(request.body.model),
+          } as AnthropicProvider.Messages.MessageCountTokensParams);
+        } catch (error) {
+          if (!(error instanceof AnthropicProvider.APIError)) throw error;
+          // Preserve the upstream status and native error envelope, not SDK
+          // diagnostics or request headers that could contain credentials.
+          return (reply as FastifyReply)
+            .code(error.status ?? 502)
+            .type("application/json")
+            .send(
+              JSON.stringify(
+                error.error ?? {
+                  error: {
+                    type: "api_error",
+                    message: "GitHub Copilot token counting failed",
+                  },
+                },
+              ),
+            );
+        }
+      },
+    );
+  }
 
   /**
    * Copilot's Responses surface. Its Codex and GPT-5.x models declare

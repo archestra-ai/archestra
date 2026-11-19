@@ -3,24 +3,24 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      openai: {
-        codex: {
-          issuer: "https://auth.openai.com",
-          clientId: "app_test_client",
-          originator: "codex_cli_rs",
-          apiBaseUrl: "https://chatgpt.com/backend-api/codex",
-        },
+overrideConfig({
+  llm: {
+    openai: {
+      codex: {
+        issuer: "https://auth.openai.com",
+        clientId: "app_test_client",
+        originator: "codex_cli_rs",
+        apiBaseUrl: "https://chatgpt.com/backend-api/codex",
       },
     },
-  }),
-);
+  },
+});
 
 /** JWT whose namespaced auth claim carries the ChatGPT account id. */
 function idTokenWithAccount(accountId: string): string {
@@ -106,7 +106,7 @@ describe("POST /api/openai-codex-auth/device/poll", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json().error).toEqual({
       message:
-        "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        "Could not connect to an upstream service (ETIMEDOUT). Check the service URL and network access, then retry.",
       type: "api_service_unavailable_error",
     });
   });

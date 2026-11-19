@@ -2,7 +2,7 @@ import { RouteId } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { and, eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";

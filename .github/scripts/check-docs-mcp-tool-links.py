@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Require every mention of a built-in Archestra MCP tool in the docs to link to its
-entry in the generated tool reference (docs/pages/reference/archestra-mcp-server.md).
+entry in the generated tool reference (docs/pages/reference/archestra-mcp-server/).
 
 A mention is an inline-code tool name, with or without the `archestra__` prefix:
 `list_skills` must be written [`list_skills`](/docs/reference/archestra-mcp-server#list_skills).
@@ -18,10 +18,10 @@ import re
 import sys
 
 PAGES_DIR = Path("docs/pages")
-REFERENCE = PAGES_DIR / "reference/archestra-mcp-server.md"
+REFERENCE = PAGES_DIR / "reference/archestra-mcp-server/index.md"
 REFERENCE_URL = "/docs/reference/archestra-mcp-server"
 
-TOOL_HEADING = re.compile(r"^#### ([a-z0-9_]+)\s*$", re.MULTILINE)
+TOOL_HEADING = re.compile(r"^### ([a-z0-9_]+)\s*$", re.MULTILINE)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # Inline code that is not already the text of a link.
 MENTION = re.compile(r"(?<!\[)`(?:archestra__)?([a-z0-9_]+)`(?!\]\()")
@@ -39,7 +39,7 @@ def main() -> int:
 
     violations: list[str] = []
     for page in sorted(PAGES_DIR.rglob("*.md")):
-        if page == REFERENCE:
+        if page == REFERENCE or REFERENCE.parent in page.parents:
             continue
         text = page.read_text(encoding="utf-8")
         fixed, found = link_mentions(text, tools)
@@ -62,7 +62,11 @@ def main() -> int:
 
 
 def load_tools() -> frozenset[str]:
-    return frozenset(TOOL_HEADING.findall(REFERENCE.read_text(encoding="utf-8")))
+    return frozenset(
+        tool
+        for page in REFERENCE.parent.glob("*.md")
+        for tool in TOOL_HEADING.findall(page.read_text(encoding="utf-8"))
+    )
 
 
 def link_mentions(text: str, tools: frozenset[str]) -> tuple[str, list[tuple[int, str]]]:

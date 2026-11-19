@@ -290,8 +290,8 @@ interface ExpectedCapabilities {
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
-  pricePerMillionInput: string;
-  pricePerMillionOutput: string;
+  pricePerMillionInput: string | null;
+  pricePerMillionOutput: string | null;
   priceSource: PriceSource;
   pricePerMillionCacheRead: string | null;
   pricePerMillionCacheWrite: string | null;
@@ -1023,7 +1023,7 @@ const MATRIX: MatrixRow[] = [
   },
 
   // --- vLLM: the operator runs the server, so it reports its own window and
-  // bills nothing per token ---
+  // requires its own configured token rates ---
   {
     name: "vllm/a vendor model served under its HuggingFace path",
     provider: "vllm",
@@ -1039,8 +1039,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "0.00",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -1058,8 +1058,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "0.00",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,

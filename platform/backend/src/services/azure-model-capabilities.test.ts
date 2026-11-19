@@ -2,6 +2,7 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import config from "@/config";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -9,6 +10,7 @@ import { getAvailableLlmModels } from "@/routes/llm-provider-models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
+  classifyAzureModelCapabilities,
   resolveAzureModelCapabilities,
   validateAzureModelOperation,
 } from "./azure-model-capabilities";
@@ -163,6 +165,58 @@ describe("Azure resource capability evidence", () => {
     await expect(validate([image, image])).rejects.toMatchObject({
       statusCode: 400,
     });
+  });
+
+  test("a Claude deployment is rejected on Chat with guidance and allowed on Responses", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    // The alias says nothing about Claude; the backing model does.
+    server.use(
+      http.get(`${baseUrl}/deployments`, () =>
+        HttpResponse.json({
+          data: [{ id: "team-assistant", model: "claude-haiku-5-5" }],
+        }),
+      ),
+    );
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "azure",
+      apiKeyValue: "synthetic-key",
+      baseUrl,
+    });
+
+    const chat = validateAzureModelOperation({
+      providerApiKeyId: key.id,
+      modelId: "team-assistant",
+      operation: "chat",
+    });
+    await expect(chat).rejects.toMatchObject({ statusCode: 400 });
+    const message = await chat.catch((error: Error) => error.message);
+    expect(message).toContain('"team-assistant" runs claude-haiku-5-5');
+    expect(message).toContain("POST /v1/model-router/responses");
+    // The resource's own Anthropic URL, ready to paste.
+    expect(message).toContain(
+      "base URL https://scope5.services.ai.azure.com/anthropic,",
+    );
+    expect(message).toContain('call "anthropic:team-assistant"');
+    expect(message).toContain(
+      "/llm-proxy/providers/anthropic#anthropic-on-microsoft-foundry",
+    );
+    expect(
+      await validateAzureModelOperation({
+        providerApiKeyId: key.id,
+        modelId: "team-assistant",
+        operation: "responses",
+      }),
+    ).toMatchObject({ status: "known", operations: ["responses"] });
   });
 
   test("explicit deployment flags classify missing backing names without trusting aliases", async ({
@@ -432,13 +486,20 @@ describe("Azure resource capability evidence", () => {
   });
 
   test.for([
-    true,
-    false,
-  ])("an in-flight refresh cannot overwrite evidence after a connection change (nonempty: %s)", async (nonempty, {
-    makeOrganization,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
+    { nonempty: true, change: { baseUrl: secondUrl } },
+    { nonempty: false, change: { baseUrl: secondUrl } },
+    {
+      nonempty: true,
+      change: { extraHeaders: { Authorization: "Bearer rotated-header" } },
+    },
+    {
+      nonempty: false,
+      change: { extraHeaders: { Authorization: "Bearer rotated-header" } },
+    },
+  ])("an in-flight refresh cannot overwrite evidence after a connection change: %j", async ({
+    nonempty,
+    change,
+  }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
@@ -473,7 +534,7 @@ describe("Azure resource capability evidence", () => {
     const pending = sync();
     await began;
     try {
-      await LlmProviderApiKeyModel.update(key.id, { baseUrl: secondUrl });
+      await LlmProviderApiKeyModel.update(key.id, change);
     } finally {
       release();
     }
@@ -489,6 +550,71 @@ describe("Azure resource capability evidence", () => {
         modelId: "production",
       }),
     ).toMatchObject({ status: "stale" });
+  });
+
+  test("header and deployment-key rotation invalidate evidence without exposing credentials in model metadata", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const headers = { Authorization: "Bearer synthetic-sensitive-header" };
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    await LlmProviderApiKeyModel.update(key.id, { extraHeaders: headers });
+    const sync = (extraHeaders = headers) =>
+      modelSyncService.syncModelsForApiKey({
+        apiKeyId: key.id,
+        provider: "azure",
+        apiKeyValue: "synthetic-key",
+        baseUrl,
+        extraHeaders,
+      });
+    const resolve = () =>
+      resolveAzureModelCapabilities({
+        providerApiKeyId: key.id,
+        modelId: "production",
+      });
+    await sync();
+    expect(await resolve()).toMatchObject({ status: "known" });
+    const [row] =
+      await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels([
+        key.id,
+      ]);
+    if (!row.evidence) throw new Error("Missing synced evidence");
+    expect(row.evidence.configurationHash).toMatch(/^hmac-sha256-v1:/);
+    expect(
+      classifyAzureModelCapabilities({
+        ...row,
+        evidence: { ...row.evidence, configurationHash: "0".repeat(64) },
+      }),
+    ).toMatchObject({ status: "stale" });
+    const serialized = JSON.stringify(
+      await getAvailableLlmModels({
+        userId: user.id,
+        organizationId: org.id,
+        query: { provider: "azure", apiKeyId: key.id },
+      }),
+    );
+    expect(serialized).not.toContain(headers.Authorization);
+    expect(serialized).not.toContain("configurationHash");
+    expect(serialized).not.toContain("hmac-sha256-v1:");
+    const rotated = { Authorization: "Bearer rotated-sensitive-header" };
+    await LlmProviderApiKeyModel.update(key.id, { extraHeaders: rotated });
+    expect(await resolve()).toMatchObject({ status: "stale" });
+    await sync(rotated);
+    expect(await resolve()).toMatchObject({ status: "known" });
+    config.auth.secret = "synthetic-rotated-deployment-key";
+    expect(await resolve()).toMatchObject({ status: "stale" });
+    await sync(rotated);
+    expect(await resolve()).toMatchObject({ status: "known" });
   });
 
   test("a regional model catalog does not attest a deployment on this resource", async ({

@@ -50,7 +50,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
     console.log(`SSO login did not produce a session; final URL: ${finalUrl}`);
     const errorToast = ssoPage.locator('[role="alert"]').first();
     const errorText = await errorToast.textContent().catch(() => null);
-    if (errorText && !errorText.includes("Default Admin Credentials Enabled")) {
+    if (errorText) {
       console.log(`SSO login failed with error: ${errorText}`);
     }
   }

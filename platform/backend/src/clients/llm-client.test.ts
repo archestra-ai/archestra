@@ -5,6 +5,7 @@ import {
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   type SupportedProviderEndpoint,
+  UNATTENDED_HEADER,
 } from "@archestra/shared";
 import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
@@ -13,6 +14,7 @@ import config from "@/config";
 import {
   ConversationModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   UserTokenModel,
 } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -44,7 +46,7 @@ const mockCreateAnthropic = vi.hoisted(() =>
     },
   ),
 );
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
 vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {
@@ -209,6 +211,23 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  test("the direct availability fetch preserves Gemini Vertex routing", () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    try {
+      const model = createDirectLLMModel({
+        provider: "gemini",
+        apiKey: undefined,
+        modelName: "gemini-2.5-flash",
+        baseUrl: null,
+      });
+      expect(typeof model === "string" ? model : model.provider).toContain(
+        "vertex",
+      );
+    } finally {
+      mockIsVertexAiEnabled.mockReturnValue(false);
+    }
+  });
+
   test("decodes Bedrock SigV4 credentials on the direct provider path", () => {
     const marker = encodeBedrockSigV4Marker({
       accessKeyId: "test-access-key",
@@ -344,7 +363,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
     // The upstream Archestra relays thinking as DeepSeek-style
     // `reasoning_content`; the strict openai provider ("openai.chat") drops
@@ -382,7 +401,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
 
     // The stubbed upstream fails the call; the request body is captured
@@ -951,6 +970,31 @@ describe("createDirectLLMModel", () => {
       expect(body.options).toMatchObject({ num_ctx: 4096, top_k: 40 });
     });
 
+    test.for([
+      // A summary or title request sets no options of its own.
+      { caller: "a request without options", configured: null, numCtx: 16384 },
+      { caller: "a turn", configured: { num_ctx: 4096 }, numCtx: 4096 },
+    ])("sends the admin's num_ctx on $caller", async ({
+      configured,
+      numCtx,
+    }) => {
+      const row = await ModelModel.create({
+        externalId: "ollama-native/qwen3:4b",
+        provider: "ollama-native",
+        modelId: "qwen3:4b",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(row.id, {
+        configuredParameters: { num_ctx: 16384 },
+      });
+
+      const body = await wireBodyFor(configured);
+
+      expect(body.options).toMatchObject({ num_ctx: numCtx });
+    });
+
     it("passes a non-JSON body through untouched", async () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
       vi.stubGlobal("fetch", mockFetch);
@@ -1252,6 +1296,25 @@ describe("createLLMModel", () => {
     }
   });
 
+  test("says when no person answers for the session, as a Scheduled task run does", () => {
+    for (const unattended of [true, false]) {
+      createLLMModel({
+        provider: "openai",
+        apiKey: "test",
+        agentId: "agent",
+        modelName: "gpt-4",
+        baseUrl: null,
+        source: "chat",
+        userId: "user",
+        sessionId: "session",
+        unattended,
+      });
+      expect(
+        new Headers(capturedCreateOpenAIOptions.headers).get(UNATTENDED_HEADER),
+      ).toBe(unattended ? "1" : null);
+    }
+  });
+
   test("keeps an internal call's session out of OpenAPPA", () => {
     config.llmProxy.plugins = ["appa"];
     config.openappa = {
@@ -1331,6 +1394,64 @@ describe("createLLMModel", () => {
       accessKeyId: undefined,
       baseURL: expect.stringContaining("/v1/bedrock/agent-1"),
     });
+  });
+
+  test("current chat key selection overrides a stored key but cannot borrow another user's key", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const other = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const oldKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      access: "org",
+    });
+    const selectedKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      access: "org",
+    });
+    const privateKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      userId: other.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      title: "Synthetic selection",
+      chatApiKeyId: oldKey.id,
+    });
+    const params = {
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      model: "gpt-4o",
+      provider: "openai" as const,
+      conversationId: conversation.id,
+    };
+    const selected = await createLLMModelForAgent({
+      ...params,
+      providerKeySelection: { providerApiKeyId: selectedKey.id },
+    });
+    expect(selected.chatApiKeyId).toBe(selectedKey.id);
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({ [CHAT_API_KEY_ID_HEADER]: selectedKey.id }),
+    );
+    await expect(
+      createLLMModelForAgent({
+        ...params,
+        providerKeySelection: { providerApiKeyId: privateKey.id },
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 
   test("uses an explicit keyless Azure conversation key and forwards its inference URL to the proxy", async ({

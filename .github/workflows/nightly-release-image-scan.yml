@@ -1,0 +1,156 @@
+name: Nightly Release Image Scan
+
+# The merge queue scans a release's images, and publication scans the same
+# bytes again before tagging them. An advisory published in between holds the
+# release, and the only way out is a new version. A line can go days between
+# releases, so rebuild every image a release on main and on each supported
+# release line would publish, scan it under the release policy, and alert in
+# Slack before anyone cuts a release that would be held.
+#
+# Advisory only: these builds gate nothing and are never publication evidence.
+# They cover linux/amd64; releases still scan both architectures.
+
+on:
+  schedule:
+    # After the 04:17 UTC Platform byte scan, which covers main's Platform images.
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+    inputs:
+      test-alert:
+        description: "Skip the scan and post a test message to the alerts channel"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: nightly-release-image-scan
+  cancel-in-progress: false
+
+jobs:
+  targets:
+    name: Select release images per line
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Read each line's image inventory.
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Every supported line's head.
+      - name: Select images
+        id: targets
+        run: python3 .github/scripts/nightly-release-image-scan.py targets
+
+  scan:
+    name: Scan ${{ matrix.branch }} ${{ matrix.image }}
+    needs: [targets]
+    if: ${{ !inputs.test-alert }}
+    runs-on: ubuntu-24.04-16core
+    timeout-minutes: 60
+    permissions:
+      contents: read # Checkout the line's head.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    env:
+      IMAGE_REFERENCE: nightly-scan-${{ matrix.image }}:${{ matrix.sha }}
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+      - name: Checkout line head
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ matrix.sha }}
+      - name: Read release version
+        id: version
+        run: echo "version=$(jq -er .platform .github/release-please/.release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        uses: $/.github/actions/build-docker-image
+        with:
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: "false"
+          load: "true"
+          provenance: "false"
+          tags: ${{ env.IMAGE_REFERENCE }}
+          version: ${{ steps.version.outputs.version }}
+          # Read-only: the publish paths own cache export for these images.
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-amd64
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+      - name: Scan image
+        uses: $/.github/actions/scan-docker-image
+        with:
+          image: local://${{ env.IMAGE_REFERENCE }}
+          exit-code: "true"
+
+  notify:
+    name: Report scan failures
+    needs: [targets, scan]
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.targets.result == 'failure' || needs.scan.result == 'failure' || inputs.test-alert) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed scan jobs of this run.
+      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
+    steps:
+      # The webhook lives in GCP Secret Manager. A dedicated service account
+      # reads only the alerting secrets, so no repository secret holds it.
+      # This one posts to #alerts; ci-alerts-slack-webhook-url posts to #approvals.
+      - name: Authenticate to read the alerting webhook
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the alerting webhook
+        id: alerting
+        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
+        with:
+          secrets: |-
+            slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url
+
+      - name: Post failures to alerting
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
+          TEST_ALERT: ${{ inputs.test-alert }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOBS_URL: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+        run: |
+          set -euo pipefail
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "::warning::The alerting webhook secret is empty; skipping Slack notification."
+            exit 0
+          fi
+
+          # One line per failed job: a failed "Scan image" step is a finding (or
+          # a Scout outage that outlasted its retries); any other step is a build failure.
+          failures="$(gh api --paginate "$JOBS_URL?per_page=100" --jq '
+            .jobs[] | select(.conclusion == "failure") |
+            ([.steps[] | select(.conclusion == "failure") | .name][0] // "setup") as $step |
+            "• <\(.html_url)|\(.name)>: " + (if $step == "Scan image" then "fixable critical/high CVEs" else "failed at \($step)" end)')"
+
+          if [[ "$TEST_ALERT" == "true" ]]; then
+            message=":test_tube: Test of the Nightly Release Image Scan alert; no images were scanned, nothing to do. <$RUN_URL|View workflow run>"
+            jq -n --arg text "$message" '{text: $text}' |
+              curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            exit 0
+          fi
+
+          message=":rotating_light: Nightly release image scan found images a release would be held on. Fix them before cutting a release (see platform/dev/RELEASE.md, \"Image CVE Gate\"). <$RUN_URL|View workflow run>"$'\n'"${failures:-• No failed job was listed; check the run.}"
+          jq -n --arg text "$message" '{text: $text}' |
+            curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

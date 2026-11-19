@@ -147,21 +147,28 @@ export function prepareAppaRequest(params: {
   releasedSpawnCalls?: string[];
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
-   * The client's own wire, when a Model Router route translated it to this
+   * The client's own wire, when a Unified Model API route translated it to this
    * one. Turns are counted on it.
    */
   clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
   // A wire outside the APPA families — Gemini, Bedrock, Cohere, native
   // Ollama — is governed in part rather than refused: calls and results are
-  // still ruled on, but no turn accounting runs unless a Model Router route
+  // still ruled on, but no turn accounting runs unless a Unified Model API route
   // kept the client's own wire to count turns on. Bedrock Converse still
   // restores notices; on the others a notice stays in the history as the
   // notice call the client ran.
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  const defersTools = declared.some(declaresToolSearch);
+  const grokDeferredTools =
+    params.session?.provenance === "grok-session-header" &&
+    ["search_tool", "use_tool"].every((name) =>
+      entries.some(
+        (entry) => entry.name === name && entry.namespace === undefined,
+      ),
+    );
+  const defersTools = grokDeferredTools || declared.some(declaresToolSearch);
   refuseUnsupportedToolTypes(declared);
   // Provider-run tools never return a client call to gate. Responses web search
   // remains governed by the response adapter, not by its declaration.
@@ -274,7 +281,7 @@ export function prepareAppaRequest(params: {
       }),
     ];
   } else if (params.delegationMarkers) {
-    // A Model Router route collected these from the client's own wire, and
+    // A Unified Model API route collected these from the client's own wire, and
     // stripped them there, before translating it to this one.
     delegation = { markers: params.delegationMarkers };
     childTrajectoryReceipts = params.childTrajectoryReceipts;
@@ -710,7 +717,7 @@ function restoreHistory(params: {
     allowHistoricalControl: params.declaredCount === 0,
     isControlTool: params.ours.control,
   });
-  const noticeCallIds = restoreAppaNotices({
+  const { callIds: noticeCallIds, memoryTexts } = restoreAppaNotices({
     family: params.family,
     body: params.body,
     isNoticeTool: params.ours.notice,
@@ -728,7 +735,10 @@ function restoreHistory(params: {
     ...(historicalControlToolName ? { historicalControlToolName } : {}),
     noticeCallIds,
     changed:
-      (historicalControlToolName ? 1 : 0) + noticeCallIds.size + askUsers,
+      (historicalControlToolName ? 1 : 0) +
+      noticeCallIds.size +
+      memoryTexts +
+      askUsers,
   };
 }
 

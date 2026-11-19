@@ -2,7 +2,7 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,15 +30,16 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Credential | Where to get it | Runs as |
 | --- | --- | --- |
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
-| Team token | **Settings → Teams**, then the team's token | The team |
-| Organization token | **Settings → Auth** | The organization |
+| Legacy team or organization token | Its migrated account in **Settings → Service Accounts** | The migrated service account |
 | Service account API key | **Settings → Service Accounts**, then the account's API key | The account |
 | OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
 
 For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilities can share the same client credentials.
 
-Use a service account API key for automations. Team and organization tokens get no code sandbox: the agent cannot run commands, attached files it cannot read inline are dropped, and large tool results are truncated.
+Client-credentials tokens can invoke in-process agents, but cannot start or continue dedicated Agent Runtime runs. Binding the OAuth client to a service account does not remove this restriction. A service-account API key or a user authorization-code token is a different credential, subject to that account's agent, runtime and model access.
+
+Use a service account API key for automations. Legacy team and organization tokens run as their migrated service account, with the same sandbox behavior as other service-account keys.
 
 What to know:
 
@@ -84,6 +85,32 @@ The reply is the agent's message:
 ```
 
 **Some calls return a task, not a message:** an agent with a [dedicated runtime](/docs/agents/runtime), a tool call that needs approval, or a background run. A finished task holds the answer in its text artifact `agent-response`. `messageId` is optional.
+
+## Sending Files
+
+Add a file part next to the text to give the agent a screenshot or a PDF to work from. A part carries the file in one of two ways:
+
+- **Inline:** `raw` holds the file as base64.
+- **By link:** `url` points at the file, and Archestra downloads it. Use this for large files.
+
+```json
+"message": {
+  "role": "ROLE_USER",
+  "parts": [
+    { "text": "What does this screenshot show, and does the invoice match it?" },
+    { "raw": "iVBORw0KGgo...", "mediaType": "image/png", "filename": "screenshot.png" },
+    { "url": "https://files.example.com/invoice.pdf" }
+  ]
+}
+```
+
+The agent's model reads the file types listed in `defaultInputModes` on its AgentCard, such as images and PDFs. A file of any other type goes to the agent's [code sandbox](/docs/agents#code-sandbox) when it has one, where its tools can open it. An agent with a [dedicated runtime](/docs/agents/runtime) gets every file in its container.
+
+What to know:
+
+- A link must be a public `https` URL that needs no sign-in, such as a presigned link. Archestra sends no credentials with the download.
+- A message takes up to 20 files. Each one must fit [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT).
+- Task history names an inline file but does not return its content. Send the file again when a later turn needs it.
 
 ## Continuing a Conversation
 
@@ -208,7 +235,9 @@ Errors come back with HTTP status `200` and a JSON-RPC `error` object. Only Agen
 | `-32602` Failed to resolve actor from token | The token is invalid or cannot reach this agent |
 | `-32601` Method not found | A method name from another A2A version, such as `message/send` |
 | `-32600` Invalid Request | The params do not match the schema. `data` names the field, for example a `role` that is not `ROLE_USER` |
+| `-32602` Invalid file part | A file is empty, too large, or its `url` could not be downloaded. The message names the file and the reason |
 | `-32602` Context not found | A `contextId` that Archestra did not create, or that belongs to someone else |
 | `-32004` the task is in a terminal state | A message sent to a finished task. Send `contextId` without `taskId` |
+| `-32004` OAuth applications cannot use Agent Runtime | A client-credentials token targets a dedicated-runtime agent. Use an in-process agent or a permitted service-account API key or user credential. |
 | `-32009` Unsupported A2A-Version | An `A2A-Version` header other than `0.3` or `1.0` |
 | `-32603` Internal error | The run failed, for example at the LLM provider. `data.reason` has the provider's message |

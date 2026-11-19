@@ -3,7 +3,8 @@ name: Open Backport PRs
 on:
   push:
     branches: [main]
-  # Only merged PRs from branches in this repository can request backports.
+  # Label events only for PRs from branches in this repository: fork PR events
+  # carry no secrets, so the scheduled poll backports merged fork PRs instead.
   pull_request:
     branches: [main]
     types: [labeled]
@@ -40,7 +41,7 @@ jobs:
       # Only run automation from the trusted default branch. Cherry-picked code
       # is never executed and no dependencies or repository hooks are installed.
       - name: Checkout trusted automation
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
@@ -48,12 +49,18 @@ jobs:
 
       # An App token makes push/PR events trigger ordinary CI. GITHUB_TOKEN
       # would suppress those events and leave the backport without its checks.
+      # Cherry-picks can change .github/workflows, which needs the workflows
+      # permission; the shared wrapper cannot request it, so this calls the
+      # upstream action it wraps (same pin, token revoked at job end).
       - name: Generate a backport token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write # push backport branches
+          permission-pull-requests: write # open backport PRs, comment on the source PR
+          permission-workflows: write # push cherry-picks that touch .github/workflows
 
       - name: Configure Git identity
         uses: $/.github/actions/configure-git-identity

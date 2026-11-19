@@ -90,7 +90,7 @@ describe("LogsSectionLayout", () => {
         [
           "LLM Proxy",
           "MCP Gateway",
-          "Guardrail consults",
+          "Guardrails",
           "Agent connections",
           "Audit",
         ].includes(name ?? ""),
@@ -98,7 +98,7 @@ describe("LogsSectionLayout", () => {
     expect([...new Set(tabs)]).toEqual([
       "LLM Proxy",
       "MCP Gateway",
-      "Guardrail consults",
+      "Guardrails",
       "Agent connections",
       "Audit",
     ]);

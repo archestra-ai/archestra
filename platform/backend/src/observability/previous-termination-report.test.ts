@@ -10,11 +10,6 @@ vi.mock("@sentry/node", () => ({
   captureException: captureExceptionSentry,
 }));
 
-const capturePosthog = vi.hoisted(() => vi.fn());
-vi.mock("@/services/error-tracking", () => ({
-  posthogErrorTrackingService: { captureException: capturePosthog },
-}));
-
 // The service-account namespace file and the marker file are externally-owned
 // storage (kubelet-projected volume / container-local tmp).
 const readFileMock = vi.hoisted(() => vi.fn());
@@ -117,13 +112,11 @@ describe("reportAbnormalPreviousTermination", () => {
       exit_code: "137",
     });
 
-    expect(capturePosthog).toHaveBeenCalledTimes(1);
-    expect(capturePosthog.mock.calls[0][0].properties).toMatchObject({
-      $exception_fingerprint:
-        "container-abnormal-termination/archestra-platform/OOMKilled",
-      reason: "OOMKilled",
-      exitCode: 137,
-    });
+    expect(options.fingerprint).toEqual([
+      "container-abnormal-termination",
+      "archestra-platform",
+      "OOMKilled",
+    ]);
 
     // Write-then-rename keeps the marker file crash-safe.
     expect(writeFileMock).toHaveBeenCalledWith(
@@ -148,7 +141,6 @@ describe("reportAbnormalPreviousTermination", () => {
     await reportAbnormalPreviousTermination();
 
     expect(captureExceptionSentry).not.toHaveBeenCalled();
-    expect(capturePosthog).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
   });
 
@@ -195,7 +187,6 @@ describe("reportAbnormalPreviousTermination", () => {
     await reportAbnormalPreviousTermination();
 
     expect(captureExceptionSentry).not.toHaveBeenCalled();
-    expect(capturePosthog).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
   });
 

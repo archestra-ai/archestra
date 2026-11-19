@@ -1,6 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { ModelModel } from "@/models";
 import MemberModel from "@/models/member";
+import ModelModel from "@/models/model";
 import type { ProxyRequestContext } from "@/models/proxy-request-context";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";

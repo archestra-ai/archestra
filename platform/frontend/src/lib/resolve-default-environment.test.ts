@@ -2,9 +2,9 @@
 import { describe, expect, test } from "vitest";
 import { resolveDefaultEnvironmentId } from "./resolve-default-environment";
 
-const explore = { id: "env-explore", canDeploy: true };
-const locked = { id: "env-locked", canDeploy: false };
-const unlocked = { id: "env-locked", canDeploy: true };
+const explore = { id: "env-explore", deployKinds: ["mcpRegistry", "app"] };
+const locked = { id: "env-locked", deployKinds: [] };
+const unlocked = { id: "env-locked", deployKinds: ["mcpRegistry"] };
 
 describe("resolveDefaultEnvironmentId", () => {
   test("returns the environment configured for the resource kind", () => {
@@ -43,6 +43,16 @@ describe("resolveDefaultEnvironmentId", () => {
         environments: [locked],
         resourceDefaults: { mcpRegistry: "env-locked" },
         resource: "mcpRegistry",
+      }),
+    ).toBeNull();
+  });
+
+  test("falls back when the user may deploy other kinds there but not this one", () => {
+    expect(
+      resolveDefaultEnvironmentId({
+        environments: [unlocked],
+        resourceDefaults: { agent: "env-locked", mcpRegistry: "env-locked" },
+        resource: "agent",
       }),
     ).toBeNull();
   });

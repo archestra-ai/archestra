@@ -14,6 +14,7 @@ export function makeInstalledServer(
     serverType: "local",
     secretId: null,
     environmentValues: null,
+    desktopArguments: null,
     ownerId: "test-user-admin",
     createdByServiceAccountId: null,
     teamId: null,

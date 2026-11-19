@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-17
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -52,7 +52,7 @@ Give people **Can use** on an agent to let them run it without changing it. Give
 Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
 
 1. Open the item's **Permissions** control.
-2. Add a person, team, role, service account, or **Everyone in the organization**.
+2. Add a person, team, role, service account, OAuth client (on Knowledge Bases, knowledge connectors, and files), or **Everyone in the organization**.
 3. Choose their level, then save.
 
 | Level | Allows |
@@ -66,7 +66,7 @@ You need **Manage access** on the item to share it. To share every current and f
 
 Sharing with everyone or a role also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
 
-Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers).
+Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers). Agent Runtimes have a **Can use and configure** level instead of **Can update**; see [who can use each runtime](/docs/agents/runtime#choose-who-can-use-each-runtime).
 
 ### Share Across Teams
 
@@ -87,6 +87,20 @@ Roles control organization actions, such as creating resources and managing user
 
 See the [exact permission matrix](/docs/reference/permissions#predefined-roles). To change a member's roles, open **Settings → Users**, choose **Change role** on their row, and save with **Update Roles**.
 
+## Compose Access from Granular Roles
+
+Give someone exactly what their job needs without writing a custom role: assign a few granular roles, such as **Agent Writer** and **Log Reader**, and their permissions add up. Granular roles are built in, grouped by area, and cannot be edited.
+
+1. Open the role picker where roles are assigned: **Change role** on a row in **Settings → Users**, **Inherited Roles** on a team, or **Roles** on a service account.
+2. Pick an area on the left, such as **Agents** or **MCP**, and check the roles you need on the right. The checkbox beside an area takes all of its roles. The chevron at the end of a role shows what it grants.
+3. Each choice applies as you make it. Close the picker and save.
+
+What to know:
+
+- Each granular role grants a few permissions, such as [`agent:read`](/docs/reference/permissions#agent:read). **View built-in roles** on **Settings → Roles** lists every built-in role and what it grants, and the [permissions reference](/docs/reference/permissions#granular-roles) has the full table.
+- A granular role opens a page, not every item on it. Which agents or servers someone sees still depends on what is shared with them.
+- A new custom role can start from one of the four preset roles or from another custom role, not from a granular role.
+
 <span id="custom-roles"></span>
 
 <span id="multiple-roles-and-team-grants"></span>
@@ -105,7 +119,9 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 ## Team Member and Admin Roles
 
-Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage that team's members and settings, and its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) and their usage. Team admin status does not pass to descendant teams.
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage only that team's members and settings.
+
+Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy, and see [those teams' costs](/docs/llm-proxy/costs-and-limits/costs#view-your-teams-costs). Their own team's ceiling stays protected unless they also administer a parent team.
 
 <span id="delegation-and-concurrent-edits"></span>
 
@@ -127,4 +143,4 @@ Choose **Make owner** on another person's row in the permissions editor. You nee
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
-For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api#/Permissions/getResourcePermissions).
+For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).

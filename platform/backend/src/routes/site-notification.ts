@@ -21,6 +21,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               expiresAt: z.string().nullable(),
               createdAt: z.string(),
               isActive: z.boolean(),
+              dismissible: z.boolean(),
             })
             .nullable(),
         ),
@@ -36,13 +37,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         return reply.send(null);
       }
 
-      return reply.send({
-        id: notification.id,
-        content: notification.content,
-        expiresAt: notification.expiresAt?.toISOString() ?? null,
-        createdAt: notification.createdAt.toISOString(),
-        isActive: notification.isActive,
-      });
+      return reply.send(serializeNotification(notification));
     },
   );
 
@@ -61,6 +56,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               expiresAt: z.string().nullable(),
               createdAt: z.string(),
               isActive: z.boolean(),
+              dismissible: z.boolean(),
             })
             .nullable(),
         ),
@@ -91,6 +87,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           content: z.string().min(1),
           expiresAt: z.string().datetime().optional(),
           isActive: z.boolean().optional(),
+          dismissible: z.boolean().optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -99,6 +96,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             expiresAt: z.string().nullable(),
             createdAt: z.string(),
             isActive: z.boolean(),
+            dismissible: z.boolean(),
           }),
         ),
       },
@@ -113,6 +111,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           ? new Date(request.body.expiresAt)
           : undefined,
         isActive: request.body.isActive ?? true,
+        dismissible: request.body.dismissible ?? true,
       });
 
       return reply.send(serializeNotification(notification));
@@ -133,6 +132,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           content: z.string().min(1).optional(),
           expiresAt: z.string().datetime().nullable().optional(),
           isActive: z.boolean().optional(),
+          dismissible: z.boolean().optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -141,6 +141,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             expiresAt: z.string().nullable(),
             createdAt: z.string(),
             isActive: z.boolean(),
+            dismissible: z.boolean(),
           }),
         ),
       },
@@ -166,6 +167,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               : null
             : undefined,
         isActive: request.body.isActive,
+        dismissible: request.body.dismissible,
       });
 
       if (!notification) {
@@ -210,6 +212,7 @@ function serializeNotification(notification: {
   expiresAt: Date | null;
   createdAt: Date;
   isActive: boolean;
+  dismissible: boolean;
 }) {
   return {
     id: notification.id,
@@ -217,5 +220,6 @@ function serializeNotification(notification: {
     expiresAt: notification.expiresAt?.toISOString() ?? null,
     createdAt: notification.createdAt.toISOString(),
     isActive: notification.isActive,
+    dismissible: notification.dismissible,
   };
 }

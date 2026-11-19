@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import {
+  buildPgConnectionConfig,
+  isEntraDatabaseAuthEnabled,
+  isRdsIamAuthEnabled,
+  type RdsIamConnectionOptions,
+} from "@/database/rds-iam";
 import logger from "@/logging";
 
 /**
@@ -153,8 +159,14 @@ export function createInMemoryNotifyHub(): PgNotifyHub {
 
 export function createPostgresNotifyHub(
   connectionString: string,
-  clientFactory: PgClientFactory = createDefaultPgClient,
+  clientFactoryOrOptions:
+    | PgClientFactory
+    | RdsIamConnectionOptions = createDefaultPgClient,
 ): PgNotifyHub {
+  const clientFactory: PgClientFactory =
+    typeof clientFactoryOrOptions === "function"
+      ? clientFactoryOrOptions
+      : (url) => createDefaultPgClient(url, clientFactoryOrOptions);
   return new PostgresNotifyHub(connectionString, clientFactory);
 }
 
@@ -611,13 +623,38 @@ function parseFanoutMessage(
   }
 }
 
-function createDefaultPgClient(connectionString: string): PgClient {
-  return new pg.Client({
-    connectionString,
-    connectionTimeoutMillis: 1_000,
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10_000,
-  });
+/** @public — exported for unit tests */
+export function createDefaultPgClient(
+  connectionString: string,
+  options: RdsIamConnectionOptions = {},
+): PgClient {
+  const env = options.env ?? process.env;
+  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const entraAuthEnabled =
+    options.entraAuthEnabled ?? isEntraDatabaseAuthEnabled(env);
+  const awsRegion =
+    options.awsRegion?.trim() ||
+    env.ARCHESTRA_DATABASE_AWS_REGION?.trim() ||
+    undefined;
+  return new pg.Client(
+    buildPgConnectionConfig(
+      connectionString,
+      {
+        // A token fetch precedes each passwordless connection.
+        connectionTimeoutMillis:
+          iamAuthEnabled || entraAuthEnabled ? 10_000 : 1_000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10_000,
+      },
+      {
+        ...options,
+        iamAuthEnabled,
+        entraAuthEnabled,
+        awsRegion,
+        env,
+      },
+    ),
+  );
 }
 
 function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {

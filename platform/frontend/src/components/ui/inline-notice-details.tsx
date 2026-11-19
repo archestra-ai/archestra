@@ -19,11 +19,14 @@ export function InlineNoticeDetails({
   children,
   className,
   label = "details",
+  expandOnMobile = false,
 }: {
   children: string;
   className?: string;
   /** What the toggle shows and hides, as in "Show full error". */
   label?: string;
+  /** Show diagnostics without a toggle below the sm breakpoint. */
+  expandOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -32,19 +35,24 @@ export function InlineNoticeDetails({
       <button
         type="button"
         data-slot="inline-notice-details-toggle"
-        className="col-start-1 row-start-2 justify-self-start sm:col-start-2 underline underline-offset-2 opacity-80 hover:opacity-100"
+        className={cn(
+          "col-start-1 row-start-2 justify-self-start sm:col-start-2 underline underline-offset-2 opacity-80 hover:opacity-100",
+          expandOnMobile && "max-sm:hidden",
+        )}
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
       >
         {open ? `Hide ${label}` : `Show ${label}`}
       </button>
-      {open && (
+      {(open || expandOnMobile) && (
         <pre
           id={id}
           data-slot="inline-notice-details"
           className={cn(
             "col-start-1 col-end-3 row-start-3 max-h-40 sm:col-start-2 sm:col-end-4 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed",
+            expandOnMobile && "max-sm:col-span-full",
+            !open && "sm:hidden",
             className,
           )}
         >

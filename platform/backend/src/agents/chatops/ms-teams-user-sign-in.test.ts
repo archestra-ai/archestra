@@ -71,6 +71,7 @@ describe("Teams file sign-in", () => {
         tenantId: TENANT_ID,
         aadObjectId: SENDER_ID,
         client: CLIENT,
+        access: "own",
       }),
     ).toBe("access-1");
   });
@@ -109,6 +110,7 @@ describe("Teams file sign-in", () => {
     const signInUrl = await msTeamsUserSignIn.createPendingSignIn({
       tenantId: TENANT_ID,
       message: heldMessage(),
+      access: "own",
     });
     const key = new URL(signInUrl).searchParams.get("key") ?? "";
     // The card is clicked twice before either sign-in finishes.
@@ -209,6 +211,59 @@ describe("Teams file sign-in", () => {
     ).not.toBeNull();
   });
 
+  test("a group-chat sign-in asks for the person's own files; a channel sign-in for every file they can open", async () => {
+    const groupChat = await startSignIn(heldMessage(), "own");
+    const channel = await startSignIn(heldMessage(), "all");
+
+    expect(groupChat.searchParams.get("scope")?.split(" ")).toContain(
+      "https://graph.microsoft.com/Files.Read",
+    );
+    expect(groupChat.searchParams.get("scope")).not.toContain("Files.Read.All");
+    expect(channel.searchParams.get("scope")?.split(" ")).toContain(
+      "https://graph.microsoft.com/Files.Read.All",
+    );
+  });
+
+  test("a sign-in for own files only does not read channel files, and is kept", async () => {
+    await signedInWithExpiredToken("refresh-0", "openid Files.Read");
+
+    expect(await accessToken("all")).toBeNull();
+    expect(
+      await ChatOpsMsTeamsUserConnectionModel.find({
+        tenantId: TENANT_ID,
+        aadObjectId: SENDER_ID,
+      }),
+    ).not.toBeNull();
+  });
+
+  test("a sign-in for every file serves both kinds, and refreshes keep its access", async () => {
+    const refreshScopes: string[] = [];
+    server.use(
+      http.post(TOKEN_URL, async ({ request }) => {
+        refreshScopes.push(
+          new URLSearchParams(await request.text()).get("scope") ?? "",
+        );
+        return HttpResponse.json({
+          access_token: "access-all",
+          refresh_token: "refresh-all",
+          expires_in: 3600,
+          scope: "https://graph.microsoft.com/Files.Read.All openid profile",
+        });
+      }),
+    );
+    await signedInWithExpiredToken(
+      "refresh-0",
+      "https://graph.microsoft.com/Files.Read.All openid profile",
+    );
+
+    expect(await accessToken("all")).toBe("access-all");
+    expect(await accessToken("own")).toBe("access-all");
+    expect(refreshScopes).toHaveLength(1);
+    expect(refreshScopes[0].split(" ")).toContain(
+      "https://graph.microsoft.com/Files.Read.All",
+    );
+  });
+
   test("an unknown or malformed sign-in link starts nothing", async () => {
     expect(
       await msTeamsUserSignIn.beginSignIn({
@@ -225,6 +280,8 @@ describe("Teams file sign-in", () => {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+type MsTeamsFileAccess = "own" | "all";
 
 function heldMessage(): IncomingChatMessage {
   return {
@@ -250,10 +307,14 @@ function heldMessage(): IncomingChatMessage {
   };
 }
 
-async function startSignIn(message: IncomingChatMessage): Promise<URL> {
+async function startSignIn(
+  message: IncomingChatMessage,
+  access: MsTeamsFileAccess = "own",
+): Promise<URL> {
   const signInUrl = await msTeamsUserSignIn.createPendingSignIn({
     tenantId: TENANT_ID,
     message,
+    access,
   });
   return beginSignIn(new URL(signInUrl).searchParams.get("key") ?? "");
 }
@@ -279,11 +340,14 @@ function tokenResponse(claims: { oid: string; tid: string }) {
   };
 }
 
-async function signedInWithExpiredToken(refreshToken: string): Promise<void> {
+async function signedInWithExpiredToken(
+  refreshToken: string,
+  scope = "Files.Read",
+): Promise<void> {
   await ChatOpsMsTeamsUserConnectionModel.save({
     tenantId: TENANT_ID,
     aadObjectId: SENDER_ID,
-    scope: "Files.Read",
+    scope,
     tokens: {
       accessToken: "access-0",
       refreshToken,
@@ -292,10 +356,13 @@ async function signedInWithExpiredToken(refreshToken: string): Promise<void> {
   });
 }
 
-function accessToken(): Promise<string | null> {
+function accessToken(
+  access: MsTeamsFileAccess = "own",
+): Promise<string | null> {
   return msTeamsUserSignIn.getAccessToken({
     tenantId: TENANT_ID,
     aadObjectId: SENDER_ID,
     client: CLIENT,
+    access,
   });
 }

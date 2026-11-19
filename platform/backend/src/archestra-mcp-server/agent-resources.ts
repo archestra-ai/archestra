@@ -9,10 +9,14 @@ import {
   type ResourcePermissionGrant,
   ResourcePermissionGrantSchema,
   resolveAgentCatalogId,
+  StoredSubagentLoadBalancingConfigSchema,
+  type SubagentLoadBalancingConfig,
+  SubagentLoadBalancingConfigSchema,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+  withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import { z } from "zod";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
@@ -31,8 +35,14 @@ import {
   KnowledgeBaseModel,
   OrganizationModel,
 } from "@/models";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
+import {
+  agentNetworkRuntimeChanged,
+  assertCanWriteAgentNetworkPolicy,
+  syncAgentNetworkRuntimes,
+} from "@/services/agent-network-policy";
 import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
@@ -40,10 +50,17 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import { applyAgentRuntimeAccess } from "@/services/agent-runtime/agent-runtime-access";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, AgentRuntime, ToolExposureMode } from "@/types";
+import type {
+  Agent,
+  AgentRuntime,
+  NetworkPolicy,
+  NetworkPolicyInput,
+  ToolExposureMode,
+} from "@/types";
 import {
   AgentActivationSkillSchema,
   AgentRuntimeSchema,
@@ -52,6 +69,7 @@ import {
   ApiError,
   InsertAgentSchemaBase,
   LabelWithDetailsSchema,
+  NetworkPolicyInputSchema,
   SuggestedPromptInputSchema,
   ToolExposureModeSchema,
   UuidIdSchema,
@@ -142,6 +160,11 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
       ),
+    subagentLoadBalancing: SubagentLoadBalancingConfigSchema.nullable()
+      .optional()
+      .describe(
+        "Optional subagent load-balancing and automatic failover policy across assigned runtime subagents.",
+      ),
   })
   .strict();
 
@@ -170,7 +193,7 @@ export const AgentRuntimeToolInputSchema = z
       .required({ image: true })
       .strict()
       .describe(
-        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the model router.",
+        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the unified model API.",
       ),
   ])
   .describe(
@@ -245,6 +268,11 @@ const ResourceDetailOutputSchema = z.object({
     .boolean()
     .describe(
       "Whether the agent may delegate to every internal agent the calling user can access.",
+    ),
+  subagentLoadBalancing: StoredSubagentLoadBalancingConfigSchema.nullable()
+    .optional()
+    .describe(
+      "Configured subagent load-balancing and failover policy across assigned runtime subagents, or null when unconfigured.",
     ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
@@ -349,7 +377,9 @@ export async function handleCreateResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput;
+    networkPolicy?: NetworkPolicyInput;
     llmApiKeyId?: string;
     modelId?: string;
   },
@@ -364,7 +394,8 @@ export async function handleCreateResource<
   logger.info(
     {
       agentId: context.agent.id,
-      createArgs: args,
+      argumentKeys: Object.keys(args),
+      argumentsSize: JSON.stringify(args).length,
       agentType: targetAgentType,
     },
     `create_${targetAgentType} tool called`,
@@ -418,7 +449,17 @@ export async function handleCreateResource<
     if (args.accessAllSubagents !== undefined) {
       createParams.accessAllSubagents = args.accessAllSubagents;
     }
+    if (args.subagentLoadBalancing !== undefined) {
+      createParams.subagentLoadBalancing = args.subagentLoadBalancing;
+    }
     Object.assign(createParams, runtimeAndModel);
+    if (args.networkPolicy !== undefined) {
+      createParams.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: null,
+      });
+    }
 
     // A template-backed agent starts with what the catalog card would give
     // it: a coding-agent prompt and dynamic tool access.
@@ -488,13 +529,20 @@ export async function handleCreateResource<
     const created = await AgentModel.create(createParams, context.userId, {
       initialPermissionGrants: args.initialGrants ?? [],
     });
+    if (created.networkPolicy) {
+      syncAgentNetworkRuntimes({
+        agentId: created.id,
+        organizationId: created.organizationId,
+      });
+    }
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (targetAgentType === "agent" || targetAgentType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
         : [];
 
@@ -717,7 +765,9 @@ export async function handleEditResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput | null;
+    networkPolicy?: NetworkPolicyInput | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
   },
@@ -730,7 +780,13 @@ export async function handleEditResource<
   const toolLabel = expectedType.replace("_", " ");
 
   logger.info(
-    { agentId: context.agent.id, editArgs: args, agentType: expectedType },
+    {
+      agentId: context.agent.id,
+      requestedId: args.id,
+      argumentKeys: Object.keys(args),
+      argumentsSize: JSON.stringify(args).length,
+      agentType: expectedType,
+    },
     `edit_${expectedType} tool called`,
   );
 
@@ -795,8 +851,18 @@ export async function handleEditResource<
     if (args.accessAllSubagents !== undefined) {
       updateData.accessAllSubagents = args.accessAllSubagents;
     }
+    if (args.subagentLoadBalancing !== undefined) {
+      updateData.subagentLoadBalancing = args.subagentLoadBalancing;
+    }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
+    }
+    if (args.networkPolicy !== undefined) {
+      updateData.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: existingAgent.networkPolicy,
+      });
     }
 
     if (expectedType === "agent" || expectedType === "mcp_gateway") {
@@ -835,13 +901,21 @@ export async function handleEditResource<
     }
     // A Slack bot of this agent follows its name and icon (best effort).
     void slackAppFactory.syncAgentIdentity(args.id);
+    if (agentNetworkRuntimeChanged({ before: existingAgent, after: updated })) {
+      syncAgentNetworkRuntimes({
+        agentId: updated.id,
+        organizationId: updated.organizationId,
+        engine: !!(existingAgent.networkPolicy || updated.networkPolicy),
+      });
+    }
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (expectedType === "agent" || expectedType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
         : [];
 
@@ -889,6 +963,43 @@ async function resolveNewAgentEnvironmentId(params: {
 }
 
 /**
+ * Validate a network policy argument with the API's own schema and the same
+ * permission the agents REST routes require. Returns the normalized policy, or
+ * null to inherit the environment's policy.
+ */
+async function resolveNetworkPolicyForWrite(params: {
+  context: ArchestraContext;
+  input: NetworkPolicyInput | null;
+  existing: NetworkPolicy | null | undefined;
+}): Promise<NetworkPolicy | null> {
+  const { context, input, existing } = params;
+  let policy: NetworkPolicy | null = null;
+  if (input !== null) {
+    const parsed = NetworkPolicyInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ApiError(
+        400,
+        `Invalid networkPolicy: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    }
+    policy = parsed.data;
+  }
+  if (!context.userId || !context.organizationId) {
+    throw new ApiError(
+      403,
+      "User and organization context are required to set a network policy.",
+    );
+  }
+  await assertCanWriteAgentNetworkPolicy({
+    userId: context.userId,
+    organizationId: context.organizationId,
+    before: existing,
+    after: policy,
+  });
+  return policy;
+}
+
+/**
  * Validate a runtime and model change the way the agents REST routes do, and
  * return only the fields to write. `existing` is the stored agent on an edit,
  * so a change to one field is checked against the other's current value.
@@ -915,20 +1026,22 @@ async function resolveRuntimeAndModelForWrite(params: {
     throw new ApiError(400, "user/organization context not available.");
   }
 
-  const runtime =
-    runtimeInput == null
-      ? runtimeInput
-      : await resolveAgentRuntimeToolInput({
-          input: runtimeInput,
-          organizationId: context.organizationId,
-        });
+  const runtime = await applyAgentRuntimeAccess({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
+    runtime:
+      runtimeInput == null
+        ? runtimeInput
+        : await resolveAgentRuntimeToolInput({
+            input: runtimeInput,
+            organizationId: context.organizationId,
+          }),
+  });
   await requireAgentRuntimePermission({
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
-    userId: context.userId,
-    organizationId: context.organizationId,
-    previous: existing?.runtime,
   });
   await assertAgentRuntimeTiersExist({
     runtime,
@@ -1013,10 +1126,16 @@ async function resolveAgentRuntimeToolInput(params: {
       "claudeCode settings apply only to the claude-code template.",
     );
   }
+  const { builtIns } = await AgentRuntimeTemplateModel.getSettings(
+    params.organizationId,
+  );
   return AgentRuntimeSchema.parse({
-    ...buildAgentCatalogRuntime({
-      id: template,
-      image: config.agentRuntime.catalogImages[template],
+    ...withAgentRuntimeDefaults({
+      runtime: buildAgentCatalogRuntime({
+        id: template,
+        image: config.agentRuntime.catalogImages[template],
+      }),
+      defaults: builtIns[template]?.settings,
     }),
     ...overrides,
   });

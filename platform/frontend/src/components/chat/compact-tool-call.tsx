@@ -149,8 +149,11 @@ function CompactCircle({
   onClick,
   icon,
   catalogId,
+  title,
 }: {
   toolName: string;
+  /** Replaces the tool's own name in the label. */
+  title?: string;
   toolCallId?: string;
   state: "running" | "completed" | "error" | "denied";
   /** Displays specific status text, such as a user review decision. */
@@ -182,6 +185,7 @@ function CompactCircle({
             ? " (denied)"
             : "";
   const label =
+    title ??
     getToolCardTitle(toolName) ??
     parseFullToolName(toolName).toolName.replace(/_/g, " ");
   const accessibleName = `${label}${stateSuffix}`;
@@ -607,6 +611,10 @@ export function CompactToolGroup({
             <CompactCircle
               key={entry.key}
               toolName={displayToolName}
+              title={getToolCardTitle(
+                displayToolName,
+                getToolShortName(displayToolName),
+              )}
               toolCallId={entry.part.toolCallId}
               state={state}
               stateLabel={
@@ -887,7 +895,7 @@ function ExpandedToolCard({
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
-        title={getToolCardTitle(toolName)}
+        title={getToolCardTitle(toolName, toolShortName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}

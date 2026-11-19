@@ -345,9 +345,7 @@ function readTaskHandle(value: unknown): { taskId: string } | null {
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.resultType !== "task") return null;
-  const task = record.task;
-  if (typeof task !== "object" || task === null) return null;
-  const taskId = (task as Record<string, unknown>).taskId;
+  const taskId = record.taskId;
   return typeof taskId === "string" ? { taskId } : null;
 }
 

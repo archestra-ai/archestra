@@ -1,10 +1,16 @@
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import {
+  alternativePagePermissionsMap,
+  requiredPagePermissionsMap,
+} from "@archestra/shared/access-control";
 import { LOGS_LAYOUT_CONFIG } from "@/consts";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 
 export function useLogsLayoutConfig() {
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permissionMap = usePermissionMap(
+    requiredPagePermissionsMap,
+    alternativePagePermissionsMap,
+  );
   const openappaEnabled = useFeature("openappaEnabled");
 
   return {
@@ -13,7 +19,7 @@ export function useLogsLayoutConfig() {
       { label: "LLM Proxy", href: "/llm/logs" },
       { label: "MCP Gateway", href: "/mcp/logs" },
       ...(openappaEnabled && permissionMap?.["/consults/logs"]
-        ? [{ label: "Guardrail consults", href: "/consults/logs" }]
+        ? [{ label: "Guardrails", href: "/consults/logs" }]
         : []),
       ...(permissionMap?.["/connections/logs"]
         ? [{ label: "Agent connections", href: "/connections/logs" }]

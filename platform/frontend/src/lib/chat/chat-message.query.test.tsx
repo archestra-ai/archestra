@@ -9,11 +9,10 @@ import {
   useUpdateChatMessage,
 } from "./chat-message.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    updateChatMessage: vi.fn(),
-    setChatMessageFeedback: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  updateChatMessage: vi.fn(),
+  setChatMessageFeedback: vi.fn(),
 }));
 
 vi.mock("@/lib/utils/api", async () => {

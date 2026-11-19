@@ -4,11 +4,7 @@ import { z } from "zod";
 import { LimitLabelModel, LimitModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit, limitReadCleanup } from "@/services/limit";
-import {
-  assertCanChangeLimit,
-  assertLimitTarget,
-  getLimitAccess,
-} from "@/services/limit-access";
+import { assertLimitTarget, getLimitAccess } from "@/services/limit-access";
 import {
   ApiError,
   CreateLimitSchema,
@@ -275,7 +271,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       assertLimitTarget(teamIds, existing);
-      assertCanChangeLimit(teamIds, existing);
       const { lastCleanup: _resetOwned, ...changes } = body;
       const limit = await LimitModel.patch(id, changes);
 
@@ -316,7 +311,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Limit not found");
       }
       assertLimitTarget(teamIds, existing);
-      assertCanChangeLimit(teamIds, existing);
       if (
         existing.limitType !== "token_cost" ||
         existing.cleanupInterval === "minute"
@@ -358,9 +352,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }) =>
         limit.entityType !== "user" &&
         (!teamIds ||
-          (limit.entityType === "team" &&
-            teamIds.includes(limit.entityId) &&
-            limit.teamManaged));
+          (limit.entityType === "team" && teamIds.includes(limit.entityId)));
       const outcome = await runBulk({
         ids: request.body.ids,
         logLabel: "limits bulk delete",
@@ -431,7 +423,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       assertLimitTarget(teamIds, existing);
-      assertCanChangeLimit(teamIds, existing);
       const deleted = await LimitModel.delete(id);
 
       if (!deleted) {

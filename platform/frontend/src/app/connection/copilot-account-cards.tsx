@@ -1,5 +1,6 @@
 "use client";
 
+import type { CopilotPlan } from "@archestra/shared";
 import { useState } from "react";
 import { CopilotOrganizationConnectDialog } from "@/app/llm/model-providers/_parts/copilot-organization-connect-dialog";
 import { SubscriptionCard } from "@/app/llm/model-providers/_parts/subscription-provider-cards";
@@ -13,13 +14,20 @@ export interface CopilotAccountKey {
   isGithubAppKey?: boolean | null;
 }
 
-/** Whether a GitHub Copilot account is still missing: a sign-in, a plan, or both. */
+/** The GitHub Copilot plans an admin turned off; absent means offered. */
+type HiddenCopilotPlans = Partial<Record<CopilotPlan, boolean>>;
+
+/**
+ * Whether a GitHub Copilot account is still missing that this organization
+ * offers: a sign-in, a plan, or both.
+ */
 export function copilotAccountMissing(
   keys: readonly CopilotAccountKey[],
+  hiddenPlans: HiddenCopilotPlans = {},
 ): boolean {
   return (
-    !keys.some((key) => !key.isGithubAppKey) ||
-    !keys.some((key) => key.isGithubAppKey)
+    (!hiddenPlans.personal && !keys.some((key) => !key.isGithubAppKey)) ||
+    (!hiddenPlans.enterprise && !keys.some((key) => key.isGithubAppKey))
   );
 }
 
@@ -29,15 +37,18 @@ export function copilotAccountMissing(
  * spot) and an enterprise plan (a GitHub App on a GitHub organization, through
  * the same wizard). With no account at all both cards stand in for the
  * command; once one is connected the other stays on offer next to the account
- * in use; with both connected there is nothing to show.
+ * in use; with both connected there is nothing to show. A plan an admin
+ * turned off gets no card.
  */
 export function CopilotAccountCards({
   keys,
+  hiddenPlans = {},
   pending,
   onToken,
   className,
 }: {
   keys: readonly CopilotAccountKey[];
+  hiddenPlans?: HiddenCopilotPlans;
   /** The personal key is being saved: the sign-in waits for it. */
   pending: boolean;
   /** Receives the GitHub token of a completed personal sign-in. */
@@ -45,19 +56,21 @@ export function CopilotAccountCards({
   className?: string;
 }) {
   const [connectingPlan, setConnectingPlan] = useState(false);
-  const hasOwn = keys.some((key) => !key.isGithubAppKey);
-  const hasPlan = keys.some((key) => key.isGithubAppKey);
-  if (hasOwn && hasPlan) return null;
+  const offerOwn =
+    !hiddenPlans.personal && !keys.some((key) => !key.isGithubAppKey);
+  const offerPlan =
+    !hiddenPlans.enterprise && !keys.some((key) => key.isGithubAppKey);
+  if (!offerOwn && !offerPlan) return null;
   return (
     <div
       className={cn(
         "grid gap-3",
-        !hasOwn && !hasPlan && "sm:grid-cols-2",
+        offerOwn && offerPlan && "sm:grid-cols-2",
         className,
       )}
       data-testid="copilot-account-cards"
     >
-      {!hasOwn && (
+      {offerOwn && (
         <SubscriptionCard
           testId="copilot-account-card-personal"
           kind="github-copilot"
@@ -71,7 +84,7 @@ export function CopilotAccountCards({
           }
         />
       )}
-      {!hasPlan && (
+      {offerPlan && (
         <SubscriptionCard
           testId="copilot-account-card-enterprise"
           kind="github-copilot"

@@ -33,6 +33,7 @@ import mcpClient from "@/clients/mcp-client";
 import { secretManager } from "@/secrets-manager";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 
 const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
@@ -44,6 +45,8 @@ vi.mock("@/services/jwks-validator", () => ({
 }));
 
 const { default: mcpGatewayRoutes } = await import("./index");
+
+setupTestCacheManager();
 
 // A JWT-shaped bearer token that is NOT an Archestra token, so the gateway
 // routes it through external-IdP JWKS validation instead of the token tables.

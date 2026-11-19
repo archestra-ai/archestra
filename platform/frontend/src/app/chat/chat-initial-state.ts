@@ -1,4 +1,8 @@
-import type { ThinkingEffortSetting } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  type ThinkingEffortSetting,
+} from "@archestra/shared";
+import { autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import {
   resolveInitialModel,
   resolveModelForAgent,
@@ -9,6 +13,7 @@ import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 type AgentInfo = {
   id: string;
   builtIn?: boolean | null;
+  builtInAgentConfig?: { name: string } | null;
   scope?: string;
   modelId?: string | null;
   llmApiKeyId?: string | null;
@@ -42,6 +47,8 @@ export type CreateConversationInput = {
   chatApiKeyId?: string | null;
   /** A model pool picked in place of the key and model. */
   modelPoolId?: string | null;
+  /** An auto router picked in place of the key and model. */
+  autoRouterId?: string;
   title?: string;
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
@@ -69,7 +76,11 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
   memberDefaultAgentId?: string | null;
   canUseSavedAgent: boolean;
 }): InitialAgentSelection<TAgent> | null {
-  const agents = params.agents.filter((agent) => !agent.builtIn);
+  const agents = params.agents.filter(
+    (agent) =>
+      !agent.builtIn ||
+      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE,
+  );
   if (agents.length === 0) {
     return null;
   }
@@ -222,6 +233,16 @@ export function buildCreateConversationInput(params: {
     return null;
   }
 
+  const autoRouterId = autoRouterIdOfChoice(params.modelPoolId);
+  if (autoRouterId) {
+    return {
+      agentId: params.agentId,
+      autoRouterId,
+      title: params.title,
+      projectId: params.projectId ?? undefined,
+      thinkingEffort: params.thinkingEffort,
+    };
+  }
   return {
     agentId: params.agentId,
     modelId: params.modelId || undefined,

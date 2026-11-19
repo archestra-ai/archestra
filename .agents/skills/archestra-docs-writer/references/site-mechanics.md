@@ -6,8 +6,7 @@ How pages are built, linked, and illustrated on the docs site. Follow these rule
 
 The folder tree under `docs/pages/` is the navigation. A page's path is its URL: `docs/pages/knowledge/retrieval.md` is `/docs/knowledge/retrieval`. Every folder has an `index.md`, which is the folder's own page and gets an automatic **Explore** list of its children. Top-level folders are the sidebar sections. Nest at most four levels.
 
-Keep `title`, `description`, `order`, and `lastUpdated` in frontmatter; update `lastUpdated` when content changes. `order` sorts a page among its siblings and must be unique among them. `description` is not shown on the page itself; it is the summary on the parent's Explore cards, in search metadata, and in the docs MCP server, so write it as one plain sentence. Set `explore: false` on a page that already links its children in its body, such as a numbered path, so the automatic Explore cards do not repeat them. Avoid `sidebarTitle`: a long, clear title is fine, because the sidebar wraps. Use it only when the full title would read badly in the sidebar. For a beta feature, never put "(Beta)" in the title or hand-write a beta callout. Set `beta: true` when `ARCHESTRA_BETA=true` turns the feature on: the site then shows the standard notice, "Beta feature. Turn on beta features with `ARCHESTRA_BETA=true`." Write your own sentence only when the feature has a different switch, such as `beta: "Set [`ARCHESTRA_X_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_X_ENABLED) to turn it on."`, or no switch at all. Start that sentence with "Set" when it names a variable. The site shows a Beta label in the sidebar and the notice under the title. For one beta section of a page, put `:::beta:::` (standard text) or `:::beta <sentence>:::` on its own line under that section's heading. Never hand-write a beta blockquote. For an alpha feature, use `alpha:` the same way: the label and notice then say Alpha. A child of a beta or alpha page shows no badge of its own in the sidebar, but keeps its notice. When only one section of a page is beta, put `:::beta <one sentence on how to turn it on>:::` on its own line under that section's heading, or `:::beta:::` when there is nothing to turn on. It renders the same notice. Never hand-write a beta blockquote.
-
+Keep `title`, `description`, `order`, and `lastUpdated` in frontmatter; update `lastUpdated` when content changes. `order` sorts a page among its siblings and must be unique among them. `description` is not shown on the page itself; it is the summary on the parent's Explore cards, in search metadata, and in the docs MCP server, so write it as one plain sentence. Set `explore: false` on a page that already links its children in its body, such as a numbered path, so the automatic Explore cards do not repeat them. Avoid `sidebarTitle`: a long, clear title is fine, because the sidebar wraps. Use it only when the full title would read badly in the sidebar. For a beta feature, never put "(Beta)" in the title or hand-write a beta callout. Set `beta` to one sentence of your own: how to turn the feature on when it has a switch, such as `beta: "Set [`ARCHESTRA_X_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_X_ENABLED) to turn it on."`, or that it is in Beta when it has none, such as `beta: "Model Pools are in Beta."`. Start that sentence with "Set" when it names a variable. There is no deployment-wide beta switch, so never use `beta: true`: its standard notice names a variable that no longer exists. The site shows a Beta label in the sidebar and the notice under the title. For one beta section of a page, put `:::beta <sentence>:::` on its own line under that section's heading. Never hand-write a beta blockquote. For an alpha feature, use `alpha:` the same way: the label and notice then say Alpha. A child of a beta or alpha page shows no badge of its own in the sidebar, but keeps its notice.
 Link to other pages with absolute paths (`/docs/chat`), never relative ones.
 
 Preserve existing public URLs and inbound section anchors. Moves, renames, or deletions require a permanent redirect in `docs/redirects.json`; update inbound links and `platform/shared/docs.ts` where relevant. Use the user's existing branch/worktree when appropriate. Commit, push, open PRs, or publish only within explicit task authorization.
@@ -32,11 +31,32 @@ docker run …
 
 Always tag a fence with its language (`bash`, `powershell`, `yaml`, …); the block shows it as a label and highlights by it.
 
+## Content Tabs
+
+When the same task differs by provider, such as the database setup on AWS, Google Cloud, and Azure, put each variant in a tab instead of stacking sections. A `:::tabs` block holds any Markdown; each `@tab <label>` line starts a tab, and a line with only `:::` ends the block:
+
+````markdown
+:::tabs
+@tab AWS
+Amazon RDS for PostgreSQL fits every size.
+
+| Size | Instance |
+| --- | --- |
+| Small | `db.m7g.large` |
+@tab Google Cloud
+Cloud SQL for PostgreSQL fits every size.
+:::
+````
+
+- Use the same labels for the same choice on every page: a reader's pick applies to every tab group with that label.
+- Headings inside a tab stay out of the table of contents. Use a bold label or a list instead.
+- Search, `llms.txt`, and the docs MCP server show each tab as its bold label followed by its content.
+
 ## Environment Variables
 
 Every RBAC permission a page mentions links to its row on the Permissions page: [`agent:read`](/docs/reference/permissions#agent:read). The generator anchors each row by the permission name. CI enforces this with `.github/scripts/check-docs-permission-links.py`; run it with `--fix` to add the links.
 
-Every environment variable a page mentions links to its exact entry on the Configuration page: [`ARCHESTRA_BETA=true`](/docs/admin/deployment/configuration#ARCHESTRA_BETA). The anchor is the variable's name verbatim; keep any `=value` inside the link text. Do not add a separate "See Configuration" pointer next to it — the link already goes there. Each entry on the Configuration page is a `- **`ARCHESTRA_X`** - …` bullet, which the site anchors by name; a new variable gets one there. CI enforces this with `.github/scripts/check-docs-env-var-links.py`; run it with `--fix` to add the links.
+Every environment variable a page mentions links to its exact entry on the Configuration page: [`ARCHESTRA_ANALYTICS=disabled`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). The anchor is the variable's name verbatim; keep any `=value` inside the link text. Do not add a separate "See Configuration" pointer next to it — the link already goes there. Each entry on the Configuration page is a `- **`ARCHESTRA_X`** - …` bullet, which the site anchors by name; a new variable gets one there. CI enforces this with `.github/scripts/check-docs-env-var-links.py`; run it with `--fix` to add the links.
 
 Every observability metric a page mentions links to its row in the matching Metrics reference subpage: [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total). Each metric row starts its first cell with `<span id="metric_name"></span>` for each metric it lists; a new metric gets one. Code blocks and headings are exempt. CI enforces this with `.github/scripts/check-docs-metric-links.py`; run it with `--fix` to add the anchors and links.
 
@@ -55,8 +75,8 @@ Every screenshot of the product must match the current UI. When you edit a page,
 Never take app screenshots by hand. Every screenshot of the Archestra app comes from one script that seeds a demo organization and captures each shot in light **and** dark mode, so screenshots stay consistent and can be re-taken whenever the UI changes:
 
 - **Add a shot** to `platform/tools/docs-screenshots/src/manifest.ts`: the asset path, the route, and any steps to reach the state (open a dialog, switch a tab). If the shot needs data, add it to `src/dataset.ts` — fictional, generic names only, never a real customer.
-- **Capture** from `platform/`: `ARCHESTRA_URL=http://localhost:3000 pnpm docs:screenshots` (all shots) or `DOCS_SCREENSHOTS_ONLY=automated_screenshots/<page-name> pnpm docs:screenshots` (one page). It works against any instance: seeding is additive and idempotent through the public API, signs in with `ARCHESTRA_AUTH_ADMIN_EMAIL`/`ARCHESTRA_AUTH_ADMIN_PASSWORD`, and captures as a seeded persona, never as your admin. The instance needs `ARCHESTRA_BETA=true`: the docs show beta features (Plugins, OpenAPPA), and the seed fails without them. Without Tilt, `ARCHESTRA_BETA=true pnpm test:e2e:lite:up` starts a stack on `:3000` (the same one CI uses).
-- **Capture locally, before you push.** Run the capture against your own Tilt instance (or `ARCHESTRA_BETA=true pnpm test:e2e:lite:up`), then open every image you changed. CI re-captures on release PRs, but you own the first look.
+- **Capture** from `platform/`: `ARCHESTRA_URL=http://localhost:3000 pnpm docs:screenshots` (all shots) or `DOCS_SCREENSHOTS_ONLY=automated_screenshots/<page-name> pnpm docs:screenshots` (one page). It works against any instance: seeding is additive and idempotent through the public API, signs in with `ARCHESTRA_AUTH_ADMIN_EMAIL`/`ARCHESTRA_AUTH_ADMIN_PASSWORD`, and captures as a seeded persona, never as your admin. Without Tilt, `pnpm test:e2e:lite:up` starts a stack on `:3000` (the same one CI uses).
+- **Capture locally, before you push.** Run the capture against your own Tilt instance (or `pnpm test:e2e:lite:up`), then open every image you changed. CI re-captures on release PRs, but you own the first look.
 - **Real seeded data only.** Never fake product data in the browser (`page.route` stubs for channels, statuses, or records). If a shot needs data, seed it: through the public API in `src/seed.ts`, or, when no API can create it (messaging channels a live bot would discover), as SQL in `src/db-seed.ts`. Both are additive and idempotent.
 - **The persona owns everything.** The seed signs in as the instance admin only to create the persona. Then the persona creates every demo record and takes over any record an earlier run made. No shot may show the admin's default identity (`admin@example.com`, "Admin"). If one does, fix the seed or the framing, not the image.
 - **The sidebar is always collapsed.** The capture sets it, so every shot gives the page the full width. Never re-open it in a shot's steps.

@@ -9,12 +9,14 @@
 #
 # Debian (glibc) base — not Alpine like the platform's other images — because
 # the official `p4` binary is glibc-linked and does not run on musl.
-ARG NODE_IMAGE=node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
-
-FROM ${NODE_IMAGE}
+FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini libpcre2-8-0 perl-base \
+  && apt-get install -y --no-install-recommends apt libapt-pkg6.0 tini libpcre2-8-0 perl-base \
+  # CVE-2026-109518: upgrade the package manager inherited from the base image.
+  && for package in apt libapt-pkg6.0; do \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 2.6.2 || exit 1; \
+  done \
   # CVE-2026-86145 and CVE-2026-103111: reject a repository snapshot that
   # predates the pcre2 fixes.
   && dpkg --compare-versions \

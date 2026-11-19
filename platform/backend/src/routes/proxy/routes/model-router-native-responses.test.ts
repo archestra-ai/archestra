@@ -7,6 +7,7 @@ import {
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -129,18 +130,20 @@ test("preserves native Responses reasoning, replay state and tool calls through 
   app.setSerializerCompiler(serializerCompiler);
   await app.register(modelRouterProxyRoutes);
   try {
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/model-router/${agent.id}/responses`,
-      headers: {
-        authorization: `Bearer ${value}`,
-        "user-agent": "test-client",
-      },
-      payload,
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
-    expect(response.json().output).toEqual([message, call]);
+    for (const path of ["unified-model", "model-router"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/${path}/${agent.id}/responses`,
+        headers: {
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
+      expect(response.json().output).toEqual([message, call]);
+    }
   } finally {
     await app.close();
   }
@@ -214,6 +217,81 @@ test("sends Azure OpenAI deployments to Azure's native Responses API", async ({
   expect(response.statusCode, response.body).toBe(200);
   expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
   expect(response.json().output).toEqual([call]);
+});
+
+test("serves Claude deployments over Azure's Responses API and rejects them on Chat Completions", async ({
+  makeOrganization,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  // Foundry serves Claude over Responses but answers Chat Completions with
+  // 404 api_not_supported, so neither route may reach that endpoint.
+  const modelId = "claude-haiku-5-5";
+  const { agent, value } = await setUpAzureRouter({
+    modelId,
+    makeOrganization,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  let chatCompletionsCalls = 0;
+  server.use(
+    http.post(`${AZURE_BASE_URL}/responses`, () =>
+      HttpResponse.json({
+        id: "resp_claude",
+        object: "response",
+        created_at: 1,
+        model: modelId,
+        status: "completed",
+        output: [
+          {
+            type: "message",
+            id: "msg_claude",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Hi!", annotations: [] }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+      }),
+    ),
+    http.post(`${AZURE_BASE_URL}/chat/completions`, () => {
+      chatCompletionsCalls++;
+      return HttpResponse.json(
+        {
+          error: {
+            code: "api_not_supported",
+            message: "Requested API is currently not supported",
+          },
+        },
+        { status: 404 },
+      );
+    }),
+  );
+
+  const responses = await injectRouterResponses({
+    agent,
+    value,
+    payload: { model: `azure:${modelId}`, stream: false, input: "Hello" },
+  });
+  expect(responses.statusCode, responses.body).toBe(200);
+  expect(responses.json().output[0].content[0].text).toBe("Hi!");
+
+  const chat = await injectRouter({
+    agent,
+    value,
+    path: "chat/completions",
+    payload: {
+      model: `azure:${modelId}`,
+      messages: [{ role: "user", content: "Hello" }],
+    },
+  });
+  expect(chat.statusCode, chat.body).toBe(400);
+  expect(chat.json().error.message).toMatch(
+    /Responses API.*"anthropic:claude-haiku-5-5"/,
+  );
+  expect(chatCompletionsCalls).toBe(0);
 });
 
 test("keeps non-OpenAI Azure deployments on the chat translation", async ({
@@ -442,14 +520,22 @@ async function injectRouterResponses(params: {
   value: string;
   payload: Record<string, unknown>;
 }) {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
+  return injectRouter({ ...params, path: "responses" });
+}
+
+async function injectRouter(params: {
+  agent: { id: string };
+  value: string;
+  path: "responses" | "chat/completions";
+  payload: Record<string, unknown>;
+}) {
+  // The app's own instance, so errors reach the client as they do in production.
+  const app = createFastifyInstance();
   await app.register(modelRouterProxyRoutes);
   try {
     return await app.inject({
       method: "POST",
-      url: `/v1/model-router/${params.agent.id}/responses`,
+      url: `/v1/model-router/${params.agent.id}/${params.path}`,
       headers: {
         authorization: `Bearer ${params.value}`,
         "user-agent": "test-client",

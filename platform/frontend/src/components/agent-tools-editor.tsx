@@ -66,6 +66,7 @@ import {
   buildBulkToolUpdate,
   computeMcpEnvConflicts,
   credentialSourceOfAssignments,
+  desktopToolsRunNote,
   filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
   isCatalogInEnvironment,
@@ -94,6 +95,16 @@ type CatalogTool = Pick<
 const isCredentialLessCatalogType = (
   serverType: InternalMcpCatalogItem["serverType"],
 ) => serverType === "builtin" || serverType === "app";
+
+/**
+ * A desktop MCP server runs on the computer of the person who makes the call,
+ * through their own installation. The picker has no connection to choose for
+ * it, and the assigning caller's installations say nothing about whether it
+ * is "connected".
+ */
+const isDesktopCatalogType = (
+  serverType: InternalMcpCatalogItem["serverType"],
+) => serverType === "desktop_mcp";
 type ResourceTool = archestraApiTypes.GetAgentToolsResponses["200"][number];
 type AssignedTool = {
   tool: ResourceTool;
@@ -363,7 +374,11 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     catalogIdsIn: catalogItems
-      .filter((catalog) => !isCredentialLessCatalogType(catalog.serverType))
+      .filter(
+        (catalog) =>
+          !isCredentialLessCatalogType(catalog.serverType) &&
+          !isDesktopCatalogType(catalog.serverType),
+      )
       .map((catalog) => catalog.id),
   });
 
@@ -764,6 +779,7 @@ const AgentToolsEditorContent = forwardRef<
         environmentName: agentEnvironmentName,
         isDisabledApp:
           catalog.serverType === "app" && catalog.appEnabled === false,
+        isDesktop: isDesktopCatalogType(catalog.serverType),
       });
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
@@ -883,6 +899,7 @@ const AgentToolsEditorContent = forwardRef<
             isEnvIncompatible: false,
             isDisabledApp:
               catalog.serverType === "app" && catalog.appEnabled === false,
+            isDesktop: isDesktopCatalogType(catalog.serverType),
           });
 
           return (
@@ -1021,7 +1038,9 @@ function McpServerCard({
       <span className="text-xs font-medium truncate w-full">{displayName}</span>
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
-          ? "Not installed"
+          ? isDesktopCatalogType(catalog.serverType)
+            ? "Not connected from a device yet"
+            : "Not installed"
           : unavailable
             ? "Not connected"
             : isSelected
@@ -1265,8 +1284,13 @@ function McpServerPill({
   // dynamic per-caller resolution (and any pinned-but-unavailable connection)
   // stays visible for an assignment made without a local install.
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
+  // A desktop MCP server has nothing to choose: one plain line says where
+  // its tools run.
+  const isDesktop = isDesktopCatalogType(catalogItem.serverType);
   const showCredentialSelector =
-    !isCredentialLessCatalogType(catalogItem.serverType) && !isPlaywright;
+    !isCredentialLessCatalogType(catalogItem.serverType) &&
+    !isPlaywright &&
+    !isDesktop;
   return (
     <McpServerPillShell
       icon={
@@ -1292,6 +1316,11 @@ function McpServerPill({
       removeAriaLabel={`Remove ${catalogItem.name}`}
       triggerTestId={getAgentToolCatalogPillTestId(catalogItem.name)}
     >
+      {isDesktop && (
+        <p className="shrink-0 border-b p-4 text-sm text-pretty text-muted-foreground">
+          {desktopToolsRunNote(displayName)}
+        </p>
+      )}
       {showCredentialSelector && (
         <div className="p-4 border-b space-y-2 shrink-0">
           <Label className="text-sm font-medium">Connect on behalf of</Label>

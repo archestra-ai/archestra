@@ -1,5 +1,6 @@
 import {
   AGENT_CATALOG_NAMES,
+  PopularAgentIdSchema,
   PopularAgentOverridesSchema,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -55,11 +56,40 @@ export const AgentRuntimeTemplateSchema = z.object({
 });
 export type AgentRuntimeTemplate = z.infer<typeof AgentRuntimeTemplateSchema>;
 
+/**
+ * An administrator's settings for a maintained runtime, over the catalog's
+ * own. Its image, wrapper, protocol and follow-up delivery belong to the
+ * maintained image and stay as the catalog sets them.
+ */
+export const BuiltInRuntimeSettingsSchema = AgentRuntimeSchema.pick({
+  tier: true,
+  maxTier: true,
+  ttlHours: true,
+  maxCostUsd: true,
+  idleTimeoutMinutes: true,
+})
+  .partial()
+  .extend({
+    claudeCode: z
+      .object({ authentication: z.enum(["provider", "subscription"]) })
+      .optional(),
+  });
+
+const BuiltInRuntimeSchema = z.object({
+  settings: BuiltInRuntimeSettingsSchema,
+});
+
 export const RuntimeTemplateSettingsSchema = z.object({
   revision: z.number().int().nonnegative(),
   templates: z.array(AgentRuntimeTemplateSchema).max(100),
+  builtIns: z
+    .partialRecord(PopularAgentIdSchema, BuiltInRuntimeSchema)
+    .default({}),
 });
 export type RuntimeTemplateSettings = z.infer<
+  typeof RuntimeTemplateSettingsSchema
+>;
+export type RuntimeTemplateSettingsInput = z.input<
   typeof RuntimeTemplateSettingsSchema
 >;
 
@@ -97,6 +127,25 @@ export const SaveRuntimeTemplateSettingsSchema =
       names.add(name);
     }
   });
+
+/** Which Agent Runtimes the caller may use and configure. */
+export const AgentRuntimeAccessSchema = z.object({
+  runtimes: z.array(
+    z.object({
+      /** A built-in runtime's catalog id, or a custom runtime's id. */
+      id: z.string(),
+      canUse: z.boolean(),
+      canConfigure: z.boolean(),
+    }),
+  ),
+  /** Whether the caller may run an image that is none of the runtimes. */
+  canConfigureAny: z.boolean(),
+});
+
+/** What any agent builder may read about the maintained runtimes. */
+export const BuiltInRuntimeSummarySchema = BuiltInRuntimeSchema.extend({
+  id: PopularAgentIdSchema,
+});
 
 /** Catalog lists never carry environment values or other runtime configuration. */
 export const AgentRuntimeTemplateSummarySchema =

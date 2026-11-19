@@ -3,7 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentForm } from "@/components/agent-form";
 import { defaultAgentRuntime } from "@/components/agent-runtime-fields";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,23 @@ export function AgentCreatePage({
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);
   const [startsFromImage, setStartsFromImage] = useState(false);
-  const steps = getAgentSetupSteps({ agentType: kind, builtIn: false });
+  // One object for as long as the choice stands: the form seeds itself again
+  // whenever its initial values change identity, which would discard every
+  // keystroke.
+  const imageInitialValues = useMemo(
+    () => (startsFromImage ? { runtime: defaultAgentRuntime() } : undefined),
+    [startsFromImage],
+  );
+  // The form renders the channel editor only for a reader of the org's
+  // channel bindings; without that read the step would be blank.
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
+  const steps = getAgentSetupSteps({
+    agentType: kind,
+    builtIn: false,
+    canReadTriggers: !!canReadAgentTriggers,
+  });
   const [step, setStep] = useState<AgentSetupStepId>(steps[0].id);
   const stepIndex = steps.findIndex((s) => s.id === step);
   const prevStep = steps[stepIndex - 1];
@@ -238,10 +254,7 @@ export function AgentCreatePage({
         <AgentForm
           agentType={kind}
           defaultIconType={config.defaultIconType}
-          initialValues={
-            selectedTemplate?.initialValues ??
-            (startsFromImage ? { runtime: defaultAgentRuntime() } : undefined)
-          }
+          initialValues={selectedTemplate?.initialValues ?? imageInitialValues}
           initialRuntimeId={selectedTemplate?.id}
           // What runs the agent was picked in the catalog, so the form shows
           // that choice instead of asking again; changing it goes back there.

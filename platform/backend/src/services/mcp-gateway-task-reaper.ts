@@ -2,6 +2,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 
 /**
@@ -63,12 +64,17 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
       await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
+      await cacheManager.deleteExpiredByPrefix(CacheKey.McpGatewayRateLimit);
       // An exchanged OIDC token id and an idle IP budget are never read again.
       await cacheManager.deleteExpiredByPrefix(CacheKey.GitHubActionsTokenJti);
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.GitHubActionsTokenRateLimit,
       );
       await LlmThroughputModel.deleteExpired();
+      await ModelPoolUsageModel.deleteExpired().catch(() => {
+        // Routing hints must not prevent unrelated task/cache maintenance.
+        logger.warn("Unable to sweep model pool routing usage");
+      });
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
       );
@@ -81,6 +87,9 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.AgentWorkspaceTransferTicket,
       );
+      await cacheManager.deleteExpiredByPrefix(CacheKey.SubagentLoadBalancer);
+      // A tool call the client never ran through the gateway is never read.
+      await cacheManager.deleteExpiredByPrefix(CacheKey.LlmToolCallSession);
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

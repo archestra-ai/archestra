@@ -66,6 +66,7 @@ export function useManualSteps(
 
   if (!client) return [];
   if (client.id === "chatgpt") {
+    const tools = data.partsFor(client).tools;
     return [
       {
         key: "mcp",
@@ -73,7 +74,7 @@ export function useManualSteps(
         content: (
           <ChatgptGatewaySetup
             includeSkills={data.skillsEnabled && includeSkills}
-            gateway={data.partsFor(client).tools ? gateway : null}
+            gateway={tools ? gateway : null}
             baseUrl={baseUrl}
           />
         ),

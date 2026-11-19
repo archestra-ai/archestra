@@ -12,10 +12,9 @@ import {
 import type { UIMessageChunk } from "ai";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
+import { credentialsNeededMessage } from "@/archestra-mcp-server/helpers";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import {
   actorFromUserId,
@@ -71,12 +70,14 @@ import type {
   ChatOpsProviderType,
   ChatOpsReplyStream,
   ChatReplyOptions,
-  DiscoveredChannel,
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
+import { trackBackgroundWork } from "@/utils/background-work";
+import { withDrainScope } from "@/utils/drain-scope";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -156,6 +157,8 @@ export class ChatOpsManager {
   private slackAgentBots = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
   private jiraAgentBots = new Map<string, JiraProvider>();
+  private stopping = false;
+  private reinitializing: Promise<void> = Promise.resolve();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
   private readonly statefulA2aManager: A2AManager;
@@ -509,6 +512,10 @@ export class ChatOpsManager {
     allWorkspaceIds?: string[];
   }): Promise<void> {
     const { provider, context, workspaceId } = params;
+    if (provider.providerId === "slack") {
+      await this.discoverSlackChannels(context);
+      return;
+    }
 
     // TTL check using distributed (PostgreSQL-backed) cache — shared across pods
     const cacheKey =
@@ -516,13 +523,7 @@ export class ChatOpsManager {
     if (await cacheManager.get(cacheKey)) return;
 
     try {
-      // Every Slack connection shares the channel table, so a channel only one
-      // pinned bot belongs to must count as active, or the stale sweep below
-      // deletes its binding.
-      const channels =
-        provider.providerId === "slack"
-          ? await this.discoverAllSlackChannels(context)
-          : await provider.discoverChannels(context);
+      const channels = await provider.discoverChannels(context);
       if (!channels?.length) {
         logger.debug(
           { workspaceId },
@@ -578,9 +579,171 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * All configured Slack bots share one complete snapshot and admission lease.
+   * Slack I/O happens outside the lock; the final owner check and reconciliation
+   * share one short transaction, so an expired worker cannot publish stale data.
+   */
+  async discoverSlackChannels(context: unknown): Promise<void> {
+    if (this.stopping) return;
+    const providers = this.getSlackProviders().filter((provider) =>
+      provider.isConfigured(),
+    );
+    if (!providers.length) return;
+    const scope =
+      `${CacheKey.ChannelDiscoveryLease}-slack-all` as AllowedCacheKey;
+    const freshnessKey =
+      `${CacheKey.ChannelDiscovery}-slack-all` as AllowedCacheKey;
+    const owner = randomUUID();
+    const configuration = JSON.stringify(
+      providers
+        .map((provider) => [provider.getWorkspaceId(), provider.getBotUserId()])
+        .sort(),
+    );
+    const isCurrent = () =>
+      !this.stopping &&
+      providers.length ===
+        this.getSlackProviders().filter((provider) => provider.isConfigured())
+          .length &&
+      providers.every((provider) =>
+        this.getSlackProviders().includes(provider),
+      );
+    try {
+      const admitted = await cacheManager.withLock(scope, async (cache, tx) => {
+        if (!(await this.hasCurrentSlackDiscoveryConfig(tx))) return false;
+        if (
+          (await cache.get(scope)) ||
+          (await cache.get(freshnessKey)) === configuration
+        )
+          return false;
+        // Discovery bounds each scan to two minutes plus one request timeout.
+        // A crashed process cannot retain admission indefinitely.
+        await cache.set(scope, { owner }, 3 * 60_000);
+        return true;
+      });
+      if (!admitted) return;
+      try {
+        const workspaceIds = [
+          ...new Set(
+            providers.map((provider) => {
+              const workspaceId = provider.getWorkspaceId();
+              if (!workspaceId)
+                throw new Error(
+                  "Slack discovery requires an authenticated workspace",
+                );
+              return workspaceId;
+            }),
+          ),
+        ];
+        // Wait for every bot, even after one fails: no orphan scan may overlap
+        // a later attempt admitted after the failure cooldown.
+        const results = await Promise.allSettled(
+          providers.map((provider) => provider.discoverChannels(context)),
+        );
+        const failed = results.filter((result) => result.status === "rejected");
+        if (failed.length) {
+          const retryAfter = Math.max(
+            0,
+            ...failed.map((result) => {
+              const value = result.reason?.retryAfter;
+              return typeof value === "number" && Number.isFinite(value)
+                ? value
+                : 0;
+            }),
+          );
+          throw Object.assign(new Error("Slack channel snapshot incomplete"), {
+            retryAfter,
+          });
+        }
+        const channels = results.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        );
+        const uniqueChannels = [
+          ...new Map(
+            channels.map((channel) => [
+              `${channel.workspaceId}:${channel.channelId}`,
+              channel,
+            ]),
+          ).values(),
+        ];
+        const organizationId = await getDefaultOrganizationId();
+        await cacheManager.withLock(scope, async (cache, tx) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          if (
+            !isCurrent() ||
+            !(await this.hasCurrentSlackDiscoveryConfig(tx))
+          ) {
+            await cache.delete(scope);
+            return;
+          }
+          await ChatOpsChannelBindingModel.ensureChannelsExist(
+            { organizationId, provider: "slack", channels: uniqueChannels },
+            tx,
+          );
+          for (const workspaceId of workspaceIds) {
+            await ChatOpsChannelBindingModel.deleteStaleChannels(
+              {
+                organizationId,
+                provider: "slack",
+                workspaceIds: [workspaceId],
+                activeChannelIds: uniqueChannels
+                  .filter((channel) => channel.workspaceId === workspaceId)
+                  .map((channel) => channel.channelId),
+                allowEmptySnapshot: true,
+              },
+              tx,
+            );
+          }
+          // Keep an empty snapshot eligible for the next trigger, so a first
+          // invitation is not hidden behind successful-result freshness.
+          if (uniqueChannels.length) {
+            await cache.set(
+              freshnessKey,
+              configuration,
+              CHATOPS_CHANNEL_DISCOVERY.TTL_MS,
+            );
+          } else {
+            await cache.delete(freshnessKey);
+          }
+          await cache.delete(scope);
+          // A reload/shutdown can happen during any awaited publication query.
+          // Throw before committing so bindings and freshness roll back together.
+          if (!isCurrent()) throw new Error("Slack discovery interrupted");
+        });
+      } catch (error) {
+        await cacheManager.withLock(scope, async (cache) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          const retryAfter =
+            error &&
+            typeof error === "object" &&
+            "retryAfter" in error &&
+            typeof error.retryAfter === "number"
+              ? error.retryAfter
+              : 0;
+          // Manual refresh clears freshness only, never admission or Retry-After.
+          await cache.set(
+            scope,
+            { owner: null },
+            Math.max(30_000, retryAfter * 1_000),
+          );
+        });
+        throw error;
+      }
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Slack channel discovery failed; retaining existing bindings",
+      );
+    }
+  }
+
   async initialize(): Promise<void> {
+    if (this.stopping) return;
     // Seed DB from env vars on first run (no-op if DB already has config)
     await this.seedConfigFromEnvVars();
+    if (this.stopping) return;
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
@@ -615,6 +778,7 @@ export class ChatOpsManager {
           return [];
         }),
       ]);
+    if (this.stopping) return;
 
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
@@ -633,6 +797,7 @@ export class ChatOpsManager {
       );
       return new Set<MessagingChannelId>();
     });
+    if (this.stopping) return;
 
     // Create providers with their config
     if (
@@ -645,6 +810,7 @@ export class ChatOpsManager {
       // configuration that is disabled or incomplete gets no provider, as
       // none was configured.
       const { default: MSTeamsProvider } = await import("./ms-teams-provider");
+      if (this.stopping) return;
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }
@@ -677,6 +843,7 @@ export class ChatOpsManager {
     }
 
     await this.reloadJiraProviders();
+    if (this.stopping) return;
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -693,6 +860,7 @@ export class ChatOpsManager {
     ];
 
     for (const { name, provider } of providers) {
+      if (this.stopping) return;
       if (provider?.isConfigured()) {
         try {
           await provider.initialize();
@@ -705,6 +873,7 @@ export class ChatOpsManager {
         }
       }
     }
+    if (this.stopping) return;
 
     // Each Slack bot ignores messages that @mention one of the others.
     const slackBotUserIds = this.getSlackProviders().flatMap(
@@ -738,29 +907,28 @@ export class ChatOpsManager {
   }
 
   async reinitialize(): Promise<void> {
-    await this.cleanup();
-    await this.initialize();
+    // A settings save admitted before shutdown may finish afterward. Keep the
+    // stopped providers' reply clients available to turns already draining.
+    if (this.stopping) return;
+    const reinitializing = this.reinitializing.then(async () => {
+      if (this.stopping) return;
+      await this.cleanupProviders("reload");
+      await this.initialize();
+    });
+    // Serialize settings saves so every opened provider remains owned by this
+    // manager. A failed save must not prevent the next one from retrying.
+    this.reinitializing = reinitializing.catch(() => {});
+    await reinitializing;
+  }
+
+  /** Disconnect event sources before HTTP drain; admitted handlers still reply. */
+  async beginShutdown(): Promise<void> {
+    this.stopping = true;
+    await this.stopProviderIntake();
   }
 
   async cleanup(): Promise<void> {
-    if (this.msTeamsProvider) {
-      await this.msTeamsProvider.cleanup();
-      this.msTeamsProvider = null;
-    }
-    if (this.slackProvider) {
-      await this.slackProvider.cleanup();
-      this.slackProvider = null;
-    }
-    for (const bot of this.slackAgentBots.values()) {
-      await bot.cleanup();
-    }
-    this.slackAgentBots.clear();
-    this.jiraAgentBots.clear();
-    if (this.telegramProvider) {
-      await this.telegramProvider.cleanup();
-      this.telegramProvider = null;
-    }
-    this.stopCleanupInterval();
+    await this.cleanupProviders("final");
   }
 
   stopCleanupInterval(): void {
@@ -775,222 +943,17 @@ export class ChatOpsManager {
    * Covers: channel discovery, email resolution, user verification,
    * binding check, agent selection or processMessage().
    */
-  async handleIncomingMessage(
+  handleIncomingMessage(
     provider: ChatOpsProvider,
     body: unknown,
   ): Promise<void> {
-    const headers: Record<string, string | string[] | undefined> = {};
-    const message = await provider.parseWebhookNotification(body, headers);
-    if (!message) return;
-
-    // Notify about missing scopes (rate-limited, at most once per 30 days)
-    if (provider.hasMissingScopes()) {
-      provider.notifyMissingScopes(message).catch(() => {});
-    }
-
-    // Discover channels in background
-    if (message.workspaceId) {
-      this.discoverChannels({
-        provider,
-        context: null,
-        workspaceId: message.workspaceId,
-      }).catch(() => {});
-    }
-
-    // Resolve sender email
-    const senderEmail = await provider.getUserEmail(message.senderId);
-    if (senderEmail) {
-      message.senderEmail = senderEmail;
-    }
-
-    // Verify sender is a registered user
-    if (!message.senderEmail) {
-      logger.warn("[ChatOps] Could not resolve user email");
-      await provider.sendReply({
-        originalMessage: message,
-        text:
-          provider.identityVerificationFailureText?.() ??
-          "Could not verify your identity. Please ensure your profile has an email configured.",
-      });
-      return;
-    }
-
-    let displayName = "";
-    const provisioned = await ensureProvisionedUser({
-      email: message.senderEmail,
-      // Resolve display name from provider (e.g., Slack real_name)
-      resolveDisplayName: async () => {
-        displayName =
-          (await provider.getUserName?.(message.senderId)) ||
-          message.senderName;
-        return displayName;
-      },
-      provider: provider.providerId,
-    });
-    if (!provisioned) {
-      logger.error(
-        { email: message.senderEmail },
-        "[ChatOps] Auto-provisioned user not found after creation",
-      );
-      return;
-    }
-    if (provisioned.invitationId !== null) {
-      // Send ephemeral welcome message (non-blocking)
-      this.sendAutoProvisionWelcome({
-        provider,
-        message,
-        invitationId: provisioned.invitationId,
-        displayName,
-      }).catch(() => {});
-    }
-
-    const organizationId = await getDefaultOrganizationId();
-
-    // Check for existing binding
-    let binding = await ChatOpsChannelBindingModel.findByChannel({
-      provider: provider.providerId,
-      channelId: message.channelId,
-      workspaceId: message.workspaceId,
-    });
-
-    // If no binding found and this is a DM, check for a pending DM binding
-    // (pre-assigned from the UI before the first real DM interaction). A
-    // pinned bot's DM is its own channel and never takes over another's.
-    const isDm = message.metadata?.channelType === "im";
-    const pinnedAgentId = provider.pinnedAgentId;
-    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
-      const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
-        organizationId,
-        provider: provider.providerId,
-        dmOwnerEmail: message.senderEmail,
-      });
-      if (pending) {
-        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
-          id: pending.id,
-          organizationId,
-          realChannelId: message.channelId,
-          workspaceId: message.workspaceId,
-        });
-        logger.info(
-          { bindingId: pending.id, channelId: message.channelId },
-          "[ChatOps] Fulfilled pending DM binding with real channel ID",
-        );
-      }
-    }
-
-    // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
-    // the pending lookup above misses. Try to find an existing DM binding by
-    // email and update its channelId to the new one, preserving the agentId.
-    // The person's DMs with agent bots are other channels and stay theirs.
-    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
-      const existingDm =
-        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
-          organizationId,
-          provider: provider.providerId,
-          dmOwnerEmail: message.senderEmail,
-          scope: this.slackDmScope(provider),
-        });
-      if (existingDm) {
-        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
-          id: existingDm.id,
-          organizationId,
-          realChannelId: message.channelId,
-          workspaceId: message.workspaceId,
-        });
-        logger.info(
-          { bindingId: existingDm.id, channelId: message.channelId },
-          "[ChatOps] Updated existing DM binding with new channel ID",
-        );
-      }
-    }
-
-    if (pinnedAgentId) {
-      // A pinned bot always answers as its agent: the binding only carries the
-      // channel (instructions, answer-all, task follow-ups). A channel nobody
-      // has claimed yet goes to the first bot's agent, so it shows up on that
-      // agent's page with its settings; other bots in it answer when
-      // @mentioned. Its DM is labelled with the agent the same way.
-      if (binding && !binding.agentId) {
-        binding =
-          (await ChatOpsChannelBindingModel.update(binding.id, {
-            agentId: pinnedAgentId,
-          })) ?? binding;
-        await invalidateChannelAnswerAll({
-          provider: binding.provider,
-          channelId: binding.channelId,
-          workspaceId: binding.workspaceId,
-        });
-      }
-      binding ??= await ChatOpsChannelBindingModel.upsertByChannel(
-        {
-          organizationId,
-          provider: provider.providerId,
-          channelId: message.channelId,
-          workspaceId: message.workspaceId,
-          workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: isDm
-            ? `Direct Message - ${message.senderEmail}`
-            : ((await provider.getChannelName(message.channelId)) ?? undefined),
-          isDm,
-          dmOwnerEmail: isDm ? message.senderEmail : undefined,
-          agentId: pinnedAgentId,
-        },
-        { staleDms: this.slackDmScope(provider) },
-      );
-    } else if (!binding || !binding.agentId) {
-      // Create binding early (without agent) so the DM/channel appears in the UI
-      if (!binding) {
-        const channelName = isDm
-          ? `Direct Message - ${message.senderEmail}`
-          : await provider.getChannelName(message.channelId);
-        binding = await ChatOpsChannelBindingModel.upsertByChannel(
-          {
-            organizationId,
-            provider: provider.providerId,
-            channelId: message.channelId,
-            workspaceId: message.workspaceId,
-            workspaceName: provider.getWorkspaceName() ?? undefined,
-            channelName: channelName ?? undefined,
-            isDm,
-            dmOwnerEmail: isDm ? message.senderEmail : undefined,
-          },
-          { staleDms: this.slackDmScope(provider) },
-        );
-      }
-
-      // Frictionless onboarding: auto-assign a clear default agent instead of
-      // always prompting, so the bot just replies. Falls back to the picker
-      // card only when the choice is ambiguous.
-      const agentId = await this.resolveOrPromptChannelAgent({
-        provider,
-        message,
-        binding,
-        isDm,
-      });
-      if (!agentId) return; // picker card was sent
-      binding = { ...binding, agentId };
-    }
-
-    // A bare mention (no text, no file) still goes to the agent, so it answers
-    // in its own voice — a greeting, or a reply to what the thread is about —
-    // instead of a canned line. It can arrive as either app_mention or
-    // message; processMessage's dedup keeps the first.
-    const isBareMention =
-      (message.metadata?.eventType === "app_mention" ||
-        message.metadata?.botMentioned === true) &&
-      !message.text.trim() &&
-      !message.attachments?.length &&
-      !message.skippedAttachments?.length;
-    if (isBareMention) {
-      message.text = BARE_MENTION_TEXT;
-    }
-
-    // Process message through assigned agent
-    await this.processMessage({
-      message,
-      provider,
-      sendReply: true,
-    });
+    // Webhooks acknowledge before this work finishes. Retain the scope and
+    // dependencies for the full turn, just as socket ingress does.
+    const work = withDrainScope(() =>
+      this.processIncomingMessage(provider, body),
+    );
+    trackBackgroundWork(work);
+    return work;
   }
 
   /**
@@ -1305,8 +1268,9 @@ export class ChatOpsManager {
     const arrivedMessage: IncomingChatMessage = { ...message };
     await this.addPlatformMessageFiles({ provider, message });
     // A file only its sender can open (a Teams group-chat file in their
-    // OneDrive): hold the message and ask them to sign in; it is answered
-    // again, with the file, once they have.
+    // OneDrive, or a channel file the app has no site grant for): hold the
+    // message and ask them to sign in; it is answered again, with the file,
+    // once they have.
     const signInFiles =
       message.skippedAttachments?.filter(
         (skipped) => skipped.reason === "sign_in_required",
@@ -2874,21 +2838,32 @@ export class ChatOpsManager {
     ];
   }
 
-  /**
-   * The channels every Slack connection is a member of, merged. A connection
-   * whose listing fails contributes nothing (SlackProvider logs it).
-   */
-  private async discoverAllSlackChannels(
-    context: unknown,
-  ): Promise<DiscoveredChannel[]> {
-    const listings = await Promise.all(
-      this.getSlackProviders().map((slack) => slack.discoverChannels(context)),
+  private async hasCurrentSlackDiscoveryConfig(
+    tx: Parameters<typeof ChatOpsConfigModel.getSlackDiscoveryConfigs>[0],
+  ): Promise<boolean> {
+    const { main, bots } =
+      await ChatOpsConfigModel.getSlackDiscoveryConfigs(tx);
+    const expected = [
+      ...(main?.enabled
+        ? [{ config: main, provider: this.slackProvider }]
+        : []),
+      ...bots
+        .filter((bot) => bot.enabled)
+        .map((bot) => ({
+          config: bot,
+          provider: this.slackAgentBots.get(bot.agentId),
+        })),
+    ];
+    const providers = this.getSlackProviders().filter((provider) =>
+      provider.isConfigured(),
     );
-    const byId = new Map<string, DiscoveredChannel>();
-    for (const channel of listings.flat()) {
-      if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
-    }
-    return [...byId.values()];
+    return (
+      expected.length === providers.length &&
+      expected.every(
+        ({ config, provider }) =>
+          provider?.isConfigured() && provider.matchesDiscoveryConfig(config),
+      )
+    );
   }
 
   /**
@@ -2926,8 +2901,8 @@ export class ChatOpsManager {
   }
 
   /**
-   * Post a reply, finishing the live streamed message instead when there is
-   * one, so the answer is not posted twice.
+   * Post a reply through its stream when one was opened. The stream waits for
+   * pending Slack calls and owns the fallback when it has not started.
    */
   private async deliverReply(params: {
     provider: ChatOpsProvider;
@@ -2935,7 +2910,7 @@ export class ChatOpsManager {
     options: ChatReplyOptions;
   }): Promise<void> {
     const { provider, replyStream, options } = params;
-    if (replyStream?.isLive) {
+    if (replyStream) {
       await replyStream.finish(options);
       return;
     }
@@ -3333,14 +3308,15 @@ export class ChatOpsManager {
     }
 
     // The Agent's runtime needs per-user credentials the sender has not set
-    // up — link straight to the form instead of a generic apology.
+    // up, or must connect again: link straight to the form instead of a
+    // generic apology.
     if (error instanceof AgentRuntimeCredentialsRequiredError) {
       await provider.sendReply({
         originalMessage: message,
-        text: `This agent runs in its own runtime, which needs credentials you have not set up yet: ${error.missing.map((entry) => entry.label).join(", ")}. Add them, then send your message again: ${agentCredentialSetupUrl(
-          error.agentId,
-          error.missing.map((entry) => entry.key),
-        )}`,
+        text: credentialsNeededMessage({
+          agentId: error.agentId,
+          missing: error.missing,
+        }),
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
@@ -3422,9 +3398,14 @@ export class ChatOpsManager {
 
       const { selectedModel, selectedProvider } =
         await resolveConversationLlmSelectionForAgent({
-          agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+          agent: {
+            llmApiKeyId: agent.llmApiKeyId,
+            modelId: agent.modelId,
+            autoRouterId: agent.autoRouterId,
+          },
           organizationId: params.organizationId,
           userId: params.userId,
+          allowAutoModel: agent.runtime === null,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
@@ -4359,6 +4340,252 @@ export class ChatOpsManager {
     } finally {
       if (admissionId) await ChatOpsUserAdmissionModel.release(admissionId);
     }
+  }
+  private async processIncomingMessage(
+    provider: ChatOpsProvider,
+    body: unknown,
+  ): Promise<void> {
+    const headers: Record<string, string | string[] | undefined> = {};
+    const message = await provider.parseWebhookNotification(body, headers);
+    if (!message) return;
+
+    // Notify about missing scopes (rate-limited, at most once per 30 days)
+    if (provider.hasMissingScopes()) {
+      provider.notifyMissingScopes(message).catch(() => {});
+    }
+
+    // Discover channels in background
+    if (message.workspaceId) {
+      this.discoverChannels({
+        provider,
+        context: null,
+        workspaceId: message.workspaceId,
+      }).catch(() => {});
+    }
+
+    // Resolve sender email
+    const senderEmail = await provider.getUserEmail(message.senderId);
+    if (senderEmail) {
+      message.senderEmail = senderEmail;
+    }
+
+    // Verify sender is a registered user
+    if (!message.senderEmail) {
+      logger.warn("[ChatOps] Could not resolve user email");
+      await provider.sendReply({
+        originalMessage: message,
+        text:
+          provider.identityVerificationFailureText?.() ??
+          "Could not verify your identity. Please ensure your profile has an email configured.",
+      });
+      return;
+    }
+
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: message.senderEmail,
+      // Resolve display name from provider (e.g., Slack real_name)
+      resolveDisplayName: async () => {
+        displayName =
+          (await provider.getUserName?.(message.senderId)) ||
+          message.senderName;
+        return displayName;
+      },
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { email: message.senderEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
+    }
+    if (provisioned.invitationId !== null) {
+      // Send ephemeral welcome message (non-blocking)
+      this.sendAutoProvisionWelcome({
+        provider,
+        message,
+        invitationId: provisioned.invitationId,
+        displayName,
+      }).catch(() => {});
+    }
+
+    const organizationId = await getDefaultOrganizationId();
+
+    // Check for existing binding
+    let binding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId,
+    });
+
+    // If no binding found and this is a DM, check for a pending DM binding
+    // (pre-assigned from the UI before the first real DM interaction). A
+    // pinned bot's DM is its own channel and never takes over another's.
+    const isDm = message.metadata?.channelType === "im";
+    const pinnedAgentId = provider.pinnedAgentId;
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
+      const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
+        organizationId,
+        provider: provider.providerId,
+        dmOwnerEmail: message.senderEmail,
+      });
+      if (pending) {
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
+          id: pending.id,
+          organizationId,
+          realChannelId: message.channelId,
+          workspaceId: message.workspaceId,
+        });
+        logger.info(
+          { bindingId: pending.id, channelId: message.channelId },
+          "[ChatOps] Fulfilled pending DM binding with real channel ID",
+        );
+      }
+    }
+
+    // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
+    // the pending lookup above misses. Try to find an existing DM binding by
+    // email and update its channelId to the new one, preserving the agentId.
+    // The person's DMs with agent bots are other channels and stay theirs.
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
+      const existingDm =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId,
+          provider: provider.providerId,
+          dmOwnerEmail: message.senderEmail,
+          scope: this.slackDmScope(provider),
+        });
+      if (existingDm) {
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
+          id: existingDm.id,
+          organizationId,
+          realChannelId: message.channelId,
+          workspaceId: message.workspaceId,
+        });
+        logger.info(
+          { bindingId: existingDm.id, channelId: message.channelId },
+          "[ChatOps] Updated existing DM binding with new channel ID",
+        );
+      }
+    }
+
+    if (pinnedAgentId) {
+      // A pinned bot always answers as its agent: the binding only carries the
+      // channel (instructions, answer-all, task follow-ups). A channel nobody
+      // has claimed yet goes to the first bot's agent, so it shows up on that
+      // agent's page with its settings; other bots in it answer when
+      // @mentioned. Its DM is labelled with the agent the same way.
+      if (binding && !binding.agentId) {
+        binding =
+          (await ChatOpsChannelBindingModel.update(binding.id, {
+            agentId: pinnedAgentId,
+          })) ?? binding;
+        await invalidateChannelAnswerAll({
+          provider: binding.provider,
+          channelId: binding.channelId,
+          workspaceId: binding.workspaceId,
+        });
+      }
+      binding ??= await ChatOpsChannelBindingModel.upsertByChannel(
+        {
+          organizationId,
+          provider: provider.providerId,
+          channelId: message.channelId,
+          workspaceId: message.workspaceId,
+          workspaceName: provider.getWorkspaceName() ?? undefined,
+          channelName: isDm
+            ? `Direct Message - ${message.senderEmail}`
+            : ((await provider.getChannelName(message.channelId)) ?? undefined),
+          isDm,
+          dmOwnerEmail: isDm ? message.senderEmail : undefined,
+          agentId: pinnedAgentId,
+        },
+        { staleDms: this.slackDmScope(provider) },
+      );
+    } else if (!binding || !binding.agentId) {
+      // Create binding early (without agent) so the DM/channel appears in the UI
+      if (!binding) {
+        const channelName = isDm
+          ? `Direct Message - ${message.senderEmail}`
+          : await provider.getChannelName(message.channelId);
+        binding = await ChatOpsChannelBindingModel.upsertByChannel(
+          {
+            organizationId,
+            provider: provider.providerId,
+            channelId: message.channelId,
+            workspaceId: message.workspaceId,
+            workspaceName: provider.getWorkspaceName() ?? undefined,
+            channelName: channelName ?? undefined,
+            isDm,
+            dmOwnerEmail: isDm ? message.senderEmail : undefined,
+          },
+          { staleDms: this.slackDmScope(provider) },
+        );
+      }
+
+      // Frictionless onboarding: auto-assign a clear default agent instead of
+      // always prompting, so the bot just replies. Falls back to the picker
+      // card only when the choice is ambiguous.
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm,
+      });
+      if (!agentId) return; // picker card was sent
+      binding = { ...binding, agentId };
+    }
+
+    // A bare mention (no text, no file) still goes to the agent, so it answers
+    // in its own voice — a greeting, or a reply to what the thread is about —
+    // instead of a canned line. It can arrive as either app_mention or
+    // message; processMessage's dedup keeps the first.
+    const isBareMention =
+      (message.metadata?.eventType === "app_mention" ||
+        message.metadata?.botMentioned === true) &&
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length;
+    if (isBareMention) {
+      message.text = BARE_MENTION_TEXT;
+    }
+
+    // Process message through assigned agent
+    await this.processMessage({
+      message,
+      provider,
+      sendReply: true,
+    });
+  }
+
+  private async stopProviderIntake(): Promise<void> {
+    await Promise.all([
+      ...this.getSlackProviders().map((provider) => provider.beginShutdown()),
+      this.telegramProvider?.beginShutdown(),
+    ]);
+  }
+
+  private async cleanupProviders(mode: "reload" | "final"): Promise<void> {
+    if (this.msTeamsProvider) {
+      await this.msTeamsProvider.cleanup();
+      if (mode === "reload" && this.stopping) return;
+      this.msTeamsProvider = null;
+    }
+    await this.stopProviderIntake();
+    if (mode === "reload" && this.stopping) return;
+
+    // No await from here: shutdown cannot interleave with releasing replies.
+    this.slackProvider?.finishCleanup();
+    this.slackProvider = null;
+    for (const bot of this.slackAgentBots.values()) {
+      bot.finishCleanup();
+    }
+    this.slackAgentBots.clear();
+    this.jiraAgentBots.clear();
+    this.telegramProvider?.finishCleanup();
+    this.telegramProvider = null;
+    this.stopCleanupInterval();
   }
 }
 

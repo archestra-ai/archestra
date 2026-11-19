@@ -1,6 +1,6 @@
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { AgentRunInputModel } from "@/models";
 import type { AgentRunInput } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import {
   nextAvailableName,
   sanitizeUploadFilename,

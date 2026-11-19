@@ -241,7 +241,8 @@ test("a cold new-chat load renders a ready composer from the server's one read",
   mswControl,
 }) => {
   await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  // This warm-up only reads config; the composer fixture is installed below.
+  await expect(page.getByRole("main")).toBeVisible();
   const [config, publicConfig] = await page.evaluate(() =>
     Promise.all(
       ["/api/config", "/api/config/public"].map((url) =>
@@ -252,7 +253,13 @@ test("a cold new-chat load renders a ready composer from the server's one read",
 
   const { key, agent, model } = composerFixture();
   await mswControl.registerMany([
-    bootstrapOverride({ config, publicConfig, agent, model, key }),
+    bootstrapOverride({
+      config,
+      publicConfig,
+      agent,
+      model,
+      key,
+    }),
     {
       method: "get",
       url: "/api/bootstrap/new-chat",
@@ -295,11 +302,11 @@ test("a cold new-chat load renders a ready composer from the server's one read",
     "/api/llm-provider-api-keys",
     "/api/llm-provider-api-keys/available",
     "/api/llm-models/available",
-    // Only the open model menu names the organization default.
-    "/api/organization/default-model",
   ]) {
     expect(requests.count(`GET ${path}`), path).toBe(0);
   }
+  // Auto needs its live tier summary.
+  expect(requests.count("GET /api/organization/default-model")).toBe(1);
 });
 
 test("a cold conversation load renders its end on the server and its history after paint", async ({
@@ -307,7 +314,8 @@ test("a cold conversation load renders its end on the server and its history aft
   mswControl,
 }) => {
   await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  // This warm-up only reads config; the conversation fixture is installed below.
+  await expect(page.getByRole("main")).toBeVisible();
   const [config, publicConfig] = await page.evaluate(() =>
     Promise.all(
       ["/api/config", "/api/config/public"].map((url) =>

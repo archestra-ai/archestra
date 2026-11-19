@@ -9,7 +9,7 @@ import {
   splitMessagesForCompaction,
 } from "./history";
 import {
-  buildCompactionPrompt,
+  buildCompactionTranscript,
   decodeDataUrl,
   estimateChatMessagesTokens,
   getDataUrlMediaType,
@@ -338,8 +338,7 @@ describe("context compaction helpers", () => {
   });
 
   test("compaction prompt preserves recent user messages outside the bounded transcript", async () => {
-    const prompt = await buildCompactionPrompt({
-      previousSummary: null,
+    const prompt = await summarizerInput({
       conversationId: "test-conversation-id",
       messages: [
         msg("u1", "user", "Original request."),
@@ -352,8 +351,7 @@ describe("context compaction helpers", () => {
   });
 
   test("compaction prompt extracts text from data URL file parts without mediaType metadata", async () => {
-    const prompt = await buildCompactionPrompt({
-      previousSummary: null,
+    const prompt = await summarizerInput({
       conversationId: "test-conversation-id",
       messages: [
         {
@@ -376,8 +374,7 @@ describe("context compaction helpers", () => {
   });
 
   test("compaction prompt parses data URLs with intermediate media type parameters", async () => {
-    const prompt = await buildCompactionPrompt({
-      previousSummary: null,
+    const prompt = await summarizerInput({
       conversationId: "test-conversation-id",
       messages: [
         {
@@ -473,3 +470,10 @@ describe("context compaction helpers", () => {
     });
   });
 });
+
+/** Everything the compaction summarizer is given, as one searchable string. */
+async function summarizerInput(
+  params: Parameters<typeof buildCompactionTranscript>[0],
+): Promise<string> {
+  return JSON.stringify(await buildCompactionTranscript(params));
+}

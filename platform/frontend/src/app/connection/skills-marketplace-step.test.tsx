@@ -35,16 +35,10 @@ const {
   fetchUserTokenMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async () => {
-  const actual =
-    await vi.importActual<Record<string, unknown>>("@archestra/shared");
-  return {
-    ...actual,
-    archestraApiSdk: {
-      getSkills: getSkillsMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: getSkillsMock,
+}));
 
 vi.mock("@/lib/skills/skill-share.query", () => ({
   useSkillMarketplace: () => marketplaceMock(),

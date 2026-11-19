@@ -313,20 +313,94 @@ class KnowledgeBaseModel {
    */
   static async update(
     id: string,
-    data: Partial<UpdateKnowledgeBase>,
+    data: Partial<UpdateKnowledgeBase> & {
+      uploadedFilesEnvironmentId?: string | null;
+    },
   ): Promise<KnowledgeBase | null> {
-    const [result] = await db
-      .update(schema.knowledgeBasesTable)
-      .set(data)
-      .where(
-        and(
-          eq(schema.knowledgeBasesTable.id, id),
-          notDeleted(schema.knowledgeBasesTable),
+    const { uploadedFilesEnvironmentId, ...columns } = data;
+    if (uploadedFilesEnvironmentId === undefined) {
+      const [result] = await db
+        .update(schema.knowledgeBasesTable)
+        .set(columns)
+        .where(
+          and(
+            eq(schema.knowledgeBasesTable.id, id),
+            notDeleted(schema.knowledgeBasesTable),
+          ),
+        )
+        .returning();
+      return result ?? null;
+    }
+    return withDbTransaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(schema.knowledgeBasesTable)
+        .where(
+          and(
+            eq(schema.knowledgeBasesTable.id, id),
+            notDeleted(schema.knowledgeBasesTable),
+          ),
+        )
+        .for("update");
+      if (!existing) return null;
+      const [connector] = await tx
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ environmentId: uploadedFilesEnvironmentId })
+        .where(
+          and(
+            eq(
+              schema.knowledgeBaseConnectorsTable.organizationId,
+              existing.organizationId,
+            ),
+            eq(
+              schema.knowledgeBaseConnectorsTable.connectorType,
+              "file_upload",
+            ),
+            notDeleted(schema.knowledgeBaseConnectorsTable),
+            inArray(
+              schema.knowledgeBaseConnectorsTable.id,
+              tx
+                .select({ id: schema.kbUploadConnectorsTable.connectorId })
+                .from(schema.kbUploadConnectorsTable)
+                .where(eq(schema.kbUploadConnectorsTable.knowledgeBaseId, id)),
+            ),
+          ),
+        )
+        .returning({ id: schema.knowledgeBaseConnectorsTable.id });
+      if (!connector) return null;
+      const [result] = await tx
+        .update(schema.knowledgeBasesTable)
+        .set({ ...columns, updatedAt: new Date() })
+        .where(eq(schema.knowledgeBasesTable.id, id))
+        .returning();
+      return result ?? null;
+    });
+  }
+
+  /** The environment of the internal uploads connector, if files were indexed. */
+  static async findUploadedFilesEnvironment(
+    knowledgeBaseId: string,
+  ): Promise<{ uploadedFilesEnvironmentId?: string | null }> {
+    const [row] = await db
+      .select({
+        uploadedFilesEnvironmentId:
+          schema.knowledgeBaseConnectorsTable.environmentId,
+      })
+      .from(schema.kbUploadConnectorsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.kbUploadConnectorsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
         ),
       )
-      .returning();
-
-    return result ?? null;
+      .where(
+        and(
+          eq(schema.kbUploadConnectorsTable.knowledgeBaseId, knowledgeBaseId),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
+    return row ?? {};
   }
 
   /**
@@ -543,6 +617,14 @@ class KnowledgeBaseModel {
     const rows = await db
       .select({
         id: schema.knowledgeBasesTable.id,
+        uploadedFiles: params.identityOnly
+          ? sql<null>`NULL`
+          : sql<{ environmentId: string | null } | null>`(
+          SELECT json_build_object('environmentId', c.environment_id)
+          FROM ${schema.kbUploadConnectorsTable} u
+          JOIN ${schema.knowledgeBaseConnectorsTable} c ON c.id = u.connector_id
+          WHERE u.knowledge_base_id = ${kbId} AND c.deleted_at IS NULL
+        )`,
         creatorUser: sql<{ id: string; name: string; email: string } | null>`(
           SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
           FROM ${schema.usersTable} u
@@ -618,6 +700,7 @@ class KnowledgeBaseModel {
             ? CreatedByModel.fromUser(row.creatorUser)
             : null,
         connectors: row.connectors,
+        uploadedFiles: row.uploadedFiles,
         totalDocsIndexed,
         assignedAgents: row.assignedAgents,
         assignedAgentCount: row.assignedAgentCount ?? row.assignedAgents.length,
@@ -689,6 +772,9 @@ class KnowledgeBaseModel {
       visibility: row.visibility,
       teamIds: row.teamIds,
       connectors: connectors.map((c) => c.name).sort(),
+      uploadedFilesEnvironmentId: connectors.find(
+        (c) => c.connectorType === "file_upload",
+      )?.environmentId,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -707,6 +793,7 @@ function ownAudienceContext(organizationId: string) {
 
 type KnowledgeBaseListEnrichment = {
   createdBy: CreatedBy | null;
+  uploadedFiles: { environmentId: string | null } | null;
   connectors: { id: string; name: string; connectorType: ConnectorType }[];
   totalDocsIndexed: number;
   assignedAgents: { id: string; name: string; agentType: string }[];

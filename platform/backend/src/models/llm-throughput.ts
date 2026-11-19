@@ -48,13 +48,18 @@ class LlmThroughputModel {
   static async admit(params: {
     entities: Array<{ entityType: LimitEntityType; entityId: string }>;
     model: string;
+    modelAliases?: string[];
     subscription?: boolean;
     /** These entities' rules, already read fresh by this request. */
     rules?: Limit[];
   }): Promise<ThroughputAdmission> {
     const rules =
       params.rules ?? (await LlmThroughputModel.findRules(params.entities));
-    if (!rules.some((rule) => matchesModel(rule, params.model)))
+    if (
+      !rules.some((rule) =>
+        matchesModel(rule, params.model, params.modelAliases),
+      )
+    )
       return { reservation: null };
     const observations: Array<{
       rule: Limit;
@@ -69,7 +74,9 @@ class LlmThroughputModel {
         const current = await LlmThroughputModel.findRules(params.entities, tx);
         const ids = new Set(rules.map((rule) => rule.id));
         const matching = current.filter(
-          (rule) => ids.has(rule.id) && matchesModel(rule, params.model),
+          (rule) =>
+            ids.has(rule.id) &&
+            matchesModel(rule, params.model, params.modelAliases),
         );
         if (!matching.length) return { reservation: null };
         const now = await entries.now();
@@ -395,8 +402,12 @@ const THROUGHPUT_TYPES = [
   "tokens_per_minute",
 ] as const;
 const RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
-function matchesModel(rule: Limit, model: string) {
-  return !rule.model?.length || rule.model.includes(model);
+function matchesModel(rule: Limit, model: string, modelAliases?: string[]) {
+  return (
+    !rule.model?.length ||
+    rule.model.includes(model) ||
+    !!modelAliases?.some((alias) => rule.model?.includes(alias))
+  );
 }
 function counterKey(rule: Limit) {
   // Unshipped forecast counters are not actual usage. A separate token-only

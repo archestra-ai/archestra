@@ -433,7 +433,7 @@ describe("environment routes", () => {
     );
     expect(
       mcpServerRuntimeManager.reinstallSharedDeployment,
-    ).toHaveBeenCalledWith(sharedCatalog.id);
+    ).toHaveBeenCalledWith(sharedCatalog.id, { awaitReady: false });
     expect(mcpServerRuntimeManager.getOrLoadDeployment).not.toHaveBeenCalled();
   });
 

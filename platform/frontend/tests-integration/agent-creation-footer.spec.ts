@@ -7,7 +7,9 @@ test("keeps agent actions reachable after instructions load at 320px", async ({
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/agents/new");
   const name = page.getByRole("textbox", { name: /^Name\b/ });
-  const fromScratch = page.getByRole("button", { name: /^New .* agent/ });
+  const fromScratch = page.getByRole("button", {
+    name: /Built into .* for chat\./,
+  });
   await expect(name.or(fromScratch)).toBeVisible();
   if (!(await name.isVisible())) await fromScratch.click();
   await expect(name).toBeVisible();

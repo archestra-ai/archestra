@@ -59,6 +59,9 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "perplexity:responses",
   "groq:chatCompletions",
   "xai:chatCompletions",
+  // Official managed native Grok sessions speak Responses. API-key and virtual
+  // paths stay on chat completions.
+  "xai:responses",
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
@@ -80,6 +83,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
+  "github-copilot:messages",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
   "voyage:embeddings",
@@ -110,18 +114,19 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
- * Providers whose shared keys can be model pool members. Per-user providers
- * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Gemini and Cohere have no translator to or from the wires
- * pooled clients speak.
+ * Providers whose credentials can be model pool members. Personal credentials
+ * remain restricted to their owner when a request selects pool members. Cohere
+ * and Microsoft 365 Copilot have no translator for pooled request formats.
  */
 export const MODEL_POOL_PROVIDERS = [
+  "github-copilot",
   "anthropic",
   "bedrock",
   "openai",
   "azure",
   "cerebras",
   "deepseek",
+  "gemini",
   "groq",
   "minimax",
   "mistral",
@@ -370,9 +375,9 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 /**
- * Providers that charge no per-token rate, so their real price is zero rather
- * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
- * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ * Providers without a published per-token rate: the operator runs the server
+ * (vLLM, self-hosted Ollama), or the vendor bills a flat subscription metered on
+ * compute time (Ollama's cloud). vLLM rates remain unknown until configured.
  *
  * Listed explicitly rather than derived from the self-hosted-provider set it
  * currently matches, so that adding a keyless provider that does bill per token
@@ -587,23 +592,56 @@ export function isChatCompletionsOnlyRouterProvider(
   );
 }
 
+/** Whether a runtime command invokes the maintained Claude Code runtime or wrapper. */
+export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-claude-code" ||
+    command === "archestra-claude-code-runtime"
+  );
+}
+
+/** Whether a runtime command invokes the maintained Codex runtime or wrapper. */
+export function isCodexRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-codex" || command === "archestra-codex-runtime";
+}
+
+/** Whether a runtime command invokes the maintained Grok Build runtime or wrapper. */
+export function isGrokRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-grok" || command === "archestra-grok-runtime";
+}
+
+/** Whether a runtime command invokes the maintained Kimi Code runtime or wrapper. */
+export function isKimiRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-kimi" || command === "archestra-kimi-runtime";
+}
+
+/** Whether a runtime command invokes the maintained GitHub Copilot CLI runtime or wrapper. */
+export function isCopilotRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-copilot" || command === "archestra-copilot-runtime"
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
-  switch (runtimeCommand?.[0]) {
-    case "archestra-claude-code":
-      return ["anthropic"];
-    case "archestra-codex":
-      return ["openai_responses", "openai_chat"];
-    // These wrappers use Chat Completions on a custom model endpoint.
-    case "archestra-grok":
-    case "archestra-kimi":
-    case "archestra-copilot":
-      return ["openai_chat"];
-    default:
-      return ["openai_responses", "openai_chat", "anthropic"];
+  const command = runtimeCommand?.[0];
+  if (isClaudeCodeRuntimeCommand(command)) {
+    return ["anthropic"];
   }
+  if (isCodexRuntimeCommand(command)) {
+    return ["openai_responses", "openai_chat"];
+  }
+  // These runtimes and wrappers use Chat Completions on a custom model endpoint.
+  if (
+    isGrokRuntimeCommand(command) ||
+    isKimiRuntimeCommand(command) ||
+    isCopilotRuntimeCommand(command)
+  ) {
+    return ["openai_chat"];
+  }
+  return ["openai_responses", "openai_chat", "anthropic"];
 }
 
 /**
@@ -618,7 +656,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   provider: SupportedProvider;
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
-  if (runtimeCommand === "archestra-claude-code") {
+  if (isClaudeCodeRuntimeCommand(runtimeCommand)) {
     if (
       !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
         params.inferenceProtocol,
@@ -638,13 +676,13 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Claude Code runtime requires an Anthropic model or a Claude model on AWS Bedrock, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-codex" && params.provider !== "openai") {
+  if (isCodexRuntimeCommand(runtimeCommand) && params.provider !== "openai") {
     return {
       compatible: false,
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-kimi" && params.provider !== "kimi-code") {
+  if (isKimiRuntimeCommand(runtimeCommand) && params.provider !== "kimi-code") {
     return {
       compatible: false,
       message: `The maintained Kimi Code runtime requires a Kimi Code model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
@@ -697,7 +735,7 @@ export function getAgentRuntimeModelCompatibility(params: {
   if (!providerCompatibility.compatible) return providerCompatibility;
 
   if (
-    params.runtimeCommand?.[0] === "archestra-claude-code" &&
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
     params.provider === "bedrock" &&
     params.modelId &&
     !isClaudeOnBedrock(params.modelId)
@@ -720,6 +758,30 @@ export function getAgentRuntimeModelCompatibility(params: {
     };
   }
   return { compatible: true };
+}
+
+/**
+ * Whether an Agent Runtime agent that follows the organization's default model
+ * can run `provider`/`modelId` as that default. A Claude Code runtime not set
+ * to provider authentication runs a default it can't use from a provider on
+ * the person's own Claude subscription instead, except a Bedrock model, which
+ * it runs with provider billing (so that one must be a Claude model).
+ */
+export function getAgentRuntimeDefaultModelCompatibility(
+  params: Parameters<typeof getAgentRuntimeModelCompatibility>[0] & {
+    claudeCodeAuthentication?: "provider" | "subscription" | null;
+  },
+): { compatible: true } | { compatible: false; message: string } {
+  const { claudeCodeAuthentication, ...model } = params;
+  if (
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
+    (claudeCodeAuthentication === "subscription" ||
+      (claudeCodeAuthentication !== "provider" &&
+        params.provider !== "bedrock"))
+  ) {
+    return { compatible: true };
+  }
+  return getAgentRuntimeModelCompatibility(model);
 }
 
 export function getProvidersWithOptionalApiKey(params?: {

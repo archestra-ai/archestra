@@ -21,7 +21,7 @@ export const piSetup: ShellAgentSetup = {
   ...nodeScriptRenderers(renderPiSetup),
   ending: (ctx) => ({
     proxyDetail:
-      "Connected providers use the model router with native tool and result checks",
+      "Connected providers use the unified model API with native tool and result checks",
     signIn: ctx.mcp
       ? {
           command: ["arcpi", "--reconnect"],

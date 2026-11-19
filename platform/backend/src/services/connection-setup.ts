@@ -1,4 +1,6 @@
 import {
+  copilotPlanTurnedOffMessage,
+  isCopilotPlanHidden,
   providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
@@ -8,7 +10,11 @@ import {
   type InstallerClientId,
 } from "@archestra/shared/connection-setup";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import {
   type AnthropicCreditVerdict,
   probeAnthropicCredit,
@@ -170,6 +176,24 @@ export async function ensureConnectionVirtualKey(params: {
         ? `Connect your own ${provider} account before generating a setup command — each user links their own.`
         : `No ${provider} API key is configured for your account, teams, or organization. Ask an admin to add one under LLM provider keys.`,
     );
+  }
+  // Each GitHub Copilot plan has its own switch: an account of a plan the
+  // admins turned off is not set up again, though it keeps serving the
+  // setups that already use it. (assertCopilotPlanAllowed says the same, but
+  // lives outside this project.)
+  if (provider === "github-copilot") {
+    const plan = (await LlmProviderApiKeyModel.isGithubAppKey(
+      providerApiKey.id,
+    ))
+      ? "enterprise"
+      : "personal";
+    const { modelProviderOverrides } =
+      await OrganizationModel.getIntegrationOverrides(organizationId);
+    if (isCopilotPlanHidden(modelProviderOverrides, plan))
+      throw new ApiError(
+        400,
+        copilotPlanTurnedOffMessage(modelProviderOverrides, plan),
+      );
   }
 
   // Anthropic keys can pass the (free) /v1/models test at creation yet be out of

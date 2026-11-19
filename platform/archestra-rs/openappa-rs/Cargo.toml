@@ -26,11 +26,53 @@ crate-type = ["cdylib"]
 # escape (#724); then v0.38.0 and the remedy's vouch spent at its claim
 # (#725), shorter block feedback (#726), the replay stand-in (#739), a
 # subagent's return declared without review or ahead of its spawn (#763), and
-# the required readers named in reviews and block reasons (#764).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab" }
+# the required readers named in reviews and block reasons (#764); then
+# v0.38.1 and zip 9, which fixes the archive extract advisories (#680); then
+# context-provider answers trimmed largest first (#769), refusal detail in
+# provider errors (#770), more shell shapes for the GitHub provider (#771),
+# the consult budget in `APPA_CONSULT_TIMEOUT_MS` (#772), and context-provider
+# and deployment hints (#773), and the GitHub context provider answering the
+# GH_TOKEN, git config, assignment, and heredoc shapes it used to decline (#775);
+# then the annotator label-guide fixes and the claude-code verdict cache (#782),
+# result trust judged by open-write surfaces (#783), a narrowing's impact
+# that leaves per-call labeled tools unjudged (#784), a dotenv file matched in
+# the coding shell credential floor as a path, not a substring (#785), and a
+# peer read admitted under unscoped output sanitizers while its result is not
+# confined (#786); then Google Drive sharing settings for Google Workspace
+# audiences (#750), the project's own toolchain releases kept out of the
+# label-guide trust gate (#788), every Archestra built-in tool labeled (#789),
+# and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
+# then the planner-cap lint's redispatch index (#792), the battery scripts'
+# run lines (#793), kagent demo fixes (#794, #796), and a credential link
+# declaration that requires an internal audience (#798); then v0.39.0 and a
+# model sanitizer's rewritten value kept unwrapped (#797), the session module
+# split (#800), credential files and dotenv modes matched as path tokens with a
+# lower-trust return floor (#803), and recorders in place of the runtime file
+# ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
+# v0.40.1 and the LLM log tools labeled in the archestra battery (#852); then
+# v0.42.0 and empty child turns settled under their recorded return contract (#807);
+# then stale call offers refused as superseded (#884), a typed scope on reviews
+# (#888), and a return declared ahead kept in the family log (#887);
+# then an authority's `except_tags`, and plans that need only stock `approve`
+# authorities applied at the block and recorded (#889); then a remedy whose
+# annotator gave no answer refused as unanswered (#890), and a refusal of numbers
+# whose canonical form is an unsafe integer (#891); then battery sanitizers,
+# which stay off until a root binds them (#791), and logs written before #790
+# replaying (#897); then v0.43.1 and selector alternatives with `|` (#900),
+# file tracking as its own battery, with an annotator binding no declaration
+# names left idle instead of refused (#909), opencode background subagents
+# (#731), the archestra battery ruling `list_openappa_operations` and
+# `propose_tuner_suggestion` (#926), and stops held while a call they did not
+# answer still runs (#936); then v0.44.0, shared policy publication (#938),
+# reused SQLite snapshots (#939), and shell annotations inspecting every
+# pipeline stage, chained command and substitution, with separate result and
+# send labels (#940); then a spawn's tool call carrying the return it
+# declares (#947, #948); then appa-guide teaching newcomers how APPA decides
+# while setting it up (#942).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

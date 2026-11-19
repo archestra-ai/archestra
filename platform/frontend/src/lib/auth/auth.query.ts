@@ -59,7 +59,17 @@ export function useSession() {
       sessionConfirmation.set(!!data?.user);
       return data;
     },
-    staleTime: 5 * 60 * 1000,
+    // A signed-in session without an organization is a moment, not a state:
+    // the user just joined, and the server-side cache of their session can
+    // briefly lag the membership. Every organization-scoped screen reads as
+    // empty meanwhile, so it is never fresh, and the query checks again
+    // until the organization shows up.
+    staleTime: (query) =>
+      isAwaitingOrganization(query.state.data) ? 0 : 5 * 60 * 1000,
+    refetchInterval: (query) =>
+      isAwaitingOrganization(query.state.data)
+        ? AWAITING_ORGANIZATION_REFETCH_MS
+        : false,
     gcTime: 30 * 60 * 1000,
     // Keep focus refetching on so backgrounded tabs discover revoked or changed sessions promptly.
     refetchOnWindowFocus: true,
@@ -197,7 +207,7 @@ export function useMissingPermissions(
  * Low-level query which fetches the dictionary of all user permissions.
  * Avoid using directly in components and use useHasPermissions instead.
  */
-export function useAllPermissions() {
+export function useAllPermissions(options?: { revalidateOnMount?: boolean }) {
   const { data: session, isPending: isSessionPending } = useSession();
   const isAuthenticated = !!session?.user;
 
@@ -214,6 +224,11 @@ export function useAllPermissions() {
     throwOnError: false,
     enabled: !isSessionPending && isAuthenticated,
     staleTime: 5 * 60 * 1000,
+    refetchOnMount: (query) =>
+      options?.revalidateOnMount &&
+      Date.now() - query.state.dataUpdatedAt > REVALIDATE_ON_MOUNT_MIN_AGE_MS
+        ? "always"
+        : true,
     gcTime: 30 * 60 * 1000,
     // Decides which nav items and pages exist, so restoring it is what lets
     // the sidebar come back with its real contents rather than empty.
@@ -222,12 +237,29 @@ export function useAllPermissions() {
 }
 
 /**
+ * True while the permission map is asked for again because the caller just
+ * mounted. The map is trusted for five minutes, and nothing tells an open tab
+ * that an administrator changed the viewer's role in the meantime. A screen
+ * about to refuse the viewer on the cached map waits for this answer first.
+ * A map answered moments ago (a page load) is not asked for again.
+ */
+export function usePermissionsRevalidatingOnMount(): boolean {
+  const { isFetching, isFetchedAfterMount } = useAllPermissions({
+    revalidateOnMount: true,
+  });
+  return isFetching && !isFetchedAfterMount;
+}
+
+/**
  * Resolves the permission map with given keys and results of permission checks as values.
  * Use in cases where multiple useHasPermissions calls are impossible.
+ * A key with an entry in `alternatives` is also permitted by that second set
+ * (e.g. `alternativePagePermissionsMap` for pages).
  * @returns A record with the same keys as the input map and boolean values indicating permission checks, or null if still loading.
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
+  alternatives?: Partial<Record<Key, Permissions>>,
 ): Record<Key, boolean> | null {
   const { isPending: isSessionPending } = useSession();
   const { data: userPermissions, isLoading } = useAllPermissions();
@@ -250,11 +282,16 @@ export function usePermissionMap<Key extends string>(
     Key,
     Permissions,
   ][]) {
-    result[key] = hasPagePermissions({
-      userPermissions,
-      required: requiredPermissions,
-      capabilities: capabilities.data ?? [],
-    });
+    const alternative = alternatives?.[key];
+    result[key] = [requiredPermissions, ...(alternative ? [alternative] : [])]
+      .map((required) =>
+        hasPagePermissions({
+          userPermissions,
+          required,
+          capabilities: capabilities.data ?? [],
+        }),
+      )
+      .some(Boolean);
   }
 
   return result;
@@ -304,6 +341,23 @@ export function seedShellQueries(
 }
 
 // ===
+
+const AWAITING_ORGANIZATION_REFETCH_MS = 10_000;
+
+/** A permission map younger than this is the page load's own answer. */
+const REVALIDATE_ON_MOUNT_MIN_AGE_MS = 2_000;
+
+function isAwaitingOrganization(
+  data:
+    | {
+        user?: unknown;
+        session?: { activeOrganizationId?: string | null } | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  return !!data?.user && !data.session?.activeOrganizationId;
+}
 
 type BootstrapData = NonNullable<
   Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>["data"]

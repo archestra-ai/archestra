@@ -126,6 +126,26 @@ describe("LLM interactions", () => {
       PRIVATE,
     );
   });
+
+  test("a guardrail sanitizer's call stores no content, even under Full content", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const created = await InteractionModel.create({
+      profileId: agent.id,
+      source: "guardrail:sanitizer",
+      type: "anthropic:messages",
+      request,
+      processedRequest: request,
+      response,
+      inputTokens: 120,
+    });
+
+    const raw = await rawRow("interactions", created.id);
+    expect(JSON.stringify(raw)).not.toContain(PRIVATE);
+    expect(raw).toMatchObject({ input_tokens: 120, processed_request: null });
+  });
 });
 
 describe("session listing", () => {

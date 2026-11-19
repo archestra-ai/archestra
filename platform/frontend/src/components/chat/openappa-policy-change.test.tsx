@@ -34,6 +34,12 @@ beforeEach(() => {
     validationDirectory: "",
     githubWebUrl: "https://github.com",
     provider: "github",
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
     source: null,
   };
   server.use(
@@ -141,6 +147,40 @@ test("shows a first preview of the starter with every line added", () => {
   const diff = screen.getByLabelText("Policy diff");
   expect(diff).toHaveTextContent("1Added: [policy]");
   expect(diff).toHaveTextContent("2Added: version = 2");
+});
+
+test("keeps a large replacement bounded in chat and counts changes beyond the preview", () => {
+  const before = Array.from({ length: 9_000 }, (_, i) => `old rule ${i}`);
+  const after = Array.from({ length: 9_000 }, (_, i) => `new rule ${i}`);
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          stage: "preview",
+          delivery: "revision",
+          before: before.join("\n"),
+          after: after.join("\n"),
+          diff: [
+            "@@ -1,9000 +1,9000 @@",
+            ...before.map((line) => `-${line}`),
+            ...after.map((line) => `+${line}`),
+          ].join("\n"),
+        },
+      }}
+    />,
+  );
+  const preview = screen.getByRole("region", { name: "Diff preview" });
+  expect(preview).toHaveTextContent("old rule 0");
+  expect(preview).not.toHaveTextContent("old rule 8999");
+  expect(preview).not.toHaveTextContent("new rule 8999");
+  expect(screen.getByText("9,000 added")).toBeVisible();
+  expect(screen.getByText("9,000 removed")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Review full diff" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: /Show \d+ more lines/ }),
+  ).not.toBeInTheDocument();
 });
 
 const saved = {
@@ -254,6 +294,9 @@ test.each([
           setupPullRequestNumber: null,
           lastSyncedAt: null,
           lastSyncError: null,
+          selfService: false,
+          selfServiceDirectory: "mcp",
+          selfServiceAutoMerge: false,
         },
       };
     },

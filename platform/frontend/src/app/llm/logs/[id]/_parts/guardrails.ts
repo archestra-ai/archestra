@@ -606,7 +606,7 @@ const ROLES = ["authority", "annotator", "sanitizer", "audience_source"];
  * thought signature around it (`gemsig-<signature>.<id>`).
  */
 function modelCallId(id: string): string {
-  const signed = /^gemsig-[^.]*\.(.+)$/s.exec(unstamped(id));
+  const signed = /^gemsig-[^.]*\.(.+)$/.exec(unstamped(id));
   return signed ? modelCallId(signed[1]) : unstamped(id);
 }
 

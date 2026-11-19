@@ -538,7 +538,10 @@ export function McpServerIssueNotice({
     <>
       <InlineNotice
         variant={noticeVariant}
-        className={className}
+        // Sized by the notice, not the viewport: a server page column can be
+        // narrow on a wide screen, and buttons beside the text then squeeze
+        // it into a sliver.
+        className={cn("@container", className)}
         data-testid={`mcp-registry-attention-row-${item.name}`}
       >
         <CircleAlert aria-hidden />
@@ -580,7 +583,7 @@ export function McpServerIssueNotice({
         </InlineNoticeText>
         <div
           data-slot="inline-notice-action"
-          className="ml-auto flex flex-wrap items-center gap-1.5"
+          className="ml-auto flex flex-wrap items-center gap-1.5 @max-2xl:basis-full @max-2xl:ml-0"
         >
           {panelActions === "dismiss-only" ? (
             // Your own rejected token has one fix, signing in again; it

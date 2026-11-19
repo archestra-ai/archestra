@@ -68,10 +68,10 @@ crate-type = ["cdylib"]
 # pipeline stage, chained command and substitution, with separate result and
 # send labels (#940); then a spawn's tool call carrying the return it
 # declares (#947, #948).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c861e11e0f63ac769c93e9a02c60f0e5f4c74b4b", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c861e11e0f63ac769c93e9a02c60f0e5f4c74b4b" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c861e11e0f63ac769c93e9a02c60f0e5f4c74b4b", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c861e11e0f63ac769c93e9a02c60f0e5f4c74b4b" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

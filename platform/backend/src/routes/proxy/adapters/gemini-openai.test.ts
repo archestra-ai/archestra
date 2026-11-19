@@ -82,6 +82,46 @@ describe("GeminiOpenaiResponseAdapter", () => {
     );
   });
 
+  test("names a call Gemini gave no id the same way for policy and on the wire, rewritten or not", () => {
+    const call = { functionCall: { name: "read", args: {} } };
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "pool",
+    }).createResponseAdapter({
+      candidates: [
+        {
+          content: {
+            role: "model",
+            parts: [{ ...call, thoughtSignature: "sig" }, call, call],
+          },
+        },
+      ],
+    } as Gemini.Types.GenerateContentResponse);
+    const wireIds = (response: unknown) =>
+      (
+        response as { choices: [{ message: { tool_calls: { id: string }[] } }] }
+      ).choices[0].message.tool_calls.map(
+        (toolCall) => decodeSignedToolCallId(toolCall.id).id,
+      );
+
+    const calls = adapter.getToolCalls();
+    const ids = calls.map((toolCall) => toolCall.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(wireIds(adapter.getOriginalResponse())).toEqual(ids);
+    expect(
+      wireIds(
+        adapter.withRewrittenToolCalls?.(
+          calls.slice(1).map((toolCall) => ({
+            id: toolCall.id,
+            name: toolCall.name,
+            arguments: "{}",
+          })),
+        ),
+      ),
+    ).toEqual(ids.slice(1));
+  });
+
   test("toRefusalResponse keeps the wire OpenAI-shaped but logs the native Gemini refusal", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
       chatcmplId: "chatcmpl-test",

@@ -417,7 +417,6 @@ export function geminiResponseToOpenai(
     function: { name: string; arguments: string };
   }> = [];
   let text = "";
-  const callIdSeed = Date.now();
 
   // Blocked candidates carry a `finishReason` but no `content`.
   for (const part of candidate?.content?.parts ?? []) {
@@ -428,11 +427,7 @@ export function geminiResponseToOpenai(
     if ("functionCall" in part && part.functionCall) {
       toolCalls.push({
         id: encodeSignedToolCallId({
-          // Unique within the response, as the Gemini adapter's own are: a
-          // call is known by this id whether or not a signature rides with it.
-          id:
-            part.functionCall.id ??
-            `gemini-call-${part.functionCall.name}-${callIdSeed + toolCalls.length}`,
+          id: part.functionCall.id,
           name: part.functionCall.name,
           thoughtSignature:
             "thoughtSignature" in part ? part.thoughtSignature : undefined,

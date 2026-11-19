@@ -392,9 +392,9 @@ export function describeMcpServerIssue(issue: McpServerIssue): {
     case "not-running":
       if (issue.noDeployment) {
         return {
-          what: "No deployment is running for this server, although it installed successfully.",
-          fix: "Restart the server from its page to create the deployment again; if it does not come back, check the logs.",
-          whoActs: INSTALL_OWNER_OR_ADMIN_ACTS,
+          what: "No pod is running for this server, although it installed successfully.",
+          fix: "Restart its pods to create the pod again.",
+          whoActs: "Someone who can edit this MCP server can restart its pods.",
         };
       }
       return {

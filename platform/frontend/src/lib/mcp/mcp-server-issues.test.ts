@@ -256,7 +256,7 @@ describe("computeMcpServerIssues", () => {
       }),
     ]);
     expect(describeMcpServerIssue(reported[0]).what).toBe(
-      "No deployment is running for this server, although it installed successfully.",
+      "No pod is running for this server, although it installed successfully.",
     );
   });
 

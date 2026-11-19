@@ -19,6 +19,7 @@ import {
   FileKindChip,
   FilePathLabel,
   FileWorkspace,
+  FileWorkspaceNotice,
   IconBadge,
   IconLink,
   WorkspacePanelToggle,
@@ -188,27 +189,13 @@ function PolicyEditor() {
           }
           notice={
             workspace.notice && (
-              <div
-                role="alert"
+              <FileWorkspaceNotice
                 data-testid="composition-notice"
-                className={cn(
-                  "flex h-7 shrink-0 items-center gap-2 border-b px-3 text-xs",
-                  workspace.notice.variant === "error"
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-                )}
+                variant={workspace.notice.variant}
+                title={workspace.notice.title}
               >
-                <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
-                <span className="shrink-0 font-medium">
-                  {workspace.notice.title}
-                </span>
-                <span
-                  className="min-w-0 truncate opacity-90"
-                  title={workspace.notice.body}
-                >
-                  {workspace.notice.body}
-                </span>
-              </div>
+                {workspace.notice.body}
+              </FileWorkspaceNotice>
             )
           }
         >

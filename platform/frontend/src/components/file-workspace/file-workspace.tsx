@@ -1,7 +1,8 @@
 "use client";
 
-import { FolderTree, PanelLeft, Search } from "lucide-react";
+import { FolderTree, PanelLeft, Search, TriangleAlert } from "lucide-react";
 import {
+  type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
@@ -186,6 +187,48 @@ export function FileWorkspace({
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
       />
+    </div>
+  );
+}
+
+/**
+ * A notice about the whole workspace, for its `notice` slot: a slim strip that
+ * spans the workspace under its bar, not a card inside the editor. From `sm`
+ * up the title and explanation share one line and the explanation truncates,
+ * with the full text on hover. On a phone, where there is no hover, the
+ * explanation wraps onto its own lines under the title.
+ */
+export function FileWorkspaceNotice({
+  variant = "warning",
+  title,
+  children,
+  className,
+  ...props
+}: {
+  variant?: "warning" | "error";
+  title: ReactNode;
+  /** The explanation. Plain text, so it can be the hover title too. */
+  children: string;
+} & Omit<ComponentProps<"div">, "title" | "children">) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "flex shrink-0 items-start gap-2 border-b px-3 py-1.5 text-xs sm:items-center",
+        variant === "error"
+          ? "bg-destructive/10 text-destructive"
+          : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        className,
+      )}
+      {...props}
+    >
+      <TriangleAlert className="mt-px size-3.5 shrink-0 sm:mt-0" aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+        <span className="shrink-0 font-medium">{title}</span>
+        <span className="min-w-0 opacity-90 sm:truncate" title={children}>
+          {children}
+        </span>
+      </div>
     </div>
   );
 }

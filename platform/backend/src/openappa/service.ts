@@ -1921,7 +1921,7 @@ function spawnReturnDeclares(
     case "attested":
       return {
         label: {},
-        return_schema: normalizeReturnSchemaNode(declaration.schema),
+        return_schema: declaration.schema,
       };
   }
 }

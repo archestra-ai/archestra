@@ -2818,7 +2818,6 @@ describe("APPA feature boundary", () => {
         kind: "attested",
         schema: {
           type: "object",
-          additionalProperties: false,
           properties: { days: { type: "integer" } },
         },
       },

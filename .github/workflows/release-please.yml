@@ -770,7 +770,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@be7b130d1e0280187c8898ebe1031bdc95dc7a9e # vex-document (pin the release with it before merging)
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@78920d499caedeb1efcb3e20395b41fd26eea8fe # v1.34.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

@@ -163,8 +163,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         operationId: RouteId.GetDisconnectReference,
-        // Listed in the API reference once the docs for it ship.
-        hide: true,
         description:
           "A reference for the signed-in user's cleanup prompt. Guardrails leave the first conversation of that user that presents it unchecked until it expires, so the cleanup can remove the gateway and the Guardrails helpers without depending on them. Only a browser session gets one: an API key or a service account cannot exempt a conversation.",
         tags: ["Connection Setups"],

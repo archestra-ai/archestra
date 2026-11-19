@@ -1279,6 +1279,20 @@ Parents can also declare return bounds prospectively before issuing the spawn by
 
 Prospective declarations apply strictly to the parent's next immediate child spawn within the same turn. The declaration remains valid only while the parent's label remains unchanged. If intervening tool calls alter the parent's label, the declaration lapses. Prospective declarations must immediately precede the subagent call with no intervening tool invocations. Fan-out spawns ignore prospective declarations and must configure return contracts at the spawn block.
 
+A host can also declare the return on the spawn's own `tool_call` event, in the `declares` field. The field takes the same `label` and optional `return_schema`:
+
+```json
+{ "declares": { "label": {} } }
+```
+
+`declares` selects one of two returns. Without `return_schema`, the return crosses as spoken. With `return_schema`, `attest-schema` attests the return. A void return or a named output sanitizer needs a plan from the spawn's block.
+
+If the spawn is blocked, OpenAPPA applies the declaration through the block's declaration plan and checks the call again in the same hook. The call is then released, or blocked only by its other preconditions. If no declaration plan of the block fits `declares`, the block states that the declaration was not applied.
+
+A declaration that already stands for the call, with the same tool and arguments, is kept: `declares` does not replace it. A prospective declaration also takes precedence over `declares`.
+
+OpenAPPA refuses a `tool_call` that carries `declares` but does not start exactly one subagent. Under a deployment without `context_control` a spawn is released without a prepared child, so OpenAPPA applies no declaration there.
+
 In the example below, a child agent can inspect internal customer data and pass its return payload through `remove_customer_details` before the parent receives it:
 
 ```toml

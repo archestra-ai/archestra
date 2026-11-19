@@ -164,6 +164,73 @@ class UserModel {
     return user;
   }
 
+  /** When the user was soft-deleted, or `null` when they are active. */
+  static async getSoftDeleted(userId: string): Promise<Date | null> {
+    const [row] = await db
+      .select({ softDeleted: schema.usersTable.softDeleted })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, userId))
+      .limit(1);
+    return row?.softDeleted ?? null;
+  }
+
+  /** `soft_deleted` of each given user that has it set, by user id. */
+  static async getSoftDeletedByIds(
+    userIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (userIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        id: schema.usersTable.id,
+        softDeleted: schema.usersTable.softDeleted,
+      })
+      .from(schema.usersTable)
+      .where(inArray(schema.usersTable.id, userIds));
+    return new Map(
+      rows.flatMap((row) =>
+        row.softDeleted ? [[row.id, row.softDeleted] as const] : [],
+      ),
+    );
+  }
+
+  /** Set when the user was soft-deleted, or `null` to make them active again. */
+  static async setSoftDeleted(params: {
+    userId: string;
+    softDeleted: Date | null;
+  }) {
+    await db
+      .update(schema.usersTable)
+      .set({ softDeleted: params.softDeleted })
+      .where(eq(schema.usersTable.id, params.userId));
+  }
+
+  /**
+   * Create a user with no `account` row: no password and no linked identity
+   * provider yet. The first SSO sign-in with the same email links onto this
+   * user (see `accountLinking` in better-auth.ts). Throws on a duplicate email.
+   */
+  static async createWithoutAccount(params: {
+    name: string;
+    email: string;
+    /** Marks the user as created by SCIM provisioning. */
+    scimProvisioned?: boolean;
+  }) {
+    const now = new Date();
+    const [user] = await db
+      .insert(schema.usersTable)
+      .values({
+        id: crypto.randomUUID(),
+        name: params.name,
+        email: params.email.toLowerCase(),
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+        scimProvisioned: params.scimProvisioned ? now : null,
+      })
+      .returning();
+    return user;
+  }
+
   /**
    * Get all permissions for a user
    */

@@ -104,6 +104,15 @@ export class Authnz {
       throw new ApiError(401, "Unauthenticated");
     }
 
+    // A user the identity provider deactivated (SCIM) keeps their data, but
+    // their existing sessions and API keys stop working.
+    if (request.user.softDeleted) {
+      throw new ApiError(
+        401,
+        "Your account was deactivated in your identity provider",
+      );
+    }
+
     // Set Sentry user context after successful authentication
     this.setSentryUserContext(request.user);
 
@@ -752,6 +761,8 @@ export class Authnz {
       banReason: null,
       banExpires: null,
       twoFactorEnabled: false,
+      softDeleted: null,
+      scimProvisioned: null,
     };
     request.organizationId = serviceAccount.organizationId;
     request.serviceAccount = serviceAccount;

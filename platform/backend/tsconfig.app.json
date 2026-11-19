@@ -13,6 +13,7 @@
     "src/observability/previous-termination-report.ts",
     "src/auth/better-auth.ts",
     "src/auth/sso-email-reconciliation.ee.ts",
+    "src/auth/sso-soft-deleted.ee.ts",
     "src/routes/chat/context-trimming.ts",
     "src/routes/chat/encrypted-chat.ts",
     "src/routes/chat/errors.ts",

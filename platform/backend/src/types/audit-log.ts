@@ -162,6 +162,8 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.hardReset",
   "mcpServer.bulk_deleted",
   "member.bulk_deleted",
+  "member.provisioning_updated",
+  "member.soft_deleted",
   "member.created",
   "member.role_updated",
   "member.deleted",

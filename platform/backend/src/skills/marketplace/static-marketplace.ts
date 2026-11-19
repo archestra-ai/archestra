@@ -89,6 +89,9 @@ export async function resolveMarketplaceViewer(params: {
   // to be someone, and silently serving them less would look like their token
   // worked.
   if (!identity) return { status: "unauthenticated" };
+  // Deactivated in the identity provider (SCIM): the credential no longer works.
+  if (await UserModel.getSoftDeleted(identity.userId))
+    return { status: "unauthenticated" };
 
   const checker = await getSkillPermissionChecker(identity);
   if (!checker.canRead && !checker.isAdmin) return { status: "forbidden" };

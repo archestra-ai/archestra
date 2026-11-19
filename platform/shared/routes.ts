@@ -750,6 +750,13 @@ export const RouteId = {
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
+  ScimGetServiceProviderConfig: "scimGetServiceProviderConfig",
+  ScimListUsers: "scimListUsers",
+  ScimGetUser: "scimGetUser",
+  ScimCreateUser: "scimCreateUser",
+  ScimReplaceUser: "scimReplaceUser",
+  ScimPatchUser: "scimPatchUser",
+  ScimDeleteUser: "scimDeleteUser",
   CompleteOnboarding: "completeOnboarding",
 
   // Appearance Settings Routes

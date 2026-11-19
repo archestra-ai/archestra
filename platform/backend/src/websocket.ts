@@ -1958,6 +1958,8 @@ export class WebSocketService {
         const { organizationId, ...user } = await UserModel.getById(
           session.user.id,
         );
+        // Deactivated in the identity provider (SCIM): no connection.
+        if (user.softDeleted) return null;
         return {
           userId: user.id,
           organizationId,
@@ -1982,6 +1984,8 @@ export class WebSocketService {
           const { organizationId, ...user } = await UserModel.getById(
             apiKeyResult.key.referenceId,
           );
+          // Deactivated in the identity provider (SCIM): no connection.
+          if (user.softDeleted) return null;
           return {
             userId: user.id,
             organizationId,

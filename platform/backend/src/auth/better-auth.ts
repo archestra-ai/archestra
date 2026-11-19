@@ -82,6 +82,8 @@ import { hashOauthClientSecret } from "./oauth-client-secret";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoSoftDeletedBlock } from "./sso-soft-deleted.ee";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoSubjectBinding } from "./sso-subject-binding.ee";
 
 // SPDX-SnippetEnd
@@ -554,6 +556,14 @@ export const auth = betterAuth({
     session: {
       create: {
         before: async (session) => {
+          // A user the identity provider deactivated (SCIM) cannot sign in by
+          // any method: password, SSO or impersonation.
+          if (await UserModel.getSoftDeleted(session.userId)) {
+            throw new APIError("FORBIDDEN", {
+              message:
+                "Your account was deactivated in your identity provider. Contact your administrator.",
+            });
+          }
           // If activeOrganizationId is not set, find the user's first organization
           if (!session.activeOrganizationId) {
             const membership = await MemberModel.getFirstMembershipForUser(
@@ -665,11 +675,18 @@ export const auth = betterAuth({
         },
       });
       const emailReconciliation = withSsoEmailReconciliation(ctx);
-      const internalAdapter =
+      const subjectBinding =
         withSsoSubjectBinding(
           ctx,
           emailReconciliation ?? ctx.context.internalAdapter,
         ) ?? emailReconciliation;
+      // Outermost, so a deactivated user is refused before any other check.
+      const internalAdapter =
+        withSsoSoftDeletedBlock(
+          ctx,
+          (subjectBinding ??
+            ctx.context.internalAdapter) as typeof ctx.context.internalAdapter,
+        ) ?? subjectBinding;
       if (adapter || internalAdapter)
         return {
           context: {

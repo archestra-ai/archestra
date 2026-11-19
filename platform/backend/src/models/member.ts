@@ -579,6 +579,7 @@ class MemberModel {
           image: schema.usersTable.image,
           // Nullable in the schema despite the default; coalesced below.
           twoFactorEnabled: schema.usersTable.twoFactorEnabled,
+          softDeleted: schema.usersTable.softDeleted,
         })
         .from(schema.membersTable)
         .innerJoin(
@@ -810,8 +811,15 @@ class MemberModel {
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
     const [row] = await db
-      .select()
+      .select({
+        member: schema.membersTable,
+        softDeleted: schema.usersTable.softDeleted,
+      })
       .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
       .where(
         and(
           eq(schema.membersTable.userId, userId),
@@ -823,12 +831,14 @@ class MemberModel {
     if (!row) return null;
 
     return {
-      id: row.id,
-      organizationId: row.organizationId,
-      userId: row.userId,
-      role: row.role,
-      defaultAgentId: row.defaultAgentId ?? null,
-      createdAt: row.createdAt.toISOString(),
+      id: row.member.id,
+      organizationId: row.member.organizationId,
+      userId: row.member.userId,
+      role: row.member.role,
+      defaultAgentId: row.member.defaultAgentId ?? null,
+      createdAt: row.member.createdAt.toISOString(),
+      // When the identity provider deactivated the user through SCIM.
+      softDeleted: row.softDeleted?.toISOString() ?? null,
     };
   }
 

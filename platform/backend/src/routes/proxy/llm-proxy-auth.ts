@@ -50,6 +50,7 @@ import { configCache } from "@/services/config-cache";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { ApiError, type GatewayAgent } from "@/types";
@@ -1621,6 +1622,16 @@ async function authenticatePassthroughProxyRequest(params: {
 
   try {
     const identity = await authenticate();
+    // A user the identity provider deactivated (SCIM) cannot use their
+    // credentials. 403, not 401: a 401 falls back to anonymous forwarding.
+    if (
+      identity?.userId &&
+      (await softDeletedUsers.isSoftDeleted(identity.userId))
+    )
+      throw new ApiError(
+        403,
+        "Your account was deactivated in your identity provider",
+      );
     if (authenticatedBearer && bearerToken) {
       stripAuthenticatedBearer(request, bearerToken);
       if (providerApiKey) {

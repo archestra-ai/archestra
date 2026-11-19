@@ -987,6 +987,13 @@ export class ChatOpsManager {
       );
       return;
     }
+    if (provisioned.user.softDeleted) {
+      logger.info(
+        { userId: provisioned.user.id },
+        "[ChatOps] Selection refused: the identity provider deactivated this user",
+      );
+      return;
+    }
 
     // Verify agent exists
     const agent = await AgentModel.findById(selection.agentId);
@@ -1085,6 +1092,7 @@ export class ChatOpsManager {
     if (
       !user?.emailVerified ||
       user.banned ||
+      user.softDeleted ||
       !(await ResourcePermissions.allows({
         organizationId: binding.organizationId,
         userId: user.id,
@@ -2238,7 +2246,7 @@ export class ChatOpsManager {
         const linkedUser = identity.userId
           ? await UserModel.getById(identity.userId)
           : null;
-        if (!linkedUser || linkedUser.banned)
+        if (!linkedUser || linkedUser.banned || linkedUser.softDeleted)
           return {
             success: false,
             error: `The linked ${archestraMcpBranding.appName} account is unavailable`,
@@ -2284,6 +2292,7 @@ export class ChatOpsManager {
           !service.disabled &&
           reviewer?.emailVerified &&
           !reviewer.banned &&
+          !reviewer.softDeleted &&
           member &&
           (await ResourcePermissions.allows({
             userId: fallbackUserId,
@@ -2359,6 +2368,12 @@ export class ChatOpsManager {
       return {
         success: false,
         error: `This ${archestraMcpBranding.appName} account is disabled`,
+      };
+    }
+    if (user.softDeleted) {
+      return {
+        success: false,
+        error: `This ${archestraMcpBranding.appName} account was deactivated in your identity provider`,
       };
     }
     if (provider.providerId === "ms-teams") {
@@ -4109,6 +4124,7 @@ export class ChatOpsManager {
         if (
           !user.emailVerified ||
           user.banned ||
+          user.softDeleted ||
           binding.organizationId !== provider.getOrganizationId() ||
           binding.agentId !== provider.pinnedAgentId ||
           !(await ResourcePermissions.allows({
@@ -4397,6 +4413,13 @@ export class ChatOpsManager {
       logger.error(
         { email: message.senderEmail },
         "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
+    }
+    if (provisioned.user.softDeleted) {
+      logger.info(
+        { userId: provisioned.user.id },
+        "[ChatOps] Message refused: the identity provider deactivated this user",
       );
       return;
     }

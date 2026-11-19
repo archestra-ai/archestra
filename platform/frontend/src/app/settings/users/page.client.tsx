@@ -460,8 +460,18 @@ function MembersTab({
       header: "User",
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="font-medium truncate">
-            {row.original.name || "Unknown"}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="font-medium truncate">
+              {row.original.name || "Unknown"}
+            </span>
+            {row.original.softDeleted && (
+              <Badge
+                variant="destructive"
+                title={`Deactivated in your identity provider on ${new Date(row.original.softDeleted).toLocaleDateString()}. They cannot sign in.`}
+              >
+                Deactivated
+              </Badge>
+            )}
           </div>
           <div className="text-xs text-muted-foreground truncate">
             {row.original.email}

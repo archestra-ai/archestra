@@ -1,0 +1,374 @@
+import { RouteId } from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { enterpriseTier } from "@/enterprise-tier";
+import { scimProvisioningService } from "@/services/scim-provisioning.ee";
+import {
+  ApiError,
+  constructResponseSchema,
+  ErrorResponsesSchema,
+} from "@/types";
+
+/**
+ * SCIM 2.0 `/Users` endpoints for identity-provider provisioning. The
+ * identity provider authenticates with a service-account token
+ * (`Authorization: Bearer <token>`); its base URL is
+ * `<archestra>/api/scim/v2`. See `scimProvisioningService` for what a pushed
+ * user becomes.
+ */
+const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Scoped to this plugin's routes.
+  fastify.addHook("preHandler", async () => {
+    if (!enterpriseTier.isCoreActive())
+      throw new ApiError(
+        403,
+        "SCIM provisioning is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+      );
+  });
+
+  // Identity providers send SCIM bodies as `application/scim+json`, and may
+  // send that content type, or JSON's, on a DELETE with no body.
+  const parseJson = fastify.getDefaultJsonParser("error", "error");
+  fastify.removeContentTypeParser("application/json");
+  fastify.addContentTypeParser(
+    ["application/json", "application/scim+json"],
+    { parseAs: "string" },
+    (request, body, done) => {
+      const text = typeof body === "string" ? body : body.toString();
+      if (text.trim() === "") done(null, undefined);
+      else parseJson(request, text, done);
+    },
+  );
+
+  fastify.get(
+    `${SCIM_BASE}/ServiceProviderConfig`,
+    {
+      schema: {
+        operationId: RouteId.ScimGetServiceProviderConfig,
+        description: "SCIM 2.0: the features this SCIM service supports",
+        tags: ["SCIM"],
+        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+      },
+    },
+    async (_request, reply) =>
+      reply.send({
+        schemas: [
+          "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig",
+        ],
+        patch: { supported: true },
+        bulk: { supported: false, maxOperations: 0, maxPayloadSize: 0 },
+        filter: { supported: true, maxResults: MAX_COUNT },
+        changePassword: { supported: false },
+        sort: { supported: false },
+        etag: { supported: false },
+        authenticationSchemes: [
+          {
+            type: "oauthbearertoken",
+            name: "OAuth Bearer Token",
+            description: "An Archestra service-account token",
+          },
+        ],
+      }),
+  );
+
+  fastify.get(
+    `${SCIM_BASE}/Users`,
+    {
+      schema: {
+        operationId: RouteId.ScimListUsers,
+        description:
+          'SCIM 2.0: list users. Supports only the filter `userName eq "<email>"`.',
+        tags: ["SCIM"],
+        querystring: z.object({
+          filter: z.string().optional(),
+          startIndex: z.coerce.number().int().min(1).default(1),
+          count: z.coerce.number().int().min(0).max(MAX_COUNT).default(100),
+        }),
+        response: constructResponseSchema(ScimListResponseSchema),
+      },
+    },
+    async ({ query, organizationId }, reply) => {
+      const userName =
+        query.filter === undefined ? undefined : parseFilter(query.filter);
+      return reply.send(
+        await scimProvisioningService.listUsers({
+          organizationId,
+          userName,
+          startIndex: query.startIndex,
+          count: query.count,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    `${SCIM_BASE}/Users/:id`,
+    {
+      schema: {
+        operationId: RouteId.ScimGetUser,
+        description: "SCIM 2.0: get one user",
+        tags: ["SCIM"],
+        params: UserIdParamsSchema,
+        response: constructResponseSchema(ScimUserSchema),
+      },
+    },
+    async ({ params, organizationId }, reply) =>
+      reply.send(await getUserOrThrow({ organizationId, userId: params.id })),
+  );
+
+  fastify.post(
+    `${SCIM_BASE}/Users`,
+    {
+      schema: {
+        operationId: RouteId.ScimCreateUser,
+        description:
+          "SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in.",
+        tags: ["SCIM"],
+        body: ScimUserInputSchema,
+        response: { ...ErrorResponsesSchema, 201: ScimUserSchema },
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      const email = emailOf(body);
+      const result = await scimProvisioningService.createUser({
+        organizationId,
+        userName: email,
+        name: displayNameOf(body) ?? email,
+      });
+      if (result.status === "exists")
+        throw new ApiError(409, "A user with this userName already exists");
+      return reply.code(201).send(result.user);
+    },
+  );
+
+  fastify.put(
+    `${SCIM_BASE}/Users/:id`,
+    {
+      schema: {
+        operationId: RouteId.ScimReplaceUser,
+        description:
+          "SCIM 2.0: replace a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.",
+        tags: ["SCIM"],
+        params: UserIdParamsSchema,
+        body: ScimUserInputSchema,
+        response: constructResponseSchema(ScimUserSchema),
+      },
+    },
+    async (request, reply) => {
+      const { user, changed } = await applyActive({
+        organizationId: request.organizationId,
+        userId: request.params.id,
+        active: request.body.active,
+      });
+      if (!changed) request.auditSkip = true;
+      return reply.send(user);
+    },
+  );
+
+  fastify.patch(
+    `${SCIM_BASE}/Users/:id`,
+    {
+      schema: {
+        operationId: RouteId.ScimPatchUser,
+        description:
+          "SCIM 2.0: patch a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.",
+        tags: ["SCIM"],
+        params: UserIdParamsSchema,
+        body: ScimPatchSchema,
+        response: constructResponseSchema(ScimUserSchema),
+      },
+    },
+    async (request, reply) => {
+      const { user, changed } = await applyActive({
+        organizationId: request.organizationId,
+        userId: request.params.id,
+        active: activeFromPatch(request.body),
+      });
+      if (!changed) request.auditSkip = true;
+      return reply.send(user);
+    },
+  );
+
+  fastify.delete(
+    `${SCIM_BASE}/Users/:id`,
+    {
+      schema: {
+        operationId: RouteId.ScimDeleteUser,
+        description:
+          "SCIM 2.0: delete a user. Soft-deletes the user like deactivation: no sign-in, data kept.",
+        tags: ["SCIM"],
+        params: UserIdParamsSchema,
+        response: { ...ErrorResponsesSchema, 204: z.undefined() },
+      },
+    },
+    async (request, reply) => {
+      const { changed } = await applyActive({
+        organizationId: request.organizationId,
+        userId: request.params.id,
+        active: false,
+      });
+      if (!changed) request.auditSkip = true;
+      return reply.code(204).send();
+    },
+  );
+};
+
+export default scimRoutes;
+
+// ===== internal helpers =====
+
+const SCIM_BASE = "/api/scim/v2";
+const MAX_COUNT = 200;
+
+const UserIdParamsSchema = z.object({ id: z.string() });
+
+/** SCIM sends booleans as JSON booleans or, from Entra ID, as "True"/"False". */
+const ScimBooleanSchema = z.union([
+  z.boolean(),
+  z
+    .string()
+    .regex(/^(true|false)$/i)
+    .transform((value) => value.toLowerCase() === "true"),
+]);
+
+const ScimUserInputSchema = z.looseObject({
+  userName: z.string().trim().min(1),
+  displayName: z.string().optional(),
+  name: z
+    .looseObject({
+      formatted: z.string().optional(),
+      givenName: z.string().optional(),
+      familyName: z.string().optional(),
+    })
+    .optional(),
+  emails: z
+    .array(
+      z.looseObject({
+        value: z.string(),
+        primary: ScimBooleanSchema.optional(),
+      }),
+    )
+    .optional(),
+  active: ScimBooleanSchema.optional(),
+});
+
+const ScimPatchSchema = z.looseObject({
+  Operations: z.array(
+    z.looseObject({
+      op: z.string(),
+      path: z.string().optional(),
+      value: z.unknown().optional(),
+    }),
+  ),
+});
+
+const ScimUserSchema = z.object({
+  schemas: z.array(z.string()),
+  id: z.string(),
+  userName: z.string(),
+  displayName: z.string(),
+  name: z.object({ formatted: z.string() }),
+  emails: z.array(
+    z.object({ value: z.string(), type: z.string(), primary: z.boolean() }),
+  ),
+  active: z.boolean(),
+  meta: z.object({
+    resourceType: z.string(),
+    created: z.string(),
+    lastModified: z.string(),
+  }),
+});
+
+const ScimListResponseSchema = z.object({
+  schemas: z.array(z.string()),
+  totalResults: z.number().int(),
+  startIndex: z.number().int(),
+  itemsPerPage: z.number().int(),
+  Resources: z.array(ScimUserSchema),
+});
+
+type ScimUserInput = z.infer<typeof ScimUserInputSchema>;
+
+/** Only `userName eq "<value>"`, the filter Entra ID and Okta send. */
+function parseFilter(filter: string): string {
+  const match = /^\s*userName\s+eq\s+"((?:[^"\\]|\\.)*)"\s*$/i.exec(filter);
+  if (!match)
+    throw new ApiError(
+      400,
+      'Only the filter userName eq "<value>" is supported',
+    );
+  return match[1].replace(/\\(.)/g, "$1");
+}
+
+/** The email is the userName when it is one, else the primary email. */
+function emailOf(body: ScimUserInput): string {
+  if (EMAIL.test(body.userName)) return body.userName.toLowerCase();
+  const email =
+    body.emails?.find((entry) => entry.primary === true)?.value ??
+    body.emails?.[0]?.value;
+  if (!email || !EMAIL.test(email))
+    throw new ApiError(400, "userName or emails must contain an email address");
+  return email.toLowerCase();
+}
+
+function displayNameOf(body: ScimUserInput): string | undefined {
+  const given = [body.name?.givenName, body.name?.familyName]
+    .filter(Boolean)
+    .join(" ");
+  return body.displayName || body.name?.formatted || given || undefined;
+}
+
+/**
+ * The `active` value a PATCH sets: from `{ path: "active", value }`, or from a
+ * path-less `{ value: { active } }` (both forms are in use).
+ */
+function activeFromPatch(body: z.infer<typeof ScimPatchSchema>) {
+  let active: boolean | undefined;
+  for (const operation of body.Operations) {
+    if (!/^(replace|add)$/i.test(operation.op)) continue;
+    const value =
+      operation.path?.toLowerCase() === "active"
+        ? operation.value
+        : operation.path === undefined &&
+            typeof operation.value === "object" &&
+            operation.value !== null
+          ? (operation.value as Record<string, unknown>).active
+          : undefined;
+    const parsed = ScimBooleanSchema.safeParse(value);
+    if (parsed.success) active = parsed.data;
+  }
+  return active;
+}
+
+async function getUserOrThrow(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const user = await scimProvisioningService.getUser(params);
+  if (!user) throw new ApiError(404, "User not found");
+  return user;
+}
+
+/**
+ * `active: false` soft-deletes the user, `active: true` restores them, and
+ * no `active` leaves Archestra as is. `changed` says whether `active` changed,
+ * so a call that changed nothing is left out of the audit log.
+ */
+async function applyActive(params: {
+  organizationId: string;
+  userId: string;
+  active: boolean | undefined;
+}) {
+  const { organizationId, userId, active } = params;
+  const before = await getUserOrThrow({ organizationId, userId });
+  const user =
+    active === false
+      ? await scimProvisioningService.softDeleteUser({ organizationId, userId })
+      : active === true
+        ? await scimProvisioningService.restoreUser({ organizationId, userId })
+        : before;
+  if (!user) throw new ApiError(404, "User not found");
+  return { user, changed: user.active !== before.active };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+$/;

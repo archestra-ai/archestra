@@ -897,6 +897,7 @@ const layerTable = [
       // through ports (models/ports.ts).
       "src/auth/better-auth.ts",
       "src/auth/sso-email-reconciliation.ee.ts",
+      "src/auth/sso-soft-deleted.ee.ts",
       "src/auth/jwks-signing-key-guard.ts",
       "src/auth/fastify-plugin/index.ts",
       "src/auth/fastify-plugin/plugin.ts",
@@ -913,6 +914,7 @@ const layerTable = [
         files: [
           "src/auth/better-auth.ts",
           "src/auth/sso-email-reconciliation.ee.ts",
+          "src/auth/sso-soft-deleted.ee.ts",
           "src/entrypoints/_shared/log-capture.ts",
           "src/fastify-instance.ts",
           "src/hooks/hook-dispatcher-service.ts",

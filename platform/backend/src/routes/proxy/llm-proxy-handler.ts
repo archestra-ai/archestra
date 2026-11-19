@@ -158,6 +158,7 @@ import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deplo
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -1300,6 +1301,18 @@ async function handleObservedLLMProxy<
     oauthUserId ??
     personalTokenUserId ??
     regularVirtualKeyUserId;
+
+  // A user the identity provider deactivated (SCIM) keeps their keys and
+  // tokens but cannot use them.
+  if (
+    authenticatedUserId &&
+    (await softDeletedUsers.isSoftDeleted(authenticatedUserId))
+  ) {
+    throw new ApiError(
+      403,
+      "Your account was deactivated in your identity provider",
+    );
+  }
 
   if (
     proof.serviceAccountId &&

@@ -127,6 +127,7 @@
     "src/auth/fastify-plugin/plugin.ts",
     "src/auth/jwks-signing-key-guard.ts",
     "src/auth/sso-email-reconciliation.ee.ts",
+    "src/auth/sso-soft-deleted.ee.ts",
     // Tests and test helpers.
     "src/**/*.test.ts", "src/**/*.test-*.ts", "src/**/__mocks__/**", "src/test/**"
   ],

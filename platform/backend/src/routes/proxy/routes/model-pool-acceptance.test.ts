@@ -322,10 +322,11 @@ labTest(
       );
       first.mode = { kind: "status", status: 503 };
       // Initial plan selects the first member. Its network response changes
-      // the next random draw; a fixed precomputed member sweep would pick light.
+      // the next draw to 0.25: weights 1:9 choose heavy, while equal weights
+      // or a fixed precomputed member sweep would pick light.
       server.use(
         http.post(`${first.origin}/chat/completions`, ({ request }) => {
-          random.mockImplementation(() => 0x80000000);
+          random.mockImplementation(() => 0x40000000);
           return respond(first, request);
         }),
       );

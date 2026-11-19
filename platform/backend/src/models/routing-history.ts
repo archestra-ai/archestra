@@ -471,7 +471,13 @@ class RoutingHistoryModel {
       .values({ ...values, scorerCost })
       .onConflictDoUpdate({
         target: [scores.historySessionId, scores.scorerVersionId],
-        set: { status: values.status, features: values.features, scorerCost },
+        // Restamped on settling, so the job that scored it gets the credit.
+        set: {
+          status: values.status,
+          features: values.features,
+          scorerCost,
+          createdAt: sql`now()`,
+        },
         setWhere: sql`${scores.status} = 'pending'`,
       });
   }

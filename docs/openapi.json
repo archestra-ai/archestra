@@ -614609,7 +614609,7 @@
         "tags": [
           "SCIM"
         ],
-        "description": "SCIM 2.0: replace a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`member:delete`](/docs/reference/permissions#member:delete): Remove members from the organization\n[`member:update`](/docs/reference/permissions#member:update): Change member roles and settings",
+        "description": "SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`member:delete`](/docs/reference/permissions#member:delete): Remove members from the organization\n[`member:update`](/docs/reference/permissions#member:update): Change member roles and settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -615030,7 +615030,7 @@
         "tags": [
           "SCIM"
         ],
-        "description": "SCIM 2.0: patch a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`member:delete`](/docs/reference/permissions#member:delete): Remove members from the organization\n[`member:update`](/docs/reference/permissions#member:update): Change member roles and settings",
+        "description": "SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`member:delete`](/docs/reference/permissions#member:delete): Remove members from the organization\n[`member:update`](/docs/reference/permissions#member:update): Change member roles and settings",
         "requestBody": {
           "required": true,
           "content": {

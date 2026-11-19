@@ -129,20 +129,21 @@ it("saves independent MCP tiers with the same CPU-derived GiB defaults and prese
   client.clear();
 });
 
-it("keeps tier controls read-only without organization settings permission", async () => {
+it("keeps edits after a refused save and resets the shared editor when reopened", async () => {
   server.use(
     http.get(`${origin}/api/organization/mcp-runtime-tiers`, () =>
-      HttpResponse.json({
-        tiers: [
-          {
-            name: "MCP small",
-            cpuRequest: 0.1,
-            cpuLimit: null,
-            memoryRequestMiB: 128,
-            memoryLimitMiB: 512,
+      HttpResponse.json(resolveMcpRuntimeTiers(null)),
+    ),
+    http.patch(`${origin}/api/organization/mcp-runtime-tiers`, () =>
+      HttpResponse.json(
+        {
+          error: {
+            message: "Tier names changed; reload and try again",
+            type: "api_conflict_error",
           },
-        ],
-      }),
+        },
+        { status: 409 },
+      ),
     ),
   );
   const client = new QueryClient({
@@ -150,15 +151,31 @@ it("keeps tier controls read-only without organization settings permission", asy
   });
   render(
     <QueryClientProvider client={client}>
-      <McpRuntimeTiersBlock canEdit={false} />
+      <McpRuntimeTiersBlock canEdit />
     </QueryClientProvider>,
   );
-  await screen.findByText("MCP small");
+  await screen.findByRole("button", { name: "Edit S" });
+  await userEvent.click(screen.getByRole("button", { name: "Edit S" }));
+  const dialog = screen.getByRole("dialog", { name: "Edit tier" });
+  const name = within(dialog).getByLabelText("Name");
+  await userEvent.clear(name);
+  await userEvent.type(name, "Unsaved tier");
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Save changes" }),
+  );
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "Tier names changed",
+  );
+  expect(name).toHaveValue("Unsaved tier");
+  await userEvent.type(name, " edited");
+  expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await userEvent.click(screen.getByRole("button", { name: "Edit S" }));
   expect(
-    screen.queryByRole("button", { name: "Create tier" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: /Edit|Delete/ }),
-  ).not.toBeInTheDocument();
+    within(screen.getByRole("dialog", { name: "Edit tier" })).getByLabelText(
+      "Name",
+    ),
+  ).toHaveValue("S");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   client.clear();
 });

@@ -6287,4 +6287,3 @@ const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
 const MCP_TRANSPORT_ANNOTATION = "archestra.ai/mcp-transport";
 
 type DeployedTransport = "stdio" | "streamable-http";
-

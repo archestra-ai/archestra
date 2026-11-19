@@ -161,7 +161,7 @@ export function McpRuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     <SettingsBlock
       id="runtime-tiers"
       title="Runtime tiers"
-      description="CPU and memory tiers for self-hosted MCP servers, independent of Agent Runtime tiers. Changes require affected MCP servers to be reinstalled."
+      description="CPU and memory tiers for self-hosted MCP servers. Changes require affected MCP servers to be reinstalled."
       control={
         canEdit && resolved ? (
           <Button

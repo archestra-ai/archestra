@@ -467,6 +467,7 @@ describe("Independent MCP runtime tiers", () => {
       [tier("S", 1, { memoryRequestMiB: 513 })],
       [tier("S"), tier("s")],
       [tier("S", 1, { pooled: true })],
+      [tier("S", 1, { workspaceGiB: 10 })],
     ])
       expect((await patch(tiers)).statusCode).toBe(400);
   });

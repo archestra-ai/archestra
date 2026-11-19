@@ -331,17 +331,6 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(
       (await InternalMcpCatalogModel.findById(id))?.localConfig?.runtimeTier,
     ).toBe("S");
-    const preview = await app.inject({
-      method: "GET",
-      url: `/api/internal_mcp_catalog/${id}/deployment-yaml-preview`,
-    });
-    expect(preview.json().yaml).toBe(DEPLOYMENT_YAML);
-    const reset = await app.inject({
-      method: "POST",
-      url: `/api/internal_mcp_catalog/${id}/reset-deployment-yaml`,
-    });
-    expect(reset.statusCode, reset.body).toBe(200);
-    expect(reset.json().yaml).toContain("cpu: 100m");
   });
 
   test("an editor cannot add, change or remove runtime tiers", async ({

@@ -3181,7 +3181,7 @@ function McpRuntimeTierField({
             </SelectContent>
           </Select>
           <FormDescription>
-            MCP runtime tiers are managed independently in Settings → MCP.
+            Manage MCP runtime tiers in Settings → MCP.
           </FormDescription>
           <FormMessage />
         </FormItem>

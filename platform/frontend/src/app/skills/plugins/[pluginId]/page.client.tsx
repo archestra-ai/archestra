@@ -58,6 +58,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
         onManifestChange={() => undefined}
         onFilesChange={() => undefined}
         readOnly
+        downloadName={skill.name}
         className="h-[calc(100vh-20rem)] min-h-[32rem]"
       />
     </PageLayout>

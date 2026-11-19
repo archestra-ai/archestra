@@ -346,13 +346,11 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByRole("button", { name: "Next change" }),
   ).toBeDisabled();
-  await expect(dialog.getByText("Last change", { exact: true })).toBeVisible();
   await expect(
     dialog.getByText('final_review = "updated"', { exact: true }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Previous change" }).click();
   await expect(position).toHaveText("Change 1 of 2");
-  await expect(dialog.getByText("1 change below")).toBeVisible();
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();

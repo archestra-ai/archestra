@@ -28,7 +28,6 @@ export function PolicyDiffReview({
   const controlId = useId();
   const [sideBySide, setSideBySide] = useState(false);
   const navigation = usePolicyDiffNavigation();
-  const below = navigation.total - navigation.current;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -44,27 +43,18 @@ export function PolicyDiffReview({
           aria-label="Change navigation"
           className="ml-auto flex w-full items-center justify-end gap-3 sm:w-auto"
         >
-          <div className="mr-auto text-sm tabular-nums sm:mr-0">
-            <output
-              aria-label="Change position"
-              aria-live="polite"
-              aria-atomic="true"
-              className="block font-medium"
-            >
-              {navigation.ready
-                ? navigation.total
-                  ? `Change ${navigation.current} of ${navigation.total}`
-                  : "No changes"
-                : "Calculating changes…"}
-            </output>
-            {navigation.total > 0 && (
-              <span className="block text-xs text-muted-foreground">
-                {below > 0
-                  ? `${below} ${below === 1 ? "change" : "changes"} below`
-                  : "Last change"}
-              </span>
-            )}
-          </div>
+          <output
+            aria-label="Change position"
+            aria-live="polite"
+            aria-atomic="true"
+            className="mr-auto text-sm font-normal text-muted-foreground tabular-nums sm:mr-0"
+          >
+            {navigation.ready
+              ? navigation.total
+                ? `Change ${navigation.current} of ${navigation.total}`
+                : "No changes"
+              : "Calculating changes…"}
+          </output>
           <div className="flex items-center gap-1">
             <Button
               size="icon-sm"

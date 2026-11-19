@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { use, useCallback, useMemo, useState } from "react";
+import { use, useCallback, useMemo, useRef, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -36,6 +36,7 @@ import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionChatErrors,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import {
@@ -48,6 +49,10 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
+import {
+  type SessionChatError,
+  SessionChatErrors,
+} from "./_parts/session-chat-errors";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,
@@ -162,6 +167,28 @@ export default function SessionDetailPage({
     sessionId,
     enabled: openappaEnabled,
   });
+  // Read only for a session whose chat showed errors, so other sessions do
+  // not pay for a request that would come back empty.
+  const { data: chatErrors = NO_CHAT_ERRORS } = useSessionChatErrors({
+    sessionId,
+    enabled: (sessionData?.chatErrorCount ?? 0) > 0,
+  });
+  const requestIdByChatErrorId = useMemo(
+    () =>
+      lastRequestBeforeEachError({
+        chatErrors,
+        requests: interactions,
+        nextRequest: hasNextPage ? nextRequest : null,
+      }),
+    [chatErrors, interactions, hasNextPage, nextRequest],
+  );
+  const chatErrorsByRowId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const requestId of requestIdByChatErrorId.values()) {
+      counts.set(requestId, (counts.get(requestId) ?? 0) + 1);
+    }
+    return counts;
+  }, [requestIdByChatErrorId]);
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -271,6 +298,7 @@ export default function SessionDetailPage({
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const requestsSectionRef = useRef<HTMLElement>(null);
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -413,12 +441,32 @@ export default function SessionDetailPage({
             trajectory={
               openappaEnabled ? { session: sessionData, lineage } : null
             }
+            status={sessionData ?? null}
+          />
+
+          <SessionChatErrors
+            chatErrors={chatErrors}
+            requestIdByErrorId={requestIdByChatErrorId}
+            onShowRequest={(requestId) => {
+              if (!interactions.some((row) => row.id === requestId)) {
+                openRequest(requestId);
+                return;
+              }
+              // The list keeps its selected row in view; bring the list
+              // itself into the page's view, or the click seems to do nothing.
+              setPickedKey(requestSpanKey(requestId));
+              requestsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
           />
 
           {/* overflow-clip, not hidden, below lg: hidden would make the card
               a scroll container and break the sticky pane headers. isolate
               keeps the list's sticky column header under the page header. */}
           <section
+            ref={requestsSectionRef}
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
@@ -439,6 +487,7 @@ export default function SessionDetailPage({
                 }
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
+                chatErrorsByRowId={chatErrorsByRowId}
                 onSelect={setPickedKey}
                 notice={
                   <ToolCallsNotice
@@ -514,6 +563,38 @@ export default function SessionDetailPage({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+const NO_CHAT_ERRORS: SessionChatError[] = [];
+
+/**
+ * Ties each chat error to the request logged last before it on this page: the
+ * turn the chat was running when it failed. An error past the next page's
+ * first request belongs to a later page, and one before this page's first
+ * request to an earlier one; neither is tied.
+ */
+function lastRequestBeforeEachError({
+  chatErrors,
+  requests,
+  nextRequest,
+}: {
+  chatErrors: SessionChatError[];
+  requests: { id: string; createdAt: string }[];
+  nextRequest: { createdAt: string } | null;
+}): Map<string, string> {
+  const tied = new Map<string, string>();
+  const nextAt = nextRequest ? new Date(nextRequest.createdAt).getTime() : null;
+  for (const chatError of chatErrors) {
+    const at = new Date(chatError.createdAt).getTime();
+    if (nextAt !== null && nextAt <= at) continue;
+    let match: string | null = null;
+    for (const request of requests) {
+      if (new Date(request.createdAt).getTime() > at) break;
+      match = request.id;
+    }
+    if (match) tied.set(chatError.id, match);
+  }
+  return tied;
+}
 
 /** What the request list cannot show about this page's records, if anything. */
 function ToolCallsNotice({

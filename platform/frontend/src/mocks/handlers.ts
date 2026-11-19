@@ -784,6 +784,9 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list and the session detail page).
+  ...getJson("/api/interactions/sessions/:sessionId/chat-errors", {
+    chatErrors: [],
+  }),
   ...getJson("/api/interactions/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],

@@ -711,6 +711,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionSessionChatErrors]: {
+    log: ["read"],
+  },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},

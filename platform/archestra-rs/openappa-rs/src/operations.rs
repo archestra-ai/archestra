@@ -1,7 +1,7 @@
 use crate::{
     Sql, adapter,
-    errors::{held_elsewhere, invalid_input, receipt_failure, sql_failure},
-    input::{Input, OfferInput, OfferOwner, TrajectoryStamp, required},
+    errors::{held_elsewhere, invalid_input, receipt_failure, sql_failure, storage},
+    input::{DeclaredReturn, Input, OfferInput, OfferOwner, TrajectoryStamp, required},
     lease,
     remedy::decision_text,
     sealed,
@@ -190,8 +190,10 @@ pub(crate) fn remedy_binding(caller_id: &Option<String>) -> ReceiptBinding {
     }
 }
 
+/// A declared return is part of the call, so a retry under the same id that declares
+/// another return is another request. Absent, it is omitted so older rows keep their shape.
 pub(crate) fn operation_semantic(input: &Input) -> Value {
-    json!({
+    let mut semantic = json!({
         "event": input.event,
         "tool": input.tool,
         "arguments": input.arguments,
@@ -199,7 +201,21 @@ pub(crate) fn operation_semantic(input: &Input) -> Value {
         "output": input.output,
         "spawn_call_id": input.spawn_call_id,
         "child_native_id": input.child_native_id,
-    })
+    });
+    if let Some(declares) = &input.declares {
+        semantic["declares"] = json!(declares);
+    }
+    semantic
+}
+
+/// The return a recorded call declared, read back from its semantic request.
+pub(crate) fn recorded_declaration(semantic: &Value) -> napi::Result<Option<DeclaredReturn>> {
+    semantic
+        .get("declares")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| storage("recorded call carries an unreadable return declaration"))
 }
 
 /// Host retry text lives beside the call, not in the idempotency key. Absent
@@ -645,5 +661,51 @@ mod tests {
         assert!(old.get("dispatch").is_none());
         assert!(crate::remedy::recorded_call(Some(context), serde_json::json!({})).is_ok());
         assert!(crate::remedy::recorded_call(Some(old), serde_json::json!({})).is_ok());
+    }
+
+    #[test]
+    fn a_declared_return_is_keyed_with_its_call_and_read_back_for_recovery() {
+        let spawn = |declares: Option<serde_json::Value>| -> crate::input::Input {
+            let mut input = serde_json::json!({
+                "organization_id": "organization",
+                "session_id": "session",
+                "event": "tool_call",
+                "operation_id": "call:spawn",
+                "tool": "subagent",
+                "arguments": {"prompt": "go"},
+                "spawn": true,
+            });
+            if let Some(declares) = declares {
+                input["declares"] = declares;
+            }
+            serde_json::from_value(input).unwrap()
+        };
+        let attested = serde_json::json!({"label": {}, "return_schema": {"type": "object"}});
+        let semantic = crate::operations::operation_semantic(&spawn(Some(attested)));
+        assert_ne!(
+            crate::operations::operation_semantic(&spawn(Some(serde_json::json!({"label": {}})))),
+            semantic,
+            "another declaration under the same call id is another request"
+        );
+        let recovered = crate::operations::recorded_declaration(&semantic)
+            .unwrap()
+            .map(appa_runtime_api::DeclaredArguments::from);
+        assert_eq!(
+            recovered,
+            Some(appa_runtime_api::DeclaredArguments {
+                label: Some(appa_runtime_api::LabelSpelling::default()),
+                return_schema: Some(serde_json::json!({"type": "object"})),
+            })
+        );
+
+        let undeclared = crate::operations::operation_semantic(&spawn(None));
+        assert!(undeclared.get("declares").is_none());
+        assert_eq!(
+            crate::operations::recorded_declaration(&undeclared).unwrap(),
+            None
+        );
+        assert!(
+            crate::operations::recorded_declaration(&serde_json::json!({"declares": {}})).is_err()
+        );
     }
 }

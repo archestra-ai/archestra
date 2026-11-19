@@ -22,7 +22,6 @@ for (const stream of [false, true]) {
   test.for([
     { provider: "anthropic" as const, modelId: "claude-opus-4-6-20250918" },
     { provider: "cohere" as const, modelId: "command-a-03-2025" },
-    { provider: "gemini" as const, modelId: "gemini-2.5-pro" },
   ])(`rejects unsupported $provider structured output before upstream (stream: ${stream})`, async ({
     provider,
     modelId,

@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import { ChatCompletionRequestSchema } from "@/types/llm-providers/openai/api";
 import { openaiToAnthropic } from "./anthropic-openai-translator";
 import { openaiToCohere } from "./cohere-openai-translator";
-import { openaiToGemini } from "./gemini-openai-translator";
 
 const formats = [
   { type: "json_object" },
@@ -24,7 +23,6 @@ const formats = [
 for (const [provider, translate] of [
   ["anthropic", openaiToAnthropic],
   ["cohere", openaiToCohere],
-  ["gemini", openaiToGemini],
 ] as const) {
   describe(`${provider} OpenAI-compatible translation`, () => {
     for (const stream of [false, true]) {

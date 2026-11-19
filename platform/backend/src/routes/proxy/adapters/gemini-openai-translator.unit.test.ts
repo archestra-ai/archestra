@@ -31,6 +31,48 @@ function firstToolParams(tools: unknown): SanitizedToolParams {
   return (tools as EmittedTools)[0].functionDeclarations[0].parameters;
 }
 
+describe("openaiToGemini — response_format", () => {
+  const schema = {
+    type: "object",
+    properties: { status: { type: "string", enum: ["ready"] } },
+    required: ["status"],
+    additionalProperties: false,
+  };
+
+  test("json_object requests the JSON MIME type", () => {
+    const { geminiBody } = openaiToGemini(
+      req({ response_format: { type: "json_object" } }),
+    );
+    expect(geminiBody.generationConfig).toEqual({
+      responseMimeType: "application/json",
+    });
+  });
+
+  test("json_schema maps to responseJsonSchema and keeps other options", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        temperature: 0.2,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "status_result", strict: true, schema },
+        },
+      }),
+    );
+    expect(geminiBody.generationConfig).toEqual({
+      temperature: 0.2,
+      responseMimeType: "application/json",
+      responseJsonSchema: schema,
+    });
+  });
+
+  test("text format adds no generationConfig", () => {
+    const { geminiBody } = openaiToGemini(
+      req({ response_format: { type: "text" } }),
+    );
+    expect(geminiBody.generationConfig).toBeUndefined();
+  });
+});
+
 describe("openaiToGemini — reasoning and output limits", () => {
   test.each([
     ["gemini-2.5-flash", "minimal", { thinkingBudget: 1024 }],

@@ -6,7 +6,6 @@ import {
 import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
-import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
@@ -49,7 +48,6 @@ export function openaiToGemini(req: OpenAiRequest): {
   geminiBody: GeminiRequest;
   openaiContext: GeminiOpenaiContext;
 } {
-  assertUnstructuredResponseFormat(req, "the Gemini translation");
   const output = req as OpenAiRequest & {
     modalities?: string[];
     audio?: unknown;
@@ -205,7 +203,9 @@ export function openaiToGemini(req: OpenAiRequest): {
     req.reasoning_effort,
   );
   const maxOutputTokens = req.max_completion_tokens ?? req.max_tokens;
+  const responseFormatConfig = buildResponseFormatConfig(req);
   if (
+    responseFormatConfig !== undefined ||
     req.temperature !== undefined ||
     req.max_tokens !== undefined ||
     req.max_completion_tokens !== undefined ||
@@ -213,7 +213,7 @@ export function openaiToGemini(req: OpenAiRequest): {
     loose.top_p !== undefined ||
     loose.stop !== undefined
   ) {
-    geminiBody.generationConfig = {};
+    geminiBody.generationConfig = { ...responseFormatConfig };
     if (req.temperature !== undefined && req.temperature !== null) {
       geminiBody.generationConfig.temperature = req.temperature;
     }
@@ -647,6 +647,29 @@ function unsupported(feature: string): never {
  * https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
  */
 const FOREIGN_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
+/**
+ * Gemini enforces JSON output natively: `json_object` becomes the JSON MIME
+ * type and `json_schema` adds the schema as `responseJsonSchema`.
+ */
+function buildResponseFormatConfig(
+  req: OpenAiRequest,
+):
+  | Pick<
+      NonNullable<GeminiRequest["generationConfig"]>,
+      "responseMimeType" | "responseJsonSchema"
+    >
+  | undefined {
+  const format = req.response_format;
+  if (!format || format.type === "text") return undefined;
+  if (format.type === "json_schema" && format.json_schema.schema) {
+    return {
+      responseMimeType: "application/json",
+      responseJsonSchema: format.json_schema.schema,
+    };
+  }
+  return { responseMimeType: "application/json" };
+}
 
 /** Adapt the portable conversation to the existing OpenAI pool transports. */
 export function geminiToOpenai(

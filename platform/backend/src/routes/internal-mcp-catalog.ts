@@ -999,6 +999,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InternalMcpCatalogModel.resolveRuntimeResources(
           restBody.localConfig,
           request.organizationId,
+          undefined,
+          restBody.serverType,
         );
       }
       // SPDX-SnippetBegin
@@ -1665,6 +1667,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InternalMcpCatalogModel.resolveRuntimeResources(
           effectiveLocalConfig,
           request.organizationId,
+          undefined,
+          restBody.serverType ?? originalCatalogItem.serverType,
         );
       }
       // SPDX-SnippetBegin

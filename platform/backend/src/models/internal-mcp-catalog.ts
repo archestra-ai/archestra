@@ -172,8 +172,14 @@ class InternalMcpCatalogModel {
     localConfig: LocalConfig,
     organizationId: string | null | undefined,
     tx?: Transaction,
+    serverType: InternalMcpCatalogServerType = "local",
   ): Promise<McpServerResources | undefined> {
     if (!localConfig.runtimeTier) return undefined;
+    if (serverType !== "local")
+      throw new ApiError(
+        400,
+        "Runtime tiers are only supported for locally hosted MCP servers",
+      );
     if (!organizationId)
       throw new ApiError(
         400,
@@ -331,6 +337,7 @@ class InternalMcpCatalogModel {
           dbValues.localConfig,
           context?.organizationId,
           tx,
+          dbValues.serverType,
         );
       }
       const [row] = await tx
@@ -1592,7 +1599,8 @@ class InternalMcpCatalogModel {
     if (Object.keys(setValues).length > 0) {
       if (
         dbValues.localConfig !== undefined ||
-        dbValues.deploymentSpecYaml !== undefined
+        dbValues.deploymentSpecYaml !== undefined ||
+        dbValues.serverType !== undefined
       ) {
         const [owner] = await db
           .select({
@@ -1620,6 +1628,7 @@ class InternalMcpCatalogModel {
               localConfig,
               current.organizationId,
               tx,
+              dbValues.serverType ?? current.serverType,
             );
           const [updated] = await tx
             .update(schema.internalMcpCatalogTable)

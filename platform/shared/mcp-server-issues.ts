@@ -74,6 +74,11 @@ export interface McpServerIssue {
    * connection the viewer only sees because they may manage it.
    */
   onViewerConnection?: boolean;
+  /**
+   * Set on not-running issues the runtime raised because it holds no
+   * deployment at all for the install, as opposed to one that keeps failing.
+   */
+  noDeployment?: boolean;
 }
 
 /** One of the viewer's own alert dismissals, as the issue rule reads it. */
@@ -385,6 +390,13 @@ export function describeMcpServerIssue(issue: McpServerIssue): {
         whoActs: INSTALL_OWNER_OR_ADMIN_ACTS,
       };
     case "not-running":
+      if (issue.noDeployment) {
+        return {
+          what: "No pod is running for this server, although it installed successfully.",
+          fix: "Restart its pods to create the pod again.",
+          whoActs: "Someone who can edit this MCP server can restart its pods.",
+        };
+      }
       return {
         what: "The server keeps crashing after a successful install.",
         fix: "Check the logs; if the configuration is right, restart the server from its page.",
@@ -453,6 +465,39 @@ export function tidyMcpServerErrorText(
     }
   }
   return kept.trim();
+}
+
+/**
+ * The deployment status of each install on a multitenant catalog. One
+ * deployment serves every install on such a catalog, but the runtime reports
+ * status per install, and a backend process that never loaded an install
+ * reports it "not created" while the pod it shares is up. Each such install
+ * takes the shared deployment's entry from a sibling that has one, preferring
+ * a running or idle one. When no install has an entry, the deployment really
+ * is missing and every entry stays as reported.
+ */
+export function withSharedMultitenantStatuses({
+  serverIds,
+  deploymentStatuses,
+}: {
+  serverIds: readonly string[];
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+}): Record<string, McpDeploymentStatusEntry> {
+  const reported = serverIds.flatMap((id) => {
+    const entry = deploymentStatuses[id];
+    return entry && entry.state !== "not_created" ? [entry] : [];
+  });
+  const shared =
+    reported.find(
+      (entry) => entry.state === "running" || entry.state === "hibernated",
+    ) ?? reported[0];
+  if (!shared) return deploymentStatuses;
+  const result = { ...deploymentStatuses };
+  for (const id of serverIds) {
+    const entry = result[id];
+    if (!entry || entry.state === "not_created") result[id] = shared;
+  }
+  return result;
 }
 
 // ===== Internal pieces =====
@@ -533,6 +578,12 @@ function computeItemIssues({
   // state are the error payloads. Multi-tenant rows alias one pod, so
   // collapse siblings by deployment identity.
   if (isLocal) {
+    const statuses = item.multitenant
+      ? withSharedMultitenantStatuses({
+          serverIds: servers.map((server) => server.id),
+          deploymentStatuses,
+        })
+      : deploymentStatuses;
     const sharedInstallFailureSource = item.multitenant
       ? mcpRuntimeAlertSource({
           serverId: `catalog:${item.id}`,
@@ -548,7 +599,7 @@ function computeItemIssues({
       : null;
     const seenDeployments = new Set<string>();
     for (const s of servers) {
-      const entry = deploymentStatuses[s.id];
+      const entry = statuses[s.id];
       // A healthy or on-demand pod proves the current installation works,
       // whatever stale state the row carries.
       if (entry?.state === "running" || entry?.state === "hibernated") {
@@ -572,6 +623,9 @@ function computeItemIssues({
         kind,
         audience: viewerCanFix(s) ? "you" : "others",
         serverId: item.multitenant ? undefined : s.id,
+        ...(kind === "not-running" && entry?.state === "not_created"
+          ? { noDeployment: true }
+          : {}),
         detail:
           kind === "failed-to-start" && installError
             ? installError
@@ -661,12 +715,27 @@ function viewerConnectionIds({
   return new Set(winning.map((s) => s.id));
 }
 
-function formatRuntimeDetail(entry: McpDeploymentStatusEntry): string {
+/**
+ * The runtime's message for the detail block, or null when it only restates
+ * the status: "Deployment not created" says nothing the sentence above it
+ * does not.
+ */
+function formatRuntimeDetail(entry: McpDeploymentStatusEntry): string | null {
+  if (
+    entry.state === "not_created" &&
+    !entry.error?.trim() &&
+    entry.message === RUNTIME_NOT_CREATED_MESSAGE
+  ) {
+    return null;
+  }
   const base = tidyMcpServerErrorText(entry.error) ?? entry.message;
   return entry.restartCount && entry.restartCount > 0
     ? `${base} · ${entry.restartCount} restart${entry.restartCount === 1 ? "" : "s"}`
     : base;
 }
+
+/** The runtime's message for an install it holds no deployment for. */
+const RUNTIME_NOT_CREATED_MESSAGE = "Deployment not created";
 
 function isoOrNull(value: string | Date | null | undefined): string | null {
   if (value == null) return null;

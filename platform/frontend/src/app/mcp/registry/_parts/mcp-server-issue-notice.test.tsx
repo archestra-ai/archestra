@@ -12,12 +12,27 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: routerPush }),
 }));
 
+const { access } = vi.hoisted(() => ({
+  access: { canEditCatalog: true },
+}));
+
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-me" } } }),
   // The fixture may edit the catalog but is not an installations admin, so
   // ownership checks remain meaningful in the "others" tests.
   useHasPermissions: (permissions: Record<string, unknown>) => ({
-    data: "mcpRegistry" in permissions,
+    data: "mcpRegistry" in permissions && access.canEditCatalog,
+  }),
+}));
+
+const { restartPodsMutate } = vi.hoisted(() => ({
+  restartPodsMutate: vi.fn(),
+}));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useRefreshInternalMcpCatalogImage: () => ({
+    mutate: restartPodsMutate,
+    isPending: false,
   }),
 }));
 
@@ -107,6 +122,18 @@ const needsReauth = (
   ...overrides,
 });
 
+const noPod = (): McpServerIssue => ({
+  kind: "not-running",
+  noDeployment: true,
+  audience: "you",
+  catalogId: "cat-1",
+  detail: null,
+  since: null,
+  fingerprint: "v1:not-running:test",
+  muted: false,
+  mutedReason: null,
+});
+
 function AttentionIssueSurface(props: Omit<Props, "variant">) {
   return (
     <>
@@ -120,6 +147,7 @@ function AttentionIssueSurface(props: Omit<Props, "variant">) {
 describe("McpServerIssueNotice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    access.canEditCatalog = true;
     dismissMutateAsync.mockImplementation(async ({ alerts }) => ({
       succeeded: alerts,
       failed: [],
@@ -453,6 +481,44 @@ describe("McpServerIssueNotice", () => {
     expect(screen.getByText("exit code 1")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Hide details" }));
     expect(screen.queryByText("exit code 1")).toBeNull();
+  });
+  it("panel: a server with no pod offers to restart its pods instead of logs", async () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        item={item}
+        issues={[noPod()]}
+        servers={[server]}
+        hideName
+        panelActions="dismiss-only"
+      />,
+    );
+
+    expect(screen.getByText(/No pod is running for this server/)).toBeTruthy();
+    expect(
+      screen.getByText(/Restart its pods to create the pod again/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "View logs" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Restart pods" }));
+    expect(restartPodsMutate).toHaveBeenCalledWith("cat-1");
+  });
+  it("panel: a server with no pod names who can restart it when the viewer cannot", () => {
+    access.canEditCatalog = false;
+    renderWithQuery(
+      <McpServerIssueNotice
+        item={item}
+        issues={[noPod()]}
+        servers={[server]}
+        hideName
+        panelActions="dismiss-only"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Someone who can edit this MCP server can restart its pods/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restart pods" })).toBeNull();
   });
   it("panel: reports a colleague's lapsed sign-in as a count, not as the viewer's to fix", () => {
     renderWithQuery(

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import type { FastifyRequest } from "fastify";
+import { policyCallId } from "@/openappa/call-id";
 import {
   type CollectedChildReturns,
   collectAndStripChildReturns,
@@ -94,7 +95,9 @@ export function scrubOpenappaIngress(params: {
     ...(scrubbed?.delegationMarkers
       ? { delegationMarkers: scrubbed.delegationMarkers }
       : {}),
-    ...(scrubbed?.childReturns ? { childReturns: scrubbed.childReturns } : {}),
+    ...(scrubbed?.childReturns
+      ? { childReturns: underPolicyCallIds(scrubbed.childReturns) }
+      : {}),
     ...(scrubbed && scrubbed.releasedSpawnCalls.length > 0
       ? { releasedSpawnCalls: scrubbed.releasedSpawnCalls }
       : {}),
@@ -278,6 +281,33 @@ function scrubFamilyWire(params: {
     releasedSpawnCalls,
     childReturns,
     ...(childReturnRefusal ? { childReturnRefusal } : {}),
+  };
+}
+
+/** Policy compares a return's spawn call with calls it knows by policy id. */
+function underPolicyCallIds(
+  childReturns: CollectedChildReturns,
+): CollectedChildReturns {
+  // One envelope can hold many returns: its id is digested once.
+  const policyIds = new Map<string, string>();
+  const policyId = (wireId: string): string => {
+    const known = policyIds.get(wireId);
+    if (known !== undefined) return known;
+    const id = policyCallId(wireId);
+    policyIds.set(wireId, id);
+    return id;
+  };
+  return {
+    ...childReturns,
+    completions: childReturns.completions.map((completion) => ({
+      ...completion,
+      ...(completion.spawnCallId
+        ? { spawnCallId: policyId(completion.spawnCallId) }
+        : {}),
+      ...(completion.envelopeId
+        ? { envelopeId: policyId(completion.envelopeId) }
+        : {}),
+    })),
   };
 }
 

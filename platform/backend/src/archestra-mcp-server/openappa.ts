@@ -28,6 +28,7 @@ import {
   recordWaivedReview,
   type WaivedReviewRecord,
 } from "@/openappa/break-the-glass";
+import { policyCallId } from "@/openappa/call-id";
 import { compositionView } from "@/openappa/composition-view";
 import {
   coverageVisibility,
@@ -1269,7 +1270,7 @@ const registry = defineArchestraTools([
           });
         }
       }
-      const callId = execution?.call_id ?? context.currentToolCallId;
+      const callId = execution?.call_id ?? policyCallIdOf(context);
       if (remedy.offer_id === undefined) {
         // A return declared ahead of its spawn: no offer, so no review. The
         // runtime checks the floor and holds it for the next subagent call.
@@ -2272,7 +2273,7 @@ async function peerExecution(params: {
       session.organization_id === context.organizationId &&
       session.caller_id === callerId
     ) {
-      return { session, toolCallId: context.currentToolCallId ?? randomUUID() };
+      return { session, toolCallId: policyCallIdOf(context) ?? randomUUID() };
     }
     throw new ApiError(
       400,
@@ -2312,6 +2313,16 @@ async function peerExecution(params: {
 }
 
 /**
+ * The executing host's id for the call it is running, as policy knows it: the
+ * proxy ruled on the call, and looks up what it left behind, under that id.
+ */
+function policyCallIdOf(context: ArchestraContext): string | undefined {
+  return context.currentToolCallId === undefined
+    ? undefined
+    : policyCallId(context.currentToolCallId);
+}
+
+/**
  * Prefer the complete identity from the executing host or the proxy. A gateway
  * session can be authenticated without a model call id, especially when its
  * proxy traffic bypasses enforcement and leaves no reporting receipt.
@@ -2333,8 +2344,8 @@ async function yellIdentity(params: {
       ? chatOpenAppaSession(context.organizationId, context.userId, id)
       : undefined);
   // A gateway client's logical id identifies its request, not a released call.
-  if (known && context.currentToolCallId && !context.tokenAuth)
-    return { session: known, callId: context.currentToolCallId };
+  const callId = policyCallIdOf(context);
+  if (known && callId && !context.tokenAuth) return { session: known, callId };
   const recalled = context.organizationId
     ? await recallYellSession({
         organizationId: context.organizationId,
@@ -2348,7 +2359,7 @@ async function yellIdentity(params: {
   if (known)
     return {
       session: known,
-      callId: context.currentToolCallId ?? randomUUID(),
+      callId: callId ?? randomUUID(),
       needsAdmission: true,
     };
   logger.warn(

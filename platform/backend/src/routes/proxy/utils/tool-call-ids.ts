@@ -80,6 +80,6 @@ function openAiToolCallId(id: string): string {
 
 // `call_` and 32 hex digits: 37 characters, which also fits the 40-character
 // limit older reports give for Chat Completions.
-function digestToolCallId(id: string): string {
+export function digestToolCallId(id: string): string {
   return `call_${createHash("sha256").update(id).digest("hex").slice(0, 32)}`;
 }

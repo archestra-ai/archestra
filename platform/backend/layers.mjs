@@ -316,6 +316,7 @@ const layerTable = [
       "src/archestra-mcp-server/search-text.ts",
       "src/archestra-mcp-server/tool-attestation.ts",
       "src/clients/realtime-audio.ts",
+      "src/openappa/call-id.ts",
       "src/openappa/child-trajectory-receipt.ts",
       "src/openappa/child-trajectory-reference-format.ts",
       "src/openappa/grok-durable-history.ts",

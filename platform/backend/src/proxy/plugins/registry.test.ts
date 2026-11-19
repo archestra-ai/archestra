@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
+import { policyCallId } from "@/openappa/call-id";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
@@ -968,6 +969,7 @@ describe("runtime proof attachments", () => {
 
   async function finalize(
     params: {
+      id?: string;
       wrapped?: boolean | "string";
       stringInput?: boolean;
       report?: boolean;
@@ -982,13 +984,14 @@ describe("runtime proof attachments", () => {
     config.openappa.offerSigningSecret = "runtime-proof-test-secret";
     const entry = {
       ...attachment,
+      id: params.id ?? attachment.id,
       session: { ...session },
       wrapped: Boolean(params.wrapped),
       name: params.wrapped ? "archestra__run_tool" : attachment.name,
     };
     const proof = signRuntimeToolProof({
       session,
-      toolCallId: entry.id,
+      toolCallId: policyCallId(entry.id),
       action: entry.action,
       arguments: args,
       spawn: false,
@@ -1057,6 +1060,12 @@ describe("runtime proof attachments", () => {
     { now: Math.floor(Date.now() / 1000) - 600 },
   ])("rejects a proof for different authority or expired approval: %j", async (sign) => {
     await expect(finalize({ sign })).rejects.toThrow("rewrote a call");
+  });
+
+  test("releases a proof signed for the policy id of a call whose provider id is too long", async () => {
+    await expect(
+      finalize({ id: `gemsig-${"s".repeat(2000)}.call-1` }),
+    ).resolves.toMatchObject({ decision: "allow" });
   });
 
   test("rejects unreported proof insertion", async () => {

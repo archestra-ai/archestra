@@ -14,6 +14,7 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { policyCallId } from "./call-id";
 
 /** Incremented when the notice payload structure changes. */
 const NOTICE_VERSION = 1;
@@ -166,7 +167,7 @@ export function readNotice(params: {
   );
   if (!parsed.success) return null;
   const { tool, arguments: args, ruling, notice } = parsed.data;
-  if (notice.call_id !== params.callId) return null;
+  if (!namesCall(notice.call_id, params.callId)) return null;
   const original = normalizeOriginalCall({
     custom: notice.custom,
     arguments: args,
@@ -180,6 +181,14 @@ export function readNotice(params: {
     ...(notice.custom ? { custom: true } : {}),
     ...(notice.namespace ? { namespace: notice.namespace } : {}),
   };
+}
+
+/**
+ * Whether a notice or receipt was written for the call it rides on: under the
+ * call's policy id, or under its wire id by a release that knew no other.
+ */
+function namesCall(recordedId: string, wireId: string): boolean {
+  return recordedId === wireId || recordedId === policyCallId(wireId);
 }
 
 /** Reads an execution receipt attached to a direct remedy control call. */
@@ -197,7 +206,7 @@ export function readRemedyExecution(params: {
   const parsed = RemedyExecutionSchema.safeParse(argumentsValue.execution);
   if (
     !parsed.success ||
-    parsed.data.call_id !== params.callId ||
+    !namesCall(parsed.data.call_id, params.callId) ||
     parsed.data.tool_name !== params.toolName ||
     parsed.data.namespace !== params.namespace
   )

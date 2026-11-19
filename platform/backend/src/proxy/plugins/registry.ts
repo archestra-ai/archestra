@@ -1,6 +1,7 @@
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
+import { policyCallId } from "@/openappa/call-id";
 import {
   stripChildTrajectoryReceipts,
   verifyChildTrajectoryReceipt,
@@ -926,7 +927,8 @@ function addsOnlyRuntimeProof(params: {
   });
   return (
     verified !== null &&
-    verified.toolCallId === withoutTrajectoryStamp(attachment.id) &&
+    verified.toolCallId ===
+      policyCallId(withoutTrajectoryStamp(attachment.id)) &&
     verified.spawn === attachment.spawn &&
     verified.session.session_id === attachment.session.session_id &&
     verified.session.parent_id === attachment.session.parent_id

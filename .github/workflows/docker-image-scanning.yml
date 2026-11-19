@@ -200,7 +200,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance.
       attestations: write # Store the build provenance.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
     with:
       subjects: ${{ needs.release-image-security.outputs.subjects }}
 

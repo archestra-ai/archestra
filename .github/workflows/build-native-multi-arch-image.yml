@@ -114,7 +114,7 @@ jobs:
       reused: ${{ steps.reuse.outputs.reused }}
     steps:
       - name: Checkout image source and previous commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
@@ -122,7 +122,7 @@ jobs:
 
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -130,7 +130,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -167,7 +167,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || inputs.checkout_fetch_depth }}
@@ -175,7 +175,7 @@ jobs:
 
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -183,7 +183,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -193,7 +193,7 @@ jobs:
       # login of its scan, whatever the image's registry.
       - name: Log in to Docker Hub
         if: ${{ (inputs.push_image && inputs.auth_provider == 'dockerhub') || startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
@@ -233,14 +233,14 @@ jobs:
 
       - name: Download verified release selection
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: release-candidate-selection-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-selection
 
       - name: Download exact scanned architecture bytes
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: promoted-candidate-${{ inputs.image_name }}-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-candidate
@@ -270,7 +270,7 @@ jobs:
       # every leg to succeed, so no version tag exists before both scans pass.
       - name: Scan release bytes before tagging
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/scan-docker-image
+        uses: $/.github/actions/scan-docker-image
         with:
           image: registry://${{ inputs.image_registry }}/${{ inputs.image_name }}@${{ steps.promote.outputs.digest }}
           platform: ${{ matrix.os_and_arch }}
@@ -298,7 +298,7 @@ jobs:
 
       - name: Upload the release scan's findings
         if: ${{ failure() && steps.release-findings.outputs.found == 'true' }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-scan-findings-${{ inputs.image_name }}-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-findings/*
@@ -308,7 +308,7 @@ jobs:
       - name: Build Docker image
         if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
         id: build
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ inputs.image_directory }}
           dockerfile: ${{ inputs.dockerfile }}
@@ -334,7 +334,7 @@ jobs:
 
       - name: Upload digest
         if: ${{ inputs.push_image }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ inputs.image_name }}-digests-${{ strategy.job-index }}-${{ github.run_attempt }}
           path: /tmp/digests/*
@@ -358,7 +358,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           # A release reads its handoff scripts at the workflow's own commit.
@@ -366,7 +366,7 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: ${{ inputs.image_name }}-digests-*-${{ github.run_attempt }}
@@ -376,7 +376,7 @@ jobs:
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -384,7 +384,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -392,7 +392,7 @@ jobs:
       # Docker Hub OIDC: pushes for Docker Hub images.
       - name: Log in to Docker Hub
         if: ${{ inputs.auth_provider == 'dockerhub' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
@@ -480,7 +480,7 @@ jobs:
 
       - name: Upload release image reference
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-image-${{ inputs.image_name }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-image/*

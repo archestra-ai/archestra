@@ -42,7 +42,7 @@ jobs:
         working-directory: ${{ matrix.workspace }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -51,7 +51,7 @@ jobs:
       # jobs restore this default-branch entry without publishing their own.
       - name: Restore or save Cargo dependencies
         id: cargo-cache
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: ${{ matrix.workspace }}
           shared-key: ${{ matrix.cache-key }}

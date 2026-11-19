@@ -38,7 +38,7 @@ runs:
 
     - name: Restore Turbo cache from main
       if: inputs.mode == 'restore'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: ${{ env.TURBO_CACHE_DIR }}
         key: turbo-${{ runner.os }}-${{ inputs.name }}-${{ github.sha }}
@@ -47,7 +47,7 @@ runs:
 
     - name: Save Turbo cache
       if: inputs.mode == 'save' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/save@v6.1.0
       with:
         path: ${{ env.TURBO_CACHE_DIR }}
         key: turbo-${{ runner.os }}-${{ inputs.name }}-${{ github.sha }}

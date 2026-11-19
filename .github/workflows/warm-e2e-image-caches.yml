@@ -45,35 +45,35 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Cache Kind node image
         id: cache-kind-node
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: /tmp/kindest-node.tar
           key: kindest-node-v1.34.3-${{ runner.arch }}
 
       - name: Cache MCP example OAuth server image
         id: cache-oauth-image
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: /tmp/mcp-oauth-server.tar
           key: mcp-oauth-server-0.0.1-${{ runner.arch }}
 
       - name: Cache MCP JWKS server image
         id: cache-jwks-image
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: /tmp/mcp-jwks-server.tar
           key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
       - name: Cache MCP ID-JAG server image
         id: cache-id-jag-image
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: /tmp/mcp-id-jag-server.tar
           key: mcp-id-jag-server-0.0.4-${{ runner.arch }}

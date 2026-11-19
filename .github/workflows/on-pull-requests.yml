@@ -77,13 +77,13 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -115,7 +115,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -126,7 +126,7 @@ jobs:
           python3 .github/scripts/check-supply-chain-policy.py
 
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@410c0edb0244ef042e04bfd972ccba90e12db2ed
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.0.1
         # The action fetches the base SHA, which needs authentication in private
         # mirrors. Keep checkout credentials unpersisted and scope the read-only
         # job token to this pinned action via Git's runtime configuration.
@@ -151,13 +151,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Install uv
-        uses: ./.github/actions/setup-uv
+        uses: $/.github/actions/setup-uv
 
       # the shipped scripts are zero-dependency; this gates the contributor tooling
       # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
@@ -184,7 +184,7 @@ jobs:
       # API and references no local config file, so the (fetch-depth: 0) checkout
       # was ~74s of the job's ~89s for nothing.
       - name: Dependency review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
@@ -242,7 +242,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -252,14 +252,14 @@ jobs:
       - name: Generate token for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Update checkout credentials for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
           ref: ${{ github.head_ref }}
@@ -267,14 +267,14 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       # Read-only: only Warm Turbo Cache on main saves entries under this name,
       # and release branches never save, so a hit replays a result main produced.
       - name: Restore Turbo cache from main
-        uses: ./.github/actions/turbo-cache
+        uses: $/.github/actions/turbo-cache
         with:
           name: platform-lint
 
@@ -353,7 +353,7 @@ jobs:
       # native addons are intentionally uncached in Turbo; Cargo artifacts
       # here are scoped to this CI runner and Rust toolchain.
       - name: Restore Rust build cache
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -505,7 +505,7 @@ jobs:
           exit 1
 
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -513,7 +513,7 @@ jobs:
       # The mac mini keeps its cargo caches on the persistent disk; only the
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
@@ -526,7 +526,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@v2.87.20
         with:
           tool: cargo-deny@0.20.2
 
@@ -600,13 +600,13 @@ jobs:
           --health-retries 20
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -614,7 +614,7 @@ jobs:
       # workspace, same shared-key, so the crate build is an incremental no-op
       # without this job racing the shards to save.
       - name: Cache cargo registry and target
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -661,14 +661,14 @@ jobs:
         working-directory: ./ai-labs
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
           shared-key: ai-labs-rust-checks
@@ -676,13 +676,13 @@ jobs:
           toolchain-before-cache: "true"
 
       - name: Install uv
-        uses: ./.github/actions/setup-uv
+        uses: $/.github/actions/setup-uv
 
       # The Node renderer is the second implementation of the analyzer's
       # persisted triage format. Its golden fixture must remain byte-identical
       # with the Rust analyzer tests below; it has no package dependencies.
       - name: Set up Node.js for triage parity
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: "24.22.1"
 
@@ -721,7 +721,7 @@ jobs:
       ai_labs: ${{ steps.diff.outputs.ai_labs }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -764,23 +764,23 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Restore backend NAPI binaries
         id: native-cache
-        uses: ./.github/actions/cache-backend-napi
+        uses: $/.github/actions/cache-backend-napi
 
       - name: Cache cargo registry and target on native cache miss
         if: steps.native-cache.outputs.usable != 'true'
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -807,7 +807,7 @@ jobs:
       # A same-run artifact works even on a cold cache. Merge-group cache
       # entries are scoped to their queue ref and cannot warm the next group.
       - name: Share native addons with all shards
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ steps.bundle.outputs.artifact-name }}
           path: /tmp/backend-test-napi.tar.gz
@@ -840,13 +840,13 @@ jobs:
         shard: [1, 2]
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -864,7 +864,7 @@ jobs:
           pwsh -NoProfile -Command 'Write-Output $PSVersionTable.PSVersion'
 
       - name: Download prepared native addons
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           # Use the producer's attempt, including a partial rerun that keeps
           # successful preparation from the previous attempt.
@@ -880,7 +880,7 @@ jobs:
       # first. Persist one cache per shard so fresh runners keep that balancing
       # data without mixing partial result sets across the matrix.
       - name: Cache Vitest timing data
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: platform/backend/node_modules/.vite/vitest
           key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
@@ -893,7 +893,7 @@ jobs:
       # content; the source hash bounds stale entries and the restore prefix
       # lets the next commit reuse bytecode for unchanged modules.
       - name: Cache Node compile data
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/node-compile-cache
           key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
@@ -954,13 +954,13 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -974,7 +974,7 @@ jobs:
         # The mac mini keeps its browser cache on the persistent disk instead.
         if: runner.os == 'Linux'
         id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
@@ -1026,7 +1026,7 @@ jobs:
       # Keep persistent macOS runners on their existing cache policy.
       - name: Cache integration test compiler output
         if: runner.os != 'Linux'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*/dev/cache
           key: frontend-integration-next-${{ runner.os }}-compiler-v2-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
@@ -1080,7 +1080,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: playwright-integration-report
           path: platform/frontend/playwright-report-shard-*/
@@ -1088,7 +1088,7 @@ jobs:
 
       - name: Upload traces
         if: failure()
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: playwright-integration-traces
           path: platform/frontend/test-results-shard-*/
@@ -1138,7 +1138,7 @@ jobs:
       actions: write # Required to cancel this workflow run on failover.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1148,7 +1148,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
@@ -1210,7 +1210,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

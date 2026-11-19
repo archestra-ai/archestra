@@ -31,7 +31,7 @@ jobs:
       matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
@@ -67,7 +67,7 @@ jobs:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -76,7 +76,7 @@ jobs:
         id: inputs
         run: python3 .github/scripts/release-candidate.py prepare
       - name: Build candidate locally
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
@@ -105,14 +105,14 @@ jobs:
         id: image
         run: python3 .github/scripts/release-candidate.py verify
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Scan exact candidate bytes
         id: scan
-        uses: ./.github/actions/scan-docker-image
+        uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
           platform: linux/${{ matrix.arch }}
@@ -122,7 +122,7 @@ jobs:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         run: python3 .github/scripts/release-candidate.py scanned
       - name: Retain exact scanned bytes
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-candidate-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
           path: |
@@ -132,7 +132,7 @@ jobs:
           retention-days: 1
           compression-level: 1
       - name: Transfer scan evidence to gate
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-evidence-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
           path: ${{ env.CANDIDATE_DIR }}/evidence/*
@@ -151,13 +151,13 @@ jobs:
       subjects: ${{ steps.gate.outputs.subjects }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
       - name: Download complete scan evidence
         if: ${{ needs.classify.outputs.scan == 'true' && needs.scan-release-images.result == 'success' }}
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           pattern: release-evidence-*-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-evidence
@@ -175,7 +175,7 @@ jobs:
 
       - name: Retain complete successful candidate index
         if: ${{ needs.classify.outputs.scan == 'true' }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-candidate-index-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-candidate-index.json
@@ -194,7 +194,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance.
       attestations: write # Store the build provenance.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       subjects: ${{ needs.release-image-security.outputs.subjects }}
 
@@ -241,19 +241,19 @@ jobs:
       id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Scan exact full and slim Platform image bytes
-        uses: ./.github/actions/scan-platform-image-bytes
+        uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
 
@@ -265,19 +265,19 @@ jobs:
       contents: read
     steps:
       - name: Checkout fixture policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
       - name: Setup fixture builder
-        uses: ./.github/actions/setup-docker-builder
+        uses: $/.github/actions/setup-docker-builder
       - name: Build harmless scratch-image archives
         env:
           FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture
           FIXTURE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 .github/scripts/release-handoff-fixture.py create
       - name: Retain non-publishing fixture
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-handoff-fixture-${{ github.run_attempt }}
           path: ${{ runner.temp }}/handoff-fixture/*

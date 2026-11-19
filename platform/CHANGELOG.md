@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.4.36](https://github.com/archestra-ai/archestra/compare/platform-v1.4.35...platform-v1.4.36) (2026-11-19)
+
+
+### Features
+
+* **guardrails:** fold validations into the Policy editor and yells into the Guardrails log (backport release/1.4) ([#10856](https://github.com/archestra-ai/archestra/issues/10856)) ([97f9afc](https://github.com/archestra-ai/archestra/commit/97f9afc520792c2379c0542b73ec3fe3fec8e4a2))
+* **guardrails:** lay the Policy page out as an editor with a file explorer (backport release/1.4) ([#10852](https://github.com/archestra-ai/archestra/issues/10852)) ([1633cf5](https://github.com/archestra-ai/archestra/commit/1633cf519d37802fcac94ee7e1349a8238b03db1))
+* **logs:** show failed turns in LLM session logs (backport release/1.4) ([#10920](https://github.com/archestra-ai/archestra/issues/10920)) ([d4eb0bf](https://github.com/archestra-ai/archestra/commit/d4eb0bfde0afa0a0f0a8ec91427c95be59284c47))
+* **mcp:** bulk revoke credentials on the MCP server page (backport release/1.4) ([#10848](https://github.com/archestra-ai/archestra/issues/10848)) ([4876c7d](https://github.com/archestra-ai/archestra/commit/4876c7d858b3b17e5eef7ecdcf02cbfd68e2bfe3))
+* **skills:** read skills and plugins in the policy editor's file workspace (backport release/1.4) ([#10898](https://github.com/archestra-ai/archestra/issues/10898)) ([179685a](https://github.com/archestra-ai/archestra/commit/179685a3d707a5d43d431f05d8d9c1fc556bde5c))
+
+
+### Bug Fixes
+
+* **appearance:** show logos that are SVGs without a width and height (backport release/1.4) ([#10846](https://github.com/archestra-ai/archestra/issues/10846)) ([0b22a17](https://github.com/archestra-ai/archestra/commit/0b22a17e9b6311875bc9da1af9da6d5853edaa74))
+* **auth:** check service-account tokens before the session lookup (backport release/1.4) ([#10885](https://github.com/archestra-ai/archestra/issues/10885)) ([be347e3](https://github.com/archestra-ai/archestra/commit/be347e3acd67ec40f0477f43bf96270ed6e62793))
+* **chat:** backport clearer tool approvals to release/1.4 ([#10893](https://github.com/archestra-ai/archestra/issues/10893)) ([c9840f5](https://github.com/archestra-ai/archestra/commit/c9840f5630bafe0cd1951d00d8ad94082c30ec22))
+* **chat:** keep the agent picker anchored during search (backport release/1.4) ([#10894](https://github.com/archestra-ai/archestra/issues/10894)) ([d735a41](https://github.com/archestra-ai/archestra/commit/d735a41a904b518385a9626a138e5567344bb58f))
+* **chat:** keep the assistant's reply when a tool needs re-authentication (backport release/1.4) ([#10847](https://github.com/archestra-ai/archestra/issues/10847)) ([91c8ac1](https://github.com/archestra-ai/archestra/commit/91c8ac1e90dcd03470cd72a5a42bfb663e2767b2))
+* **chat:** recheck permissions before refusing a viewer whose role changed (backport release/1.4) ([#10851](https://github.com/archestra-ai/archestra/issues/10851)) ([ebc0d7f](https://github.com/archestra-ai/archestra/commit/ebc0d7f53aece2bfb6a427a9c053c5e4c4b6cd52))
+* **connectivity:** recover from false browser offline hints (backport release/1.4) ([#10873](https://github.com/archestra-ai/archestra/issues/10873)) ([dcb7861](https://github.com/archestra-ai/archestra/commit/dcb7861e7fb1263f538ad57fae0b422b3d95062d))
+* **frontend:** keep page content from painting over the sticky banner (backport release/1.4) ([#10917](https://github.com/archestra-ai/archestra/issues/10917)) ([6dc6cac](https://github.com/archestra-ai/archestra/commit/6dc6cac06372f232e0ed2d7bfe071a91519dbd1d))
+* **frontend:** show the dark-theme icon logo after a server render (backport release/1.4) ([#10913](https://github.com/archestra-ai/archestra/issues/10913)) ([523333d](https://github.com/archestra-ai/archestra/commit/523333deacd47affdc7b1c0c13294907c42c57fe))
+* **frontend:** show workspace notices as a slim strip under the bar (backport release/1.4) ([#10918](https://github.com/archestra-ai/archestra/issues/10918)) ([c6ac4a6](https://github.com/archestra-ai/archestra/commit/c6ac4a69df9fc5321e7bf7d61bef45cda2ea7dba))
+* **github-copilot:** read the extended context window and prompt limit (backport release/1.4) ([#10919](https://github.com/archestra-ai/archestra/issues/10919)) ([4f06f0c](https://github.com/archestra-ai/archestra/commit/4f06f0ce892ed98f585df4ab780e2619c64faf6d))
+* **guardrails:** backport clearer policy labels and approval coverage to 1.4 ([#10904](https://github.com/archestra-ai/archestra/issues/10904)) ([7eeb1e0](https://github.com/archestra-ai/archestra/commit/7eeb1e075af6879eb874fb61b61279770fc913c2))
+* **guardrails:** let the policy editor fill the viewport height (backport release/1.4) ([#10877](https://github.com/archestra-ai/archestra/issues/10877)) ([3ab42a7](https://github.com/archestra-ai/archestra/commit/3ab42a77edd9bc4b1037013f1675d07e95786ff5))
+* **guardrails:** update OpenAPPA to 0.44.0 for Bash annotations (backport release/1.4) ([#10869](https://github.com/archestra-ai/archestra/issues/10869)) ([78377f6](https://github.com/archestra-ai/archestra/commit/78377f6933aaab728350517f5499014548895aa7))
+* **llm-providers:** let admins control access to env-configured provider keys (backport release/1.4) ([#10878](https://github.com/archestra-ai/archestra/issues/10878)) ([75c9961](https://github.com/archestra-ai/archestra/commit/75c996193bc98fac807dd08f72361e3334e56f78))
+* **mcp:** keep backend processes agreed on a local MCP server's transport aft (backport release/1.4) ([#10849](https://github.com/archestra-ai/archestra/issues/10849)) ([e3102dc](https://github.com/archestra-ai/archestra/commit/e3102dc44c802ec02490dd3c20eaabb185c39417))
+* **mcp:** stop flagging multitenant installs as crashing while the shared pod (backport release/1.4) ([#10921](https://github.com/archestra-ai/archestra/issues/10921)) ([93e38e8](https://github.com/archestra-ai/archestra/commit/93e38e8e9701ac2b0d75f371f45fd29adf4745be))
+* **openappa:** declare a delegation's return on its spawn call instead of probing it (backport release/1.4) ([#10928](https://github.com/archestra-ai/archestra/issues/10928)) ([51cebdc](https://github.com/archestra-ai/archestra/commit/51cebdcd65bad3305f14312ef4eb183cde60bbb4))
+* **plugins:** let plugin:create alone create and import plugins (backport release/1.4) ([#10875](https://github.com/archestra-ai/archestra/issues/10875)) ([6c6b33b](https://github.com/archestra-ai/archestra/commit/6c6b33b85ea3dbbc572a00085df3938d5072b838))
+* **proxy:** accept response_format on the OpenAI-to-Bedrock translation (backport release/1.4) ([#10897](https://github.com/archestra-ai/archestra/issues/10897)) ([ddadcc1](https://github.com/archestra-ai/archestra/commit/ddadcc1ddf3bb617a6c61204832df57f3712d6c8))
+
+
+### Miscellaneous Chores
+
+* **backend:** log interaction list requests at debug level (backport release/1.4) ([#10879](https://github.com/archestra-ai/archestra/issues/10879)) ([408d668](https://github.com/archestra-ai/archestra/commit/408d668223531e0f8f5e66ac03931b22698a07ee))
+* **backend:** log successful requests at debug level (backport release/1.4) ([#10884](https://github.com/archestra-ai/archestra/issues/10884)) ([7fab119](https://github.com/archestra-ai/archestra/commit/7fab119e78154483cdccc27118c67d59f07975b3))
+* **backend:** sample LLM proxy log list traces at a reduced rate (backport release/1.4) ([#10892](https://github.com/archestra-ai/archestra/issues/10892)) ([c4d1505](https://github.com/archestra-ai/archestra/commit/c4d15056f13f50fb9499379d7d2cbb94254b29e0))
+
 ## [1.4.35](https://github.com/archestra-ai/archestra/compare/platform-v1.4.34...platform-v1.4.35) (2026-11-17)
 
 

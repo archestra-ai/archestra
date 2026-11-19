@@ -238,15 +238,23 @@ describe("planModelPool", () => {
     expect(plan?.members.map((m) => m.providerApiKeyId).sort()).toEqual(
       [zai.id, bedrock.id].sort(),
     );
-    // Converse reaches only Converse members.
+    const converse = await planModelPool({
+      organizationId: org.id,
+      name: "glm-5",
+      inbound: "bedrock-converse",
+      caller: { providerApiKeyIds: [zai.id] },
+    });
+    expect(converse?.members.map((m) => m.providerApiKeyId).sort()).toEqual(
+      [zai.id, bedrock.id].sort(),
+    );
     await expect(
       planModelPool({
         organizationId: org.id,
         name: "glm-5",
-        inbound: "bedrock-converse",
+        inbound: "openai-responses",
         caller: { providerApiKeyIds: [zai.id] },
       }),
-    ).rejects.toThrow("cannot serve bedrock-converse requests");
+    ).rejects.toThrow("cannot serve openai-responses requests");
   });
 
   test("plans the pool only for callers that may use it", async ({

@@ -551,6 +551,7 @@ export async function handleLLMProxy<
   request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
+  options?: { preserveNativeConverse?: boolean },
 ): Promise<FastifyReply> {
   const telemetry = getLlmProxyRequestTelemetry({
     request,
@@ -572,6 +573,7 @@ export async function handleLLMProxy<
         reply,
         provider,
         telemetry,
+        preserveNativeConverse: options?.preserveNativeConverse,
       }),
     );
   } catch (error) {
@@ -598,12 +600,14 @@ async function handleObservedLLMProxy<
   reply,
   provider,
   telemetry,
+  preserveNativeConverse,
 }: {
   body: TRequest;
   request: FastifyRequest;
   reply: FastifyReply;
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>;
   telemetry: LlmProxyRequestTelemetry;
+  preserveNativeConverse?: boolean;
 }): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
@@ -2677,6 +2681,7 @@ async function handleObservedLLMProxy<
         members: modelPoolPlan.members,
         wire: poolWire,
         request: finalRequest,
+        preserveNativeConverse,
       });
     }
 

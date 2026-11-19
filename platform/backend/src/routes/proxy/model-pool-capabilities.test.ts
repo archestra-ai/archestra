@@ -321,16 +321,7 @@ describe("request compatibility", () => {
         messages: [
           {
             role: "user",
-            content: [
-              {
-                toolResult: {
-                  toolUseId: "t",
-                  content: [
-                    { image: { format: "png", source: { bytes: "AA==" } } },
-                  ],
-                },
-              },
-            ],
+            content: [{ image: { format: "png", source: { bytes: "AA==" } } }],
           },
         ],
       },
@@ -518,19 +509,6 @@ describe("request compatibility", () => {
   });
   test.each([
     {
-      wire: "bedrock-converse",
-      body: {
-        messages: [
-          {
-            role: "user",
-            content: [
-              { guardContent: { text: { text: "lengthy text ".repeat(100) } } },
-            ],
-          },
-        ],
-      },
-    },
-    {
       wire: "gemini",
       body: {
         contents: [
@@ -564,11 +542,41 @@ describe("request compatibility", () => {
         ],
       },
     },
-  ] as const)("counts native guarded text and code on $wire", async ({
-    wire,
-    body,
-  }) => {
+  ] as const)("counts native code on $wire", async ({ wire, body }) => {
     expect(await compatible(body, wire)).toEqual(members.slice(1));
+  });
+  test("keeps guarded text on Bedrock and counts it against the native context limit", async () => {
+    await ModelModel.create({
+      provider: "bedrock",
+      modelId: "small-bedrock",
+      externalId: "bedrock/small-bedrock",
+      outputModalities: ["text"],
+      contextLength: 64,
+      inputModalities: ["text"],
+    });
+    const short = {
+      ...members[0],
+      provider: "bedrock" as const,
+      modelId: "small-bedrock",
+    };
+    const unknown = { ...short, modelId: "other-bedrock" };
+    const request = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { guardContent: { text: { text: "lengthy text ".repeat(100) } } },
+          ],
+        },
+      ],
+    };
+    await expect(
+      compatiblePoolMembers({
+        wire: "bedrock-converse",
+        request,
+        members: [...members, short, unknown],
+      }),
+    ).resolves.toEqual([unknown]);
   });
   test("uses Azure key-scoped evidence and keeps unknown or stale aliases eligible", async ({
     makeOrganization,

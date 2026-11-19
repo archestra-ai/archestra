@@ -10,8 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -50,11 +48,11 @@ export function PolicyDiffReview({
           {summary}
         </DialogDescription>
         <div className="col-span-full row-start-3 mt-4 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-2 md:mt-0">
-          <SideBySideSwitch
+          <SideBySideButton
             id={`${controlId}-side-by-side`}
-            checked={sideBySide}
-            onCheckedChange={(checked) =>
-              navigation.changeView(() => setSideBySide(checked))
+            pressed={sideBySide}
+            onPressedChange={(pressed) =>
+              navigation.changeView(() => setSideBySide(pressed))
             }
           />
           <nav
@@ -164,53 +162,41 @@ export function PolicyDiffReview({
   );
 }
 
-function SideBySideSwitch({
+function SideBySideButton({
   id,
-  checked,
-  onCheckedChange,
+  pressed,
+  onPressedChange,
 }: {
   id: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  pressed: boolean;
+  onPressedChange: (pressed: boolean) => void;
 }) {
   const description =
     "Compare current and proposed policies in two columns. Turn off for a single combined view.";
   return (
     <Tooltip delayDuration={350}>
-      <div
-        className={cn(
-          "flex h-7 shrink-0 items-center gap-2 rounded-md border px-2 transition-colors hover:bg-accent/50",
-          checked && "border-ring/40 bg-accent/60",
-        )}
-      >
-        <Label
-          htmlFor={id}
-          className="flex flex-1 cursor-pointer items-center gap-2 whitespace-nowrap text-xs font-normal"
+      <TooltipTrigger asChild>
+        <Button
+          id={id}
+          size="xs"
+          variant={pressed ? "default" : "outline"}
+          aria-pressed={pressed}
+          aria-describedby={`${id}-description`}
+          onClick={() => onPressedChange(!pressed)}
+          className={cn(
+            "shrink-0 border",
+            pressed
+              ? "border-primary"
+              : "text-muted-foreground hover:border-foreground hover:bg-foreground hover:text-background dark:hover:bg-foreground",
+          )}
         >
-          <Columns2
-            aria-hidden="true"
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground",
-              checked && "text-foreground",
-            )}
-          />
+          <Columns2 aria-hidden="true" />
           <span>Side by side view</span>
-        </Label>
-        {/* Tooltip and Switch each need their own data-state element. */}
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            <Switch
-              id={id}
-              aria-describedby={`${id}-description`}
-              checked={checked}
-              onCheckedChange={onCheckedChange}
-            />
-          </span>
-        </TooltipTrigger>
-        <span id={`${id}-description`} className="sr-only">
-          {description}
-        </span>
-      </div>
+        </Button>
+      </TooltipTrigger>
+      <span id={`${id}-description`} className="sr-only">
+        {description}
+      </span>
       <TooltipContent side="bottom" className="max-w-64">
         {description}
       </TooltipContent>

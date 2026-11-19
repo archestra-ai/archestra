@@ -147,7 +147,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ScimReplaceUser,
         description:
-          "SCIM 2.0: replace a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.",
+          "SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimUserInputSchema,
@@ -155,10 +155,11 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { user, changed } = await applyActive({
+      const { user, changed } = await applyChanges({
         organizationId: request.organizationId,
         userId: request.params.id,
         active: request.body.active,
+        userName: emailIn(request.body),
       });
       if (!changed) request.auditSkip = true;
       return reply.send(user);
@@ -171,7 +172,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ScimPatchUser,
         description:
-          "SCIM 2.0: patch a user. Only `active` changes Archestra: `false` soft-deletes the user (no sign-in, data kept), `true` restores them.",
+          "SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimPatchSchema,
@@ -179,10 +180,11 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { user, changed } = await applyActive({
+      const { user, changed } = await applyChanges({
         organizationId: request.organizationId,
         userId: request.params.id,
         active: activeFromPatch(request.body),
+        userName: userNameFromPatch(request.body),
       });
       if (!changed) request.auditSkip = true;
       return reply.send(user);
@@ -202,7 +204,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { changed } = await applyActive({
+      const { changed } = await applyChanges({
         organizationId: request.organizationId,
         userId: request.params.id,
         active: false,
@@ -302,13 +304,18 @@ function parseFilter(filter: string): string {
 
 /** The email is the userName when it is one, else the primary email. */
 function emailOf(body: ScimUserInput): string {
+  const email = emailIn(body);
+  if (!email)
+    throw new ApiError(400, "userName or emails must contain an email address");
+  return email;
+}
+
+function emailIn(body: ScimUserInput): string | undefined {
   if (EMAIL.test(body.userName)) return body.userName.toLowerCase();
   const email =
     body.emails?.find((entry) => entry.primary === true)?.value ??
     body.emails?.[0]?.value;
-  if (!email || !EMAIL.test(email))
-    throw new ApiError(400, "userName or emails must contain an email address");
-  return email.toLowerCase();
+  return email && EMAIL.test(email) ? email.toLowerCase() : undefined;
 }
 
 function displayNameOf(body: ScimUserInput): string | undefined {
@@ -340,6 +347,28 @@ function activeFromPatch(body: z.infer<typeof ScimPatchSchema>) {
   return active;
 }
 
+/**
+ * The email-shaped `userName` a PATCH sets: from `{ path: "userName", value }`,
+ * or from a path-less `{ value: { userName } }`.
+ */
+function userNameFromPatch(body: z.infer<typeof ScimPatchSchema>) {
+  let userName: string | undefined;
+  for (const operation of body.Operations) {
+    if (!/^(replace|add)$/i.test(operation.op)) continue;
+    const value =
+      operation.path?.toLowerCase() === "username"
+        ? operation.value
+        : operation.path === undefined &&
+            typeof operation.value === "object" &&
+            operation.value !== null
+          ? (operation.value as Record<string, unknown>).userName
+          : undefined;
+    if (typeof value === "string" && EMAIL.test(value.trim()))
+      userName = value.trim().toLowerCase();
+  }
+  return userName;
+}
+
 async function getUserOrThrow(params: {
   organizationId: string;
   userId: string;
@@ -350,25 +379,41 @@ async function getUserOrThrow(params: {
 }
 
 /**
- * `active: false` soft-deletes the user, `active: true` restores them, and
- * no `active` leaves Archestra as is. `changed` says whether `active` changed,
- * so a call that changed nothing is left out of the audit log.
+ * Apply what Archestra takes from a SCIM update: `userName` (for a user who
+ * has not signed in yet) and `active` (`false` soft-deletes, `true` restores).
+ * `changed` says whether anything changed, so a call that changed nothing is
+ * left out of the audit log.
  */
-async function applyActive(params: {
+async function applyChanges(params: {
   organizationId: string;
   userId: string;
   active: boolean | undefined;
+  userName?: string;
 }) {
   const { organizationId, userId, active } = params;
   const before = await getUserOrThrow({ organizationId, userId });
+  let userNameChanged = false;
+  if (params.userName !== undefined) {
+    const result = await scimProvisioningService.changeUserName({
+      organizationId,
+      userId,
+      userName: params.userName,
+    });
+    if (result === "exists")
+      throw new ApiError(409, "A user with this userName already exists");
+    userNameChanged = result === "changed";
+  }
   const user =
     active === false
       ? await scimProvisioningService.softDeleteUser({ organizationId, userId })
       : active === true
         ? await scimProvisioningService.restoreUser({ organizationId, userId })
-        : before;
+        : await scimProvisioningService.getUser({ organizationId, userId });
   if (!user) throw new ApiError(404, "User not found");
-  return { user, changed: user.active !== before.active };
+  return {
+    user,
+    changed: userNameChanged || user.active !== before.active,
+  };
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+$/;

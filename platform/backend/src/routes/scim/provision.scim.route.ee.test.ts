@@ -199,6 +199,38 @@ describe("SCIM /api/scim/v2/Users", () => {
     }
   });
 
+  test("a changed userName fixes a user who has not signed in, and nobody else", async ({
+    makeAccount,
+  }) => {
+    const pending = (await createUser("jdoe@example.com")).json();
+    const signedIn = (await createUser("asmith@example.com")).json();
+    await makeAccount(signedIn.id, { providerId: "entra" });
+    await createUser("taken@example.com");
+    const replaceUserName = (userId: string, value: string) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/scim/v2/Users/${userId}`,
+        headers: { "content-type": "application/scim+json" },
+        payload: JSON.stringify({
+          Operations: [{ op: "Replace", path: "userName", value }],
+        }),
+      });
+
+    const fixed = await replaceUserName(pending.id, "John.Doe@example.com");
+    expect(fixed.statusCode, fixed.body).toBe(200);
+    expect(fixed.json().userName).toBe("john.doe@example.com");
+
+    // After the first sign-in, the sign-in keeps the email; SCIM leaves it.
+    const ignored = await replaceUserName(
+      signedIn.id,
+      "alice.smith@example.com",
+    );
+    expect(ignored.json().userName).toBe("asmith@example.com");
+
+    const clash = await replaceUserName(pending.id, "taken@example.com");
+    expect(clash.statusCode).toBe(409);
+  });
+
   test("filters other than userName eq are rejected", async () => {
     const response = await app.inject({
       method: "GET",

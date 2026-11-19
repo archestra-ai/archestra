@@ -8,10 +8,12 @@ import {
   OrganizationModel,
   SkillMarketplaceCredentialModel,
   SkillModel,
+  UserModel,
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import {
   loadMarketplaceSkills,
@@ -127,6 +129,44 @@ describe("resolveMarketplaceViewer", () => {
     await expect(
       resolveMarketplaceViewer({ authorization: `Bearer ${token}` }),
     ).resolves.toEqual(expected);
+  });
+
+  test("a personal token of a user the identity provider deactivated is challenged", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization({
+      skillMarketplaceAnonymousAccess: true,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const { value: token } = await UserTokenModel.create(user.id, org.id);
+    const authorization = basic("archestra", token);
+    const ok = {
+      status: "ok",
+      viewer: { organizationId: org.id, userId: user.id, isSkillAdmin: false },
+    };
+
+    await expect(resolveMarketplaceViewer({ authorization })).resolves.toEqual(
+      ok,
+    );
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    // Not downgraded to the anonymous view the organization publishes.
+    await expect(resolveMarketplaceViewer({ authorization })).resolves.toEqual({
+      status: "unauthenticated",
+    });
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    await expect(resolveMarketplaceViewer({ authorization })).resolves.toEqual(
+      ok,
+    );
   });
 
   test("a role without skill:read is forbidden, not challenged", async ({

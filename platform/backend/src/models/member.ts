@@ -813,6 +813,7 @@ class MemberModel {
     const [row] = await db
       .select({
         member: schema.membersTable,
+        email: schema.usersTable.email,
         softDeleted: schema.usersTable.softDeleted,
       })
       .from(schema.membersTable)
@@ -837,6 +838,7 @@ class MemberModel {
       role: row.member.role,
       defaultAgentId: row.member.defaultAgentId ?? null,
       createdAt: row.member.createdAt.toISOString(),
+      email: row.email,
       // When the identity provider deactivated the user through SCIM.
       softDeleted: row.softDeleted?.toISOString() ?? null,
     };

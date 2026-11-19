@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { MemberModel, UserModel } from "@/models";
+import { AccountModel, MemberModel, UserModel } from "@/models";
 import SessionModel from "@/models/session";
 import { createPendingSignupMember } from "@/services/pending-signup-member";
 import { softDeletedUsers } from "@/services/soft-deleted-users";
@@ -122,6 +122,31 @@ class ScimProvisioningService {
     }
     await SessionModel.deleteAllByUserId(params.userId);
     return this.getUser(params);
+  }
+
+  /**
+   * Apply a new `userName` (the user's email) while the user has not signed in
+   * yet, so fixing the identity provider's mapping fixes users it already
+   * pushed. After the first SSO sign-in, every sign-in refreshes the email from
+   * the identity provider's claims, so SCIM leaves it alone.
+   */
+  async changeUserName(params: {
+    organizationId: string;
+    userId: string;
+    userName: string;
+  }): Promise<"changed" | "unchanged" | "exists" | "not_found"> {
+    const user = await this.getUser(params);
+    if (!user) return "not_found";
+    const email = params.userName.toLowerCase();
+    if (user.userName === email) return "unchanged";
+    if (await AccountModel.getByUserId(params.userId)) return "unchanged";
+    try {
+      await UserModel.patch(params.userId, { email });
+      return "changed";
+    } catch (error) {
+      if (isUniqueConstraintError(error)) return "exists";
+      throw error;
+    }
   }
 
   /** Activate again: the user can sign in. */

@@ -14,6 +14,7 @@ import {
   type DesktopMcpJsonRpcMessage,
   type DesktopMcpRequest,
 } from "@/types";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 
 /** A device key is this prefix followed by the sign-in device code. */
 export const DESKTOP_DEVICE_KEY_PREFIX = "archestra_dev_";
@@ -79,6 +80,12 @@ class DesktopTunnelService {
     }
     if (this.tunnelIdForDevice(device.id) !== params.tunnelId) {
       throw new ApiError(403, "This device key is for a different tunnel.");
+    }
+    if (await softDeletedUsers.isSoftDeleted(device.userId)) {
+      throw new ApiError(
+        403,
+        "The identity provider deactivated this device's user.",
+      );
     }
     return device;
   }

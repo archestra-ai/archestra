@@ -24,11 +24,13 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  UserModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
 import { projectService } from "@/services/project";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -145,6 +147,46 @@ describe("websocket authentication", () => {
     const result = await service.authenticateConnection(request);
 
     expect(result).toBeNull();
+  });
+
+  test("authenticateConnection refuses a session of a user the identity provider deactivated", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id);
+    vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
+      user: { id: user.id },
+      session: { id: "session-ws" },
+    } as never);
+    vi.spyOn(betterAuth.api, "verifyApiKey").mockResolvedValue({
+      valid: false,
+      error: null,
+      key: null,
+    });
+    const request = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as IncomingMessage;
+
+    await expect(
+      service.authenticateConnection(request),
+    ).resolves.toMatchObject({ userId: user.id, organizationId: org.id });
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    await expect(service.authenticateConnection(request)).resolves.toBeNull();
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    await expect(
+      service.authenticateConnection(request),
+    ).resolves.toMatchObject({ userId: user.id });
   });
 });
 

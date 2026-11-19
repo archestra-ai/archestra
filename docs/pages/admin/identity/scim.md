@@ -7,7 +7,7 @@ lastUpdated: 2026-11-19
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Put people in teams before they ever sign in. Add someone to the Archestra group in Microsoft Entra ID, and they appear in Archestra within minutes, ready for your Terraform or scripts to add to teams. Remove them from the group, and they lose all access while their chats, agents, and teams stay. Archestra speaks [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard identity providers use to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
+Put people in teams before they ever sign in. Add someone to the Archestra group in Microsoft Entra ID, and they appear in Archestra, ready for your Terraform or scripts to add to teams. Remove them from the group, and they lose all access while their chats, agents, and teams stay. Archestra speaks [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard identity providers use to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
 
 ## How It Works
 
@@ -38,10 +38,10 @@ Archestra never deletes a user through SCIM. To remove someone for good, use **R
 3. Under **Admin Credentials**, set **Tenant URL** to your Archestra address followed by `/api/scim/v2`, for example `https://archestra.example.com/api/scim/v2`. Paste the key into **Secret Token**, then click **Test Connection**.
 4. Under **Mappings**, turn off **Provision Microsoft Entra ID Groups**: Archestra takes users, and your teams come from Archestra.
 5. In the user mapping, make sure `userName` gets the email people sign in with. Entra sends `userPrincipalName` by default. If it differs from their email, map `userName` from `mail`.
-6. Under **Settings**, set **Scope** to **Sync only assigned users and groups**, and under **Users and groups**, assign the group.
+6. Under **Settings**, set **Scope** to **Sync only assigned users and groups**, and under **Users and groups**, assign the group. Assigning a group needs Microsoft Entra ID P1 or P2. Without it, assign people one by one.
 7. Use **Provision on demand** for one person, check that they appear in **Settings → Users**, then set **Provisioning Status** to **On**.
 
-Entra pushes everyone in the group on its first cycle, then sends changes on its own schedule. Any other identity provider with SCIM 2.0 user provisioning, such as Okta, uses the same address and key.
+Entra pushes everyone assigned on its first cycle, then sends changes on its own schedule.
 
 ## Add Pushed Users to Teams
 
@@ -50,13 +50,13 @@ Pushed users are members you can add to teams right away, by email, before they 
 - **Terraform:** look the person up with the `archestra_user` data source and list them in the `members` of an `archestra_team`.
 - **API:** look up the user ID with `GET /api/organization/members/{email}`, then call `POST /api/teams/{teamId}/members`.
 
-Run either with a service account key whose role holds [`team:update`](/docs/reference/permissions#team:update), such as **Team Writer**.
+Give the service account from the setup the **Team Writer** role too, for [`team:update`](/docs/reference/permissions#team:update), and use its key. The lookup by email needs [`member:read`](/docs/reference/permissions#member:read), which **User Writer** already holds.
 
 ## Troubleshooting
 
 | What you see | Cause and fix |
 | --- | --- |
-| Someone signs in and has none of their teams | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, then remove the extra user in **Settings → Users**. |
+| Someone signs in and has none of their teams | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, remove the extra user in **Settings → Users**, then use **Provision on demand** for that person. The pushed user takes the right email, and their next sign-in opens it with their teams. |
 | **Account Not Linked** at first sign-in | Add their email domain to the provider's **Allowed Email Domains**. |
 | **Account Deactivated** at sign-in | They were removed from the group or the app in Entra. Assign them again. |
 | **Test Connection** fails | Check the tenant URL ends in `/api/scim/v2`, the key is active, and its role holds the `member` permissions. |

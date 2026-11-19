@@ -699,6 +699,7 @@ mod tests {
             spawn: None,
             prompt: None,
             ruling: None,
+            declares: None,
         }
     }
 
@@ -772,6 +773,7 @@ mod tests {
             spawn: None,
             prompt: None,
             ruling: None,
+            declares: None,
         };
         assert!(matches!(
             hooks::handle(&runtime, release).await,
@@ -824,6 +826,7 @@ delta = { audience = ["internal"] }
                     spawn: None,
                     prompt: None,
                     ruling: None,
+                    declares: None,
                 }
             )
             .await,

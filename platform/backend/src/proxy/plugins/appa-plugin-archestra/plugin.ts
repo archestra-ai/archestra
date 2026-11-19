@@ -1927,13 +1927,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const [id, decision] of decisionById) {
       // Only the notice of this call runs. The runtime holds no record of the
       // call, so the result the client sends back is answered from here and
-      // never ruled on as a call that ran.
-      if (decision.kind === "deny" && decision.unanswered)
-        await cacheManager.set(
-          unansweredNoticeKey({ session, callId: id }),
-          decision.feedback,
-          TimeInMs.Day,
-        );
+      // never ruled on as a call that ran. Without the retained reason the
+      // runtime answers that result as withheld, so a failed write is not fatal.
+      if (decision.kind === "deny" && decision.unanswered) {
+        try {
+          await cacheManager.set(
+            unansweredNoticeKey({ session, callId: id }),
+            decision.feedback,
+            TimeInMs.Day,
+          );
+        } catch (err) {
+          logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+        }
+      }
     }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });

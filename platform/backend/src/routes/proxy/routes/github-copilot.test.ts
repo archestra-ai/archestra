@@ -2218,7 +2218,7 @@ describe("Copilot native Messages with a stored GitHub App", () => {
             "copilot-developer-cli",
           );
           expect(request.headers.get("x-github-api-version")).toBe(
-            "2025-04-01",
+            "2026-08-01",
           );
           expect(request.headers.get("openai-intent")).toBe("messages-proxy");
           expect(request.headers.get("x-api-key")).toBeNull();

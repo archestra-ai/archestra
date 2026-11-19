@@ -51,6 +51,7 @@ import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  underPolicyCallIds,
 } from "@/openappa/child-return";
 import {
   mintChildTrajectoryReceipt,
@@ -656,13 +657,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
         // Any malformed frame left after filtering must fail closed here.
-        childReturns: collectAndStripChildReturns(binding.requestBody, {
-          openCodeBackgroundReturns:
-            !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
-          codexMailboxReturns: binding.adapter?.id === "codex",
-          copilotAgentReports: binding.adapter?.id === "copilot-cli",
-          grokSubagentReturns: binding.adapter?.id === "grok-build",
-        }),
+        childReturns: underPolicyCallIds(
+          collectAndStripChildReturns(binding.requestBody, {
+            openCodeBackgroundReturns:
+              !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
+            codexMailboxReturns: binding.adapter?.id === "codex",
+            copilotAgentReports: binding.adapter?.id === "copilot-cli",
+            grokSubagentReturns: binding.adapter?.id === "grok-build",
+          }),
+        ),
         promptOperationId: undefined,
         ...appaTurnBoundaries({ family, body: binding.requestBody }),
       });

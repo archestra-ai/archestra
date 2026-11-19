@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
+import { policyCallId } from "./call-id";
 import {
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  underPolicyCallIds,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { stampToolCallId } from "./trajectory-stamp";
@@ -1053,6 +1055,29 @@ describe("OpenAPPA child-return markers", () => {
       notification(stampedSpawnCallId),
     ).completions;
     expect(stamped).toMatchObject({ spawnCallId: stampedSpawnCallId });
+  });
+
+  test("reads a spawn call id too long for policy, and names it by its policy id", () => {
+    // A stamp around an id that carries a Gemini thought signature.
+    const spawnCallId = stampToolCallId({
+      callId: `gemsig-${"s".repeat(2000)}.gemini-call-task-1`,
+      sessionId: "root",
+      organizationId: RETURN.organizationId,
+      callerId: RETURN.callerId,
+      secret: SECRET,
+    });
+    const notification = (id: string) => ({
+      content: `<task-notification>\n<task-id>child</task-id>\n<tool-use-id>${id}</tool-use-id>\n<status>completed</status>\n<result>${carrier(requiredMarker(RETURN))}</result>\n</task-notification>`,
+    });
+    const collected = collectAndStripChildReturns(notification(spawnCallId));
+    expect(collected.completions).toMatchObject([{ spawnCallId }]);
+    expect(underPolicyCallIds(collected).completions).toMatchObject([
+      { spawnCallId: policyCallId(spawnCallId) },
+    ]);
+    expect(policyCallId(spawnCallId)).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(() =>
+      collectAndStripChildReturns(notification(`${spawnCallId} x`)),
+    ).toThrow();
   });
 
   test("records the notification's native child identity", () => {

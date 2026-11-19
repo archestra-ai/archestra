@@ -64,3 +64,50 @@ test("the first conversation of the person that presents their reference runs un
   expect(await bypass(COPY)).toBe(false);
   expect(await bypass(OWNER, {}, "Disconnect Claude Code.")).toBe(false);
 });
+
+test("a routed Cursor chat keeps the exemption after its first tool call gives its session a name of its own", async ({
+  makeAgent,
+  makeUser,
+}) => {
+  const agent = await makeAgent();
+  const user = await makeUser();
+  const { reference } = issueDisconnectReference({
+    organizationId: agent.organizationId,
+    userId: user.id,
+    secret: config.auth.secret,
+  });
+  const opening = {
+    role: "user",
+    content: `Read https://example.com/disconnect.md?client=cursor&ref=${reference} and disconnect Cursor.`,
+  };
+  const bypass = (messages: unknown[]) =>
+    resolveDisconnectBypass({
+      request: {
+        headers: { "user-agent": "Cursor/3.30.14" },
+      } as unknown as FastifyRequest,
+      body: { model: "gpt-6", messages },
+      agent,
+      authenticatedUserId: user.id,
+      appaActive: true,
+    });
+
+  expect(await bypass([opening])).toBe(true);
+  // The cleanup's first call is in the history from here on.
+  expect(
+    await bypass([
+      opening,
+      {
+        role: "assistant",
+        content: [],
+        tool_calls: [
+          { id: "call_cleanup", function: { name: "Shell", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_cleanup", content: "removed" },
+    ]),
+  ).toBe(true);
+  // Another chat that got a copy of the prompt is still checked.
+  expect(
+    await bypass([{ ...opening, content: `${opening.content} Please.` }]),
+  ).toBe(false);
+});

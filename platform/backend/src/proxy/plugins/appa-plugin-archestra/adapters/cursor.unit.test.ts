@@ -110,6 +110,24 @@ describe("Cursor session identity", () => {
       ]),
     ).toEqual(one);
 
+    // A claim on the conversation holds through that change.
+    const conversation = (requestBody: unknown) =>
+      adapter.conversationClaimId({ headers: cursorHeaders, requestBody });
+    expect(conversation(chat("Fix the login bug"))).toBe(shared?.sessionId);
+    expect(
+      conversation({
+        ...chat("Fix the login bug"),
+        messages: [
+          ...chat("Fix the login bug").messages,
+          {
+            role: "assistant",
+            content: [],
+            tool_calls: [{ id: "call_a", function: { name: "Read" } }],
+          },
+        ],
+      }),
+    ).toBe(shared?.sessionId);
+
     // The Responses wire carries a call as an item of its own.
     expect(
       identity({

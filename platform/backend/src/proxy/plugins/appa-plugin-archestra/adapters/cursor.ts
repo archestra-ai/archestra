@@ -59,23 +59,25 @@ export class AppaCursorAdapter implements AppaClientAdapter {
     const opening = openingText(context.requestBody);
     if (opening === undefined) return undefined;
     const firstCall = firstCallId(context.requestBody);
-    const digest = createHash("sha256")
-      .update(
-        firstCall === undefined
-          ? `${OPENING_DOMAIN}\u0000${opening}`
-          : `${OPENING_DOMAIN}\u0000${opening}\u0000${firstCall}`,
-        "utf8",
-      )
-      .digest("base64url")
-      .slice(0, 32);
     return {
-      sessionId: `${CURSOR_SESSION_PREFIX}${digest}`,
+      sessionId: chatName(
+        firstCall === undefined ? [opening] : [opening, firstCall],
+      ),
       provenance: "cursor-opening",
     };
   }
 
   nativeConversationId(context: AppaMatchContext): string | undefined {
     return this.extractSessionIdentity(context)?.sessionId;
+  }
+
+  /**
+   * The opening alone: it does not change when the chat makes its first
+   * tool call and its session gets a name of its own.
+   */
+  conversationClaimId(context: AppaMatchContext): string | undefined {
+    const opening = openingText(context.requestBody);
+    return opening === undefined ? undefined : chatName([opening]);
   }
 
   gatewayToolsHint(serverName: string): string {
@@ -105,6 +107,15 @@ export class AppaCursorAdapter implements AppaClientAdapter {
 
 const CURSOR_SESSION_PREFIX = "cursor-chat-";
 const OPENING_DOMAIN = "archestra-cursor-opening-v1";
+
+/** A chat's name: a digest of what tells it apart from other chats. */
+function chatName(parts: readonly string[]): string {
+  const digest = createHash("sha256")
+    .update([OPENING_DOMAIN, ...parts].join("\u0000"), "utf8")
+    .digest("base64url")
+    .slice(0, 32);
+  return `${CURSOR_SESSION_PREFIX}${digest}`;
+}
 
 /**
  * The text of the first user message, on Chat Completions (`messages`) or

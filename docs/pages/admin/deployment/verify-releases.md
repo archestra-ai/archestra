@@ -103,7 +103,7 @@ What to know:
 
 - Each statement says why: the vulnerable code is not in the image, is never run, or cannot be reached by an attacker. Read `impact_statement` in `platform.vex.json` to check a claim.
 - An image that no statement covers has no VEX attestation, so `gh attestation verify` fails for it. Scan it as usual.
-- Statements are added as Archestra investigates new advisories. The newest are in [`vex/archestra.openvex.json`](https://github.com/archestra-ai/archestra/blob/main/vex/archestra.openvex.json), which Grype and Trivy read as is.
+- Statements are added as Archestra investigates new advisories. The newest are in [`vex/openvex.json`](https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json), which Grype and Trivy read as is.
 
 ## Admit Only Archestra Images
 

@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import {
   keepPreviousData,
   useMutation,
@@ -14,7 +18,6 @@ const {
   getAgentAdoptionUsage,
   getConnectedClientLog,
   getConnectedClients,
-  getDisconnectReference,
 } = archestraApiSdk;
 
 export type ConnectedClient =
@@ -88,7 +91,11 @@ export function useDisconnectReference() {
     refetchInterval: DISCONNECT_REFERENCE_REFRESH_MS,
     retry: false,
     queryFn: async () => {
-      const response = await getDisconnectReference();
+      // The endpoint is not in the API reference yet, so the generated
+      // client has no function for it.
+      const response = await archestraApiClient.get<{
+        200: { reference: string; expiresAt: string };
+      }>({ url: "/api/connected-clients/disconnect-reference" });
       return response.data?.reference ?? null;
     },
   });

@@ -469,7 +469,12 @@ function renderEntry(
 function modelWrittenInput(toolName: string, rawInput: unknown): unknown {
   // A released runtime call carries its signed proof in its arguments.
   const input = structuredClone(rawInput);
-  stripRuntimeToolProofs(input);
+  try {
+    stripRuntimeToolProofs(input);
+  } catch {
+    // Too deep to search for a proof: withhold this input, not the summary.
+    return WITHHELD_TOOL_INPUT;
+  }
   const hidden = PROXY_WRITTEN_MEMBERS.find(
     ([shortName]) =>
       toolName === shortName || toolName.endsWith(`__${shortName}`),
@@ -525,6 +530,7 @@ const CONTINUATION_PREFIX = "[… continued] ";
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;
 const WITHHELD_TOOL_OUTPUT = "(output withheld from this summary)";
+const WITHHELD_TOOL_INPUT = "(input withheld from this summary)";
 const PROXY_WRITTEN_MEMBERS: ReadonlyArray<
   readonly [shortName: string, members: readonly string[]]
 > = [

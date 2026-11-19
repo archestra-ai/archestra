@@ -1457,14 +1457,13 @@ function createOllamaNativeFetch(params: {
       delete body.think;
     }
 
-    const numCtx = await resolvePinnedNumCtx();
-    if (numCtx !== undefined) {
-      const current =
-        typeof body.options === "object" && body.options !== null
-          ? (body.options as Record<string, unknown>)
-          : {};
-      if (current.num_ctx === undefined)
-        body.options = { ...current, num_ctx: numCtx };
+    const current =
+      typeof body.options === "object" && body.options !== null
+        ? (body.options as Record<string, unknown>)
+        : {};
+    if (current.num_ctx === undefined) {
+      const numCtx = await resolvePinnedNumCtx();
+      if (numCtx !== undefined) body.options = { ...current, num_ctx: numCtx };
     }
 
     // The package emits an `options` bag even when every key resolved to

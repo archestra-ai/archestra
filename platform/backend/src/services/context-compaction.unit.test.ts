@@ -118,6 +118,21 @@ describe("summarizeTranscriptEntries", () => {
     expect(JSON.parse(input.tool_args).runtime_proof).toBe("proof-nested");
   });
 
+  test("withholds a tool input too deep to search for proofs and summarizes the rest", async () => {
+    let deep: Record<string, unknown> = { leaf: "deep-leaf" };
+    for (let i = 0; i < 80; i++) deep = { nested: deep };
+    const { calls, summary } = await summarizeRecorded({
+      entries: [
+        { kind: "tool_call", toolName: "lookup", input: deep },
+        { kind: "text", role: "user", text: "after the deep call" },
+      ],
+    });
+
+    expect(summary).not.toBeNull();
+    expect(calls[0].transcript).not.toContain("deep-leaf");
+    expect(calls[0].transcript).toContain("after the deep call");
+  });
+
   test("over the chunk ceiling, folds every entry in order instead of dropping the middle", async () => {
     const entries = [
       { kind: "text" as const, role: "user", text: "TASK" },

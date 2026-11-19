@@ -59,6 +59,7 @@ export function PluginPreviewDialog({
           onFilesChange={() => {}}
           readOnly
           readOnlyMarker={false}
+          downloadName={pluginName ?? undefined}
           className="h-full"
         />
       )}

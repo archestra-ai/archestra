@@ -1854,6 +1854,57 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions chat errors", () => {
+    test("counts the errors the chat showed for its conversation", async ({
+      makeAdmin,
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Agent", organizationId: org.id });
+      const conversation = await ConversationModel.create({
+        userId: admin.id,
+        organizationId: org.id,
+        agentId: agent.id,
+      });
+      await ConversationChatErrorModel.create({
+        conversationId: conversation.id,
+        error: {
+          code: ChatErrorCode.Unknown,
+          message: "Guardrails could not settle a withheld tool call",
+          isRetryable: false,
+        },
+      });
+      const base = {
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({ ...base, sessionId: conversation.id });
+      await InteractionModel.create({
+        ...base,
+        sessionId: "claude-code-session",
+      });
+
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      const byId = new Map(sessions.data.map((s) => [s.sessionId, s]));
+      expect(byId.get(conversation.id)?.chatErrorCount).toBe(1);
+      expect(byId.get("claude-code-session")?.chatErrorCount).toBe(0);
+    });
+  });
+
   describe("getSessions Archestra Chat session identity (T-894)", () => {
     // A new Archestra Chat fires two LLM calls that share one session_id (the
     // conversation id): the user's turn under their agent (source "chat") and

@@ -30,6 +30,8 @@ Open an **LLM Proxy** session to see every request and the MCP tool calls it tri
 
 If a model response stream ends cleanly before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
 
+A session's **Status** shows **Failed** when a Chat turn ended in an error, even if every request row looks healthy. The session page lists those errors under **Failed turns**, as the user saw them, and marks the last request before each one **Turn failed**. **Export JSON** includes them.
+
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 
 ## Keep Prompts Out of the Logs

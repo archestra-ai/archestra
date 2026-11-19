@@ -240905,6 +240905,10 @@
                           "requestCount": {
                             "type": "number"
                           },
+                          "chatErrorCount": {
+                            "type": "number",
+                            "description": "Errors the chat showed for this session's conversation. Read them at GET /api/interactions/sessions/:sessionId/chat-errors."
+                          },
                           "totalInputTokens": {
                             "type": "number"
                           },
@@ -241085,6 +241089,7 @@
                           "sources",
                           "interactionId",
                           "requestCount",
+                          "chatErrorCount",
                           "totalInputTokens",
                           "totalOutputTokens",
                           "totalCacheReadTokens",
@@ -241440,6 +241445,458 @@
                     "forkedFrom",
                     "forks",
                     "forksTruncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "log:read"
+          ]
+        }
+      }
+    },
+    "/api/interactions/sessions/{sessionId}/chat-errors": {
+      "get": {
+        "operationId": "getInteractionSessionChatErrors",
+        "tags": [
+          "Interaction"
+        ],
+        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "usage_limit_exceeded",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "provider_insufficient_balance",
+                                  "not_found",
+                                  "context_too_long",
+                                  "request_too_large",
+                                  "request_exceeds_rate_limit",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "empty_response",
+                                  "incomplete_tool_call",
+                                  "tool_call_output_truncated",
+                                  "upstream_stalled",
+                                  "incomplete_response",
+                                  "provider_auth_required",
+                                  "tools_unsupported",
+                                  "aborted",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
+                              "authAction": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "ollama-native",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "kimi",
+                                      "azure",
+                                      "github-copilot",
+                                      "microsoft-365-copilot",
+                                      "archestra",
+                                      "voyage",
+                                      "jev"
+                                    ]
+                                  },
+                                  "providerLabel": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "ollama-native",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "kimi",
+                                      "azure",
+                                      "github-copilot",
+                                      "microsoft-365-copilot",
+                                      "archestra",
+                                      "voyage",
+                                      "jev"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }

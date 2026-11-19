@@ -1,6 +1,10 @@
 "use client";
 
-import { CornerDownRight, MessageSquareText } from "lucide-react";
+import {
+  CornerDownRight,
+  MessageSquareText,
+  MessageSquareWarning,
+} from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -109,7 +113,13 @@ export function RequestWaterfall({
   selectedConsultKey = null,
   onSelectConsult,
   onOpenRequest,
+  chatErrorsByRowId,
 }: {
+  /**
+   * How many chat errors followed each request id: the request was the last
+   * one logged before the chat showed the error.
+   */
+  chatErrorsByRowId?: Map<string, number>;
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
   /** The consult open in the details pane below, if any. */
@@ -595,6 +605,7 @@ export function RequestWaterfall({
                       span={span}
                       profileName={profileName}
                       isConversation={span.row.id === conversationRowId}
+                      chatErrorCount={chatErrorsByRowId?.get(span.row.id) ?? 0}
                       {...rowProps}
                     />
                   ) : (
@@ -1016,11 +1027,14 @@ function RequestRow({
   span,
   profileName,
   isConversation,
+  chatErrorCount,
   ...rowProps
 }: RowProps & {
   span: RequestSpan;
   profileName: string | null;
   isConversation: boolean;
+  /** Chat errors shown right after this request, the last one before them. */
+  chatErrorCount: number;
 }) {
   const { row, kind } = span;
   const label = requestLabel(row, profileName);
@@ -1035,7 +1049,7 @@ function RequestRow({
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${isConversation ? ", latest conversation" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${chatErrorCount > 0 ? ", then the turn failed" : ""}${isConversation ? ", latest conversation" : ""}`}
       name={
         <>
           <span
@@ -1047,6 +1061,17 @@ function RequestRow({
             {label}
           </span>
           {kind !== "main" ? <KindChip kind={kind} /> : null}
+          {chatErrorCount > 0 ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 tabular-nums dark:text-red-400"
+              title="The turn failed after this request, the last one logged before the error the user saw. See Failed turns above."
+            >
+              <MessageSquareWarning className="size-2.5" aria-hidden="true" />
+              {chatErrorCount === 1
+                ? "Turn failed"
+                : `${chatErrorCount} turns failed`}
+            </span>
+          ) : null}
           {isConversation ? (
             <MessageSquareText
               className="size-3.5 shrink-0 text-primary"

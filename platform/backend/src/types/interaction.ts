@@ -895,6 +895,11 @@ export const SessionSummarySchema = z.object({
   sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
+  chatErrorCount: z
+    .number()
+    .describe(
+      "Errors the chat showed for this session's conversation. Read them at GET /api/interactions/sessions/:sessionId/chat-errors.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),
@@ -982,3 +987,7 @@ export const SessionSummarySchema = z.object({
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+export const SessionChatErrorsSchema = z.object({
+  chatErrors: z.array(SelectConversationChatErrorSchema),
+});

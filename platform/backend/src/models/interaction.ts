@@ -60,6 +60,7 @@ import {
   shouldExportSessionSummary,
 } from "@/observability/session-summary";
 import type {
+  ConversationChatError,
   InsertInteraction,
   Interaction,
   InteractionAuthMethod,
@@ -1685,6 +1686,38 @@ class InteractionModel {
    * The previous approach used ARRAY_AGG with FILTER on request::text which was O(n) on JSON size
    * and caused 17+ second queries due to scanning megabytes of JSON per session.
    */
+  /**
+   * The errors Archestra Chat showed for a session's conversation (its id is
+   * the session id), oldest first. Empty when the caller cannot see the
+   * session or the session is no chat conversation. Encrypted-chat errors come
+   * back as the locked sentinel, as on the interaction detail endpoint.
+   */
+  static async findSessionChatErrors(params: {
+    sessionId: string;
+    organizationId: string;
+    /** Limits the check to this user's requests; omit for `log:admin`. */
+    userId?: string;
+  }): Promise<ConversationChatError[]> {
+    if (!isUuid(params.sessionId)) return [];
+    const access = await InteractionModel.buildSessionConditions(
+      undefined,
+      undefined,
+      {
+        organizationId: params.organizationId,
+        userId: params.userId,
+        sessionId: params.sessionId,
+      },
+    );
+    if (access === SESSION_ACCESS_DENIED) return [];
+    const [visible] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(access)
+      .limit(1);
+    if (!visible) return [];
+    return ConversationChatErrorModel.findByConversation(params.sessionId);
+  }
+
   static async getSessions(
     pagination: PaginationQuery,
     requestingUserId?: string,
@@ -2622,6 +2655,10 @@ class InteractionModel {
         // For single interactions (no session), return the interaction ID for direct navigation
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
+        // Errors the Archestra Chat showed for the conversation whose id is
+        // the session id, by the indexed conversation id (same uuid guard as
+        // conversationTitle below).
+        chatErrorCount: sql<number>`(SELECT COUNT(*) FROM ${schema.conversationChatErrorsTable} WHERE ${schema.conversationChatErrorsTable.conversationId} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
         totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
@@ -2776,6 +2813,7 @@ class InteractionModel {
         sources: s.sources ?? [],
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
+        chatErrorCount: Number(s.chatErrorCount),
         totalDurationMs:
           s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,

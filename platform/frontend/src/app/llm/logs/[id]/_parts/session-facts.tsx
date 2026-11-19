@@ -14,6 +14,7 @@ import {
   uniqueSources,
 } from "@/app/llm/logs/_parts/logs-table-format";
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
+import { describeSessionStatus } from "@/app/llm/logs/_parts/session-status";
 import { CopyButton } from "@/components/copy-button";
 import { formatCost } from "@/components/cost";
 import {
@@ -73,6 +74,7 @@ export function SessionFacts({
   fallbackType,
   providerLabel,
   trajectory,
+  status,
 }: {
   totals: SessionTotals;
   totalRequests: number;
@@ -90,6 +92,8 @@ export function SessionFacts({
     session: LogSession | undefined;
     lineage: SessionLineage | undefined;
   } | null;
+  /** The session's failure count; null while the session loads. */
+  status: Pick<LogSession, "chatErrorCount"> | null;
 }) {
   const cost = Number(totals.cost ?? 0);
   const subscription = Number(totals.subscriptionCost ?? 0);
@@ -143,6 +147,7 @@ export function SessionFacts({
     };
   });
   const identity = trajectory ? readTrajectory(trajectory) : null;
+  const outcome = status ? describeSessionStatus(status) : null;
 
   return (
     <FactsStrip
@@ -150,6 +155,33 @@ export function SessionFacts({
       footerLabel="Trajectory"
       footer={identity ? <TrajectoryRow t={identity} /> : null}
     >
+      <Fact label="Status">
+        <FactValue muted={!outcome}>
+          {outcome ? (
+            <span
+              className={cn(
+                "flex items-center gap-1.5",
+                outcome.failed ? "text-destructive" : undefined,
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  outcome.failed ? "bg-destructive" : "bg-emerald-500",
+                )}
+              />
+              <span>{outcome.failed ? "Failed" : "OK"}</span>
+            </span>
+          ) : (
+            <span>—</span>
+          )}
+        </FactValue>
+        <FactSub>
+          {outcome ? <span>{outcome.detail ?? "no errors"}</span> : null}
+        </FactSub>
+      </Fact>
+
       <Fact label="Started">
         <FactTip
           tip={

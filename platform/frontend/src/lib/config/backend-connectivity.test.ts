@@ -5,13 +5,54 @@ import {
   useBackendConnectivity,
 } from "./backend-connectivity";
 
+const { mockGetReady } = vi.hoisted(() => ({ mockGetReady: vi.fn() }));
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: {
+      ...actual.archestraApiSdk,
+      getReady: (...args: unknown[]) => mockGetReady(...args),
+    },
+  };
+});
+
 describe("useBackendConnectivity", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("checks readiness despite a false browser offline hint", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    mockGetReady.mockResolvedValue({ response: { ok: true } });
+    const { result } = renderHook(() => useBackendConnectivity());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("connected");
+    expect(mockGetReady).toHaveBeenCalled();
+  });
+
+  it("retries a real offline failure and recovers without an online event", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    mockGetReady
+      .mockResolvedValueOnce({ error: new TypeError("Failed to fetch") })
+      .mockResolvedValue({ response: { ok: true } });
+    const { result } = renderHook(() => useBackendConnectivity());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("browser-connecting");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(result.current.status).toBe("connected");
+    expect(navigator.onLine).toBe(false);
   });
 
   it("should start in initializing state when autoStart is false", () => {

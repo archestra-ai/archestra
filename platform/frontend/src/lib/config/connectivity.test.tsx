@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,6 +80,8 @@ describe("ConnectivityProvider", () => {
     vi.useFakeTimers();
   });
   afterEach(() => {
+    onlineManager.setOnline(true);
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -160,7 +166,7 @@ describe("ConnectivityProvider", () => {
     expect(activeInvalidations).toHaveLength(1);
   });
 
-  it("reports browser-offline immediately when navigator goes offline, independent of /ready", async () => {
+  it("recovers from a false offline event without a browser online event", async () => {
     mockGetReady.mockResolvedValue(READY_OK);
     const { result } = renderHook(() => useConnectivity(), {
       wrapper: makeWrapper().wrapper,
@@ -177,12 +183,36 @@ describe("ConnectivityProvider", () => {
     });
     expect(result.current.state.kind).toBe("browser-offline");
 
-    onLineSpy.mockReturnValue(true);
-    await act(async () => {
-      window.dispatchEvent(new Event("online"));
-    });
     await flush();
     expect(result.current.state.kind).toBe("online");
+    expect(navigator.onLine).toBe(false);
+    expect(onlineManager.isOnline()).toBe(true);
+    onLineSpy.mockRestore();
+  });
+
+  it("probes on mount and retries while the browser still reports offline", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    onlineManager.setOnline(false);
+    mockGetReady.mockResolvedValue(READY_FAIL);
+    const { queryClient, wrapper } = makeWrapper();
+    const loadPage = vi.fn().mockResolvedValue("recovered page");
+    const pageRequest = queryClient.fetchQuery({
+      queryKey: ["paused-page"],
+      queryFn: loadPage,
+    });
+    const { result } = renderHook(() => useConnectivity(), { wrapper });
+    await firstProbe();
+    expect(mockGetReady).toHaveBeenCalled();
+    expect(result.current.state.kind).toBe("browser-offline");
+
+    mockGetReady.mockResolvedValue(READY_OK);
+    act(() => result.current.retry());
+    await flush();
+    expect(result.current.state.kind).toBe("online");
+    expect(onlineManager.isOnline()).toBe(true);
+    expect(navigator.onLine).toBe(false);
+    await expect(pageRequest).resolves.toBe("recovered page");
+    expect(loadPage).toHaveBeenCalledTimes(1);
   });
 
   it("fires exactly one refetch wave per offline→online transition, not while steady", async () => {
@@ -199,8 +229,12 @@ describe("ConnectivityProvider", () => {
       ).length;
 
     for (let cycle = 1; cycle <= 2; cycle++) {
+      mockGetReady.mockResolvedValue(READY_FAIL);
       onLineSpy.mockReturnValue(false);
       await act(async () => window.dispatchEvent(new Event("offline")));
+      await flush();
+      expect(result.current.state.kind).toBe("browser-offline");
+      mockGetReady.mockResolvedValue(READY_OK);
       onLineSpy.mockReturnValue(true);
       await act(async () => window.dispatchEvent(new Event("online")));
       await flush();

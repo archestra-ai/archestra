@@ -13,16 +13,28 @@ Send easy sessions to a cheap model and hard ones to a frontier model, while kee
 ```mermaid
 flowchart LR
     Client["Agents · Chat · Unified Model API"] -->|"auto or auto:support"| Router["Auto router"]
-    Router -->|"First turn"| Jev["Jev decision model"]
-    Jev --> Router
-    Router --> Fast["Fast tier"]
-    Router --> Normal["Normal tier"]
-    Router --> Smart["Smart tier"]
+    Router -->|"First turn"| Jev["Jev scorer"]
+    Jev -->|"Difficulty & length odds"| Plan["Fitted budget plan"]
+    Plan --> Fast["Fast tier"]
+    Plan --> Normal["Normal tier"]
+    Plan --> Smart["Smart tier"]
     class Router accent
+    class Plan accent
     class Jev external
 ```
 
 If you want load balancing and failover across keys for a single model, use a [model pool](/docs/llm-proxy/model-pools) instead.
+
+## How It Picks a Model
+
+Jev does not pick the model. Jev scores the session's opening context, and Archestra's own routing plan uses those scores—together with your traffic history, model prices, and daily budget—to choose the tier.
+
+1. **Score the opening turn:** on a session's first request, Jev estimates two things: the probability that fast, normal, or smart is the weakest tier that can finish the whole session as well as a frontier model, and the chance that the session's context will grow past roughly 100,000 tokens.
+2. **Estimate cost and quality per tier:** using a plan fitted from the router's past sessions, Archestra predicts how many tokens this kind of session tends to use, what share will hit long-context pricing, and what it would cost on each of your three models.
+3. **Spend the budget where it buys the most quality:** the plan picks the tier that maximizes expected quality within your daily budget. Under a tight budget, only sessions where a stronger model buys the biggest quality gain per extra dollar move up a tier; under a larger budget, more sessions do.
+4. **Stay on that model for the session:** follow-up turns reuse the saved choice without calling Jev again.
+
+That split is why a new router starts cold on the normal model and why editing a model's price or your daily budget triggers a new plan: Jev's scores do not change, but Archestra's budget allocation does.
 
 ## Set It Up
 

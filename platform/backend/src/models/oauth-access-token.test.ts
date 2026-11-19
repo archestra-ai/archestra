@@ -1,4 +1,6 @@
 import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import OAuthAccessTokenModel from "./oauth-access-token";
 
@@ -49,6 +51,37 @@ describe("OAuthAccessTokenModel", () => {
       });
 
       expect(created.referenceId).toBeNull();
+    });
+  });
+
+  describe("getByTokenHash", () => {
+    test("treats a revoked access token as absent", async ({
+      makeUser,
+      makeOAuthClient,
+    }) => {
+      // Better Auth revokes a session's access tokens on sign-out by stamping
+      // `revoked` rather than deleting the row; validators must reject them.
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      const created = await OAuthAccessTokenModel.create({
+        tokenHash: "revoked-token-hash",
+        clientId: client.clientId,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 3600000),
+        scopes: ["mcp"],
+      });
+      expect(
+        await OAuthAccessTokenModel.getByTokenHash("revoked-token-hash"),
+      ).toBeDefined();
+
+      await db
+        .update(schema.oauthAccessTokensTable)
+        .set({ revoked: new Date() })
+        .where(eq(schema.oauthAccessTokensTable.id, created.id));
+
+      expect(
+        await OAuthAccessTokenModel.getByTokenHash("revoked-token-hash"),
+      ).toBeUndefined();
     });
   });
 

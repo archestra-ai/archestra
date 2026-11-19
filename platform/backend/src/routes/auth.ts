@@ -362,6 +362,13 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Forward to better-auth
       const url = new URL(request.url, `http://${request.headers.host}`);
 
+      // Strip `resource` (RFC 8707) here too, as the token route does. MCP
+      // clients send their per-gateway URL (`/v1/mcp/{profileId}`), and the
+      // OAuth provider rejects any resource that is not a registered
+      // `oauth_resource` row by redirecting back with `invalid_target`, which
+      // ends the sign-in. The token route binds audiences itself after mint.
+      url.searchParams.delete("resource");
+
       // Per OAuth 2.1, scopes must be declared at Dynamic Client Registration
       // (DCR) and re-validated at authorize. The OAuth provider checks the
       // authorize-time scopes against the client's *stored* scopes, so the two
@@ -423,10 +430,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // OAuth 2.1 Token — strip the `resource` parameter before forwarding to
   // better-auth. MCP clients (e.g. Cursor, Claude Code) include `resource`
-  // with dynamic per-profile URLs like `/v1/mcp/{profileId}`. better-auth's
-  // `validAudiences` only supports exact-match strings so there is no way to
-  // whitelist a dynamic path. Stripping `resource` causes better-auth to
-  // issue opaque tokens instead of JWTs, which our MCP Gateway token
+  // with dynamic per-profile URLs like `/v1/mcp/{profileId}`. better-auth
+  // accepts only resources registered as exact `oauth_resource` rows, so there
+  // is no way to allow a dynamic path. Stripping `resource` causes better-auth
+  // to issue opaque tokens instead of JWTs, which our MCP Gateway token
   // validator already handles.
   //
   // Also handles CIMD: if the client_id is a URL, auto-register the client
@@ -991,6 +998,19 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Override any client-provided value — see route comment above
       body.token_endpoint_auth_method = "none";
+
+      // OIDC, and the OAuth provider with it, treats an omitted
+      // application_type as "web", which accepts only https redirect URIs on
+      // non-loopback hosts. Every client registered here is public, so one
+      // that omits it and lists a loopback or custom-scheme redirect URI (e.g.
+      // Claude Code, MCP Inspector, Cursor) is a native app (RFC 8252).
+      if (
+        body.application_type === undefined &&
+        Array.isArray(body.redirect_uris) &&
+        body.redirect_uris.some((uri) => !isWebRedirectUri(uri))
+      ) {
+        body.application_type = "native";
+      }
 
       // Native MCP clients (e.g. Claude Desktop) register the refresh_token
       // grant but list only "mcp" in their requested scope, then ask for
@@ -1691,6 +1711,18 @@ function resolveConnectorAppId(params: {
     return appIdFromConnectorPath(new URL(canonicalUri).pathname);
   } catch {
     return null;
+  }
+}
+
+/** An https redirect URI on a non-loopback host, which a "web" client may use. */
+function isWebRedirectUri(uri: unknown): boolean {
+  if (typeof uri !== "string") {
+    return false;
+  }
+  try {
+    return new URL(uri).protocol === "https:" && !isLoopbackRedirectUri(uri);
+  } catch {
+    return false;
   }
 }
 

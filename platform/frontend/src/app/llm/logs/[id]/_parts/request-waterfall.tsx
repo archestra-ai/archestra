@@ -1153,7 +1153,11 @@ function RequestRow({
       {...rowProps}
       label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${failed ? ", failed" : ""}${chatErrorCount > 0 ? ", then the turn failed" : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
       barClassName={
-        failedOver ? FAILED_ATTEMPT_BAR : failed ? FAILED_REQUEST_BAR : undefined
+        failedOver
+          ? FAILED_ATTEMPT_BAR
+          : failed
+            ? FAILED_REQUEST_BAR
+            : undefined
       }
       edge={joinsRowAbove ? <RetryBracket /> : null}
       name={

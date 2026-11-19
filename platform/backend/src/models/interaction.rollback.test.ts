@@ -2012,9 +2012,11 @@ describe("InteractionModel", () => {
         attemptOutcome: "failed_over",
       });
 
-      expect(
-        [ok, rejected, cutOff].map((row) => row.failed),
-      ).toEqual([false, true, true]);
+      expect([ok, rejected, cutOff].map((row) => row.failed)).toEqual([
+        false,
+        true,
+        true,
+      ]);
       const sessions = await InteractionModel.getSessionsCursor(
         { limit: 100 },
         admin.id,

@@ -17,7 +17,9 @@ export function StatusCell({
       <span
         className={cn(
           "flex items-center gap-1.5 text-sm",
-          status.failed ? "font-medium text-destructive" : "text-muted-foreground",
+          status.failed
+            ? "font-medium text-destructive"
+            : "text-muted-foreground",
         )}
       >
         <span

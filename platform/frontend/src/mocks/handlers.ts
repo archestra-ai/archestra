@@ -1067,7 +1067,9 @@ export const handlers: HttpHandler[] = [
     http.get(url, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const sessionId = params.get("sessionId") ?? params.get("llmSessionId");
-      const own = llmLogsSummariesSeed.some((row) => row.sessionId === sessionId);
+      const own = llmLogsSummariesSeed.some(
+        (row) => row.sessionId === sessionId,
+      );
       return HttpResponse.json(paginated(own ? [] : mcpToolCallsSeed));
     }),
   ),

@@ -178,7 +178,9 @@ export function SessionFacts({
             <span>—</span>
           )}
         </FactValue>
-        <FactSub>{outcome?.detail ?? (outcome ? "no errors" : "")}</FactSub>
+        <FactSub>
+          {outcome ? <span>{outcome.detail ?? "no errors"}</span> : null}
+        </FactSub>
       </Fact>
 
       <Fact label="Started">

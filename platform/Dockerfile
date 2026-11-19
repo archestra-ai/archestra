@@ -497,6 +497,15 @@ RUN --mount=type=cache,target=/app/.turbo \
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm deploy --filter=@backend --prod --legacy /prod/backend
 
+# Trim the deployed tree to what the server loads: drop the optional peers
+# pnpm resolved for better-auth and drizzle-orm (Next.js with its SWC binary,
+# Vitest with msw/vite/TypeScript, PGlite), plus every third-party source map
+# and type declaration. The server keeps its own dist/*.map for
+# --enable-source-maps. About 700 MB of the 1.4 GB tree; the script fails the
+# build if the bundle ever imports a package it removes.
+COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
+RUN node /tmp/prune-backend-deploy.mjs /prod/backend
+
 # <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
 # `unified-slim` is the complete, runnable platform image minus the ~352MB
 # dagger-engine.tar, which only the quickstart docker-run path consumes (the
@@ -577,20 +586,21 @@ RUN apk --no-cache upgrade && \
     # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
     # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
     apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
-    # Install PostgreSQL 17, pgvector, supervisord, and git.
+    # Install PostgreSQL 18 with its contrib modules, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
     #
+    # PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
+    # pg_trgm, which migrations 0116/0378 use for the conversation and user
+    # search indexes (they skip the indexes when the extension is missing).
+    #
     # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
     # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-    # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
-    # because postgresql-pgvector depends on postgresql18, so that major lands in the image
-    # alongside 17 and is scanned too. (postgresql18 in fact owns the /usr/bin/postgres symlink,
-    # so it is the major supervisor actually starts.) Same stale-layer hazard as the curl pin: the bare
-    # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
-    # fixed versions and bust the cache.
-    apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \
-        "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
+    # CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
+    # pin: the bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
+    # guarantee the fixed versions and bust the cache.
+    apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
+        postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \

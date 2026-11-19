@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { drive_v3 } from "@googleapis/drive";
 import { OAuth2Client } from "google-auth-library";
-import { drive_v3 } from "googleapis/build/src/apis/drive/v3.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";

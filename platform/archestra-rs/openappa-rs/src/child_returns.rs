@@ -1202,6 +1202,22 @@ mod runtime_child_tests {
             .unwrap()
             .expect("the parent is told its subagent's answer waits for its decision");
         assert_ne!(notice.accept, notice.discard);
+
+        // The parent's turn may end before it decides: the spawn's result was answered
+        // with the notice, and the answer still waits.
+        let mut turn = event_input("turn_end", json!({ "answered_call_ids": ["spawn-1"] }));
+        turn.parent_id = None;
+        turn.output = None;
+        validate(&turn).unwrap();
+        let stopped = hooks::handle(
+            &runtime,
+            HookEvent::TurnEnd {
+                actor: parent.clone(),
+                open_calls: crate::input::open_calls(&turn),
+            },
+        )
+        .await;
+        assert_eq!(stopped, HookDecision::Ack);
         let accepted = runtime
             .execute_embedded_remedy(
                 &parent,

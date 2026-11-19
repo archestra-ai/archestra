@@ -2268,7 +2268,9 @@ export function parseOpenAppaConfig({
   policyCheckName,
   selfService,
   selfServiceAutoMerge,
+  deferredReturn,
 }: {
+  deferredReturn?: string;
   humanApprovalMode?: string;
   softBlockMode?: string;
   policyCheckName?: string;
@@ -2350,6 +2352,8 @@ export function parseOpenAppaConfig({
     ...selfServiceOverride,
     ...selfServiceAutoMergeOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
+    // Off until every replica reads a session log that records a deferred return.
+    ...(deferredReturn === "true" ? { deferredReturn: true as const } : {}),
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
     offerSigningSecret: secret,
@@ -2523,6 +2527,7 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  deferredReturn: process.env.ARCHESTRA_OPENAPPA_DEFERRED_RETURN,
   humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,

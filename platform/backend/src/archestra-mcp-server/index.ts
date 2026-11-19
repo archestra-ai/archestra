@@ -946,13 +946,17 @@ async function admitRuntimeProof(params: {
     sessionId: verified.session.session_id,
     toolCallIds: [verified.toolCallId],
   });
-  if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+  const release = released.get(verified.toolCallId);
+  if (release?.spawn !== verified.spawn) {
     return {
       kind: "refused",
       reason: "OpenAPPA has no matching released runtime call.",
     };
   }
-  return { kind: "accepted", call: verified };
+  return {
+    kind: "accepted",
+    call: release.defersReturn ? { ...verified, defersReturn: true } : verified,
+  };
 }
 
 /**

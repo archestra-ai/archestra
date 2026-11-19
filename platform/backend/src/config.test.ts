@@ -4005,6 +4005,9 @@ describe("OpenAPPA feature configuration", () => {
       offerSigningSecret: "",
       postgresMaxConnections: 4,
     });
+    expect(parseOpenAppaConfig({ deferredReturn: "true" }).deferredReturn).toBe(
+      true,
+    );
     expect(
       parseOpenAppaConfig({
         yellEnabled: "true",

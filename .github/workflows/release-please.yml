@@ -269,102 +269,6 @@ jobs:
           SELECTION_FILE: ${{ runner.temp }}/release-candidate-selection.json
         run: python3 .github/scripts/release-handoff.py select
 
-      - name: Relay scanned platform archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: platform
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned mcp-server-base archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: mcp-server-base
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned p4-shim archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: p4-shim
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned sandbox-base archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: sandbox-base
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-claude-code archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-claude-code
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-codex archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-codex
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-opencode archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-opencode
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-hermes archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-hermes
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-openclaw archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-openclaw
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-grok archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-grok
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-kimi archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-kimi
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Relay scanned agent-copilot archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: agent-copilot
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
       - name: Retain verified candidate selection for publishers
         if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         uses: $/.github/actions/github-upload-artifact
@@ -423,6 +327,72 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Copy each selected image's scanned queue archives into this run, one leg
+  # per image so the copies run in parallel rather than one after another
+  # inside release-please. Every leg verifies the bytes against the selection
+  # release-please validated and retained (release-handoff.py relay); the
+  # builds promote only those same-run artifacts and verify them again.
+  relay-release-candidates:
+    name: Relay scanned ${{ matrix.image }} archives
+    needs: release-please
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Holds the archestra-releaser App's key; main and release/* only.
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
+    permissions:
+      contents: read # Check out the handoff scripts.
+      actions: read # Download the selection release-please retained in this run.
+    strategy:
+      fail-fast: true
+      matrix:
+        # Every published image in the release inventory; platform-slim is
+        # scanned in the queue but never released.
+        image:
+          - platform
+          - mcp-server-base
+          - p4-shim
+          - sandbox-base
+          - agent-claude-code
+          - agent-codex
+          - agent-opencode
+          - agent-hermes
+          - agent-openclaw
+          - agent-grok
+          - agent-kimi
+          - agent-copilot
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Generate a token
+        id: generate-token
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
+        with:
+          # Read scanned queue artifacts from other runs.
+          permission-actions: read
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Download verified release selection
+        uses: $/.github/actions/github-download-artifact
+        with:
+          name: release-candidate-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-selection
+
+      - name: Relay scanned ${{ matrix.image }} archives
+        uses: $/.github/actions/relay-release-candidate
+        with:
+          image_name: ${{ matrix.image }}
+          selection: ${{ runner.temp }}/release-selection/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
   # Native rolling PRs on each branch, after the release tag exists. Pause only for
   # consumed cutover overrides, which must be cleared after the seed/final release has
   # built successfully.
@@ -448,6 +418,7 @@ jobs:
     uses: $/.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
+      - relay-release-candidates
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
@@ -470,6 +441,7 @@ jobs:
     uses: $/.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
+      - relay-release-candidates
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
@@ -494,6 +466,7 @@ jobs:
     uses: $/.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
+      - relay-release-candidates
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
@@ -518,6 +491,7 @@ jobs:
     uses: $/.github/workflows/build-sandbox-base-docker-image.yml
     needs:
       - release-please
+      - relay-release-candidates
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
@@ -545,6 +519,7 @@ jobs:
     uses: $/.github/workflows/build-platform-release-image.yml
     needs:
       - release-please
+      - relay-release-candidates
     permissions:
       contents: read # Required to invoke the reusable Docker build workflow.
       packages: write # Stage the image in ghcr.io/archestra-ai/ci.

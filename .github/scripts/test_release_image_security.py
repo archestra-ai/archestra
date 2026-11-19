@@ -381,19 +381,26 @@ exit(int(json.loads(os.environ['STATUSES'])[sys.argv[2]]))
 class WorkflowContractTests(unittest.TestCase):
     def test_tagging_follows_both_scans_and_release_reuse_is_disabled(self):
         source = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
-        # Guard the orchestration boundary: failures in either real scan action
-        # must prevent version-tag creation, including recovered older releases.
-        resolve = source.index("      - name: Resolve release scan inputs")
-        amd64 = source.index("      - name: Scan release amd64 bytes before tagging")
-        arm64 = source.index("      - name: Scan release arm64 bytes before tagging")
-        tag = source.index("      - name: Create manifest list and push")
-        self.assertLess(resolve, amd64)
-        self.assertLess(amd64, arm64)
-        self.assertLess(arm64, tag)
-        for name in ("Scan release amd64 bytes before tagging", "Scan release arm64 bytes before tagging"):
-            section = step_source(source, name)
-            self.assertNotIn("continue-on-error", section)
-            self.assertIn('exit-code: "true"', section)
+        # Guard the orchestration boundary: failures in either architecture's
+        # real scan must prevent version-tag creation, including recovered
+        # older releases. Each build leg scans the bytes it promoted, and the
+        # tagging job runs only after every leg succeeds.
+        build = source.split("  build-image:\n", 1)[1].split("  merge-manifests:\n", 1)[0]
+        merge = source.split("  merge-manifests:\n", 1)[1]
+        self.assertIn("os_and_arch:", build)
+        promote = build.index("      - name: Promote exact scanned bytes without rebuilding")
+        scan = build.index("      - name: Scan release bytes before tagging")
+        self.assertLess(promote, scan)
+        section = step_source(build, "Scan release bytes before tagging")
+        self.assertNotIn("continue-on-error", section)
+        self.assertIn('exit-code: "true"', section)
+        self.assertIn("@${{ steps.promote.outputs.digest }}", section)
+        self.assertIn("platform: ${{ matrix.os_and_arch }}", section)
+        self.assertNotIn("scan-docker-image", merge)
+        self.assertIn("needs.build-image.result == 'success'", merge.split("    steps:\n", 1)[0])
+        resolve = merge.index("      - name: Resolve release scan inputs")
+        self.assertLess(resolve, merge.index("      - name: Push the queue's signed release index"))
+        self.assertLess(resolve, merge.index("      - name: Create manifest list and push"))
         reuse = source.split("  reuse-image:\n", 1)[1].split("  build-image:\n", 1)[0]
         self.assertIn("!startsWith(inputs.checkout_ref, 'platform-v')", reuse)
         checkout = step_source(source.split("  merge-manifests:\n", 1)[1], "Checkout repository")

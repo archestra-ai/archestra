@@ -135,15 +135,16 @@ def recovery_hold(repository, branch, version, release_sha, draft_created_at, pu
 def record_hold(repository, run_id, attempt, version, release_sha, request=api):
     """The hold to keep for this release run's attempt, or None: the images
     whose release scan found vulnerabilities in their exact promoted bytes
-    (build-native-multi-arch-image.yml keeps a release-scan-findings-<image>
-    artifact for each). Any other failure leaves later pushes to recover."""
+    (build-native-multi-arch-image.yml keeps a
+    release-scan-findings-<image>-<arch> artifact for each architecture it
+    scans). Any other failure leaves later pushes to recover."""
     if not VERSION.fullmatch(version) or not SHA.fullmatch(release_sha):
         raise ValueError("A release version and full release SHA are required")
-    findings = re.compile(rf"release-scan-findings-([a-z0-9][a-z0-9-]*)-{attempt}")
-    images = []
+    findings = re.compile(rf"release-scan-findings-([a-z0-9][a-z0-9-]*?)(?:-(?:amd64|arm64))?-{attempt}")
+    images = set()
     for page in range(1, 11):
         rows = request(f"repos/{repository}/actions/runs/{run_id}/artifacts?per_page=100&page={page}")["artifacts"]
-        images += [match.group(1) for row in rows if (match := findings.fullmatch(row["name"]))]
+        images |= {match.group(1) for row in rows if (match := findings.fullmatch(row["name"]))}
         if len(rows) < 100:
             break
     if not images:

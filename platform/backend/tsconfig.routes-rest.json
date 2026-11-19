@@ -95,6 +95,7 @@
     "src/routes/runtime-credential/runtime-credential.routes.ts",
     "src/routes/schedule-trigger.ts",
     "src/routes/secrets.ts",
+    "src/routes/oauth-client-federated-credential/oauth-client-federated-credential.routes.ts",
     "src/routes/service-account-federated-credential/service-account-federated-credential.routes.ts",
     "src/routes/service-account.ts",
     "src/routes/session/session.routes.ts",

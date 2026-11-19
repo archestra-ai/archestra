@@ -698,6 +698,11 @@ export const RouteId = {
 
   // Unified OAuth Client Routes
   GetOauthClients: "getOauthClients",
+  GetOauthClient: "getOauthClient",
+  GetOauthClientFederatedCredentials: "getOauthClientFederatedCredentials",
+  CreateOauthClientFederatedCredential: "createOauthClientFederatedCredential",
+  UpdateOauthClientFederatedCredential: "updateOauthClientFederatedCredential",
+  DeleteOauthClientFederatedCredential: "deleteOauthClientFederatedCredential",
   GetOauthClientLabelKeys: "oauthClientLabelKeys",
   GetOauthClientLabelValues: "oauthClientLabelValues",
   CreateOauthClient: "createOauthClient",

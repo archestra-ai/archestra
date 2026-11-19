@@ -402,6 +402,34 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/oauth-clients/:id",
+    {
+      schema: {
+        operationId: RouteId.GetOauthClient,
+        description: "Get one OAuth client and its enabled API capabilities",
+        tags: ["OAuth Clients"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(ManagedOauthClientSchema),
+      },
+    },
+    async ({ params, user, organizationId }, reply) => {
+      await requireOauthClientAccess({
+        organizationId,
+        userId: user.id,
+        resource: "oauthClient",
+        id: params.id,
+        action: "read",
+      });
+      const oauthClient = await ManagedOauthClientModel.findById({
+        id: params.id,
+        organizationId,
+      });
+      if (!oauthClient) throw new ApiError(404, "OAuth client not found");
+      return reply.send(oauthClient);
+    },
+  );
+
   fastify.put(
     "/api/oauth-clients/:id",
     {

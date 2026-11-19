@@ -1,6 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ArchestraToolShortName } from "@archestra/shared";
-import { parsePolicyChange } from "./openappa-policy-change.utils";
+import {
+  getPolicyOutputPayload,
+  parsePolicyChange,
+} from "./openappa-policy-change.utils";
 import { getPolicyDiffRows } from "./policy-diff-rows";
 
 export type PolicyDiffReference = {
@@ -12,7 +15,7 @@ export type PolicyDiffReference = {
 
 const NO_REFERENCES: readonly PolicyDiffReference[] = [];
 type CachedPreview = {
-  output: unknown;
+  payload: unknown;
   reference: PolicyDiffReference | null;
   preceding: readonly PolicyDiffReference[];
   references: readonly PolicyDiffReference[];
@@ -62,8 +65,9 @@ export class PolicyDiffReferenceCollector {
           continue;
         const key = `${message.id}:${index}`;
         const cached = this.previews.get(key);
+        const payload = getPolicyOutputPayload(part.output);
         const reference =
-          cached && cached.output === part.output
+          cached && samePolicyContent(cached.payload, payload)
             ? cached.reference
             : createReference(part.output);
         const next =
@@ -73,7 +77,7 @@ export class PolicyDiffReferenceCollector {
               ? [...references, reference]
               : references;
         previews.set(key, {
-          output: part.output,
+          payload,
           reference,
           preceding: references,
           references: next,
@@ -84,6 +88,24 @@ export class PolicyDiffReferenceCollector {
     this.previews = previews;
     return result;
   }
+}
+
+function samePolicyContent(previous: unknown, next: unknown): boolean {
+  if (previous === next) return true;
+  if (
+    !previous ||
+    !next ||
+    typeof previous !== "object" ||
+    typeof next !== "object"
+  )
+    return false;
+  // The SDK structured-clones the active message on each streamed chunk.
+  // Compare the fields used by the diff, without serializing large policies.
+  const a = previous as Record<string, unknown>;
+  const b = next as Record<string, unknown>;
+  return ["delivery", "before", "after", "diff", "path"].every(
+    (key) => a[key] === b[key],
+  );
 }
 
 function createReference(output: unknown): PolicyDiffReference | null {

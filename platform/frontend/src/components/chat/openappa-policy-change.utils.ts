@@ -37,6 +37,20 @@ export function parsePolicyChange(
 export function parsePolicyOutput(
   output: unknown,
 ): Record<string, unknown> | null {
+  let candidate = getPolicyOutputPayload(output);
+  if (typeof candidate === "string") {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
+  if (!candidate || typeof candidate !== "object") return null;
+  return candidate as Record<string, unknown>;
+}
+
+/** Unwrap without decoding JSON, so streamed copies can reuse parsed results. */
+export function getPolicyOutputPayload(output: unknown): unknown {
   let candidate = output;
   if (candidate && typeof candidate === "object") {
     if ("isError" in candidate && candidate.isError === true) return null;
@@ -51,13 +65,5 @@ export function parsePolicyOutput(
       (item) => item && typeof item === "object" && item.type === "text",
     )?.text;
   }
-  if (typeof candidate === "string") {
-    try {
-      candidate = JSON.parse(candidate);
-    } catch {
-      return null;
-    }
-  }
-  if (!candidate || typeof candidate !== "object") return null;
-  return candidate as Record<string, unknown>;
+  return candidate;
 }

@@ -55,15 +55,24 @@ function references(output?: unknown) {
 }
 
 describe("policy diff duplication", () => {
+  it.each([
+    { structuredContent: change },
+    { content: [{ type: "text", text: JSON.stringify(change) }] },
+    JSON.stringify(change),
+  ])("reuses previews across the SDK's cloned streaming snapshots (%j)", (output) => {
+    const collector = new PolicyDiffReferenceCollector();
+    const messages = [preview(output), answer];
+    const first = collector.collect(messages, shortName).get("answer")?.get(0);
+    const next = collector
+      .collect(structuredClone(messages), shortName)
+      .get("answer")
+      ?.get(0);
+    expect(next).toBe(first);
+  });
+
   it("reuses completed previews while text streams, but invalidates changed output", () => {
     const collector = new PolicyDiffReferenceCollector();
-    let reads = 0;
-    const output = {
-      get structuredContent() {
-        reads++;
-        return change;
-      },
-    };
+    const output = { structuredContent: change };
     const first = collector
       .collect([preview(output), answer], shortName)
       .get("answer")
@@ -81,7 +90,6 @@ describe("policy diff duplication", () => {
       )
       .get("answer")
       ?.get(0);
-    expect(reads).toBe(1);
     expect(next).toBe(first);
     const replaced = collector
       .collect(
@@ -98,8 +106,12 @@ describe("policy diff duplication", () => {
     expect(replaced).not.toBe(first);
     expect(omitRepeatedPolicyDiffs(repeated, replaced)).toBe(repeated);
     collector.collect([], shortName);
-    collector.collect([preview(output), answer], shortName);
-    expect(reads).toBe(2);
+    expect(
+      collector
+        .collect([preview(output), answer], shortName)
+        .get("answer")
+        ?.get(0),
+    ).not.toBe(first);
   });
 
   it("matches thousands of separate hunks without blocking chat", () => {

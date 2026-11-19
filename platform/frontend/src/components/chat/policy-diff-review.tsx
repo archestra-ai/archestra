@@ -39,17 +39,17 @@ export function PolicyDiffReview({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left md:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left">
         <DialogTitle className="flex min-h-8 min-w-0 items-center font-mono text-base font-medium">
           {path}
         </DialogTitle>
         <DialogDescription
           asChild
-          className="col-span-full row-start-2 text-xs"
+          className="col-span-full row-start-2 text-xs md:col-span-1"
         >
           {summary}
         </DialogDescription>
-        <div className="col-span-full row-start-3 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-1">
+        <div className="col-span-full row-start-3 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-2">
           <SideBySideSwitch
             id={`${controlId}-side-by-side`}
             checked={sideBySide}
@@ -104,7 +104,7 @@ export function PolicyDiffReview({
             size="icon-sm"
             variant="ghost"
             aria-label="Close"
-            className="col-start-2 row-start-1 text-muted-foreground md:col-start-3"
+            className="col-start-2 row-start-1 justify-self-end text-muted-foreground"
           >
             <X />
           </Button>

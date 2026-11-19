@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
   type McpDeploymentState,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -360,48 +361,13 @@ export class McpServerRuntimeManager {
     // surface as an unhandled rejection.
     this.deploymentNamesAdopted.catch(() => {});
 
-    try {
-      const { kubeConfig, namespace } = loadKubeConfig();
-      const clients = createK8sClients(kubeConfig, namespace);
-
-      // Retained for the deployment-state watch streams (k8s.Watch takes the
-      // config, not a generated API client).
-      this.kubeConfig = kubeConfig;
-      this.k8sApi = clients.coreApi;
-      this.k8sAppsApi = clients.appsApi;
-      this.k8sAuthApi = clients.authApi;
-      this.k8sRbacApi = clients.rbacApi;
-      this.k8sNetworkingApi = clients.networkingApi;
-      this.k8sCustomObjectsApi = clients.customObjectsApi;
-      this.k8sAttach = clients.attach;
-      this.k8sExec = clients.exec;
-      this.k8sLog = clients.log;
-      this.namespace = clients.namespace;
-    } catch (error) {
-      if (config.orchestrator.enabled !== false) {
-        logger.error({ err: error }, "Failed to load Kubernetes config");
-      } else {
-        logger.info(
-          "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
-        );
-      }
-      this.rejectDeploymentNamesAdopted(
-        new Error(
-          "Kubernetes runtime failed to initialize; deployment names were not adopted",
-        ),
-      );
-      this.status = "error";
-      this.k8sApi = undefined;
-      this.k8sAppsApi = undefined;
-      this.k8sAuthApi = undefined;
-      this.k8sRbacApi = undefined;
-      this.k8sNetworkingApi = undefined;
-      this.k8sCustomObjectsApi = undefined;
-      this.k8sAttach = undefined;
-      this.k8sLog = undefined;
-      this.namespace = "";
-      return; // graceful fallback: constructor completes with runtime disabled
+    // A kubeconfig that another process writes once its cluster answers (the
+    // Docker quickstart's embedded KinD cluster) may not exist yet. The runtime
+    // stays enabled, and start() waits for the file.
+    if (kubeconfigFilePending()) {
+      return;
     }
+    this.loadClients();
   }
 
   /**
@@ -434,6 +400,12 @@ export class McpServerRuntimeManager {
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
+    if (!this.k8sApi && this.status === "not_initialized") {
+      if (kubeconfigFilePending()) {
+        await this.waitForKubeconfigFile();
+      }
+      if (this.status === "stopped" || !this.loadClients()) return;
+    }
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
@@ -4741,6 +4713,74 @@ export class McpServerRuntimeManager {
       ? { coreApi: this.k8sApi, namespace: this.namespace }
       : undefined;
   }
+
+  /**
+   * Builds the Kubernetes clients from the configured kubeconfig. On failure
+   * the runtime is disabled (status `error`) and the method returns false.
+   */
+  private loadClients(): boolean {
+    try {
+      const { kubeConfig, namespace } = loadKubeConfig();
+      const clients = createK8sClients(kubeConfig, namespace);
+
+      // Retained for the deployment-state watch streams (k8s.Watch takes the
+      // config, not a generated API client).
+      this.kubeConfig = kubeConfig;
+      this.k8sApi = clients.coreApi;
+      this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthApi = clients.authApi;
+      this.k8sRbacApi = clients.rbacApi;
+      this.k8sNetworkingApi = clients.networkingApi;
+      this.k8sCustomObjectsApi = clients.customObjectsApi;
+      this.k8sAttach = clients.attach;
+      this.k8sExec = clients.exec;
+      this.k8sLog = clients.log;
+      this.namespace = clients.namespace;
+      return true;
+    } catch (error) {
+      if (config.orchestrator.enabled !== false) {
+        logger.error({ err: error }, "Failed to load Kubernetes config");
+      } else {
+        logger.info(
+          "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
+        );
+      }
+      this.rejectDeploymentNamesAdopted(
+        new Error(
+          "Kubernetes runtime failed to initialize; deployment names were not adopted",
+        ),
+      );
+      this.status = "error";
+      this.k8sApi = undefined;
+      this.k8sAppsApi = undefined;
+      this.k8sAuthApi = undefined;
+      this.k8sRbacApi = undefined;
+      this.k8sNetworkingApi = undefined;
+      this.k8sCustomObjectsApi = undefined;
+      this.k8sAttach = undefined;
+      this.k8sLog = undefined;
+      this.namespace = "";
+      return false; // graceful fallback: the runtime stays disabled
+    }
+  }
+
+  /**
+   * Waits until the configured kubeconfig file exists, at most
+   * KUBECONFIG_WAIT_TIMEOUT_MS, or until the runtime is stopped.
+   */
+  private async waitForKubeconfigFile(): Promise<void> {
+    logger.info(
+      { kubeconfig: config.orchestrator.kubernetes.kubeconfig },
+      "Waiting for the Kubernetes config; the MCP Server Runtime starts when it exists",
+    );
+    const deadline = Date.now() + KUBECONFIG_WAIT_TIMEOUT_MS;
+    while (kubeconfigFilePending() && Date.now() < deadline) {
+      if (this.status === "stopped") return;
+      await new Promise((resolve) =>
+        setTimeout(resolve, KUBECONFIG_WAIT_POLL_MS),
+      );
+    }
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -4851,4 +4891,23 @@ const WATCH_REFRESH_DEBOUNCE_MS = 1_000;
 const WATCH_STREAM_RECONNECT_DELAY_MS = 15_000;
 const WATCH_STREAM_RECONNECT_JITTER_MS = 5_000;
 
+// Long enough for the quickstart to create its KinD cluster on a slow machine.
+const KUBECONFIG_WAIT_TIMEOUT_MS = 10 * 60_000;
+const KUBECONFIG_WAIT_POLL_MS = 500;
+
 export default new McpServerRuntimeManager();
+
+/**
+ * True when the orchestrator should read a kubeconfig file that does not
+ * exist yet.
+ */
+function kubeconfigFilePending(): boolean {
+  const kubernetes = config.orchestrator.kubernetes;
+  const path = kubernetes.kubeconfig?.trim();
+  return (
+    config.orchestrator.enabled !== false &&
+    !kubernetes.loadKubeconfigFromCurrentCluster &&
+    !!path &&
+    !existsSync(path)
+  );
+}

@@ -3048,6 +3048,56 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).toHaveBeenCalledTimes(1);
   });
 
+  test.each<{ case: string; returns: unknown[]; guided: boolean }>([
+    {
+      case: "offers only an as-spoken return",
+      returns: ["as_spoken"],
+      guided: true,
+    },
+    {
+      case: "offers an attested return",
+      returns: ["as_spoken", { sanitizer: "attest-schema" }],
+      guided: false,
+    },
+    { case: "offers no return plan", returns: [], guided: false },
+  ])("tells the model why an attested return was not applied when the block $case", async ({
+    returns,
+    guided,
+  }) => {
+    const feedback = "[appa] Blocked: declare the return";
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback,
+        offers: [
+          { offer_id: "offer-narrow" },
+          ...returns.map((route, index) => ({
+            offer_id: `offer-return-${index}`,
+            returns: route,
+          })),
+        ],
+      }),
+    );
+    const call = {
+      id: "spawn",
+      name: "agent__research",
+      arguments: { message: "Research" },
+    };
+
+    const [decision] = await evaluateToolCalls(session, [call], {
+      canonicalize: (name) => name,
+      spawnCallIds: new Set([call.id]),
+      declareSpawnReturn: () => ({
+        kind: "attested",
+        schema: { type: "object" },
+      }),
+    });
+
+    if (decision.kind !== "deny") throw new Error("expected a denial");
+    expect(decision.feedback === feedback).toBe(!guided);
+    expect(decision.offers).toHaveLength(1 + returns.length);
+  });
+
   test.each([
     "agent__research",
     "skill__research",

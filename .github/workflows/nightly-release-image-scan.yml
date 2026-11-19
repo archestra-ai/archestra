@@ -38,7 +38,7 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0 # Every supported line's head.
@@ -64,7 +64,7 @@ jobs:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout line head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -111,14 +111,14 @@ jobs:
       # reads only the alerting secrets, so no repository secret holds it.
       # This one posts to #alerts; ci-alerts-slack-webhook-url posts to #approvals.
       - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.16.0
         with:
           service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Read the alerting webhook
         id: alerting
-        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
         with:
           secrets: |-
             slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url

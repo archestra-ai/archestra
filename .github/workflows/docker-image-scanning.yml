@@ -38,7 +38,7 @@ jobs:
       matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
@@ -74,7 +74,7 @@ jobs:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -157,7 +157,7 @@ jobs:
       subjects: ${{ steps.gate.outputs.subjects }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
@@ -247,7 +247,7 @@ jobs:
       id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -271,7 +271,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout fixture policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

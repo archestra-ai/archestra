@@ -15,7 +15,7 @@ FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af61
 # Multi-stage build for minimal final image
 # Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
 # are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
-FROM python:3.12.15-alpine3.23@sha256:3d0ca66b723a0ff2a7a6e424cc2d01443e1b7c75ffcc110145f75d0f4daf6d63 AS python-builder
+FROM python:3.12.16-alpine3.23@sha256:9a7b46da82fe49a9118e0aa7e35ac3b831aa53ad4f4ebf3e16654732bc958a62 AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -117,7 +117,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM python:3.12.15-alpine3.23@sha256:3d0ca66b723a0ff2a7a6e424cc2d01443e1b7c75ffcc110145f75d0f4daf6d63
+FROM python:3.12.16-alpine3.23@sha256:9a7b46da82fe49a9118e0aa7e35ac3b831aa53ad4f4ebf3e16654732bc958a62
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \

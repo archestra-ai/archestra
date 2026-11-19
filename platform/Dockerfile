@@ -172,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS dagger-engine-image
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -203,7 +203,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     cp "${versioned}" /out/; \
     cp "${versioned}" /out/archestra-m-files-vaf-add-on.mfappx
 
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS base
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"

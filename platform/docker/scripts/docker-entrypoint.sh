@@ -59,10 +59,13 @@ cleanup() {
 
     # Stop the embedded KinD node but keep it: the next start resumes it in
     # seconds, with the Dagger Engine image and the cluster's volumes in place.
+    # A graceful node shutdown takes longer than `docker stop` waits for this
+    # container, so the node gets 3 seconds before it is killed; it resumes
+    # from that like from a power cut.
     if [ "$ARCHESTRA_QUICKSTART" = "true" ] \
         && docker ps -q --filter "name=^${CONTROL_PLANE_CONTAINER}$" 2>/dev/null | grep -q .; then
         echo "Stopping KinD cluster '${CLUSTER_NAME}' (kept for the next start; remove it with: docker rm -f ${CONTROL_PLANE_CONTAINER})"
-        docker stop "${CONTROL_PLANE_CONTAINER}" >/dev/null 2>&1 || echo "Warning: Failed to stop KinD cluster"
+        docker stop --time 3 "${CONTROL_PLANE_CONTAINER}" >/dev/null 2>&1 || echo "Warning: Failed to stop KinD cluster"
     fi
 
     exit "$CLEANUP_EXIT_CODE"

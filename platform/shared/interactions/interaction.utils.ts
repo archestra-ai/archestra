@@ -55,6 +55,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
+  "github-copilot:messages": (i) => new AnthropicMessagesInteraction(i),
   "bedrock:converse": (i) => new BedrockConverseInteraction(i),
   // Bedrock InvokeModel carries the Anthropic Messages wire format.
   "bedrock:invoke": (i) => new AnthropicMessagesInteraction(i),

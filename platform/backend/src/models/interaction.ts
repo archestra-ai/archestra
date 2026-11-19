@@ -4180,7 +4180,7 @@ function buildLastUserMessagePreview(
   response: unknown = {},
 ): string | null {
   try {
-    if (type === "anthropic:messages") {
+    if (type === "anthropic:messages" || type === "github-copilot:messages") {
       const genuine = extractGenuineAnthropicUserMessage(request);
       if (genuine) {
         return truncatePreview(genuine);

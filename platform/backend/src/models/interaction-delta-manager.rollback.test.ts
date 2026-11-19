@@ -78,6 +78,7 @@ describe("InteractionDeltaManager", () => {
     messages: unknown[],
     opts: {
       sessionId: string;
+      type?: InsertInteraction["type"];
       sessionSource?: string;
       processedMessages?: unknown[] | null;
       createdAt?: Date;
@@ -89,7 +90,7 @@ describe("InteractionDeltaManager", () => {
       profileId,
       sessionId: opts.sessionId,
       sessionSource: opts.sessionSource ?? CLAUDE_METADATA_SESSION_SOURCE,
-      type: "anthropic:messages",
+      type: opts.type ?? "anthropic:messages",
       request: anthropicRequest(
         messages,
         opts.envelope,
@@ -138,16 +139,19 @@ describe("InteractionDeltaManager", () => {
     return (request as { messages: unknown[] }).messages;
   }
 
-  test("happy path: stores deltas and reconstructs the full request", async () => {
+  test.for([
+    "anthropic:messages",
+    "github-copilot:messages",
+  ] as const)("%s stores deltas and reconstructs the full request", async (type) => {
     const sessionId = "sess-happy";
     const m0 = userMsg("first user message");
     const msgs1 = [m0];
     const msgs2 = [m0, assistantMsg("a0"), userMsg("m1")];
     const msgs3 = [...msgs2, assistantMsg("a1"), userMsg("m2")];
 
-    const r1 = await createClaude(msgs1, { sessionId });
-    const r2 = await createClaude(msgs2, { sessionId });
-    const r3 = await createClaude(msgs3, { sessionId });
+    const r1 = await createClaude(msgs1, { sessionId, type });
+    const r2 = await createClaude(msgs2, { sessionId, type });
+    const r3 = await createClaude(msgs3, { sessionId, type });
 
     // Head row stores full messages, no parent.
     expect(r1.parentId).toBeNull();
@@ -170,6 +174,7 @@ describe("InteractionDeltaManager", () => {
     expect(reconstructedMessages(raw3.request)).toHaveLength(2);
 
     // findById reconstructs the full request.
+    InteractionDeltaManager.reset();
     const full3 = await InteractionModel.findById(r3.id);
     expect(reconstructedMessages(full3?.request)).toEqual(msgs3);
     // Non-message envelope (system) is preserved.

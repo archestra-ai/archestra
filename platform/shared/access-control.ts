@@ -33,6 +33,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
+  // "read" shows and resolves the yells of your own sessions; "admin" widens
+  // that to every yell in the organization. Separate from `log`, so seeing
+  // every yell does not also open every member's LLM and MCP logs.
+  guardrailsYell: ["read", "admin"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -94,6 +98,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
+  // Editors see only their own yells, as with their own logs.
+  guardrailsYell: ["read"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -152,6 +158,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Members do not see the Guardrails pages or read the policy. Enforcement,
   // yells, and remedies do not depend on this permission.
   guardrailsPolicy: [],
+  guardrailsYell: [],
 
   // LLM
   llmProxy: ["read"],
@@ -254,8 +261,9 @@ export const adminPermissions: Record<Resource, Action[]> = {
 
 /**
  * Platform Admin: runs the deployment — full user, role, and settings
- * management — while org-wide log visibility and impersonation stay withheld.
- * They keep log:read / auditLog:read, so their OWN activity stays visible to
+ * management — while org-wide log and yell visibility and impersonation stay
+ * withheld. They keep log:read / auditLog:read / guardrailsYell:read, so their
+ * OWN activity stays visible to
  * them. Combined with the no-escalation rule (a role can only be granted by
  * someone holding every permission it carries), holders cannot hand
  * themselves or anyone else a role that would widen their visibility.
@@ -264,6 +272,7 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   log: ["read"],
   auditLog: ["read"],
+  guardrailsYell: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
 };
 
@@ -352,6 +361,10 @@ export const permissionDescriptions: Record<string, string> = {
   "guardrailsPolicy:read": "View Guardrails policy, batteries, and coverage",
   "guardrailsPolicy:update":
     "Validate and edit Guardrails policy and manage batteries",
+  "guardrailsYell:read":
+    "View and resolve the Guardrails yells of your own sessions",
+  "guardrailsYell:admin":
+    "View and resolve every Guardrails yell in your organization (also requires Read)",
 
   // MCP
   "oauthClient:read": "Open OAuth client registrations",
@@ -409,7 +422,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
   "log:read":
-    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -439,7 +452,7 @@ export const permissionDescriptions: Record<string, string> = {
   "auditLog:admin":
     "View every audit event in your organization (also requires Read)",
   "log:admin":
-    "View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)",
+    "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -1928,16 +1941,19 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
   // per-process bridge bearer inside the route.
   [RouteId.AnnotateOpenappaToolWithArchestra]: {},
-  // Log readers see and resolve their own yells and read their own consults;
-  // log:admin widens both to the whole organization.
-  [RouteId.GetOpenAppaYells]: { log: ["read"] },
-  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
-  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
-  [RouteId.GetOpenAppaYell]: { log: ["read"] },
-  [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
+  // Yell readers see and resolve their own yells; guardrailsYell:admin widens
+  // that to the whole organization. Log readers read their own consults, and
+  // log:admin widens those.
+  [RouteId.GetOpenAppaYells]: { guardrailsYell: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { guardrailsYell: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { guardrailsYell: ["read"] },
+  [RouteId.GetOpenAppaYell]: { guardrailsYell: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { guardrailsYell: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
-  // Consults and yells in one timeline, each scoped as its own list is.
-  [RouteId.GetOpenappaGuardrailEvents]: { log: ["read"] },
+  // Consults and yells in one timeline, each scoped as its own list is. It
+  // opens with either `log:read` (consults) or `guardrailsYell:read` (yells),
+  // so the handler checks and leaves out the kind the caller may not read.
+  [RouteId.GetOpenappaGuardrailEvents]: {},
   [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
   [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
@@ -2273,9 +2289,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
+  // Consults and yells in one timeline: `log:read` opens it for consults, and
+  // `guardrailsYell:read` for yells (`alternativePagePermissionsMap`).
   "/consults/logs": { log: ["read"] },
   "/consults/logs/[id]": { log: ["read"] },
-  "/consults/logs/yells/[id]": { log: ["read"] },
+  "/consults/logs/yells/[id]": { guardrailsYell: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
@@ -2320,6 +2338,15 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance/[section]": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
+};
+
+/**
+ * Pages that also open with a second set of permissions, for a page that
+ * shows two kinds of record each gated on its own: holding either set opens
+ * it, and the page shows what the caller may read.
+ */
+export const alternativePagePermissionsMap: Record<string, Permissions> = {
+  "/consults/logs": { guardrailsYell: ["read"] },
 };
 
 // === Internal helpers

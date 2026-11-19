@@ -176,6 +176,35 @@ describe("GET /api/openappa/guardrail-events", () => {
       `consult:${myConsult}`,
     ]);
   });
+
+  test("each kind follows its own permission: yell admins see every yell and no consults, log admins every consult and no yells", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const yell = await seedYell({ organizationId, secondsAgo: 10 });
+    const consult = await seedConsult({ organizationId, secondsAgo: 20 });
+    const as = async (permission: Record<string, string[]>) => {
+      const role = await makeCustomRole(organizationId, {
+        permission,
+      });
+      caller = await makeUser();
+      await makeMember(caller.id, organizationId, { role: role.role });
+    };
+
+    await as({ guardrailsYell: ["read", "admin"] });
+    expect(ids(await list())).toEqual([`yell:${yell}`]);
+
+    await as({ log: ["read", "admin"] });
+    expect(ids(await list())).toEqual([`consult:${consult}`]);
+
+    await as({ guardrailsPolicy: ["read"] });
+    const refused = await app.inject({
+      method: "GET",
+      url: "/api/openappa/guardrail-events",
+    });
+    expect(refused.statusCode).toBe(403);
+  });
 });
 
 async function seedConsult(params: {

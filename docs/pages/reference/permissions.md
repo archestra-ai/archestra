@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-18
+lastUpdated: 2026-11-19
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -21,7 +21,7 @@ Admin holds every permission, including user management, roles, and organization
 
 ### Platform Admin
 
-Platform Admin holds every permission except `log:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs and audit records and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
+Platform Admin holds every permission except `log:admin`, `guardrailsYell:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs, yells, and audit records and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
 
 ### Editor
 
@@ -34,6 +34,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
 | Guardrails Policy | `read`, `update` |
+| Guardrails Yells | `read` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -98,6 +99,8 @@ Each granular role grants one slice of the permissions below, so you can give a 
 | Apps | App Writer | `fixed:apps:writer` | `app:read`, `app:create` |
 | Guardrails | Guardrails Reader | `fixed:guardrails:reader` | `guardrailsPolicy:read` |
 | Guardrails | Guardrails Writer | `fixed:guardrails:writer` | `guardrailsPolicy:read`, `guardrailsPolicy:update` |
+| Guardrails | Yell Reader | `fixed:guardrails-yells:reader` | `guardrailsYell:read` |
+| Guardrails | Yell Admin | `fixed:guardrails-yells:admin` | `guardrailsYell:read`, `guardrailsYell:admin` |
 | Chat & Projects | Chat User | `fixed:chat:user` | `chat:read`, `chat:create`, `chat:update`, `chat:delete` |
 | Chat & Projects | Chat Full View | `fixed:chat:full-view` | `chat:read`, `chat:full-view` |
 | Chat & Projects | Project Reader | `fixed:projects:reader` | `project:read` |
@@ -125,8 +128,8 @@ Each granular role grants one slice of the permissions below, so you can give a 
 | LLM Costs & Limits | Limit Writer | `fixed:llm-limits:writer` | `llmLimit:read`, `llmLimit:create`, `llmLimit:update`, `llmLimit:delete` |
 | LLM Costs & Limits | Cost Export Reader | `fixed:cost-exports:reader` | `costExport:read` |
 | LLM Costs & Limits | Cost Export Writer | `fixed:cost-exports:writer` | `costExport:read`, `costExport:create`, `costExport:update`, `costExport:delete` |
-| Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read` |
-| Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin` |
+| Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read`, `guardrailsYell:read` |
+| Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin`, `guardrailsYell:read`, `guardrailsYell:admin` |
 | Logs & Audit | Audit Log Reader | `fixed:audit-log:reader` | `auditLog:read` |
 | Logs & Audit | Audit Log Admin | `fixed:audit-log:admin` | `auditLog:read`, `auditLog:admin` |
 | Users & Teams | User Reader | `fixed:users:reader` | `member:read` |
@@ -192,6 +195,8 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="environment:delete"></span>`environment:delete` | Delete deployment environments |
 | <span id="guardrailsPolicy:read"></span>`guardrailsPolicy:read` | View Guardrails policy, batteries, and coverage |
 | <span id="guardrailsPolicy:update"></span>`guardrailsPolicy:update` | Validate and edit Guardrails policy and manage batteries |
+| <span id="guardrailsYell:read"></span>`guardrailsYell:read` | View and resolve the Guardrails yells of your own sessions |
+| <span id="guardrailsYell:admin"></span>`guardrailsYell:admin` | View and resolve every Guardrails yell in your organization (also requires Read) |
 | <span id="identityProvider:read"></span>`identityProvider:read` | View identity provider configurations (SSO) |
 | <span id="identityProvider:create"></span>`identityProvider:create` | Set up new identity providers |
 | <span id="identityProvider:update"></span>`identityProvider:update` | Modify identity provider settings |
@@ -214,8 +219,8 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="llmProxy:update"></span>`llmProxy:update` | Modify LLM Proxy configuration |
 | <span id="llmVirtualKey:read"></span>`llmVirtualKey:read` | Open LLM virtual keys |
 | <span id="llmVirtualKey:create"></span>`llmVirtualKey:create` | Create LLM virtual keys |
-| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells |
-| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read) |
+| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization |
+| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log in your organization (also requires Read) |
 | <span id="mcpGateway:read"></span>`mcpGateway:read` | Open MCP Gateways |
 | <span id="mcpGateway:create"></span>`mcpGateway:create` | Create new MCP gateways |
 | <span id="mcpGateway:delete"></span>`mcpGateway:delete` | Open the trash of deleted MCP gateways |

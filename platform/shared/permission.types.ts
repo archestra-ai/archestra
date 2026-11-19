@@ -27,6 +27,7 @@ export const resources = [
   "plugin",
   "app",
   "guardrailsPolicy",
+  "guardrailsYell",
   "mcpGateway",
   "llmProxy",
   "log",
@@ -77,6 +78,7 @@ export const resourceLabels: Record<Resource, string> = {
   plugin: "Plugins",
   app: "Apps",
   guardrailsPolicy: "Guardrails Policy",
+  guardrailsYell: "Guardrails Yells",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
@@ -118,7 +120,9 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Proxy endpoint that routes LLM requests with security policies and logging",
   guardrailsPolicy:
     "Guardrails (OpenAPPA) policies that inspect and filter prompts and tool calls",
-  log: "Request logs and alerts from the LLM Proxy, MCP tool calls, and Guardrails",
+  guardrailsYell:
+    "Reports agents raise when Guardrails blocks them or a block is waived",
+  log: "Request logs from the LLM Proxy, MCP tool calls, and Guardrails consults",
   chat: "Conversations with agents and models in the chat interface",
   project:
     "Shared workspaces containing chats, files, schedules, and agent runs",
@@ -171,7 +175,14 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
+  Agents: [
+    "agent",
+    "skill",
+    "plugin",
+    "app",
+    "guardrailsPolicy",
+    "guardrailsYell",
+  ],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",

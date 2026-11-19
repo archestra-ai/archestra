@@ -1,0 +1,94 @@
+name: VEX Triage
+run-name: Triage the vulnerabilities of ${{ inputs.release_tag || 'the latest stable release' }}
+
+# Starts the VEX Triage agent on staging for one platform release. The agent
+# (archestra-ai/infra, archestra/automation) scans the release's public images,
+# decides for each finding whether it affects the image as shipped, and opens
+# or updates one pull request from automation/vex-triage that records those
+# decisions in vex/archestra.openvex.json (vex/README.md). It never merges: a
+# person reviews every statement. Each release then attests its images'
+# statements next to their SBOMs.
+#
+# Weekly, for the latest stable release, because new advisories arrive for
+# images that did not change. Run it by hand for another release.
+#
+# The job holds no Archestra API key and no GitHub credential beyond reading
+# this repository. It trades its GitHub OIDC token for a one-hour token of an
+# Archestra service account that can only run that agent (workload identity
+# federation). The agent's own GitHub App token never leaves Archestra.
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Published platform release, such as platform-v1.4.35. Empty: the latest stable release."
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: vex-triage
+  cancel-in-progress: false
+
+jobs:
+  start:
+    name: Start the VEX Triage agent
+    # The Archestra service account and the Google account trust this file on
+    # main only; any other ref would be refused at sign-in.
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out the scripts and read the releases.
+      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # A draft is not a release yet: its images are not published.
+      - name: Choose the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 --json tagName \
+              --jq '[.[] | select(.tagName | test("^platform-v[0-9]+\\.[0-9]+\\.[0-9]+$"))][0].tagName // empty')"
+          fi
+          [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] \
+            || { echo "::error::'$RELEASE_TAG' is not a platform release tag."; exit 1; }
+          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)"
+          [ "$draft" = false ] || { echo "::error::$RELEASE_TAG is not published yet."; exit 1; }
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      # The staging API is private. This account can open the IAP tunnel to
+      # its TLS forwarder and nothing else.
+      - name: Authenticate to Google Cloud
+        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        with:
+          service_account: ${{ vars.VEX_TRIAGE_GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Open the staging API tunnel
+        run: .github/scripts/staging-api-tunnel.sh
+
+      - name: Start the agent run
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          BASE_URL: https://backend.archestra.dev
+          PUBLIC_URL: https://frontend.archestra.dev
+          SERVICE_ACCOUNT_ID: ${{ vars.VEX_TRIAGE_SERVICE_ACCOUNT_ID }}
+          AGENT_ID: ${{ vars.VEX_TRIAGE_AGENT_ID }}
+        run: python3 .github/scripts/vex-triage.py

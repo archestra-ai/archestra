@@ -40,6 +40,11 @@ on:
 
 permissions: {}
 
+# One triage at a time; a second waits instead of cancelling the first.
+concurrency:
+  group: vex-triage
+  cancel-in-progress: false
+
 jobs:
   plan:
     name: Choose the projects
@@ -87,9 +92,6 @@ jobs:
       max-parallel: 1
       matrix:
         project: ${{ fromJSON(needs.plan.outputs.projects) }}
-    concurrency:
-      group: vex-triage-${{ matrix.project.project }}
-      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1

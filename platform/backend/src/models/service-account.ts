@@ -15,6 +15,7 @@ import {
   getTableColumns,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lte,
   max,
@@ -268,6 +269,7 @@ class ServiceAccountModel {
       id: serviceAccount.id,
       organizationId: serviceAccount.organizationId,
       name: serviceAccount.name,
+      description: serviceAccount.description,
       icon: serviceAccount.icon,
       role: serviceAccount.role,
       teamId: serviceAccount.teamId,
@@ -281,6 +283,7 @@ class ServiceAccountModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    description?: string | null;
     icon?: string | null;
     role: string;
     teamId?: string | null;
@@ -305,6 +308,7 @@ class ServiceAccountModel {
             data: {
               organizationId: params.organizationId,
               name: params.name,
+              description: params.description ?? null,
               icon: params.icon,
               role: params.role,
               teamId: params.teamId ?? null,
@@ -360,7 +364,7 @@ class ServiceAccountModel {
     data: Partial<
       Pick<
         SelectServiceAccount,
-        "name" | "icon" | "role" | "disabled" | "teamId"
+        "name" | "description" | "icon" | "role" | "disabled" | "teamId"
       >
     > & {
       labels?: LabelWithDetails[];
@@ -498,8 +502,14 @@ class ServiceAccountModel {
     federatedCredentialId: string;
     name: string;
     expiresAt: Date;
+    /**
+     * The workload's own OIDC token, when it is sent as a bearer token rather
+     * than traded for one: stored hashed, so the next request finds it. When
+     * another request stored it first, that row stands.
+     */
+    bearerToken?: string;
   }): Promise<{ token: string; expiresAt: Date }> {
-    const token = createTokenValue();
+    const token = params.bearerToken ?? createTokenValue();
     await withDbTransaction(async (tx) => {
       await tx
         .delete(schema.serviceAccountTokensTable)
@@ -512,14 +522,19 @@ class ServiceAccountModel {
             lte(schema.serviceAccountTokensTable.expiresAt, new Date()),
           ),
         );
-      await tx.insert(schema.serviceAccountTokensTable).values({
-        serviceAccountId: params.serviceAccountId,
-        federatedCredentialId: params.federatedCredentialId,
-        name: params.name,
-        tokenHash: hashToken(token),
-        tokenStart: token.slice(0, 16),
-        expiresAt: params.expiresAt,
-      });
+      await tx
+        .insert(schema.serviceAccountTokensTable)
+        .values({
+          serviceAccountId: params.serviceAccountId,
+          federatedCredentialId: params.federatedCredentialId,
+          name: params.name,
+          tokenHash: hashToken(token),
+          tokenStart: token.slice(0, 16),
+          expiresAt: params.expiresAt,
+        })
+        .onConflictDoNothing({
+          target: schema.serviceAccountTokensTable.tokenHash,
+        });
     });
     return { token, expiresAt: params.expiresAt };
   }
@@ -655,61 +670,31 @@ class ServiceAccountModel {
     return Boolean(row);
   }
 
-  static async verifyToken(token: string): Promise<{
-    serviceAccount: SelectServiceAccount;
-    token: SelectServiceAccountToken;
-  } | null> {
+  static async verifyToken(
+    token: string,
+  ): Promise<VerifiedServiceAccountToken | null> {
     // Imported team and organization tokens keep their original value, which
     // may carry a legacy prefix.
     if (
       !ALL_ARCHESTRA_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix))
     )
       return null;
-
-    const tokenHash = hashToken(token);
-    const [row] = await db
-      .select({
-        serviceAccount: getTableColumns(schema.serviceAccountsTable),
-        token: getTableColumns(schema.serviceAccountTokensTable),
-      })
-      .from(schema.serviceAccountTokensTable)
-      .innerJoin(
-        schema.serviceAccountsTable,
-        eq(
-          schema.serviceAccountsTable.id,
-          schema.serviceAccountTokensTable.serviceAccountId,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.serviceAccountTokensTable.tokenHash, tokenHash),
-          eq(schema.serviceAccountsTable.disabled, false),
-          eq(schema.serviceAccountTokensTable.disabled, false),
-          or(
-            isNull(schema.serviceAccountTokensTable.expiresAt),
-            gt(schema.serviceAccountTokensTable.expiresAt, new Date()),
-          ),
-        ),
-      )
-      .limit(1);
-
-    if (!row || !isTokenHashEqual(row.token.tokenHash, tokenHash)) {
-      return null;
-    }
-
-    // last_used_at feeds a "last used" label; writing it on every request put
-    // an UPDATE on the hot path of every service-account call. Refresh it at
-    // most once per TOKEN_LAST_USED_REFRESH_MS per token.
-    const lastUsedAt = row.token.lastUsedAt?.getTime() ?? 0;
-    if (Date.now() - lastUsedAt >= TOKEN_LAST_USED_REFRESH_MS) {
-      await db
-        .update(schema.serviceAccountTokensTable)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
-    }
-
-    return row;
+    return ServiceAccountModel.findActiveToken({ token, federatedOnly: false });
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The account a workload's own OIDC token acts as when sent as a bearer
+   * token, once it has been verified: it is stored, hashed, as a federated
+   * token of that account (see `createFederatedToken`).
+   */
+  static async verifyFederatedBearerToken(
+    token: string,
+  ): Promise<VerifiedServiceAccountToken | null> {
+    return ServiceAccountModel.findActiveToken({ token, federatedOnly: true });
+  }
+  // SPDX-SnippetEnd
 
   /**
    * The columns the authorization path needs for a synthetic service-account
@@ -748,6 +733,57 @@ class ServiceAccountModel {
       serviceAccount.organizationId,
     );
   }
+  private static async findActiveToken(params: {
+    token: string;
+    federatedOnly: boolean;
+  }): Promise<VerifiedServiceAccountToken | null> {
+    const tokenHash = hashToken(params.token);
+    const [row] = await db
+      .select({
+        serviceAccount: getTableColumns(schema.serviceAccountsTable),
+        token: getTableColumns(schema.serviceAccountTokensTable),
+      })
+      .from(schema.serviceAccountTokensTable)
+      .innerJoin(
+        schema.serviceAccountsTable,
+        eq(
+          schema.serviceAccountsTable.id,
+          schema.serviceAccountTokensTable.serviceAccountId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.serviceAccountTokensTable.tokenHash, tokenHash),
+          eq(schema.serviceAccountsTable.disabled, false),
+          eq(schema.serviceAccountTokensTable.disabled, false),
+          or(
+            isNull(schema.serviceAccountTokensTable.expiresAt),
+            gt(schema.serviceAccountTokensTable.expiresAt, new Date()),
+          ),
+          params.federatedOnly
+            ? isNotNull(schema.serviceAccountTokensTable.federatedCredentialId)
+            : undefined,
+        ),
+      )
+      .limit(1);
+
+    if (!row || !isTokenHashEqual(row.token.tokenHash, tokenHash)) {
+      return null;
+    }
+
+    // last_used_at feeds a "last used" label; writing it on every request put
+    // an UPDATE on the hot path of every service-account call. Refresh it at
+    // most once per TOKEN_LAST_USED_REFRESH_MS per token.
+    const lastUsedAt = row.token.lastUsedAt?.getTime() ?? 0;
+    if (Date.now() - lastUsedAt >= TOKEN_LAST_USED_REFRESH_MS) {
+      await db
+        .update(schema.serviceAccountTokensTable)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    }
+
+    return row;
+  }
 }
 
 export default ServiceAccountModel;
@@ -769,6 +805,7 @@ function normalizeServiceAccount(
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,
+    description: serviceAccount.description,
     icon: serviceAccount.icon,
     role: serviceAccount.role,
     teamId: serviceAccount.teamId,
@@ -884,3 +921,8 @@ function isTokenHashEqual(left: string, right: string): boolean {
     timingSafeEqual(leftBuffer, rightBuffer)
   );
 }
+
+export type VerifiedServiceAccountToken = {
+  serviceAccount: SelectServiceAccount;
+  token: SelectServiceAccountToken;
+};

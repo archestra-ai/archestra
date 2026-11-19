@@ -33,7 +33,6 @@ import {
   resolveGatewayRuntimeSession,
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
-import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import {
   McpGatewayAuthenticationBusyError,
@@ -211,6 +210,7 @@ async function logHandshake(params: {
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
       oauthClientId: tokenAuthContext?.oauthClientId ?? null,
+      serviceAccountId: tokenAuthContext?.serviceAccountId ?? null,
       source: tokenAuthContext?.source ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
@@ -1302,17 +1302,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       // Skills extension methods (SEP-2640). Handled at the route because the
-      // SDK has no handler slot for extension methods. Gated on the same
-      // predicate as the capability declaration, so when the surface is off
-      // these fall through to the SDK and get method-not-found — a client that
-      // was shown no capability is never given a half-open surface.
+      // SDK has no handler slot for extension methods.
       // `resources/read` of a `skill://` URI is deliberately *not* here: it is
       // an ordinary SDK request, and its skill branch lives in utils.ts.
       // Requests only: `isSkillMethod` refuses a body without an id, so a
       // notification spelling of these methods falls through to the SDK
       // transport, which answers 202 with no body — a notification must never
       // get a JSON-RPC response.
-      if (skillsSurfaceEnabled() && isSkillMethod(request.body)) {
+      if (isSkillMethod(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         // Nothing downstream of here turns a throw into a JSON-RPC error: this
         // surface is dispatched ahead of the SDK, so an unexpected failure

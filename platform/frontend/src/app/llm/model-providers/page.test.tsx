@@ -20,6 +20,8 @@ const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseOauthClients = vi.fn();
 const mockDeleteApiKey = vi.fn();
+const mockUpdateApiKey = vi.fn();
+const mockSavePermissions = vi.fn();
 const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   () => ({
     useDataTableQueryParamsMock: vi.fn(),
@@ -70,7 +72,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: (...args: unknown[]) =>
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockUpdateApiKey,
     isPending: false,
   }),
 }));
@@ -275,17 +277,36 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogBody: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DialogForm: ({ children }: { children: React.ReactNode }) => (
-    <form>{children}</form>
-  ),
+  DialogForm: ({
+    children,
+    onSubmit,
+  }: {
+    children: React.ReactNode;
+    onSubmit?: React.FormEventHandler<HTMLFormElement>;
+  }) => <form onSubmit={onSubmit}>{children}</form>,
   DialogStickyFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
 
-vi.mock("@/components/resource-access-section", () => ({
-  ResourceAccessSection: () => null,
-}));
+vi.mock("@/components/resource-access-section", async () => {
+  const { useEffect } = await import("react");
+  return {
+    // Registers its save with the dialog, as the real section does, so a
+    // test can see whether the dialog's Save commits the access edits.
+    ResourceAccessSection: ({
+      registerSave,
+    }: {
+      registerSave?: (save: (() => Promise<void>) | null) => void;
+    }) => {
+      useEffect(() => {
+        registerSave?.(mockSavePermissions);
+        return () => registerSave?.(null);
+      }, [registerSave]);
+      return null;
+    },
+  };
+});
 
 vi.mock("@/components/ui/permission-button", () => ({
   // `permissions`/`tooltip` are the component's own; everything else (notably
@@ -904,6 +925,49 @@ describe("ApiKeysPage", () => {
     await waitFor(() => {
       expect(formProps.form.getValues("authMethod")).toBe("subscription");
     });
+  });
+
+  it("edits who can reach a system key without touching its credentials", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("edit=system-gemini") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: {
+        id: "system-gemini",
+        name: "System Gemini",
+        provider: "gemini",
+        scope: "org",
+        isSystem: true,
+        secretId: null,
+        baseUrl: null,
+        inferenceBaseUrl: null,
+        extraHeaders: null,
+        teamId: null,
+        userId: null,
+        isPrimary: false,
+      },
+    });
+    mockSavePermissions.mockResolvedValue(undefined);
+
+    render(<ApiKeysPage />);
+
+    expect(
+      await screen.findByText("Configured through environment variables"),
+    ).toBeInTheDocument();
+    expect(mockLlmProviderApiKeyForm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mockSavePermissions).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUpdateApiKey).not.toHaveBeenCalled();
   });
 
   it("points both 'View all' links at the credentials of the key being deleted", async () => {

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the runtime image and original BuildKit provenance in an OCI archive."""
+"""Verify the runtime image and original BuildKit provenance in an OCI archive,
+and write the multi-arch index a release pushes for two of them.
+
+The merge queue writes that index from the scanned archives and signs its
+provenance; the release pushes the same bytes, so the published digest is the
+one the queue built (multi_arch_index)."""
 
 import hashlib
 import json
@@ -9,10 +14,26 @@ import tarfile
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
+def multi_arch_index(proofs):
+    """The OCI index of both architectures' images: each archive's root index
+    entries (runtime manifest and its attestation manifest), amd64 first, as
+    compact JSON with sorted keys, so every writer makes the same bytes."""
+    if set(proofs) != set(ARCHES):
+        raise ValueError("A release image needs exactly amd64 and arm64")
+    manifests = []
+    for arch in ARCHES:
+        proof = proofs[arch]
+        validate_descriptors(proof)
+        manifests.extend(proof["descriptors"])
+    index = {"schemaVersion": 2, "mediaType": INDEX_MEDIA_TYPE, "manifests": manifests}
+    return json.dumps(index, separators=(",", ":"), sort_keys=True).encode()
+
+
 def validate_metadata(proof, image_id):
     if (not isinstance(proof, dict) or proof.get("config") != image_id
             or not DIGEST.fullmatch(proof.get("runtime_manifest", ""))):
         raise ValueError("Missing OCI runtime identity")
+    validate_descriptors(proof)
     for key in ("attestations", "provenance"):
         values = proof.get(key)
         if (not isinstance(values, list) or not values or len(values) != len(set(values))
@@ -71,7 +92,13 @@ def inspect(archive, image_id, arch):
 
         if read("oci-layout")["imageLayoutVersion"] != "1.0.0":
             raise ValueError("Unsupported OCI layout")
-        walk(read("index.json"))
+        layout = read("index.json")
+        if len(layout.get("manifests", [])) != 1:
+            raise ValueError("An OCI archive must hold exactly one root index")
+        root = blob(layout["manifests"][0]["digest"])
+        if not isinstance(root.get("manifests"), list):
+            raise ValueError("The OCI archive's root is not an index")
+        walk(layout)
         if len(runtime) != 1 or not pending:
             raise ValueError("Exactly one runtime and original provenance are required")
         for descriptor, manifest in pending:
@@ -88,6 +115,25 @@ def inspect(archive, image_id, arch):
                         raise ValueError("Provenance subject differs from the scanned runtime")
                     provenance.append(layer["digest"])
         proof = {"config": image_id, "runtime_manifest": runtime[0],
-                 "attestations": sorted(attestations), "provenance": sorted(provenance)}
+                 "attestations": sorted(attestations), "provenance": sorted(provenance),
+                 "root": layout["manifests"][0]["digest"], "descriptors": root["manifests"]}
         validate_metadata(proof, image_id)
         return proof
+
+
+def validate_descriptors(proof):
+    """The archive's root index entries: its runtime manifest and attestation
+    manifests, each a descriptor of one digest."""
+    descriptors = proof.get("descriptors") if isinstance(proof, dict) else None
+    if (not DIGEST.fullmatch(str(proof.get("root", "") if isinstance(proof, dict) else ""))
+            or not isinstance(descriptors, list) or not descriptors
+            or not all(isinstance(entry, dict) and DIGEST.fullmatch(str(entry.get("digest", "")))
+                       for entry in descriptors)):
+        raise ValueError("Missing OCI root index entries")
+    digests = [entry["digest"] for entry in descriptors]
+    if sorted(digests) != sorted([proof["runtime_manifest"], *proof.get("attestations", [])]):
+        raise ValueError("The OCI root index holds other manifests than the runtime and its attestations")
+
+
+ARCHES = ("amd64", "arm64")
+INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"

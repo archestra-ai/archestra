@@ -411,6 +411,10 @@ export const AUDIT_DECISIONS = {
     reason: "better-auth verification flow state",
   },
   jwksTable: { audited: false, reason: "better-auth signing key material" },
+  spiffeSigningKeysTable: {
+    audited: false,
+    reason: "SPIFFE JWT-SVID signing key material, minted by the server",
+  },
 
   // =========================================================================
   // OAuth runtime
@@ -462,6 +466,11 @@ export const AUDIT_DECISIONS = {
   agentSkillsTable: {
     audited: false,
     reason: "join: agent × skill assignment; parent (agent) audited",
+  },
+  agentIdentityBindingsTable: {
+    audited: false,
+    reason:
+      "join: agent × identity provider; changes audited on the agent (agent.updated)",
   },
   agentLabelsTable: {
     audited: false,

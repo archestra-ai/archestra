@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -41,8 +41,6 @@ const DEFAULT_HIBERNATION_MODE: HibernationMode = "inherit";
 export function IdleHibernationSection({ item }: { item: CatalogItem }) {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  // Beta feature: with the deployment flag off, the control does not exist.
-  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
   // Only this item's installs, narrowed on the server.
@@ -71,7 +69,6 @@ export function IdleHibernationSection({ item }: { item: CatalogItem }) {
     organization?.mcpIdleHibernationEnabled ?? false;
   if (
     item.serverType !== "local" ||
-    !hibernationBeta ||
     !enterpriseCoreActive ||
     !orgHibernationEnabled ||
     !canModify

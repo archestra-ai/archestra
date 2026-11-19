@@ -1,5 +1,8 @@
 import {
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  ENVIRONMENT_DEPLOY_KINDS,
   type EnvironmentDefaultableResource,
+  type EnvironmentDeployKind,
   hasScopedPermission,
 } from "@archestra/shared";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -127,16 +130,19 @@ export async function listEnvironments(params: {
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   // The rows already establish organization ownership. Resolve the caller's
   // deployment grants once rather than repeating authorization for every row.
-  const usableEnvironmentIds =
-    await ResourcePermissions.getUsableEnvironmentIds({
-      organizationId,
-      userId,
-      environmentIds: rows.map((environment) => environment.id),
-    });
-  const environments = rows.map((environment) => ({
-    ...environment,
-    canDeploy: usableEnvironmentIds.has(environment.id),
-  }));
+  const deployKinds = await ResourcePermissions.getEnvironmentDeployKinds({
+    organizationId,
+    userId,
+    environmentIds: rows.map((environment) => environment.id),
+  });
+  const environments = rows.map((environment) => {
+    const kinds = deployKinds.get(environment.id) ?? [];
+    return {
+      ...environment,
+      canDeploy: kinds.length === ENVIRONMENT_DEPLOY_KINDS.length,
+      deployKinds: kinds,
+    };
+  });
   // SPDX-SnippetEnd
   return { environments, defaultAssignedCatalogCount, resourceDefaults };
 }
@@ -210,6 +216,7 @@ export async function resolveDefaultEnvironmentForNewResource(params: {
       organizationId,
       userId,
       scope: environment.id,
+      kind: resource,
     }))
   )
     return null;
@@ -291,10 +298,10 @@ export async function updateEnvironment(params: {
 }
 
 /**
- * Gate assigning a catalog item to an environment: it takes a `use` grant on
- * that environment. An environment is a place you deploy into, so the
- * authority to deploy there belongs to the environment rather than to each
- * kind of thing deployed.
+ * Gate assigning an object to an environment: it takes a grant on that
+ * environment that deploys this kind of object. `use` deploys every kind; a
+ * grant limited to some kinds deploys only those, so one person can be let
+ * to put agents into an environment and not MCP servers.
  *
  * The organization's Default environment has no row to grant on, and is open
  * to anyone who can create the resource being deployed.
@@ -303,8 +310,10 @@ export async function assertCanAssignEnvironment(params: {
   environmentId: string | null | undefined;
   organizationId: string;
   userId: string;
+  /** The kind of object being deployed into the environment. */
+  resource: EnvironmentDeployKind;
 }): Promise<void> {
-  const { environmentId, organizationId, userId } = params;
+  const { environmentId, organizationId, userId, resource } = params;
 
   if (!environmentId) return;
 
@@ -320,6 +329,7 @@ export async function assertCanAssignEnvironment(params: {
       organizationId,
       userId,
       scope: environment.id,
+      kind: resource,
     }))
   ) {
     throw new ApiError(
@@ -505,9 +515,11 @@ async function resolveEnvironmentValidationRegex(params: {
 }
 
 /**
- * Whether the caller may deploy into one environment, or into every one.
+ * Whether the caller may deploy one kind of object into one environment.
  *
- * Deploying is `use` on the environment, and only a stored grant confers it.
+ * Deploying is `use` on the environment, or the deploy action of that kind,
+ * and only a stored grant confers either. A `use` grant resolves to every
+ * per-kind action, so checking the kind's own action answers for both.
  * No role action stands in for it: `environment:read` is held by every custom
  * role, and reading it as `use` would open every restricted environment.
  */
@@ -515,12 +527,13 @@ async function canDeployToEnvironment(params: {
   organizationId: string;
   userId: string;
   scope: string;
+  kind: EnvironmentDeployKind;
 }): Promise<boolean> {
   const required = {
     organizationId: params.organizationId,
     resource: "environment" as const,
     scope: params.scope,
-    action: "use" as const,
+    action: ENVIRONMENT_DEPLOY_ACTIONS[params.kind],
   };
   const { grants } = await ResourcePermissions.getEffective({
     ...required,

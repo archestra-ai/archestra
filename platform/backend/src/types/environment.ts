@@ -1,4 +1,7 @@
-import type { EnvironmentDefaultableResource } from "@archestra/shared";
+import {
+  type EnvironmentDefaultableResource,
+  EnvironmentDeployKindSchema,
+} from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database/schema";
@@ -153,15 +156,17 @@ export const ReadEnvironmentSchema = SelectEnvironmentSchema.extend({
 /**
  * Listing response shape — row columns plus the number of catalog items
  * currently assigned to this environment, for delete-confirmation UI, and
- * whether the caller may deploy into it. `canDeploy` answers per environment
- * from its `use` grants, so the picker can offer one environment while
- * disabling another.
+ * whether the caller may deploy into it. `deployKinds` answers per environment
+ * from its grants, so the picker for one kind of object can offer one
+ * environment while disabling another. `canDeploy` is true when the caller may
+ * deploy every kind there.
  */
 export const EnvironmentWithAssignedCountSchema =
   SelectEnvironmentSchema.extend({
     assignedCatalogCount: z.number().int().nonnegative(),
     labels: z.array(LabelWithDetailsSchema),
     canDeploy: z.boolean(),
+    deployKinds: z.array(EnvironmentDeployKindSchema),
   });
 
 /**

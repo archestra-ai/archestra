@@ -50,7 +50,7 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
+import { applyAgentRuntimeAccess } from "@/services/agent-runtime/agent-runtime-access";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -1026,7 +1026,7 @@ async function resolveRuntimeAndModelForWrite(params: {
     throw new ApiError(400, "user/organization context not available.");
   }
 
-  const runtime = await applyAgentRuntimeLock({
+  const runtime = await applyAgentRuntimeAccess({
     organizationId: context.organizationId,
     userId: context.userId,
     previous: existing?.runtime,
@@ -1042,9 +1042,6 @@ async function resolveRuntimeAndModelForWrite(params: {
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
-    userId: context.userId,
-    organizationId: context.organizationId,
-    previous: existing?.runtime,
   });
   await assertAgentRuntimeTiersExist({
     runtime,

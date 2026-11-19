@@ -251,6 +251,39 @@ describe("Authnz", () => {
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
+    test("lets anyone read the SPIFFE issuer's discovery document, keys and bundle, and nothing else there", async () => {
+      for (const url of [
+        "/api/agent-identity/spiffe/.well-known/openid-configuration",
+        "/api/agent-identity/spiffe/keys",
+        "/api/agent-identity/spiffe/bundle",
+      ]) {
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+        await authnz.handle(
+          { url, method: "GET", headers: {} } as FastifyRequest,
+          mockReply,
+        );
+        expect(mockReply.status).not.toHaveBeenCalled();
+      }
+
+      await expect(
+        authnz.handle(
+          {
+            url: "/api/agent-identity/spiffe/keys",
+            method: "POST",
+            headers: {},
+          } as FastifyRequest,
+          {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            header: vi.fn(),
+          } as unknown as FastifyReply,
+        ),
+      ).rejects.toMatchObject({ statusCode: 401 });
+    });
+
     test("should skip auth for GET requests to public config endpoint", async () => {
       const mockRequest = {
         url: "/api/config/public",

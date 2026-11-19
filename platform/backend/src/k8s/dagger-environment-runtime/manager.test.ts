@@ -111,6 +111,14 @@ async function insertAgent(values: {
   return row;
 }
 
+// Every reconcile first applies the namespace-wide ingress deny; these tests
+// look at the engine's own egress policies.
+function egressPolicyBodies(create: ReturnType<typeof vi.fn>) {
+  return create.mock.calls
+    .map((args) => args[0].body)
+    .filter((body) => body.metadata?.name !== "dagger-engine-deny-ingress");
+}
+
 const OFF_POLICY: NetworkPolicy = {
   egressMode: "off",
   domainPreset: "none",
@@ -514,6 +522,7 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
         createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
       },
       networkingApi: {
+        createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
         deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
       },
       customObjectsApi: {
@@ -665,6 +674,11 @@ describe("reconcileOrganizationDefault", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks retains implementations; do not inherit a prior test's
+    // partial policy when Vitest shuffles the tests.
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null,
+    );
     clients = makeFakeClients();
     mockIsK8sConfigured.mockReturnValue(true);
     mockGetK8sNamespace.mockReturnValue("release-ns");
@@ -783,8 +797,9 @@ describe("reconcileOrganizationDefault", () => {
     // With no org policy the engine still gets the unrestricted-egress floor every
     // per-env engine gets: public internet allowed, private/link-local/metadata
     // ranges blocked (the 0.0.0.0/0 rule carries an `except` list, not allow-all).
-    const npBody =
-      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
     const publicRule = npBody.spec.egress.find(
       (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
@@ -809,20 +824,72 @@ describe("reconcileOrganizationDefault", () => {
     await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
 
     expect(
-      clients.networkingApi.createNamespacedNetworkPolicy,
-    ).toHaveBeenCalledTimes(1);
+      egressPolicyBodies(clients.networkingApi.createNamespacedNetworkPolicy),
+    ).toHaveLength(1);
     // Assert the org's OWN restricted policy was applied, not the unrestricted
     // floor a null policy produces: the floor allows all public egress via a
     // 0.0.0.0/0-with-except rule, so a genuinely restricted policy must NOT carry
     // one — and must still have egress rules (it isn't a no-op).
-    const npBody =
-      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
     expect(npBody.spec.egress.length).toBeGreaterThan(0);
     const hasPublicAllow = npBody.spec.egress.some(
       (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
     );
     expect(hasPublicAllow).toBe(false);
+  });
+
+  it("runs every engine in the dedicated engine namespace, closed to inbound traffic", async () => {
+    const previous = {
+      namespace: config.daggerRuntime.namespace,
+      environmentNamespaces:
+        config.orchestrator.kubernetes.environmentNamespaces,
+    };
+    (config.daggerRuntime as { namespace?: string }).namespace =
+      "archestra-sandbox";
+    config.orchestrator.kubernetes.environmentNamespaces = ["team-ns"];
+    const order: string[] = [];
+    clients.networkingApi.createNamespacedNetworkPolicy.mockImplementation(
+      async ({ body }: { body: { metadata: { name: string } } }) => {
+        order.push(`policy:${body.metadata.name}`);
+        return {};
+      },
+    );
+    clients.appsApi.createNamespacedStatefulSet.mockImplementation(async () => {
+      order.push("statefulset");
+      return {};
+    });
+    try {
+      const env = makeEnv({ namespace: "team-ns" });
+      expect(
+        daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(env)
+          ?.namespace,
+      ).toBe("archestra-sandbox");
+
+      await reconcilePersistedEnvironment(env);
+
+      expect(
+        clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].namespace,
+      ).toBe("archestra-sandbox");
+      // The ingress deny lands before the engine can start.
+      expect(order[0]).toBe("policy:dagger-engine-deny-ingress");
+      expect(order.indexOf("statefulset")).toBeGreaterThan(0);
+      const ingress =
+        clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0];
+      expect(ingress.namespace).toBe("archestra-sandbox");
+      expect(ingress.body.spec).toEqual({
+        podSelector: { matchLabels: { app: "dagger-engine" } },
+        policyTypes: ["Ingress"],
+        ingress: [],
+      });
+    } finally {
+      (config.daggerRuntime as { namespace?: string }).namespace =
+        previous.namespace;
+      config.orchestrator.kubernetes.environmentNamespaces =
+        previous.environmentNamespaces;
+    }
   });
 
   it("tears down the old namespace's engine (StatefulSet, PVC, ConfigMap, policy) when the default namespace changes", async () => {
@@ -1004,8 +1071,9 @@ describe("reconcileOrganizationDefault", () => {
     );
     // The agent blocks all egress although its environment allows it all: no
     // rule opens the public internet.
-    const npBody =
-      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const npBody = egressPolicyBodies(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    )[0];
     const hasPublicAllow = (npBody.spec.egress ?? []).some(
       (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),

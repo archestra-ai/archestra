@@ -40,11 +40,6 @@ export const AgentRuntimeTemplateSchema = z.object({
   icon: z.string().max(700_000).nullable(),
   hidden: z.boolean(),
   position: z.number().int().nonnegative().max(1_000),
-  /**
-   * Whether this runtime's settings apply to every Agent of its type and only
-   * people who can update organization settings may change them there.
-   */
-  locked: z.boolean().default(false),
   runtime: AgentRuntimeSchema.extend({
     image: z
       .string()
@@ -81,8 +76,6 @@ export const BuiltInRuntimeSettingsSchema = AgentRuntimeSchema.pick({
   });
 
 const BuiltInRuntimeSchema = z.object({
-  /** Same meaning as a custom runtime's `locked`. */
-  locked: z.boolean(),
   settings: BuiltInRuntimeSettingsSchema,
 });
 
@@ -132,24 +125,22 @@ export const SaveRuntimeTemplateSettingsSchema =
         });
       ids.add(template.id);
       names.add(name);
-      // An Agent belongs to a custom runtime by its image, so a locked
-      // runtime's image must name that runtime alone.
-      if (
-        template.locked &&
-        templates.some(
-          (other) =>
-            other.id !== template.id &&
-            other.runtime.image.trim() === template.runtime.image.trim(),
-        )
-      )
-        ctx.addIssue({
-          code: "custom",
-          path: ["templates", index, "locked"],
-          message:
-            "A locked runtime's image can't be shared with another custom runtime",
-        });
     }
   });
+
+/** Which Agent Runtimes the caller may use and configure. */
+export const AgentRuntimeAccessSchema = z.object({
+  runtimes: z.array(
+    z.object({
+      /** A built-in runtime's catalog id, or a custom runtime's id. */
+      id: z.string(),
+      canUse: z.boolean(),
+      canConfigure: z.boolean(),
+    }),
+  ),
+  /** Whether the caller may run an image that is none of the runtimes. */
+  canConfigureAny: z.boolean(),
+});
 
 /** What any agent builder may read about the maintained runtimes. */
 export const BuiltInRuntimeSummarySchema = BuiltInRuntimeSchema.extend({

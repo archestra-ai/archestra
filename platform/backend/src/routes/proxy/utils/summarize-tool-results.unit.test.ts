@@ -1,276 +1,148 @@
 import { describe, expect, test } from "vitest";
 import { stripBrowserToolsResults } from "./summarize-tool-results";
 
+const SNAPSHOT_TOOL = "microsoft__playwright-mcp__browser_snapshot";
+
+type TestMessage = {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+};
+
+function snapshot(id: string, size = 3000): string {
+  return `### Page state\n- Page URL: https://example.com/${id}\n${"x".repeat(size)}`;
+}
+
+function browserCalls(
+  calls: Array<{ id: string; content: string; name?: string }>,
+): TestMessage[] {
+  return [
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: calls.map(({ id, name }) => ({
+        id,
+        type: "function",
+        function: { name: name ?? SNAPSHOT_TOOL, arguments: "{}" },
+      })),
+    },
+    ...calls.map(
+      ({ id, content }): TestMessage => ({
+        role: "tool",
+        content,
+        tool_call_id: id,
+      }),
+    ),
+  ];
+}
+
+function snapshotTurns(count: number, size?: number): TestMessage[] {
+  return Array.from({ length: count }, (_, i) => [
+    ...browserCalls([{ id: `call_${i}`, content: snapshot(`${i}`, size) }]),
+    { role: "assistant" as const, content: `looked at page ${i}` },
+  ]).flat();
+}
+
+function toolContents(messages: TestMessage[]): string[] {
+  return messages.filter((m) => m.role === "tool").map((m) => m.content);
+}
+
 describe("stripBrowserToolsResults", () => {
-  test("strips older browser_navigate results but preserves the most recent", () => {
-    const largeYamlContent = `### Ran Playwright code
-await page.goto('https://archestra.ai');
+  test("keeps up to three browser calls raw", () => {
+    const messages = snapshotTurns(3);
 
-### Open tabs
-- 0: [] (about:blank)
-- 1: (current) [Archestra | Enterprise MCP Platform] (https://archestra.ai/)
-
-### Page state
-- Page URL: https://archestra.ai/
-- Page Title: Archestra | Enterprise MCP Platform
-- Page Snapshot:
-\`\`\`yaml
-- generic [active] [ref=e1]:
-  - generic [ref=e2]:
-    - banner [ref=e3]:
-      - generic [ref=e4]:
-        - link "Archestra Logo" [ref=e6]:
-          - /url: /
-          - img "Archestra Logo" [ref=e7]
-    - main [ref=e20]:
-      - heading "Central Place for AI" [level=1] [ref=e24]
-      - paragraph [ref=e25]: Open Source
-${"      - generic [ref=e100]: ".repeat(100)}
-\`\`\`
-`;
-    const newerYamlContent = `${largeYamlContent}\n${"x".repeat(3000)}`;
-
-    const messages = [
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_123",
-            type: "function" as const,
-            function: {
-              arguments: '{"url":"https://archestra.ai"}',
-              name: "microsoft__playwright-mcp__browser_navigate",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: largeYamlContent,
-        tool_call_id: "call_123",
-      },
-      {
-        role: "assistant" as const,
-        content: "Navigation complete",
-      },
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_456",
-            type: "function" as const,
-            function: {
-              arguments: '{"url":"https://archestra.ai"}',
-              name: "microsoft__playwright-mcp__browser_navigate",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: newerYamlContent,
-        tool_call_id: "call_456",
-      },
-    ];
-
-    const result = stripBrowserToolsResults(messages);
-
-    // Older tool result should be stripped
-    expect(result[1].role).toBe("tool");
-    expect(result[1].tool_call_id).toBe("call_123");
-    expect(result[1].content).toContain("[Page");
-    expect(result[1].content).toContain("browser_navigate was here]");
-    expect((result[1].content as string).length).toBeLessThan(200);
-
-    // Most recent tool result should be preserved
-    expect(result[4].role).toBe("tool");
-    expect(result[4].tool_call_id).toBe("call_456");
-    expect(result[4].content).toBe(newerYamlContent);
+    expect(stripBrowserToolsResults(messages)).toEqual(messages);
   });
 
-  test("strips older browser_snapshot results but preserves the most recent", () => {
-    const largeSnapshot = `### Open tabs\n${"x".repeat(5000)}`;
-    const newerSnapshot = `### Open tabs\n${"y".repeat(6000)}`;
+  test("strips the older batch once a fourth browser call arrives", () => {
+    const result = stripBrowserToolsResults(snapshotTurns(4));
 
-    const messages = [
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_456",
-            type: "function" as const,
-            function: {
-              arguments: "{}",
-              name: "microsoft__playwright-mcp__browser_snapshot",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: largeSnapshot,
-        tool_call_id: "call_456",
-      },
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_789",
-            type: "function" as const,
-            function: {
-              arguments: "{}",
-              name: "microsoft__playwright-mcp__browser_snapshot",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: newerSnapshot,
-        tool_call_id: "call_789",
-      },
-    ];
+    expect(toolContents(result)).toEqual([
+      "[Page https://example.com/0 browser_snapshot was here]",
+      "[Page https://example.com/1 browser_snapshot was here]",
+      "[Page https://example.com/2 browser_snapshot was here]",
+      snapshot("3"),
+    ]);
+  });
 
-    const result = stripBrowserToolsResults(messages);
+  test("an appended turn keeps the rewritten prefix except when a batch is stripped", () => {
+    const changedAt: number[] = [];
+    for (let count = 1; count < 10; count++) {
+      const before = stripBrowserToolsResults(snapshotTurns(count));
+      const after = stripBrowserToolsResults(snapshotTurns(count + 1));
+      if (
+        JSON.stringify(after.slice(0, before.length)) !== JSON.stringify(before)
+      ) {
+        changedAt.push(count + 1);
+      }
+    }
 
-    expect(result[1].content).toContain("[Page");
-    expect(result[1].content).toContain("browser_snapshot was here]");
-    expect(result[3].content).toBe(newerSnapshot);
+    expect(changedAt).toEqual([4, 7, 10]);
+  });
+
+  test("strips before the batch fills once the kept raw results grow too large", () => {
+    const result = stripBrowserToolsResults(snapshotTurns(3, 60_000));
+
+    expect(toolContents(result)).toEqual([
+      "[Page https://example.com/0 browser_snapshot was here]",
+      "[Page https://example.com/1 browser_snapshot was here]",
+      snapshot("2", 60_000),
+    ]);
+  });
+
+  test("keeps every result of the newest parallel batch", () => {
+    const parallel = ["a", "b", "c", "d"].map((id) => ({
+      id: `call_${id}`,
+      content: snapshot(id),
+    }));
+    const messages = [...snapshotTurns(3), ...browserCalls(parallel)];
+
+    const result = toolContents(stripBrowserToolsResults(messages));
+
+    expect(result).toEqual([
+      "[Page https://example.com/0 browser_snapshot was here]",
+      "[Page https://example.com/1 browser_snapshot was here]",
+      "[Page https://example.com/2 browser_snapshot was here]",
+      ...parallel.map(({ content }) => content),
+    ]);
   });
 
   test("does not strip small tool results", () => {
-    const smallContent = "Navigation successful";
-
     const messages = [
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_789",
-            type: "function" as const,
-            function: {
-              arguments: '{"url":"https://example.com"}',
-              name: "microsoft__playwright-mcp__browser_navigate",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: smallContent,
-        tool_call_id: "call_789",
-      },
+      ...browserCalls([{ id: "small", content: "Navigation successful" }]),
+      ...snapshotTurns(4),
     ];
 
     const result = stripBrowserToolsResults(messages);
 
-    // Small result should not be stripped
-    expect(result[1].content).toBe(smallContent);
+    expect(result[1].content).toBe("Navigation successful");
   });
 
   test("does not strip non-browser tool results", () => {
     const largeContent = "x".repeat(5000);
-
     const messages = [
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_other",
-            type: "function" as const,
-            function: {
-              arguments: "{}",
-              name: "some_other_tool",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: largeContent,
-        tool_call_id: "call_other",
-      },
+      ...browserCalls([
+        { id: "call_other", content: largeContent, name: "some_other_tool" },
+      ]),
+      ...snapshotTurns(4),
     ];
 
     const result = stripBrowserToolsResults(messages);
 
-    // Non-browser tool should not be stripped even if large
     expect(result[1].content).toBe(largeContent);
   });
 
-  test("extracts URL from content for placeholder", () => {
-    const contentWithUrl = `### Page state
-- Page URL: https://example.com/test
-- Page Title: Test Page
-${"x".repeat(3000)}`;
-    const newerContent = "Navigation successful";
-
-    const messages = [
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_url",
-            type: "function" as const,
-            function: {
-              arguments: "{}",
-              name: "browser_navigate",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: contentWithUrl,
-        tool_call_id: "call_url",
-      },
-      {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "call_new",
-            type: "function" as const,
-            function: {
-              arguments: "{}",
-              name: "browser_navigate",
-            },
-          },
-        ],
-      },
-      {
-        role: "tool" as const,
-        content: newerContent,
-        tool_call_id: "call_new",
-      },
-    ];
-
-    const result = stripBrowserToolsResults(messages);
-
-    expect(result[1].content).toContain("https://example.com/test");
-  });
-
   test("handles messages without tool_calls array", () => {
-    const messages = [
-      {
-        content: "Hello",
-        role: "user" as const,
-      },
-      {
-        role: "assistant" as const,
-        content: "Hi there!",
-      },
+    const messages: TestMessage[] = [
+      { content: "Hello", role: "user" },
+      { role: "assistant", content: "Hi there!" },
     ];
 
-    const result = stripBrowserToolsResults(messages);
-
-    expect(result).toEqual(messages);
+    expect(stripBrowserToolsResults(messages)).toEqual(messages);
   });
 });

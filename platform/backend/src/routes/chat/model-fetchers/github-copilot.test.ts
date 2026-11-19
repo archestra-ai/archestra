@@ -136,6 +136,8 @@ describe("fetchGithubCopilotModels", () => {
         provider: "github-copilot",
         capabilities: {
           contextLength: 128000,
+          outputLength: null,
+          authoritativeContextLength: true,
           supportsToolCalling: true,
           supportedEndpoints: ["/chat/completions"],
         },
@@ -146,6 +148,8 @@ describe("fetchGithubCopilotModels", () => {
         provider: "github-copilot",
         capabilities: {
           contextLength: null,
+          outputLength: null,
+          authoritativeContextLength: true,
           supportsToolCalling: false,
           supportedEndpoints: ["/chat/completions"],
         },
@@ -156,6 +160,8 @@ describe("fetchGithubCopilotModels", () => {
         provider: "github-copilot",
         capabilities: {
           contextLength: null,
+          outputLength: null,
+          authoritativeContextLength: true,
           supportsToolCalling: null,
           supportedEndpoints: ["/responses"],
         },
@@ -166,6 +172,8 @@ describe("fetchGithubCopilotModels", () => {
         provider: "github-copilot",
         capabilities: {
           contextLength: null,
+          outputLength: null,
+          authoritativeContextLength: true,
           supportsToolCalling: null,
           supportedEndpoints: ["/chat/completions", "/responses"],
         },
@@ -179,6 +187,17 @@ describe("fetchGithubCopilotModels", () => {
     const headers = modelsCall?.[1]?.headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer copilot-bearer");
     expect(headers.get("copilot-integration-id")).toBe("vscode-chat");
+    // An older API version, or none, makes /models report only each model's
+    // default context tier.
+    expect(headers.get("x-github-api-version")).toBe("2026-08-01");
+    const exchangeCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("copilot_internal"),
+    );
+    expect(
+      (exchangeCall?.[1]?.headers as Record<string, string>)[
+        "x-github-api-version"
+      ],
+    ).toBe("2025-04-01");
 
     // Each candidate is probed on the surface it declares — probing a
     // Responses-only model on chat completions would read as
@@ -195,6 +214,80 @@ describe("fetchGithubCopilotModels", () => {
       "gpt-5.1",
     ]);
     expect(probesByEndpoint("/responses")).toEqual(["gpt-5.3-codex"]);
+  });
+
+  test("reads Copilot's window, prompt and output limits", async () => {
+    // Limits as Copilot reports them (context / max_prompt / max_output).
+    const limitsById: Record<string, Record<string, number>> = {
+      // Extended tiers: the window holds the prompt and output limits.
+      "claude-haiku-5.5": {
+        max_context_window_tokens: 1_000_000,
+        max_prompt_tokens: 936_000,
+        max_output_tokens: 128_000,
+      },
+      "claude-opus-5.5": {
+        max_context_window_tokens: 1_000_000,
+        max_prompt_tokens: 1_000_000,
+        max_output_tokens: 128_000,
+      },
+      "gemini-3.8-flash": {
+        max_context_window_tokens: 1_048_576,
+        max_prompt_tokens: 983_040,
+        max_output_tokens: 65_536,
+      },
+      // The prompt and output limits add up to less than the window.
+      "gpt-4.1": {
+        max_context_window_tokens: 128_000,
+        max_prompt_tokens: 64_000,
+        max_output_tokens: 16_384,
+      },
+      // No output limit: the prompt limit is the most a request can use.
+      "gpt-4o": {
+        max_context_window_tokens: 128_000,
+        max_prompt_tokens: 64_000,
+      },
+      // Only the window.
+      "gpt-3.5-turbo-0613": { max_context_window_tokens: 16_384 },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: string | URL) => {
+        const url = String(input);
+        if (url.includes("copilot_internal")) {
+          return Promise.resolve(tokenExchangeResponse());
+        }
+        if (url.endsWith("/chat/completions")) {
+          return Promise.resolve(aliveProbeResponse());
+        }
+        return Promise.resolve(
+          Response.json({
+            data: Object.entries(limitsById).map(([id, limits]) => ({
+              id,
+              supported_endpoints: ["/chat/completions"],
+              capabilities: { type: "chat", limits },
+            })),
+          }),
+        );
+      }),
+    );
+
+    const models = await fetchGithubCopilotModels(uniqueGithubToken());
+
+    expect(
+      Object.fromEntries(
+        models.map((model) => [
+          model.id,
+          [model.capabilities?.contextLength, model.capabilities?.outputLength],
+        ]),
+      ),
+    ).toEqual({
+      "claude-haiku-5.5": [1_000_000, 128_000],
+      "claude-opus-5.5": [1_000_000, 128_000],
+      "gemini-3.8-flash": [1_048_576, 65_536],
+      "gpt-4.1": [80_384, 16_384],
+      "gpt-4o": [64_000, null],
+      "gpt-3.5-turbo-0613": [16_384, null],
+    });
   });
 
   test("probes a Responses-only model without an `input`, so nothing is generated", async () => {

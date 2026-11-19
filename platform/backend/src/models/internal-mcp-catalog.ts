@@ -39,6 +39,7 @@ import type {
   CatalogTeamInput,
   InsertInternalMcpCatalog,
   InternalMcpCatalog,
+  InternalMcpCatalogServerType,
   ListInternalMcpCatalog,
   ResourceVisibilityScope,
   SecretValue,
@@ -475,6 +476,7 @@ class InternalMcpCatalogModel {
     Array<{
       id: string;
       name: string;
+      toolPrefix: string | null;
       serverType: ListInternalMcpCatalog["serverType"];
       multitenant: boolean;
       dynamicConnectionMcpServerId: string | null;
@@ -494,6 +496,7 @@ class InternalMcpCatalogModel {
       .select({
         id: catalog.id,
         name: catalog.name,
+        toolPrefix: catalog.toolPrefix,
         serverType: catalog.serverType,
         multitenant: catalog.multitenant,
         dynamicConnectionMcpServerId: catalog.dynamicConnectionMcpServerId,
@@ -1146,6 +1149,7 @@ class InternalMcpCatalogModel {
       .select({
         id: schema.internalMcpCatalogTable.id,
         name: schema.internalMcpCatalogTable.name,
+        toolPrefix: schema.internalMcpCatalogTable.toolPrefix,
       })
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -1162,11 +1166,77 @@ class InternalMcpCatalogModel {
       );
 
     for (const row of rows) {
-      if (ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug) {
+      // A sibling's allocated prefix (a cut long name, or an app's) is the
+      // prefix its tools carry, so it is taken just like a slug.
+      if (
+        ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug ||
+        row.toolPrefix === targetSlug
+      ) {
         return { id: row.id };
       }
     }
     return null;
+  }
+
+  /**
+   * Every live catalog item's tool-prefix inputs, oldest first: what the
+   * tool-name allocation (services/mcp-tool-names.ts) weighs one item's
+   * prefix against.
+   */
+  static async listToolPrefixInputs(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      toolPrefix: string | null;
+      serverType: InternalMcpCatalogServerType;
+    }>
+  > {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+        toolPrefix: schema.internalMcpCatalogTable.toolPrefix,
+        serverType: schema.internalMcpCatalogTable.serverType,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(notDeleted(schema.internalMcpCatalogTable))
+      .orderBy(
+        asc(schema.internalMcpCatalogTable.createdAt),
+        asc(schema.internalMcpCatalogTable.id),
+      );
+  }
+
+  /**
+   * Give catalog items one tool prefix and re-mint their tools' names under
+   * it, renaming the name-keyed limits with them, in one transaction. Tool
+   * ids, assignments, and policies keyed by id are untouched. Returns the
+   * renamed tools.
+   */
+  static async applyToolPrefix(params: {
+    catalogIds: string[];
+    toolPrefix: string;
+  }): Promise<Array<{ oldName: string; newName: string }>> {
+    if (params.catalogIds.length === 0) return [];
+    return withDbTransaction(async (tx) => {
+      await tx
+        .update(schema.internalMcpCatalogTable)
+        .set({ toolPrefix: params.toolPrefix })
+        .where(inArray(schema.internalMcpCatalogTable.id, params.catalogIds));
+      const toolNamePairs: Array<{ oldName: string; newName: string }> = [];
+      for (const catalogId of params.catalogIds) {
+        toolNamePairs.push(
+          ...(await ToolModel.renameToolPrefixesForCatalog(
+            { catalogId, newName: params.toolPrefix },
+            tx,
+          )),
+        );
+      }
+      await LimitModel.renameNameKeys(
+        { serverNamePairs: [], toolNamePairs },
+        tx,
+      );
+      return toolNamePairs;
+    });
   }
 
   /**
@@ -1249,9 +1319,13 @@ class InternalMcpCatalogModel {
       // (2) Catalog name — written directly: the generic update() enforces
       // name immutability precisely so renames flow only through this
       // cascade.
+      // A prefix allocated for the old name (cut to fit, or counted apart
+      // from a look-alike) says nothing about the new one: the new name's
+      // slug takes over, and services/mcp-tool-names.ts allocates again
+      // when it leaves a tool no room.
       await tx
         .update(schema.internalMcpCatalogTable)
-        .set({ name: newName })
+        .set({ name: newName, toolPrefix: null })
         .where(eq(schema.internalMcpCatalogTable.id, id));
 
       // (3) Install names. Pairs map each install's ACTUAL old name (which
@@ -1329,8 +1403,8 @@ class InternalMcpCatalogModel {
     // tool slugs, and name-keyed limits atomically — a bare column update
     // here would silently skip that cascade, so this guard is an invariant,
     // not an obstacle. App backing catalogs are exempt — they have no k8s
-    // deployment, and their launch tool's name is id-suffixed (stable across
-    // renames), so renaming an app's catalog is safe.
+    // deployment, and their launch tool's name carries the app's stored tool
+    // prefix (stable across renames), so renaming an app's catalog is safe.
     if (dbValues.name !== undefined) {
       const [existing] = await db
         .select({

@@ -28,7 +28,6 @@ test("organization deletion removes only its runtime templates and cannot resurr
     icon: null,
     hidden: false,
     position: 0,
-    locked: false,
     runtime: {
       ...buildCustomAgentRuntime({
         image: "registry.example.com/workspace:v1",

@@ -6,6 +6,7 @@
  * hookDispatcherService.fire is stubbed with vi.spyOn so the real sandbox
  * runtime is never touched.
  */
+import { TOOL_RUN_TOOL_FULL_NAME } from "@archestra/shared";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { __test as chatClient } from "./chat-tool-builder";
@@ -182,6 +183,64 @@ describe("firePreToolUseHook", () => {
 // ---------------------------------------------------------------------------
 // firePostToolUseHook
 // ---------------------------------------------------------------------------
+describe("run_tool dispatches", () => {
+  const runToolCall = {
+    toolName: TOOL_RUN_TOOL_FULL_NAME,
+    toolInput: {
+      tool_name: "github__delete_repo",
+      tool_args: { repo: "acme/widgets" },
+    },
+  };
+  const targetFields = {
+    tool_name: "github__delete_repo",
+    tool_input: { repo: "acme/widgets" },
+  };
+
+  test("PreToolUse sees the target tool and its arguments", async () => {
+    const spy = vi
+      .spyOn(hookDispatcherService, "fire")
+      .mockResolvedValueOnce({ decision: "proceed" });
+
+    await firePreToolUseHook({ ctx: BASE_CTX, ...runToolCall });
+
+    expect(spy.mock.calls[0][0].fields).toEqual(targetFields);
+  });
+
+  test("PostToolUse sees the target tool and its arguments", async () => {
+    const spy = vi
+      .spyOn(hookDispatcherService, "fire")
+      .mockResolvedValueOnce({ decision: "proceed" });
+
+    await firePostToolUseHook({
+      ctx: BASE_CTX,
+      ...runToolCall,
+      toolResponse: "deleted",
+    });
+
+    expect(spy.mock.calls[0][0].fields).toEqual({
+      ...targetFields,
+      tool_response: "deleted",
+    });
+  });
+
+  test("a run_tool call without a target name stays the wrapper", async () => {
+    const spy = vi
+      .spyOn(hookDispatcherService, "fire")
+      .mockResolvedValueOnce({ decision: "proceed" });
+
+    await firePreToolUseHook({
+      ctx: BASE_CTX,
+      toolName: TOOL_RUN_TOOL_FULL_NAME,
+      toolInput: { tool_args: {} },
+    });
+
+    expect(spy.mock.calls[0][0].fields).toEqual({
+      tool_name: TOOL_RUN_TOOL_FULL_NAME,
+      tool_input: { tool_args: {} },
+    });
+  });
+});
+
 describe("firePostToolUseHook", () => {
   test("fires against the run scope in a headless run (no conversationId)", async () => {
     const spy = vi

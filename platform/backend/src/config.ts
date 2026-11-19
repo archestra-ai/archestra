@@ -143,6 +143,27 @@ const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
 
+/**
+ * Parse `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`, the SPIFFE trust domain
+ * agents' SPIFFE IDs live in (`spiffe://<trust domain>/agent/<id>`). Defaults
+ * to the frontend's hostname. A trust domain is lowercase letters, digits,
+ * dots, dashes and underscores (SPIFFE ID standard, section 2.1).
+ * @public — exported for testability
+ */
+export function parseSpiffeTrustDomain(params: {
+  rawValue: string | undefined;
+  frontendBaseUrl: string;
+}): string {
+  const trustDomain =
+    params.rawValue?.trim() || new URL(params.frontendBaseUrl).hostname;
+  if (!/^[a-z0-9._-]+$/.test(trustDomain)) {
+    throw new Error(
+      `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN must be a SPIFFE trust domain: lowercase letters, digits, dots, dashes and underscores (got "${trustDomain}")`,
+    );
+  }
+  return trustDomain;
+}
+
 /** @public — validates an operator-provided webhook base URL. */
 export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
   const trimmed = rawValue?.trim();
@@ -1254,7 +1275,6 @@ function getMcpIdleHibernationConfig() {
 
   return {
     ...parsed,
-    betaEnabled: process.env.ARCHESTRA_BETA === "true",
     lastUsedRefreshIntervalMs: acceleratedE2eTiming ? 1_000 : 30_000,
     demandHeartbeatIntervalMs: acceleratedE2eTiming ? 500 : 15_000,
   };
@@ -1784,10 +1804,10 @@ const MCP_IMAGE_PREPULL_DEFAULTS = {
  * the container registry.
  *
  * `enabled` is a KILL SWITCH, not a feature gate — pre-pulling follows idle
- * hibernation (beta flag + enterprise licence + organization toggle), and this
- * only lets an operator turn the extra per-node pod off while keeping
- * hibernation on. Hence default-on and an explicit `"false"` to disable, the
- * mirror of the hibernation flag's default-off shape.
+ * hibernation (operator kill switch + enterprise licence + organization
+ * toggle), and this only lets an operator turn the extra per-node pod off
+ * while keeping hibernation on. Hence default-on and an explicit `"false"` to
+ * disable.
  *
  * `priorityClassName` is unset by default (the namespace default applies).
  * Point it at a low or negative-priority class so warming a cache can never
@@ -1893,14 +1913,16 @@ export const parseHelmReleaseName = (
 // SPDX-SnippetEnd
 
 /**
- * Parses ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid
- * Kubernetes namespace name (a DNS-1123 label) is ignored with a warning, so
- * runs keep their namespace instead of failing on every launch.
+ * Parses an optional workload namespace setting such as
+ * ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid Kubernetes
+ * namespace name (a DNS-1123 label) is ignored with a warning, so workloads
+ * keep their namespace instead of failing on every launch.
  *
  * @public — exported for testability
  */
-export const parseAgentRuntimeNamespace = (
+export const parseOptionalNamespace = (
   envValue: string | undefined,
+  envName: string,
 ): string | undefined => {
   const namespace = envValue?.trim();
   if (!namespace) return undefined;
@@ -1909,7 +1931,7 @@ export const parseAgentRuntimeNamespace = (
     !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
   ) {
     logger.warn(
-      `Ignoring ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+      `Ignoring ${envName} "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
     );
     return undefined;
   }
@@ -2198,24 +2220,6 @@ export const isCodeRuntimeEnabled = ({
       (kubeconfig?.trim().length ?? 0) > 0);
   return codeRuntimeEnabledEnv === "true" && k8sConfigured;
 };
-
-/**
- * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
- * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
- * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
- * this helper while a per-feature flag keeps its own opt-out. Backs *product*
- * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
- * Azure/Vertex Entra).
- *
- * @public — the shared gate for a product feature that ships off by default; also exported for testability
- */
-export function betaFeatureEnabled(envValue: string | undefined): boolean {
-  if (envValue === undefined || envValue === "") {
-    return process.env.ARCHESTRA_BETA === "true";
-  }
-  return envValue === "true";
-}
 
 const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
@@ -2596,6 +2600,12 @@ const config = {
   },
   openappa,
   frontendBaseUrl,
+  agentIdentity: {
+    spiffeTrustDomain: parseSpiffeTrustDomain({
+      rawValue: process.env.ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN,
+      frontendBaseUrl,
+    }),
+  },
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
@@ -2699,13 +2709,6 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
       0,
     ),
-    /**
-     * Both directions of the draft MCP Skills extension: publishing local
-     * Skills through gateways and projecting external Skills from installed
-     * servers. Deployment-global; follows the ARCHESTRA_BETA master switch,
-     * with no flag of its own.
-     */
-    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpBridge: {
     /**
@@ -2771,8 +2774,9 @@ const config = {
      * still wins; unset falls back to the organization's default Environment
      * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
      */
-    namespace: parseAgentRuntimeNamespace(
+    namespace: parseOptionalNamespace(
       process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
     ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
@@ -2875,6 +2879,18 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR,
       {},
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
+    ),
+    /**
+     * Node pool for privileged Agent Runtime pods only, in the same key=value
+     * form as `nodeSelector` (each pair also becomes a NoSchedule
+     * toleration). Docker-in-Docker runs have node-level access, so a
+     * dedicated tainted pool keeps them away from unprivileged runs and other
+     * workloads. Empty (the default) places privileged runs with `nodeSelector`.
+     */
+    privilegedNodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR",
     ),
     /**
      * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
@@ -3016,6 +3032,8 @@ const config = {
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
     iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    entraAuthEnabled:
+      process.env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true",
     awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
@@ -3560,12 +3578,9 @@ const config = {
      * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
      * MCP server must sit unused before it is scaled to zero (default 30 min,
      * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
-     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
-     * the whole feature ships behind — off by default, a blank value falling
-     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-     * Whether hibernation runs at all is decided together with the enterprise
-     * licence and the organization's own toggle — see
-     * `k8s/mcp-server-runtime/hibernation.ee`.
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`. Whether hibernation runs at all is
+     * decided together with the enterprise licence and the organization's own
+     * toggle — see `k8s/mcp-server-runtime/hibernation.ee`.
      */
     mcpIdleHibernation: getMcpIdleHibernationConfig(),
     /**
@@ -3613,6 +3628,12 @@ const config = {
       // editor can offer a namespace dropdown instead of free text.
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
+      // Namespaces workloads ran in before a namespace change (Helm
+      // rbac.retiredNamespaces). The platform removes what it left there and
+      // lets Agent Runtime sessions finish, then logs that it is done.
+      retiredNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES ?? "",
       ),
     },
   },
@@ -3706,6 +3727,18 @@ const config = {
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
+    /**
+     * Namespace for the code sandbox's Dagger engines, apart from MCP
+     * servers. Engines run privileged, and Pod Security is per namespace, so
+     * sharing one forces the MCP namespace to allow `privileged`. When set,
+     * every engine runs here, whatever its Environment's namespace; each
+     * Environment still gets its own engine and egress policy. Unset keeps
+     * engines in their Environment's namespace (or the orchestrator's).
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE",
+    ),
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
@@ -3904,13 +3937,6 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
-    // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Unified Model API from resolving a model name to a pool. Off
-    // by default; a blank value falls back to the ARCHESTRA_BETA master switch
-    // (see betaFeatureEnabled).
-    modelPoolsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
-    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3931,8 +3957,6 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Unified Model API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
@@ -3950,15 +3974,11 @@ const config = {
       undefined,
     // BETA gate for the M-Files connector: hides the connector type in the
     // frontend, rejects creating connectors of the type, and disables the VAF
-    // Add On distribution endpoints. Off by default; a blank value falls back
-    // to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-    mfilesConnectorEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED,
-    ),
+    // Add On distribution endpoints. Off unless set to "true".
+    mfilesConnectorEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED === "true",
     // Gate for the M-Files Application Account (OAuth client-credentials)
-    // auth method. Deliberately NOT wired through betaFeatureEnabled: the
-    // method stays hidden until this flag is set explicitly, even on
-    // deployments running with the ARCHESTRA_BETA master switch on.
+    // auth method. The method stays hidden until this flag is set explicitly.
     // Intentionally undocumented while the method is being validated.
     mfilesOauthEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
@@ -4331,12 +4351,6 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
-  /**
-   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
-   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
-   * the new connection page the default Connect destination — can key off it.
-   */
-  beta: process.env.ARCHESTRA_BETA === "true",
   /**
    * Internal UI feedback overlay for the team's own deployments: pin a comment
    * on an element and post it, with a screenshot and an optional screen clip,

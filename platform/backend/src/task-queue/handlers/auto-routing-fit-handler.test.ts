@@ -24,7 +24,6 @@ import { handleAutoRoutingFit } from "./auto-routing-fit-handler";
 
 describe("auto routing plan fit", () => {
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 

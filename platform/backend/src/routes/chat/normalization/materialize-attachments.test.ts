@@ -40,7 +40,7 @@ function expectPresent<T>(value: T | null | undefined): T {
   return value;
 }
 
-test("rehydrates ref to inline data: URL and adds Anthropic cache_control", async ({
+test("rehydrates ref to inline data: URL without adding cache markers", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -88,9 +88,7 @@ test("rehydrates ref to inline data: URL and adds Anthropic cache_control", asyn
   );
   expect(filePart.mediaType).toBe("text/plain");
   expect(filePart.filename).toBe("doc.txt");
-  expect(filePart.providerMetadata).toMatchObject({
-    anthropic: { cacheControl: { type: "ephemeral" } },
-  });
+  expect(filePart.providerMetadata).toBeUndefined();
 
   // Input is not mutated.
   expect(expectPresent(inputMessages[0].parts?.[1]).url).toBe(
@@ -98,7 +96,7 @@ test("rehydrates ref to inline data: URL and adds Anthropic cache_control", asyn
   );
 });
 
-test("legacy inline data: URL file parts keep the url but get Anthropic cache_control", async () => {
+test("legacy inline data: URL file parts pass through unchanged", async () => {
   const dataUrl = `data:application/pdf;base64,${Buffer.from("legacy", "utf8").toString("base64")}`;
   const input: ChatMessage[] = [
     {
@@ -118,19 +116,10 @@ test("legacy inline data: URL file parts keep the url but get Anthropic cache_co
     messages: input,
     conversationId: "00000000-0000-4000-8000-000000000000",
   });
-  const filePart = expectPresent(output[0].parts?.[0]);
-  // URL is preserved verbatim — we don't rewrite or re-encode the bytes.
-  expect(filePart.url).toBe(dataUrl);
-  // But cache_control IS applied, so Anthropic prompt-caches across turns.
-  // Without this, same-tab follow-ups (FE stamps persistedMessageId but
-  // keeps the original data: URL in state) would re-bill the full file at
-  // input price on every turn.
-  expect(filePart.providerMetadata).toMatchObject({
-    anthropic: { cacheControl: { type: "ephemeral" } },
-  });
+  expect(output[0].parts?.[0]).toEqual(input[0].parts?.[0]);
 });
 
-test("preserves existing providerMetadata on data: URL file parts when adding cache_control", async () => {
+test("preserves existing providerMetadata on data: URL file parts", async () => {
   const dataUrl = `data:application/pdf;base64,${Buffer.from("x", "utf8").toString("base64")}`;
   const input: ChatMessage[] = [
     {
@@ -151,10 +140,7 @@ test("preserves existing providerMetadata on data: URL file parts when adding ca
     conversationId: "00000000-0000-4000-8000-000000000000",
   });
   const filePart = expectPresent(output[0].parts?.[0]);
-  expect(filePart.providerMetadata).toMatchObject({
-    openai: { detail: "high" },
-    anthropic: { cacheControl: { type: "ephemeral" } },
-  });
+  expect(filePart.providerMetadata).toEqual({ openai: { detail: "high" } });
 });
 
 test("missing or malformed refs do not crash and leave the part as-is", async () => {
@@ -745,140 +731,6 @@ test("inlined text-document gets NO sandbox pointer when the sandbox is unavaila
   expect(expectPresent(output[0].parts?.[0]).type).toBe("file");
 });
 
-test("applyAnthropicCacheControl=false suppresses cache_control but still inlines the bytes", async ({
-  makeAgent,
-  makeConversation,
-}) => {
-  const agent = await makeAgent();
-  const conversation = await makeConversation(agent.id, {
-    organizationId: agent.organizationId,
-  });
-  const bytes = Buffer.from("payload bytes", "utf8");
-  const row = await ConversationAttachmentModel.create({
-    organizationId: conversation.organizationId,
-    conversationId: conversation.id,
-    uploadedByUserId: conversation.userId,
-    originalName: "doc.txt",
-    mimeType: "text/plain",
-    fileSize: bytes.byteLength,
-    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
-    fileData: bytes,
-  });
-
-  const input: ChatMessage[] = [
-    {
-      role: "user",
-      parts: [
-        {
-          type: "file",
-          url: `/api/chat/attachments/${row.id}/content`,
-          mediaType: "text/plain",
-          filename: "doc.txt",
-        },
-      ],
-    },
-  ];
-
-  const output = await materializeAttachments({
-    messages: input,
-    conversationId: conversation.id,
-    applyAnthropicCacheControl: false,
-  });
-
-  const filePart = expectPresent(output[0].parts?.[0]);
-  // Bytes are still inlined — the data: content is NOT dropped...
-  expect(filePart.url).toBe(
-    `data:text/plain;base64,${bytes.toString("base64")}`,
-  );
-  // ...but the Anthropic-only cache_control marker is suppressed.
-  expect(filePart.providerMetadata).toBeUndefined();
-});
-
-test("applyAnthropicCacheControl=false suppresses cache_control on legacy inline data: parts", async () => {
-  const dataUrl = `data:application/pdf;base64,${Buffer.from("legacy", "utf8").toString("base64")}`;
-  const input: ChatMessage[] = [
-    {
-      role: "user",
-      parts: [
-        {
-          type: "file",
-          url: dataUrl,
-          mediaType: "application/pdf",
-          filename: "legacy.pdf",
-        },
-      ],
-    },
-  ];
-
-  const output = await materializeAttachments({
-    messages: input,
-    conversationId: "00000000-0000-4000-8000-000000000000",
-    applyAnthropicCacheControl: false,
-  });
-  const filePart = expectPresent(output[0].parts?.[0]);
-  expect(filePart.url).toBe(dataUrl);
-  expect(filePart.providerMetadata).toBeUndefined();
-});
-
-test("attachment routing is unchanged when cache_control is suppressed (non-ingestible still sandbox-pointed)", async ({
-  makeAgent,
-  makeConversation,
-}) => {
-  const agent = await makeAgent();
-  const conversation = await makeConversation(agent.id, {
-    organizationId: agent.organizationId,
-  });
-  const bytes = Buffer.from("SQLite header bytes", "utf8");
-  const row = await ConversationAttachmentModel.create({
-    organizationId: conversation.organizationId,
-    conversationId: conversation.id,
-    uploadedByUserId: conversation.userId,
-    originalName: "orders.sqlite",
-    mimeType: "application/octet-stream",
-    fileSize: bytes.byteLength,
-    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
-    fileData: bytes,
-  });
-
-  const input: ChatMessage[] = [
-    {
-      role: "user",
-      parts: [
-        {
-          type: "file",
-          url: `/api/chat/attachments/${row.id}/content`,
-          mediaType: "application/octet-stream",
-          filename: "orders.sqlite",
-        },
-      ],
-    },
-  ];
-
-  // Suppressing cache_control must not add or remove the existing
-  // non-ingestible → sandbox-pointer routing: same result as the cache-on path.
-  const off = await materializeAttachments({
-    messages: input,
-    conversationId: conversation.id,
-    ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: false,
-    sandboxAvailable: true,
-  });
-  const on = await materializeAttachments({
-    messages: input,
-    conversationId: conversation.id,
-    ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: true,
-    sandboxAvailable: true,
-  });
-
-  for (const output of [off, on]) {
-    const part = expectPresent(output[0].parts?.[0]);
-    expect(part.type).toBe("text");
-    expect(part.text).toContain("/home/sandbox/attachments");
-    expect(part.text).not.toContain("data:");
-  }
-});
-
 test("reroutes a binary document to the sandbox on a non-native Anthropic endpoint, even when the model could read it inline", async ({
   makeAgent,
   makeConversation,
@@ -919,7 +771,6 @@ test("reroutes a binary document to the sandbox on a non-native Anthropic endpoi
     messages: input,
     conversationId: conversation.id,
     ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: true,
     rerouteBinaryDocsToSandbox: true,
     sandboxAvailable: true,
   });
@@ -928,7 +779,6 @@ test("reroutes a binary document to the sandbox on a non-native Anthropic endpoi
     messages: input,
     conversationId: conversation.id,
     ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: true,
     rerouteBinaryDocsToSandbox: false,
     sandboxAvailable: true,
   });
@@ -985,7 +835,6 @@ test("keeps an image inlined on a non-native Anthropic endpoint", async ({
     messages: input,
     conversationId: conversation.id,
     ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: true,
     rerouteBinaryDocsToSandbox: true,
     sandboxAvailable: true,
   });
@@ -1035,7 +884,6 @@ test("keeps a text-inlineable, model-readable document inlined on a non-native A
     messages: input,
     conversationId: conversation.id,
     ingestibleMimeTypes: INGESTIBLE,
-    applyAnthropicCacheControl: true,
     rerouteBinaryDocsToSandbox: true,
     sandboxAvailable: true,
   });
@@ -1063,7 +911,6 @@ test("an inline data: binary document is dropped with a notice on a non-native e
   const output = await materializeAttachments({
     messages: input,
     conversationId: "00000000-0000-4000-8000-000000000000",
-    applyAnthropicCacheControl: true,
     rerouteBinaryDocsToSandbox: true,
   });
   const part = expectPresent(output[0].parts?.[0]);

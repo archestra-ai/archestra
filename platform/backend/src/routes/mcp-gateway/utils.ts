@@ -101,7 +101,9 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
-import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountModel, {
+  type VerifiedServiceAccountToken,
+} from "@/models/service-account";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -114,7 +116,7 @@ import {
   AGENT_RUNTIME_OAUTH_CLIENT_ID,
   isAgentRunGatewayToken,
 } from "@/services/agent-runtime/runtime-contract";
-import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
@@ -140,6 +142,7 @@ import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -251,7 +254,7 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth. A workload's own OIDC token works only when exactly one service account's federated credential trusts it.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":
@@ -340,8 +343,10 @@ export async function buildAgentMcpToolList(params: {
         | "tokenId"
         | "teamId"
         | "isOrganizationToken"
+        | "isUserToken"
         | "isExternalIdp"
         | "oauthClientId"
+        | "oauthExecution"
       >
     >;
   lookups?: RequestLookups;
@@ -448,6 +453,10 @@ export async function buildAgentMcpToolList(params: {
   // Compact external gateways expose delegation through search/run only.
   // Do not expand a potentially large caller-scoped surface only to discard
   // it below. Internal chat still uses it to decide which run controls to offer.
+  const disallowOAuthApp = Boolean(
+    tokenAuth?.oauthExecution ||
+      (tokenAuth?.oauthClientId && !tokenAuth.isUserToken),
+  );
   const resolveDelegations =
     agent.toolExposureMode !== "search_and_run_only" ||
     agent.agentType === "agent";
@@ -456,8 +465,9 @@ export async function buildAgentMcpToolList(params: {
         getAgentTools({
           agentId,
           organizationId: agent.organizationId,
-          userId: tokenAuth?.userId,
+          userId: callerUserId,
           lookups: params.lookups,
+          disallowOAuthApp,
         }),
         // Agent-designated skills surface as skill__<slug> delegation tools,
         // resolved per calling user with the same env/access symmetry.
@@ -469,7 +479,19 @@ export async function buildAgentMcpToolList(params: {
         }),
       ])
     : [[], []];
+  const includeImplicitStartAgentRun =
+    await callerUsesImplicitLoadBalancedRunStarter({
+      agent,
+      actorUserId: callerUserId,
+      exclusionSets,
+      lookups: params.lookups,
+      disallowOAuthApp,
+    });
+  const implicitTaskStarterTools = includeImplicitStartAgentRun
+    ? getImplicitStartAgentRunTools()
+    : [];
   const hasTaskStarter =
+    includeImplicitStartAgentRun ||
     delegationTools.length > 0 ||
     mcpTools.some(
       (tool) =>
@@ -515,6 +537,7 @@ export async function buildAgentMcpToolList(params: {
         (tool) => !tool.delegateToAgentId && !tool.delegateToA2aConnectionId,
       ),
       ...implicitMetaTools.map(asBuiltInTool),
+      ...implicitTaskStarterTools.map(asBuiltInTool),
       ...implicitTaskControlTools.map(asBuiltInTool),
       ...implicitOpenAppaTools.map(asBuiltInTool),
       ...implicitPolicyTools.map(asBuiltInTool),
@@ -834,6 +857,7 @@ export async function createAgentServer(params: {
         runId: runId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
         oauthClientId: tokenAuth?.oauthClientId ?? null,
+        serviceAccountId: tokenAuth?.serviceAccountId ?? null,
         source: tokenAuth?.source ?? null,
       });
       logger.info(
@@ -865,22 +889,19 @@ export async function createAgentServer(params: {
       // an ordinary SDK request — the extension's own methods are intercepted
       // at the route in index.ts — so the branch lives here. The whole
       // skill://archestra authority is reserved in every state: with the
-      // surface disabled (flag off, backfill pending), the skill unexposed,
-      // or the URI malformed, it answers not-found rather than falling
+      // skill unexposed or the URI malformed, it answers not-found rather
+      // than falling
       // through, so an upstream server can never serve its own bytes under
       // the platform's prefix. Within the namespace an unexposed skill and a
       // nonexistent one still answer identically.
       if (isPlatformSkillUri(uri)) {
-        let skillResource: Awaited<ReturnType<typeof serveSkillResource>> =
-          null;
+        let skillResource: Awaited<ReturnType<typeof serveSkillResource>>;
         try {
-          if (skillsSurfaceEnabled()) {
-            skillResource = await serveSkillResource({
-              uri,
-              agentId,
-              callerUserId: tokenAuth?.userId ?? null,
-            });
-          }
+          skillResource = await serveSkillResource({
+            uri,
+            agentId,
+            callerUserId: tokenAuth?.userId ?? null,
+          });
         } catch (error) {
           logger.error(
             {
@@ -901,9 +922,8 @@ export async function createAgentServer(params: {
         // The current revision's code for a missing resource: SEP-2164 retired
         // the MCP-specific -32002 in favor of JSON-RPC's Invalid Params, and
         // SEP-2640 pins unknown skill resources to the same code. Every reason
-        // for not-found — unexposed, deleted, never existed, malformed, surface
-        // disabled — still answers the same way, so the surface stays
-        // unprobeable.
+        // for not-found — unexposed, deleted, never existed, malformed — still
+        // answers the same way, so the surface stays unprobeable.
         throw {
           code: RESOURCE_NOT_FOUND_ERROR_CODE,
           message: `Resource not found: ${uri}`,
@@ -1139,6 +1159,7 @@ export async function createAgentServer(params: {
               llmToolCallId: tokenAuth?.llmToolCallId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              serviceAccountId: tokenAuth?.serviceAccountId ?? null,
               source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
@@ -1289,6 +1310,7 @@ export async function createAgentServer(params: {
               llmToolCallId: tokenAuth?.llmToolCallId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              serviceAccountId: tokenAuth?.serviceAccountId ?? null,
               source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
@@ -2313,16 +2335,7 @@ async function authenticateUngated(
       return { result: null, reason: "invalid_token" };
     }
     if (resolvedToken.type === "serviceAccount") {
-      const result = await validateServiceAccountGatewayAccess({
-        profileId,
-        serviceAccountId: resolvedToken.serviceAccount.id,
-        organizationId: resolvedToken.serviceAccount.organizationId,
-        teamId: resolvedToken.serviceAccount.teamId,
-        tokenId: resolvedToken.token.id,
-      });
-      return result
-        ? { result, reason: null }
-        : { result: null, reason: "no_gateway_access" };
+      return authenticateServiceAccountToken({ profileId, ...resolvedToken });
     }
     const { userId } = resolvedToken.token;
     const member = lookups
@@ -2338,6 +2351,22 @@ async function authenticateUngated(
     return userTokenResult
       ? { result: userTokenResult, reason: null }
       : { result: null, reason: "no_gateway_access" };
+  }
+
+  // A workload's own OIDC token, trusted by a service account's federated
+  // credential (an Agent Substrate actor's JWT, for one).
+  if (isJwtShaped(tokenValue)) {
+    const federated = await verifyServiceAccountBearer({ token: tokenValue });
+    if (federated) {
+      const context = await getAgentAccessContext();
+      if (
+        !context ||
+        context.organizationId !== federated.serviceAccount.organizationId
+      ) {
+        return { result: null, reason: "invalid_token" };
+      }
+      return authenticateServiceAccountToken({ profileId, ...federated });
+    }
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
@@ -2646,6 +2675,21 @@ function buildOAuthTokenHash(tokenValue: string): string {
   return createHash("sha256").update(tokenValue).digest("base64url");
 }
 
+async function authenticateServiceAccountToken(
+  params: { profileId: string } & VerifiedServiceAccountToken,
+): Promise<GatewayAuthOutcome> {
+  const result = await validateServiceAccountGatewayAccess({
+    profileId: params.profileId,
+    serviceAccountId: params.serviceAccount.id,
+    organizationId: params.serviceAccount.organizationId,
+    teamId: params.serviceAccount.teamId,
+    tokenId: params.token.id,
+  });
+  return result
+    ? { result, reason: null }
+    : { result: null, reason: "no_gateway_access" };
+}
+
 async function resolveArchestraToken(
   tokenValue: string,
 ): Promise<ResolvedArchestraToken | null> {
@@ -2706,7 +2750,9 @@ function filterExposedTools(params: {
           (openappaEnabled() &&
             isOpenappaTool(shortName) &&
             (internalChat || ALWAYS_LOADED_SHORT_NAMES.has(shortName ?? ""))) ||
-          (internalChat && isTaskControlTool(tool.name)) ||
+          (internalChat &&
+            (isTaskControlTool(tool.name) ||
+              shortName === TOOL_START_AGENT_RUN_SHORT_NAME)) ||
           (isAlwaysExposedTool(tool.name) &&
             (internalChat || shortName === TOOL_ASK_USER_SHORT_NAME)) ||
           (advertiseUiResourceTools &&
@@ -2789,6 +2835,14 @@ function getImplicitArchestraMetaTools() {
 
 function getImplicitTaskControlTools() {
   return getArchestraMcpTools().filter((tool) => isTaskControlTool(tool.name));
+}
+
+function getImplicitStartAgentRunTools() {
+  return getArchestraMcpTools().filter(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_START_AGENT_RUN_SHORT_NAME,
+  );
 }
 
 function getImplicitAskUserTools() {

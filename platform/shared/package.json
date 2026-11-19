@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.33",
+  "version": "1.5.0-rc.40",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -23,6 +23,7 @@
     "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
     "./error-reporting": "./error-reporting.ts",
+    "./fixed-roles": "./fixed-roles.ts",
     "./gemini-models": "./gemini-models.ts",
     "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",

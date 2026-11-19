@@ -30,14 +30,27 @@ async function setup(t, options = {}) {
   for (const architecture of options.missingArm
     ? ["amd64"]
     : ["amd64", "arm64"]) {
-    const config = {
-      architecture,
-      config: {
-        Env: [
-          `NODE_VERSION=${architecture === "arm64" && options.armNode ? options.armNode : "24.21.0"}`,
-        ],
-      },
-    };
+    const nodeVersion =
+      architecture === "arm64" && options.armNode ? options.armNode : "24.21.0";
+    const config =
+      options.nodeSource === "buildArg"
+        ? {
+            architecture,
+            config: { Env: ["NODE_ENV=production"] },
+            history: [
+              { created_by: "ARG NODE_VERSION=22.0.0" },
+              { created_by: `ARG NODE_VERSION=${nodeVersion}` },
+              {
+                created_by: `RUN |1 NODE_VERSION=${nodeVersion} /bin/sh -c install-node`,
+              },
+            ],
+          }
+        : options.nodeSource === "none"
+          ? { architecture, config: { Env: ["NODE_ENV=production"] } }
+          : {
+              architecture,
+              config: { Env: [`NODE_VERSION=${nodeVersion}`] },
+            };
     const configDigest = digest(config);
     routes.set(`/v2/playwright/mcp/blobs/${configDigest}`, config);
     const manifest = { config: { digest: configDigest } },
@@ -129,6 +142,15 @@ test("pins the mature upstream release and actual runtime metadata, then becomes
   assert.equal(await readFile(fixture.file, "utf8"), saved);
 });
 
+test("reads the Node version from the build argument when the image env omits it", async (t) => {
+  const fixture = await setup(t, { nodeSource: "buildArg" });
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  const next = JSON.parse(await readFile(fixture.file, "utf8"));
+  assert.equal(next.mcpVersion, "0.0.84");
+  assert.equal(next.nodeVersion, "24.21.0");
+});
+
 test("keeps the pin when the newest mature release has no upstream image yet", async (t) => {
   const fixture = await setup(t, { missingImages: ["0.0.84"] });
   // Pin 0.0.83 exactly as the fake registry serves it.
@@ -174,6 +196,11 @@ for (const [name, options, message] of [
     "inconsistent architecture runtimes",
     { armNode: "24.22.1" },
     /different Node versions/,
+  ],
+  [
+    "an image without any Node version",
+    { nodeSource: "none" },
+    /Missing Node version for amd64/,
   ],
   ["tampered manifest", { tamper: true }, /manifest digest mismatch/],
   ["registry failure", { failRegistry: true }, /HTTP 503/],

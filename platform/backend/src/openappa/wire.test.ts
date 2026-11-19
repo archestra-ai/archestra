@@ -1646,6 +1646,58 @@ describe("denial notice restoration", () => {
     expect(body.input[1].arguments).toBe(originalArguments);
   });
 
+  test("native Copilot restores Messages notices and records the same turn boundaries", () => {
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }],
+      messages: [
+        { role: "user", content: "Read the file" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_native",
+              name: NOTICE,
+              input: notice("read_file", { path: "/tmp/check" }, "call_native"),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_native",
+              content: "denied",
+            },
+          ],
+        },
+      ],
+    };
+    body.messages.push({ role: "user", content: "Continue" });
+    const anthropicBody = structuredClone(body);
+    const native = prepareAppaRequest({
+      body,
+      interactionType: "github-copilot:messages",
+      identity,
+    });
+    const anthropic = prepareAppaRequest({
+      body: anthropicBody,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(body).toEqual(anthropicBody);
+    expect(body.messages[1].content).toEqual([
+      expect.objectContaining({
+        name: "read_file",
+        input: { path: "/tmp/check" },
+      }),
+    ]);
+    expect(native.promptOperationId).toBeTruthy();
+    expect(native.promptOperationId).toBe(anthropic.promptOperationId);
+    expect(native).toEqual(anthropic);
+  });
+
   test("restores notices on an explicitly mapped compatible Responses provider", () => {
     const body = {
       tools: [

@@ -39,7 +39,7 @@ import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { canUseAgent } from "@/auth/permission-gated";
 import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
-import { createLLMModelForAgent } from "@/clients/llm-client";
+import { createLLMModelForAgent, type LLMModel } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
@@ -73,6 +73,11 @@ import {
   authorizeA2AOAuthExecution,
 } from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
+import { compactionTranscriptToolOutput } from "@/services/compaction-llm";
+import {
+  createCompactionSummarizer,
+  generateInContextSummary,
+} from "@/services/context-compaction";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -597,14 +602,51 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const contextLength = modelRow
+      ? ModelModel.resolveEffectiveContextLength(modelRow)
+      : null;
+    // Summaries run in the run's own session as `a2a:compaction`: the proxy
+    // governs the tool results they repeat and never takes one for the run's
+    // turn or a child's answer.
+    let compactionModel: Promise<LLMModel> | undefined;
+    const summaryModel = () =>
+      (compactionModel ??= createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source: "a2a:compaction",
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: llmApiKeyId,
+        modelPoolId,
+        autoRouterId,
+        appaSubagentToken: params.appaSubagent?.token,
+        unattended: scheduleTriggerRunId !== undefined,
+      }).then((created) => authorizeModel(created.model)));
     const stepContextGuard = createStepContextGuard({
-      model,
-      contextLength: modelRow
-        ? ModelModel.resolveEffectiveContextLength(modelRow)
-        : null,
+      contextLength,
       systemPrompt,
       abortSignal,
       logContext: { agentId: agent.id, sessionId },
+      transcriptToolOutput: compactionTranscriptToolOutput,
+      summarizeMessages: async ({ messages, hasPreviousSummary }) =>
+        generateInContextSummary({
+          model: await summaryModel(),
+          systemPrompt,
+          messages,
+          tools: mcpTools,
+          hasPreviousSummary,
+          contextLength,
+          abortSignal,
+          logFields: { agentId: agent.id, sessionId, provider },
+        }),
+      summarizeTranscript: async (transcript) =>
+        createCompactionSummarizer({
+          model: await summaryModel(),
+          abortSignal,
+        })(transcript),
       ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
         promptCache: {
           provider,
@@ -925,12 +967,15 @@ export async function executeA2AMessage(
         }
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
+          { model: selectedModel },
         );
       }
       if (streamError instanceof SubagentProviderError) {
         throw streamError;
       }
-      throw new ProviderError(mapProviderError(streamError, provider));
+      throw new ProviderError(mapProviderError(streamError, provider), {
+        model: selectedModel,
+      });
     }
 
     logger.info(

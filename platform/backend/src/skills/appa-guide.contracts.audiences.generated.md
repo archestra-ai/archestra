@@ -1,20 +1,20 @@
 ## Restrictions and requirements
 
-Audience and trust form the security label. Effects record completed actions. Attention requires approval for a specific call. The examples below show how to declare each one.
+OpenAPPA tracks information flow using security labels composed of an audience set and a trust rank (`audience × trust`). Policies can also require recorded effects (`effects`) and per-call approvals (`attention`).
 
 ### Audiences
 
-An audience identifies who can receive data. Reading restricted data limits where the trajectory can send data later.
+An audience defines the authorized recipients of data. Reading restricted data narrows the trajectory's audience label, restricting where the agent can send data in subsequent steps.
 
-Use `delta.audience` to restrict who can receive a tool's result. Use `requires.audience` to check the current audience before a tool call:
+Use `delta.audience` to restrict the audience permitted to read a tool's output. Use `requires.audience` to enforce recipient preconditions on outbound calls:
 
-| Field | What OpenAPPA does |
-|---|---|
-| `delta.audience` | Restricts the result to the specified readers. |
-| `forwards.audience` | Restricts the content the tool sends beyond its arguments to the specified readers. |
-| `requires.audience.contains` | Checks that the audience of what the call sends includes all specified readers. |
+| Field | Description | Runtime behavior |
+|---|---|---|
+| `delta.audience` | Allowed readers for the tool result. | Narrows the trajectory audience to the specified readers. |
+| `forwards.audience` | Allowed readers for content the tool sends beyond its arguments. | Narrows the outbound label evaluated against `requires`. |
+| `requires.audience.contains` | Required recipients for outbound data. | Verifies that the trajectory audience is authorized to reach every specified reader. |
 
-In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing.
+In the example below, reading a CRM ticket restricts the trajectory to `internal`. The subsequent `publish_update` call requires unrestricted outbound reach (`public`):
 
 ```toml
 [[policy.tool]]
@@ -26,34 +26,34 @@ name = "publish_update"
 requires = { audience = { contains = ["public"] } }
 ```
 
-Multiple entries combine readers from all entries. For example:
+Multiple entries combine readers as follows:
 
 | Declaration | Meaning |
 |---|---|
-| `delta = { audience = ["@finance", "@support"] }` | The result is for readers who belong to either group. |
-| `requires = { audience = { contains = ["@finance", "@support"] } }` | The current audience must include every member of both groups. |
+| `delta = { audience = ["@finance", "@support"] }` | Restricts output to readers who belong to either group (union of reader sets). |
+| `requires = { audience = { contains = ["@finance", "@support"] } }` | Requires the current audience to contain all members of both groups. |
 
-`contains` is the only requirement under `requires.audience`.
+`contains` is the only supported precondition operator under `requires.audience`.
 
-Each audience entry can be one of the following:
+Audience entries support three formats:
 
-| Entry | Meaning |
+| Format | Meaning |
 |---|---|
-| `"public"`, `"internal"`, `"self"` | Built-in audiences: everyone (`public`), the organization (`internal`), or the identity OpenAPPA acts for (`self`). |
-| `"@name"`, `"@provider:selector"` | A configured group, such as `"@finance"`, or a group read directly from a source, such as `"@slack:user-group/oncall"`. |
-| Other strings, such as `"alice@example.com"` | A literal [reader ID](#reader-ids), compared exactly. For example, `"finance"` is a reader ID; `"@finance"` refers to a group. |
+| `"public"`, `"internal"`, `"self"` | Built-in audiences: unrestricted (`public`), organization members (`internal`), or the identity OpenAPPA acts for (`self`). |
+| `"@name"`, `"@provider:selector"` | Configured groups (e.g. `"@finance"`) or source collections read directly from providers (e.g. `"@slack:user-group/oncall"`). |
+| Literal reader IDs (e.g. `"alice@example.com"`) | Exact-match [reader IDs](#reader-ids). Note that `"finance"` represents a literal reader ID, whereas `"@finance"` references a configured group. |
 
-For example, `audience = ["@finance", "alice@example.com"]` includes all members of `finance` and the individual reader `alice@example.com`.
+For example, `audience = ["@finance", "alice@example.com"]` covers all members of the `finance` group plus the individual reader `alice@example.com`.
 
 #### Built-in audiences
 
-The built-in chain is `self` ⊆ `internal` ⊆ `public`: `internal` includes `self`, and `public` includes everyone. Policies cannot add levels to this chain. Use named audiences for other groups of readers.
+The built-in audience lattice forms a subset chain: `self` ⊆ `internal` ⊆ `public`. `internal` includes `self`, and `public` includes all recipients. Policies cannot add levels to this chain; define named groups for custom reader subsets.
 
-Within one set of square brackets, use at most one of `self` and `internal`. Do not combine `public` with other entries. `contains = ["public"]` requires unrestricted sharing, as shown by `publish_update` above.
+Within a single audience array, specify at most one of `self` and `internal`. Do not combine `public` with other entries; `contains = ["public"]` requires completely unrestricted outbound reach.
 
 #### Read an audience from a tool argument
 
-Under `contains`, use `$<argument_name>` to read an audience from a tool argument. The name is the tool's argument name; `recipient` below is one example:
+Under `contains`, use `$<argument_name>` to read a destination audience dynamically from a tool argument (for example, `$recipient`):
 
 ```toml
 [[policy.tool]]
@@ -61,13 +61,13 @@ name = "send_email"
 requires = { audience = { contains = ["$recipient"] } }
 ```
 
-OpenAPPA reads the proposed call's `recipient` argument and checks that the current audience includes its readers. The binding makes `recipient` a required top-level string of the tool's `parameters`: OpenAPPA adds the property when the schema omits it, makes a declared string property required, and rejects a schema that declares it with another type. A whole-entry argument placeholder is allowed only under `contains`.
+OpenAPPA inspects the proposed call's `recipient` argument at check time and verifies that the trajectory's current audience contains those recipients. Referencing an argument placeholder makes that argument a required top-level string in the tool's `parameters` schema: OpenAPPA injects the property if omitted, enforces that it is required, and rejects schemas defining it as a non-string type. Argument placeholders as standalone audience entries are valid only within `contains`.
 
-The argument can contain a literal reader, `public`, `self`, `internal`, or an `@` mention. An unresolved dynamic mention stops the call with an operational error.
+The argument value may be a literal reader ID, `public`, `self`, `internal`, or an `@` group mention. An unresolvable group mention causes an operational error and denies the call.
 
 #### Read a source collection from a tool argument
 
-A selector placeholder names a source collection whose selector takes one or more segments from the call. Write `@<provider>:<selector>` and put `$<argument_name>` in place of a segment:
+A selector placeholder dynamically resolves an audience collection by extracting selector segments from tool arguments. Format placeholders as `@<provider>:<selector>` and substitute `$<argument_name>` for one or more segments:
 
 ```toml
 # Reading a channel restricts the result to that channel's members.
@@ -86,33 +86,33 @@ url = "https://audience.corp/slack"
 selectors = [{ template = "viewer", feeds = "self" }, { template = "channel/<id>" }]
 ```
 
-A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](references/contracts/annotators.md#permits-and-hint). It MUST NOT appear beside other entries in one list or in an annotator's answer.
+A selector placeholder MUST be the sole entry in `delta.audience` or `requires.audience.contains`, or an entry in an annotator's `audiences` mandate (see [Permits and hint](references/contracts/annotators.md#permits-and-hint)). It MUST NOT appear alongside other entries in the same list or in an annotator response.
 
-Each `$<argument_name>` becomes a required top-level argument of the tool, as under `contains`, except that a selector placeholder also accepts an argument declared as an array of strings; see [Read an audience from a tool argument](#read-an-audience-from-a-tool-argument). The spelling, with each `$<argument_name>` read as a variable segment, MUST match one template the provider declares under `selectors`; see [Declare selector templates](#declare-selector-templates). A `$<argument_name>` segment matches only a `<variable>` segment of the template.
+Each `$<argument_name>` becomes a required top-level argument in the tool schema. Unlike scalar placeholders under `contains`, selector placeholders also support string array arguments. The placeholder pattern MUST match a declared template under the provider's `selectors` definition (see [Declare selector templates](#declare-selector-templates)), with `$<argument_name>` mapping strictly to `<variable>` segments.
 
-At check time OpenAPPA replaces each `$<argument_name>` with the call's argument value. The result is an ordinary `@provider:selector` mention: OpenAPPA reads its members from the provider's service, records the answer with the decision, and checks the call exactly as for a static mention. In the example above, reading channel `C0123` restricts the result to the members of `C0123`, and posting to `C0123` requires that every member of `C0123` is already a reader.
+At evaluation time, OpenAPPA substitutes argument values into the selector, queries the external membership provider, pins the membership in the audit log, and applies the policy check. In the Slack example above, reading channel `C0123` restricts the output label to members of `C0123`, while posting to `C0123` requires that all channel members already belong to the trajectory's current audience.
 
-An array argument names one collection per element, and the placeholder stands for their union. Sharing a resource with teams `["t1", "t2"]` under `contains = ["@corp:team/$team_ids"]` requires that every member of `t1` and every member of `t2` is already a reader; under `delta.audience` it restricts the result to readers who belong to either team. At most one argument of a placeholder may be an array, and it may hold at most 100 elements, since each collection is a membership read. An empty array, a longer one, a second array, or an element that is not one selector segment fills no placeholder, and OpenAPPA refuses the call.
+When an argument is an array of strings, the placeholder represents the union of the referenced collections. For example, sharing with teams `["t1", "t2"]` under `contains = ["@corp:team/$team_ids"]` requires the current audience to contain every member of both teams; in `delta.audience`, it restricts output to readers in either team. A placeholder may include at most one array argument, capped at 100 elements. Empty arrays, arrays exceeding 100 elements, multiple array arguments, or invalid segment values cause immediate call rejection.
 
-Static mentions cannot contain segments starting with `$`. Dollar-sign prefixes are reserved for argument placeholders and cannot be escaped.
+Static mentions must not contain segments beginning with `$`. The dollar-sign prefix is reserved strictly for argument placeholders and cannot be escaped.
 
 #### Configure audience membership
 
-Membership answers: who belongs to this audience? OpenAPPA asks an external membership service for the members. For example, that service can read the members of a Slack group.
+External membership services resolve which individual reader IDs belong to an audience collection (such as members of a Google Workspace or Slack group).
 
-Under `[policy.audience]`, `self` and `internal` list the selectors that supply their members. `[policy.audience.group.<name>]` declares a named group with `within` and `from`.
+Under `[policy.audience]`, `self` and `internal` specify the provider selectors supplying their members. `[policy.audience.group.<name>]` defines custom groups using `within` and `from`.
 
 ### Session principal
 
-A host that serves many people can name the person each session acts for. It passes that person's email address as the session's principal when the session starts. In that session, `self` is exactly that address. OpenAPPA does not ask the `self` selectors, and `internal` includes the principal beside its own sources. Children and root forks of the session act for the same principal. A session without a principal uses `[policy.audience] self` as usual.
+Multi-user hosts can specify the identity each session acts for by passing an email address as the session's principal during session startup. Within that session, `self` resolves directly to that email address without querying external `self` selectors, and `internal` automatically includes the principal alongside configured organization sources. Child trajectories and root forks inherit the session principal. Sessions initialized without a principal resolve `self` from `[policy.audience] self`.
 
-A host names the principal in process, through the embedded runtime API, or on the HTTP hook wire as the `principal` field of `session_start`. The wire carries one only under kagent, and only when the runtime sets `APPA_SESSION_PRINCIPAL=wire`; the default `none` refuses a `session_start` that carries one. The kagent plugins send the caller's `x-user-id` header. `/hook` does not authenticate its caller, so set `wire` only when kagent authenticates its users and no other client can reach `/hook`. OpenAPPA takes the principal on the host's word; it does not authenticate it. Only a host that authenticated the person should name one, and the principal must be the address the membership services report for that person. A multi-user host usually leaves `[policy.audience] self` empty, so a session that names no principal cannot establish `self` and is denied as described below. A policy that names `self` in its boundary or starting label still needs a `self` source to load, because it is checked before any session names a principal.
+Hosts supply the principal in-process via the embedded runtime API, or over HTTP via the `principal` field in `session_start`. Wire-supplied principals are supported under kagent when `APPA_SESSION_PRINCIPAL=wire` is set (the default, `none`, rejects requests containing a principal). Because `/hook` does not authenticate incoming callers, enable `wire` only when kagent authenticates requests and `/hook` is network-isolated. OpenAPPA relies on the host for authentication and does not verify session credentials directly; hosts must provide the verified address reported by membership providers. Multi-user configurations typically omit `[policy.audience] self`, causing any unauthenticated session lacking a principal to fail `self` checks. Policies referencing `self` in boundary declarations or starting labels still require a declared `self` source at load time.
 
-A policy can omit `self` or `internal`. A check that needs the members of an omitted level — for example, `contains = ["internal"]` after a `delta` narrowed the audience to `self` — cannot be established. OpenAPPA denies that call and names the missing key; proposing the call again does not change the answer.
+Policies may omit `self` or `internal`. If a policy check requires members of an omitted audience level (for example, checking `contains = ["internal"]` after output restricted the audience to `self`), the check cannot resolve. OpenAPPA denies the call and names the missing key.
 
-Each selector entry has the form `provider:selector`. The provider identifies the service configured under `[externals.audience.<provider>]`. The selector tells that service which reader or group to read. The service's `selectors` declaration lists the selector templates it understands.
+Each selector entry uses the format `provider:selector`. The provider name corresponds to a binding under `[externals.audience.<provider>]`. The selector identifies the specific group or resource to query, matching one of the provider's declared `selectors` templates.
 
-The example below uses a Google Workspace membership service to define `self`, `internal`, and `@finance`:
+The example below configures Google Workspace membership for `self`, `internal`, and `@finance`:
 
 ```toml
 # Use the Google Workspace viewer as self and organization members as internal.
@@ -135,34 +135,34 @@ selectors = [
 ]
 ```
 
-For `google-workspace:group/finance@corp.com`, OpenAPPA sends `group/finance@corp.com` as the selector to the membership service configured under `[externals.audience.google-workspace]`. The service reads the group's members and returns them to OpenAPPA.
+For `google-workspace:group/finance@corp.com`, OpenAPPA sends `group/finance@corp.com` as the selector query to `https://audience.corp/google-workspace`. The service returns the list of reader IDs belonging to that group.
 
-Configuring a provider does not connect OpenAPPA directly to Google Workspace, Slack, or GitHub; you must supply the service that makes that connection. Each shipped battery supplies the service for the provider it covers and declares that service's templates; see What is a battery.
+Configuring a provider declares how OpenAPPA queries membership; the deployment must supply the underlying service endpoint or helper script. Pre-built batteries provide membership helpers for common providers (see What is a battery).
 
 ##### Declare selector templates
 
-`selectors` on `[externals.audience.<provider>]` declares the selector templates the service understands. Each entry has a `template` and an optional `feeds`:
+The `selectors` array on `[externals.audience.<provider>]` defines the selector templates supported by the membership service:
 
-| Field | Meaning |
+| Field | Description |
 |---|---|
-| `template` | One selector format: literal segments and `<variable>` segments separated by `/`, such as `viewer`, `full-members`, `group/<group-address>`, or `channel/<id>`. A `<variable>` segment matches one non-empty segment. |
-| `feeds` | `self` or `internal`: the built-in audience this template may supply. Omit it for a template that supplies only named groups and `@provider:selector` mentions. |
+| `template` | Selector format consisting of literal segments and `<variable>` segments separated by `/` (e.g. `viewer`, `full-members`, `group/<group-address>`, or `channel/<id>`). |
+| `feeds` | Built-in audience fed by this template (`self` or `internal`). Omit for templates supplying named groups and direct `@provider:selector` mentions. |
 
-A provider exists in a policy when the policy names it: by a `[policy.audience]` selector, by a `@provider:selector` mention in a tool contract or an annotator mandate, or by a selector placeholder. Every selector the policy writes MUST match one declared template of its provider, with the role its position needs:
+A provider is registered in a policy when referenced in `[policy.audience]`, a tool contract, an annotator mandate, or a selector placeholder. Every selector used in the policy MUST match a declared template for that provider with the required role:
 
-| Audience key | Templates you can use |
+| Audience key | Permitted template type |
 |---|---|
-| `self` | A template with `feeds = "self"`, usually `viewer`: the identity OpenAPPA acts for. |
-| `internal` | A template with `feeds = "internal"`, such as `full-members` or `org/<org>/members`. For example, `github:org/acme/members` makes members of `acme` internal. Members of other GitHub organizations are not included by this source. |
-| `group.<name>.from`, `@provider:selector` mentions, and selector placeholders | Any declared template except one with `feeds = "self"`. |
+| `self` | Templates with `feeds = "self"` (typically `viewer`, representing the session identity). |
+| `internal` | Templates with `feeds = "internal"` (e.g. `full-members` or `org/<org>/members`). |
+| `group.<name>.from`, direct mentions, and selector placeholders | Any declared template, excluding templates with `feeds = "self"`. |
 
-OpenAPPA rejects the configuration if you use a selector in the wrong key. For example, `slack:viewer` cannot define `internal`. The load error for a selector that matches no template lists the templates the provider declares. The declared templates enter the policy identity; the URL, command, and credentials do not.
+OpenAPPA rejects configurations referencing selectors under incompatible keys (for example, using a `feeds = "self"` selector to populate `internal`). Load errors list all templates declared by the provider. Declared templates become part of the cryptographic policy identity; URLs, commands, and credentials do not.
 
-If a key lists several sources, the audience includes members from any of them. For example, `internal = ["google-workspace:full-members", "slack:full-members"]` includes members returned by either service.
+When multiple sources are configured for an audience key, the resulting audience is their union. For example, `internal = ["google-workspace:full-members", "slack:full-members"]` combines members returned by both providers.
 
-In the `finance` example, `within = "internal"` declares that every member of `finance` is internal. OpenAPPA trusts this declaration; it does not check each member against the sources for `internal` or check their email domain. A group can declare `within = "self"` or `within = "internal"`.
+`within = "internal"` asserts that all members of the group belong to `internal`. OpenAPPA accepts this assertion without verifying individual member IDs against `internal` sources or checking email domains. Groups may declare `within = "self"` or `within = "internal"`.
 
-You can use `"@slack:user-group/oncall"` directly instead of declaring a named group such as `@oncall` under `[policy.audience.group.<name>]`. It refers to the Slack group `oncall`. To use this reference, at least one selector must use the `slack` provider:
+Policies can reference provider groups directly as `"@slack:user-group/oncall"` without declaring an explicit `[policy.audience.group.<name>]` block, provided the `slack` provider is configured:
 
 ```toml
 # Use Slack workspace members as internal.
@@ -184,25 +184,21 @@ selectors = [
 ]
 ```
 
-OpenAPPA rejects policy references to undeclared named audiences, providers that no `[externals.audience.<provider>]` entry declares, or selectors that match no declared template.
+OpenAPPA rejects references to undeclared named audiences, unconfigured providers, or selectors that match no declared template.
 
 ##### Reader IDs
 
-A reader ID is a string that OpenAPPA compares exactly. The membership service decides the reader ID for each member: the email address the provider verified for the account, otherwise `<provider>:<id>`, such as `slack:U012345` or `github:alice`. The shipped Slack, GitHub, and Google Workspace services do this. The GitHub service reports organization and team members by profile email where the member publishes one, otherwise as `github:<login>`.
+A reader ID is an exact string identifier. Membership services assign reader IDs using verified email addresses when available, or qualified identifiers formatted as `<provider>:<id>` (such as `slack:U012345` or `github:alice`). The default Slack, GitHub, and Google Workspace integrations follow this convention. The GitHub service uses verified public profile emails when available, falling back to `github:<login>`.
 
-The membership service is responsible for verifying who owns an address. OpenAPPA trusts the service; it does not verify ownership itself. Two services that report the same verified address name the same reader. A member reported by provider ID merges with nothing else.
+Membership services must authenticate address ownership. When multiple services report the same verified email address, OpenAPPA recognizes them as the same reader. Qualified provider IDs remain distinct and do not alias across providers.
 
-OpenAPPA converts the domain of an address to lowercase. It leaves the part before `@` unchanged, including dots and `+suffix` values. It does not merge aliases or treat personal and corporate addresses as the same reader.
+OpenAPPA lowercases the domain portion of email addresses while preserving the local part before `@` verbatim (including dots and `+tag` suffixes). It does not resolve email aliases or conflate personal and corporate addresses.
 
-Every reader ID in an answer must be a well-formed email address or `<provider>:<non-empty>` under the answering provider. An ID with a `:` before its `@` is a qualified ID, not an address. Any other value, such as `"finance"`, refuses the whole answer as an operational failure that names the provider and selector. OpenAPPA records no decision for a refused answer.
-
-A service that reports one account under two different addresses within one operation yields two reader IDs for one person. The result is a narrower audience, never a wider one.
+Every reader ID returned by a membership service must be a valid email address or match `<provider>:<non-empty>` under the responding provider. An ID containing a colon before the `@` symbol is parsed as a qualified ID, not an address. Any invalid format causes the membership response to be rejected as an operational failure, denying the call. If a service reports multiple addresses for one account, OpenAPPA treats them as distinct reader IDs, producing a strictly narrower audience.
 
 ##### Map members with `lookup` and `readers`
 
-By default, a provider's own service answers member lookups. Set `lookup = "<name>"` on a provider to send its member lookups to another `[externals.audience.<name>]` entry. That entry has exactly one of `readers`, `command`, or `url`. A `readers` entry is an inline table from `<provider>:<id>` to reader ID. OpenAPPA answers from that table without calling a service.
-
-The example below maps GitHub members to corporate addresses with a `readers` table:
+By default, a provider's own service resolves member lookups. Configure `lookup = "<name>"` on a provider to delegate member lookups to another `[externals.audience.<name>]` definition. The target entry must define exactly one of `readers`, `command`, or `url`. A `readers` entry provides a static inline map from `<provider>:<id>` to reader IDs, resolving lookups in-memory without network calls:
 
 ```toml
 [policy.audience]
@@ -223,11 +219,11 @@ lookup = "people"
 readers = { "github:alice" = "alice@corp.com" }
 ```
 
-For a provider with `lookup`, OpenAPPA also looks up every group member that is not an email address. With the configuration above, the member `github:alice` reported for `org/acme/members` becomes the reader `alice@corp.com`. A `null` answer, or a member absent from a `readers` table, leaves the member as written. OpenAPPA records lookup answers with the decision like other membership responses.
+When `lookup` is configured, OpenAPPA automatically queries the lookup provider for any group member that is not already an email address. In the example above, `github:alice` returned for `org/acme/members` maps to `alice@corp.com`. If a lookup returns `null` or an ID is missing from `readers`, the identifier remains unchanged. Lookup results are pinned in the audit record alongside group membership responses.
 
-A battery binds the membership service it ships in its own `appa.toml`, with the service's `selectors`. The root config keeps the `[policy.audience]` mappings. A root entry for a provider that a battery binds is a duplicate binding, and OpenAPPA rejects the configuration.
+Batteries bind their included membership services and selectors within their own `appa.toml`. Root policies retain `[policy.audience]` mappings. Redefining a provider binding in the root configuration when already declared by an included battery causes a duplicate binding error.
 
 ##### Source probe at start and reload
 
-Before it serves a configuration, and before it switches to a reloaded one, OpenAPPA reads every selector the policy references once, asks each configured `lookup` entry for one member those answers owe, and applies the reader ID rule to each answer. A service that fails or returns a malformed reader ID stops the start or the reload with the provider, the selector or member, and the reason. A service that refuses its declared templates fails this probe, so a policy whose `selectors` disagree with the service never serves. A failed reload leaves the previous configuration serving. Replay does not probe.
+Before serving traffic from a new or reloaded policy, OpenAPPA executes a startup probe: it queries each referenced selector once, queries each configured `lookup` target with a sample member returned by those selectors, and validates that all returned values conform to reader ID rules. If a service fails, returns an invalid reader ID, or rejects declared selector templates, the startup or reload fails with an error specifying the provider and reason. If a policy reload fails its probe, OpenAPPA continues serving the existing configuration without interruption. Replay executions do not execute startup probes.
 

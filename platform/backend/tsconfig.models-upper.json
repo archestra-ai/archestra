@@ -48,6 +48,7 @@
     "src/services/identity-providers/linked-idp-auth.ts",
     "src/services/mcp-advanced-settings.ts",
     "src/services/mcp-server-assignability.ts",
+    "src/services/mcp-tool-names.ts",
     "src/services/member-removal.ts",
     "src/services/resource-permissions.ts",
     "src/utils/llm-api-key-resolution.ts",

@@ -34,7 +34,6 @@ describe("POST /api/auto-routing/routers/:id/preview", () => {
   let jevStates: unknown[];
 
   beforeEach(async ({ makeSecret, makeLlmProviderApiKey }) => {
-    config.autoRouting.enabled = true;
     jevStates = [];
     server.use(
       http.post(config.llm.jev.baseUrl, async ({ request }) => {

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -20,10 +20,12 @@ import {
 } from "@archestra/shared";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { eq } from "drizzle-orm";
+import { decodeJwt } from "jose";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
+  AgentIdentityBindingModel,
   AgentModel,
   AgentToolModel,
   AppToolModel,
@@ -45,6 +47,7 @@ import { secretManager } from "@/secrets-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { spiffeIdForAgent } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
@@ -1060,22 +1063,16 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
-  test("connectAndGetTools advertises the Skills client extension when enabled", async () => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
+  test("connectAndGetTools advertises the Skills client extension", async () => {
     mockListTools.mockResolvedValueOnce({ tools: [] });
     const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
     if (!catalogItem) throw new Error("expected catalog item");
 
-    try {
-      await mcpClient.connectAndGetTools({
-        catalogItem,
-        mcpServerId,
-        secrets: { access_token: "skills-token" },
-      });
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "skills-token" },
+    });
 
     const { Client } = await import(
       "@modelcontextprotocol/sdk/client/index.js"
@@ -2675,10 +2672,9 @@ describe("McpClient", () => {
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         // Demand tracking is inert while idle hibernation is off — only the
-        // sweeper reads it — so the wake/skip tests below need the beta flag
-        // on, an organization that has opted into it, and the process-local
-        // mirror the synchronous stamp path reads primed from that row.
-        config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+        // sweeper reads it — so the wake/skip tests below need an
+        // organization that has opted into it, and the process-local mirror
+        // the synchronous stamp path reads primed from that row.
         await makeOrganization({ mcpIdleHibernationEnabled: true });
         await OrganizationModel.getMcpIdleHibernationEnabled();
         // SPDX-SnippetEnd
@@ -5371,6 +5367,323 @@ describe("McpClient", () => {
         expect(secondResult.isError).toBe(false);
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
+        fetchMock.mockRestore();
+      });
+
+      test("exchanges again as the new agent identity after the agent is rebound", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "rebound-agent@example.com" });
+        const agentKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-agent-rebind",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "web-client-secret",
+              agentIdentity: {
+                privateKeyPem: agentKey.privateKey
+                  .export({ format: "pem", type: "pkcs8" })
+                  .toString(),
+                privateKeyId: "archestra-agents",
+              },
+            },
+          },
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await AgentIdentityBindingModel.replaceForAgent({
+          agentId,
+          bindings: [
+            {
+              identityProviderId: identityProvider.id,
+              externalId: "wlp-agent-before",
+            },
+          ],
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__rebound_agent_tool",
+          description: "Rebound agent tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-rebound-agent",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "agent-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Agent result" }],
+          isError: false,
+        });
+        const callTool = (id: string) =>
+          mcpClient.executeToolCallForOwner(
+            {
+              id,
+              name: "github-mcp-server__rebound_agent_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            {
+              tokenId: "session-token",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: user.id,
+            },
+            { conversationId: "rebound-agent-conv" },
+          );
+
+        await callTool("call_rebound_agent_1");
+        await AgentIdentityBindingModel.replaceForAgent({
+          agentId,
+          bindings: [
+            {
+              identityProviderId: identityProvider.id,
+              externalId: "wlp-agent-after",
+            },
+          ],
+        });
+        await callTool("call_rebound_agent_2");
+
+        expect(
+          fetchMock.mock.calls.map(([, init]) =>
+            new URLSearchParams(String(init?.body)).get("client_id"),
+          ),
+        ).toEqual(["wlp-agent-before", "wlp-agent-after"]);
+        fetchMock.mockRestore();
+      });
+
+      test("acts as the agent's SPIFFE ID at a provider that takes JWT-SVIDs, with no binding", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "spiffe-agent@example.com" });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "keycloak-spiffe",
+          issuer: "https://keycloak.example.com/realms/acme",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint:
+              "https://keycloak.example.com/realms/acme/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "rfc8693",
+              tokenEndpoint:
+                "https://keycloak.example.com/realms/acme/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "web-client-secret",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              agentIdentity: { source: "spiffe", requireAgentIdentity: true },
+            },
+          },
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__spiffe_agent_tool",
+          description: "SPIFFE agent tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "agent-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Agent result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_spiffe_agent",
+            name: "github-mcp-server__spiffe_agent_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "external-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "external-idp-jwt",
+          },
+          { conversationId: "spiffe-agent-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+        const [exchange] = fetchMock.mock.calls.map(
+          ([, init]) => new URLSearchParams(String(init?.body)),
+        );
+        expect(exchange?.get("actor_token_type")).toBe(
+          "urn:ietf:params:oauth:token-type:jwt",
+        );
+        expect(decodeJwt(String(exchange?.get("actor_token"))).sub).toBe(
+          spiffeIdForAgent(agentId),
+        );
+        fetchMock.mockRestore();
+      });
+
+      test("refuses an unbound agent's cached credential once the provider requires agent identities", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "require-after-cache@example.com",
+        });
+        const oidcConfig = {
+          clientId: "web-client-id",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "okta_managed",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            tokenEndpointAuthentication: "client_secret_post",
+            clientSecret: "web-client-secret",
+          },
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-require-after-cache",
+          issuer: "https://example.okta.com",
+          oidcConfig,
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__require_after_cache_tool",
+          description: "Require after cache tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-require-after-cache",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "shared-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Shared result" }],
+          isError: false,
+        });
+        const callTool = (id: string) =>
+          mcpClient.executeToolCallForOwner(
+            {
+              id,
+              name: "github-mcp-server__require_after_cache_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            {
+              tokenId: "session-token",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: user.id,
+            },
+            { conversationId: "require-after-cache-conv" },
+          );
+
+        const before = await callTool("call_require_after_cache_1");
+        await db
+          .update(schema.identityProvidersTable)
+          .set({
+            oidcConfig: JSON.stringify({
+              ...oidcConfig,
+              enterpriseManagedCredentials: {
+                ...oidcConfig.enterpriseManagedCredentials,
+                agentIdentity: { requireAgentIdentity: true },
+              },
+            }) as unknown as undefined,
+          })
+          .where(eq(schema.identityProvidersTable.id, identityProvider.id));
+
+        expect(before.isError).toBe(false);
+        await expect(
+          callTool("call_require_after_cache_2"),
+        ).rejects.toMatchObject({ statusCode: 403 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         fetchMock.mockRestore();
       });
 
@@ -10454,7 +10767,6 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
     });
     await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
 
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
     // The gate, not the plumbing, is stubbed: this test is about WHERE the
     // wake sits relative to the demand scope, not about toggle hydration.
     const syncMirror = vi
@@ -10485,7 +10797,6 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       expect(result).toEqual(RESOURCE_CONTENTS);
       expect(atWake).toEqual({ active: 1, persisted: 1 });
     } finally {
-      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
       syncMirror.mockRestore();
       updateLastUsed.mockRestore();
     }

@@ -1014,7 +1014,7 @@ describe("clone agent route", () => {
     makeSecret,
   }) => {
     vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
-    // Cloning a runtime needs the caller's configure-runtime permission.
+    // Cloning a runtime needs `use` on it; admins hold it on every runtime.
     await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     const runtime = {
       ...buildCustomAgentRuntime({ image: "example.test/worker:v1" }),

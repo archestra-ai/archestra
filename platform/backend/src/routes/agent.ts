@@ -6,6 +6,7 @@ import {
   createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
   DEFAULT_APP_NAME,
+  type EnvironmentDeployKind,
   getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
@@ -43,6 +44,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
+  AgentIdentityBindingModel,
   AgentLabelModel,
   AgentModel,
   AgentPinModel,
@@ -82,7 +84,10 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
+import {
+  applyAgentRuntimeAccess,
+  assertCanUseAgentRuntime,
+} from "@/services/agent-runtime/agent-runtime-access";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -96,7 +101,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
-import { assertEntraAgentIdentityChange } from "@/services/identity-providers/enterprise-managed/agent-identity";
+import { replaceAgentIdentityBindings } from "@/services/identity-providers/enterprise-managed/agent-identity";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -127,6 +132,7 @@ import {
   ImportAgentResponseSchema,
   PaginatedAgentActivationSkillsResponseSchema,
   PatchAgentActivationSkillPolicySchema,
+  ReplaceAgentIdentityBindingsSchema,
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
   SuggestedPromptInputSchema,
@@ -796,7 +802,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       if (body.runtime !== undefined) {
-        body.runtime = await applyAgentRuntimeLock({
+        body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
           runtime: body.runtime,
@@ -806,8 +812,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
-        userId: user.id,
-        organizationId,
       });
       await assertAgentRuntimeTiersExist({
         runtime: body.runtime,
@@ -819,17 +823,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: null,
         next: body.runtime,
       });
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await assertEntraAgentIdentityChange({
-        organizationId,
-        userId: user.id,
-        agentId: null,
-        previous: null,
-        next: body.entraAgentIdentityId,
-      });
-      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -903,6 +896,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         environmentId,
+        resource: environmentDeployKindFor(agentType),
       });
       await assertCanWriteAgentNetworkPolicy({
         userId: user.id,
@@ -1004,6 +998,65 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(agent);
     },
   );
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  fastify.get(
+    "/api/agents/:id/identity-bindings",
+    {
+      schema: {
+        operationId: RouteId.GetAgentIdentityBindings,
+        description:
+          "Get the identities an agent acts as at identity providers",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(ReplaceAgentIdentityBindingsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      return reply.send({
+        bindings: await AgentIdentityBindingModel.findForAgent(id),
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/identity-bindings",
+    {
+      schema: {
+        operationId: RouteId.ReplaceAgentIdentityBindings,
+        description:
+          "Replace the identities an agent acts as at identity providers. Changing them requires identityProvider:update.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        body: ReplaceAgentIdentityBindingsSchema,
+        response: constructResponseSchema(ReplaceAgentIdentityBindingsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const agent = await requireReadableAgent({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require(agent.agentType, { action: "update", scope: agent.id });
+      return reply.send({
+        bindings: await replaceAgentIdentityBindings({
+          organizationId,
+          userId: user.id,
+          agentId: agent.id,
+          bindings: body.bindings,
+        }),
+      });
+    },
+  );
+  // SPDX-SnippetEnd
 
   fastify.get(
     "/api/agents/:id/default-suggested-prompts",
@@ -1329,12 +1382,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await assertCanUseAgentRuntime({
+        organizationId,
+        userId: user.id,
+        runtime: sourceAgent.runtime,
+      });
       await requireAgentRuntimePermission({
         agentType: sourceAgent.agentType,
         runtime: sourceAgent.runtime,
         isAdmin: checker.isAdmin(sourceAgent.agentType),
-        userId: user.id,
-        organizationId,
       });
 
       // The copy is the caller's own Agent, so the credentials it reads are
@@ -1771,6 +1827,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             environmentId: resolvedEnvironmentId,
             organizationId,
             userId: user.id,
+            resource: "agent",
           });
         }
         enabled = await isArchestraToolAvailableToAgent({
@@ -1792,6 +1849,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: resolvedEnvironmentId,
           organizationId,
           userId: user.id,
+          resource: "agent",
         });
         enabled =
           (await OrganizationModel.getById(organizationId))
@@ -2110,7 +2168,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Only a body that sets the runtime carries one: assigning `undefined`
       // would leave a `runtime` key with nothing to save.
       if (body.runtime !== undefined) {
-        body.runtime = await applyAgentRuntimeLock({
+        body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
           runtime: body.runtime,
@@ -2121,9 +2179,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
-        userId: user.id,
-        organizationId,
-        previous: existingAgent.runtime,
       });
       await assertAgentRuntimeTiersExist({
         runtime: body.runtime,
@@ -2151,17 +2206,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: existingAgent.githubActionsAccess ?? null,
         next: body.githubActionsAccess,
       });
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await assertEntraAgentIdentityChange({
-        organizationId,
-        userId: user.id,
-        agentId: existingAgent.id,
-        previous: existingAgent.entraAgentIdentityId ?? null,
-        next: body.entraAgentIdentityId,
-      });
-      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -2281,6 +2325,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           environmentId: body.environmentId,
+          resource: environmentDeployKindFor(existingAgent.agentType),
         });
       }
       await assertCanWriteAgentNetworkPolicy({
@@ -2964,6 +3009,15 @@ function getPermittedAgentTypesForList(params: {
   }
 
   return permittedTypes;
+}
+
+/**
+ * The kind an agent counts as when it is deployed into an environment: MCP
+ * gateways are granted separately from agents, and every other type deploys
+ * as an agent.
+ */
+function environmentDeployKindFor(agentType: AgentType): EnvironmentDeployKind {
+  return agentType === "mcp_gateway" ? "mcpGateway" : "agent";
 }
 
 /**

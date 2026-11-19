@@ -28,7 +28,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete", "configure-runtime"],
+  agent: ["read", "create", "delete"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
@@ -316,6 +316,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
     externalAgent: "agent",
+    agentRuntime: "organizationSettings",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -338,8 +339,6 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
-  "agent:configure-runtime":
-    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
@@ -546,7 +545,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentRuntimeTiers]: {},
   [RouteId.ListAgentRuntimeTemplates]: {},
   [RouteId.ListBuiltInAgentRuntimeSettings]: {},
-  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped agentRuntime:use check in the handler.
+  [RouteId.ListAgentRuntimeAccess]: {},
+  [RouteId.ApplyAgentRuntimeToAgents]: { organizationSettings: ["update"] },
+  [RouteId.CountAgentsBehindRuntime]: { organizationSettings: ["update"] },
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   /** Names the default model for every member, so "Organization default" reads the same for all. */
@@ -684,6 +686,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
   [RouteId.GetAgentDefaultSuggestedPrompts]: {},
+  // Agent read access is checked in the handler (requireReadableAgent); a
+  // change also takes identityProvider:update, checked by the binding guard.
+  [RouteId.GetAgentIdentityBindings]: {},
+  [RouteId.ReplaceAgentIdentityBindings]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.
@@ -827,6 +833,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionChatErrors]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessionHandoffs]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
@@ -1230,6 +1237,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Public: the OIDC token in the body is the proof, checked in the handler
   // against the account's federated credentials. The authnz layer exempts it.
   [RouteId.ExchangeWorkloadIdentityToken]: {},
+  // Public: verifiers fetch the SPIFFE issuer's keys to trust agents' SVIDs.
+  [RouteId.GetSpiffeDiscoveryDocument]: {},
+  [RouteId.GetSpiffeJwks]: {},
+  [RouteId.GetSpiffeTrustBundle]: {},
   // SPDX-SnippetEnd
   [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },
@@ -1858,6 +1869,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Whoever may open the MCP registry learns whether its servers' editors
   // change their own rules: the registry shows the action only then.
   [RouteId.GetAppaSelfService]: { mcpRegistry: ["read"] },
+  // A server's own rules take no Guardrails permission: the handlers list and
+  // return only the files of servers the caller may open in the MCP registry.
+  [RouteId.GetOpenappaServerRulesFiles]: { mcpRegistry: ["read"] },
+  [RouteId.GetOpenappaServerRulesSource]: { mcpRegistry: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
@@ -1921,6 +1936,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenAppaYell]: { log: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Consults and yells in one timeline, each scoped as its own list is.
+  [RouteId.GetOpenappaGuardrailEvents]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
   [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
@@ -2247,9 +2264,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/openappa": { guardrailsPolicy: ["read"] },
+  // Also open to a member who may read some MCP server's rules file: the
+  // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
-  "/openappa/yells": { log: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -2257,6 +2275,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { log: ["read"] },
   "/consults/logs/[id]": { log: ["read"] },
+  "/consults/logs/yells/[id]": { log: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

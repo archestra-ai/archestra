@@ -2,9 +2,14 @@
 import { describe, expect, test } from "vitest";
 import {
   canDelegateScopedPermissions,
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  ENVIRONMENT_DEPLOY_KINDS,
+  environmentDeployGrantActions,
+  environmentDeployKinds,
   grantsAudience,
   hasScopedPermission,
   isManagedResource,
+  isResourcePermissionPreset,
   isResourcePermissionScope,
   ManagedResourceSchema,
   type ResourcePermissionGrant,
@@ -228,6 +233,91 @@ describe("widenToPreset", () => {
     ).toEqual(["read", "manage-permissions"]);
     expect(widenToPreset(["use"], "log")).toEqual([]);
     expect(widenToPreset([], "agent")).toEqual([]);
+  });
+
+  test("keeps an environment grant limited to some kinds instead of widening it to every kind", () => {
+    expect(
+      widenToPreset(["deploy-app", "read", "deploy-agent"], "environment"),
+    ).toEqual(["read", "deploy-agent", "deploy-app"]);
+    expect(
+      isResourcePermissionPreset(
+        ["deploy-app", "read", "deploy-agent"],
+        "environment",
+      ),
+    ).toBe(true);
+    // A limited grant always reads the environment it deploys into.
+    expect(widenToPreset(["deploy-skill"], "environment")).toEqual([
+      "read",
+      "deploy-skill",
+    ]);
+    expect(isResourcePermissionPreset(["deploy-skill"], "environment")).toBe(
+      false,
+    );
+  });
+
+  test("an environment grant that deploys every kind is plain use", () => {
+    const everyKind = Object.values(ENVIRONMENT_DEPLOY_ACTIONS);
+    expect(widenToPreset(["read", ...everyKind], "environment")).toEqual([
+      "read",
+      "use",
+    ]);
+    // `use` already deploys every kind, so naming kinds beside it adds
+    // nothing and the grant is stored as the preset alone.
+    expect(
+      widenToPreset(["read", "use", "deploy-agent"], "environment"),
+    ).toEqual(["read", "use"]);
+    expect(
+      isResourcePermissionPreset(
+        ["read", "use", "deploy-agent"],
+        "environment",
+      ),
+    ).toBe(false);
+    expect(
+      widenToPreset(
+        ["read", "use", "update", "delete", "manage-permissions", "deploy-app"],
+        "environment",
+      ),
+    ).toEqual(["read", "use", "update", "delete", "manage-permissions"]);
+  });
+
+  test("per-kind deploy actions mean nothing outside environments", () => {
+    expect(widenToPreset(["read", "deploy-agent"], "agent")).toEqual(["read"]);
+    expect(widenToPreset(["deploy-agent"], "agent")).toEqual([]);
+    expect(isResourcePermissionPreset(["read", "deploy-agent"], "agent")).toBe(
+      false,
+    );
+  });
+});
+
+describe("environment deploy kinds", () => {
+  test("use deploys every kind and a limited grant only the kinds it names", () => {
+    expect(environmentDeployKinds(["read", "use"])).toEqual(
+      ENVIRONMENT_DEPLOY_KINDS,
+    );
+    expect(
+      environmentDeployKinds(["read", "deploy-mcp-registry", "deploy-agent"]),
+    ).toEqual(["agent", "mcpRegistry"]);
+    expect(environmentDeployKinds(["read"])).toEqual([]);
+  });
+
+  test("a grant for some kinds round-trips, and every kind collapses to use", () => {
+    for (const kinds of [
+      ["agent"],
+      ["app", "agent"],
+      ["knowledgeSource", "skill", "mcpGateway"],
+    ] as const) {
+      const actions = environmentDeployGrantActions(kinds);
+      expect(actions).not.toContain("use");
+      expect([...environmentDeployKinds(actions)].sort()).toEqual(
+        [...kinds].sort(),
+      );
+      expect(isResourcePermissionPreset(actions, "environment")).toBe(true);
+    }
+    expect(environmentDeployGrantActions(ENVIRONMENT_DEPLOY_KINDS)).toEqual([
+      "read",
+      "use",
+    ]);
+    expect(environmentDeployGrantActions([])).toEqual(["read"]);
   });
 });
 

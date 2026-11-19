@@ -37,14 +37,9 @@ export async function buildModelMessagesForProvider(params: {
   conversationKey?: ConversationContentKey | null;
 }) {
   const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
-  // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
-  // only suppress for an Anthropic-compatible endpoint that rejects the marker.
-  const applyAnthropicCacheControl =
-    params.provider !== "anthropic" || anthropicNativeEndpoint;
-  // Re-inline attachment refs as base64 data URLs for the LLM call (with
-  // Anthropic cache_control marker). Refs are filtered to attachments owned
-  // by `conversationId` so a client can't reference another conversation's
-  // attachment id. Legacy inline data URLs pass through unchanged. Returns a
+  // Re-inline attachment refs as base64 data URLs for the LLM call. Refs are
+  // filtered to attachments owned by `conversationId` so a client can't
+  // reference another conversation's attachment id. Legacy inline data URLs pass through unchanged. Returns a
   // deep copy — the original messages keep their refs for any subsequent
   // persistence step.
   // What we may send is bounded by our own inline budget and, where the
@@ -61,7 +56,6 @@ export async function buildModelMessagesForProvider(params: {
     messages: params.messages,
     conversationId: params.conversationId,
     ingestibleMimeTypes: params.ingestibleMimeTypes,
-    applyAnthropicCacheControl,
     rerouteBinaryDocsToSandbox:
       (params.provider === "anthropic" && !anthropicNativeEndpoint) ||
       PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS.has(params.provider),

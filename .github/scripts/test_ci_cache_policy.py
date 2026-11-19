@@ -21,6 +21,7 @@ def evaluate(expression, context):
 const vm = require('node:vm');
 const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
 input.context.format = (template, value) => template.replace('{0}', value);
+input.context.startsWith = (value, prefix) => String(value).startsWith(prefix);
 process.stdout.write(JSON.stringify(vm.runInNewContext(input.expression, input.context)));
 """],
         input=json.dumps({"expression": expression, "context": context}),
@@ -49,6 +50,20 @@ class CachePolicyTests(unittest.TestCase):
                     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
                     self.assertEqual(bool(values["cache-from"]), provider != "dockerhub")
                     self.assertEqual(bool(values["cache-to"]), provider != "dockerhub" and export == "true")
+
+    def test_only_main_and_release_branches_write_the_registry_cache(self):
+        # The merge queue's release builds read this cache.
+        workflow = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
+        step = workflow.split("      - name: Resolve build cache refs\n", 1)[1].split("        run: |\n", 1)[0]
+        expression = re.search(r"CAN_EXPORT_CACHE: \$\{\{ (.*) \}\}", step).group(1)
+        for ref, expected in (("refs/heads/main", True), ("refs/heads/release/1.5", True),
+                              ("refs/heads/feature/cache", False), ("refs/pull/7/merge", False),
+                              ("refs/heads/gh-readonly-queue/main/pr-7-abc", False)):
+            with self.subTest(ref=ref):
+                context = {"github": {"ref": ref}, "inputs": {"push_image": True, "auth_provider": "ghcr"}}
+                self.assertIs(evaluate(expression, context), expected)
+        self.assertIs(evaluate(expression, {"github": {"ref": "refs/heads/main"},
+                                            "inputs": {"push_image": False, "auth_provider": "ghcr"}}), False)
 
     def test_reused_builder_skips_the_registry_cache_import(self):
         action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()

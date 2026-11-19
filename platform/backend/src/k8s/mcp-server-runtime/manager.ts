@@ -6,6 +6,7 @@ import type * as k8s from "@kubernetes/client-node";
 import { Watch } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
@@ -68,6 +69,7 @@ import {
   FOREIGN_RESUME_LIMIT,
   type HibernationRuntimeHost,
   idleHibernationWindowSeconds,
+  isIdleHibernationLicensedAndOffered,
   isIdleHibernationOffered,
   SWEEP_DEADLINE_MS,
   sweepIdleDeployments,
@@ -88,6 +90,7 @@ import K8sDeployment, {
   fetchPlatformPodTolerations,
   type RunningMcpImage,
 } from "./k8s-deployment";
+import { constructManagedNetworkPolicyName } from "./network-policy";
 import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type {
   AvailableTool,
@@ -255,6 +258,8 @@ export class McpServerRuntimeManager {
   // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
   // can leave hundreds of Failed pod corpses that nothing else cleans up).
   private failedPodReapTimer?: NodeJS.Timeout;
+  // Periodic removal of MCP server objects whose server row is gone.
+  private orphanedServerSweepTimer?: NodeJS.Timeout;
 
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -558,6 +563,7 @@ export class McpServerRuntimeManager {
       });
 
       this.startFailedPodReaper();
+      this.startOrphanedServerSweeper();
       this.startCredentialRefresh();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2051,11 +2057,11 @@ export class McpServerRuntimeManager {
 
     // During a rolling config change, another replica may still be sweeping.
     // Unknown is therefore conservative: the sync accessor starts hydration,
-    // and only a known-false org toggle plus local-off config restores the
-    // zero-cost cache fast path.
+    // and only a known-false org toggle plus local-off config (kill switch
+    // set, or no enterprise licence) restores the zero-cost cache fast path.
     const loaded = this.mcpServerIdToDeploymentMap.get(mcpServerId);
     let hibernationMayExist =
-      isIdleHibernationOffered() ||
+      isIdleHibernationLicensedAndOffered() ||
       Boolean(
         loaded?.hasCredentialBindings &&
           (await loaded.usesRenewableCredentials()),
@@ -2219,7 +2225,7 @@ export class McpServerRuntimeManager {
     if (!deployment) return { ran: true, value: await operation() };
 
     const hibernationMayExist =
-      isIdleHibernationOffered() ||
+      isIdleHibernationLicensedAndOffered() ||
       (deployment.hasCredentialBindings &&
         (await deployment.usesRenewableCredentials())) ||
       OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;
@@ -2541,13 +2547,17 @@ export class McpServerRuntimeManager {
           // Priority & Fairness throttling (429s).
           deployments,
           K8S_API_FANOUT_CONCURRENCY,
-          async ([, deployment]) => {
+          async ([mcpServerId, deployment]) => {
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
             const before = deployment.statusSummary;
             // SPDX-SnippetEnd
             await deployment.refreshState();
+            await this.reloadIfReplacedByAnotherProcess(
+              mcpServerId,
+              deployment,
+            );
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2649,6 +2659,10 @@ export class McpServerRuntimeManager {
     if (this.failedPodReapTimer) {
       clearInterval(this.failedPodReapTimer);
       this.failedPodReapTimer = undefined;
+    }
+    if (this.orphanedServerSweepTimer) {
+      clearInterval(this.orphanedServerSweepTimer);
+      this.orphanedServerSweepTimer = undefined;
     }
 
     // SPDX-SnippetBegin
@@ -3091,6 +3105,206 @@ export class McpServerRuntimeManager {
       }
     } catch (error) {
       logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
+    }
+  }
+
+  private startOrphanedServerSweeper(): void {
+    if (this.orphanedServerSweepTimer) {
+      clearInterval(this.orphanedServerSweepTimer);
+    }
+    const sweep = () => {
+      this.removeObjectsOfMissingServers().catch((err) => {
+        logger.warn(
+          { err },
+          "Failed to sweep MCP deployments whose server no longer exists",
+        );
+      });
+    };
+    sweep();
+    this.orphanedServerSweepTimer = setInterval(
+      sweep,
+      ORPHANED_SERVER_SWEEP_INTERVAL_MS,
+    );
+    this.orphanedServerSweepTimer.unref?.();
+  }
+
+  /**
+   * Remove MCP server objects (Deployment, Service, Secrets, NetworkPolicy)
+   * whose server has no live row: the server was deleted, or never finished
+   * being created, and the Kubernetes delete failed or was skipped. Nothing
+   * else manages them, so they would keep running with old credentials
+   * mounted.
+   *
+   * Only this install's objects are touched: each carries an ownerReference
+   * to the release's runtime owner Role in its namespace, so another install
+   * sharing the namespace keeps its servers. Without that Role nothing proves
+   * ownership and the sweep does nothing. A grace period leaves servers that
+   * are still being created alone.
+   */
+  private async removeObjectsOfMissingServers(): Promise<void> {
+    const { k8sAppsApi, k8sRbacApi } = this;
+    if (!k8sAppsApi || !k8sRbacApi) return;
+    if (!config.orchestrator.kubernetes.runtimeOwnerRoleName) return;
+
+    // Every server in a retired namespace runs again where it moved to.
+    const retired = new Set(retiredWorkloadNamespaces());
+    const namespaces = uniqueStrings([
+      this.namespace,
+      ...config.orchestrator.kubernetes.environmentNamespaces,
+      ...retired,
+    ]);
+    for (const namespace of namespaces) {
+      const isRetired = retired.has(namespace);
+      try {
+        const ownerUid = (
+          await resolveRuntimeOwnerReferences(k8sRbacApi, namespace).catch(
+            () => undefined,
+          )
+        )?.[0]?.uid;
+        if (!ownerUid) continue;
+        const ownedBy = (object: k8s.KubernetesObject) =>
+          object.metadata?.ownerReferences?.some(
+            (owner) => owner.uid === ownerUid,
+          ) ?? false;
+
+        const createdBefore = Date.now() - ORPHANED_SERVER_GRACE_MS;
+        const deployments = (
+          await k8sAppsApi.listNamespacedDeployment({
+            namespace,
+            labelSelector: "app=mcp-server",
+          })
+        ).items.filter((deployment) => {
+          const createdAt = deployment.metadata?.creationTimestamp;
+          return (
+            Boolean(deployment.metadata?.labels?.["mcp-server-id"]) &&
+            ownedBy(deployment) &&
+            (isRetired ||
+              (createdAt !== undefined &&
+                new Date(createdAt).getTime() < createdBefore))
+          );
+        });
+        const serverIds = deployments.map(
+          (deployment) =>
+            deployment.metadata?.labels?.["mcp-server-id"] as string,
+        );
+        const missing = isRetired
+          ? new Set(serverIds)
+          : await this.findMissingServerIds(serverIds);
+        for (const deployment of deployments) {
+          const serverId = deployment.metadata?.labels?.[
+            "mcp-server-id"
+          ] as string;
+          if (!missing.has(serverId)) continue;
+          await this.removeObjectsOfMissingServer({
+            namespace,
+            deployment,
+            serverId,
+            ownedBy,
+            reason: isRetired ? "retired-namespace" : "missing-server",
+          });
+        }
+      } catch (err) {
+        logger.warn(
+          { err, namespace },
+          "Failed to sweep MCP deployments whose server no longer exists",
+        );
+      }
+    }
+  }
+
+  /**
+   * The ids in `ids` with neither a live MCP server row nor a catalog item.
+   * A multitenant catalog's shared deployment is labeled with the catalog id.
+   */
+  private async findMissingServerIds(ids: string[]): Promise<Set<string>> {
+    const unique = uniqueStrings(ids);
+    if (unique.length === 0) return new Set();
+    const live = new Set(
+      (await McpServerModel.findByIdsBasic(unique)).map((server) => server.id),
+    );
+    const missing = new Set<string>();
+    for (const id of unique) {
+      if (live.has(id)) continue;
+      if (await InternalMcpCatalogModel.findById(id)) continue;
+      missing.add(id);
+    }
+    return missing;
+  }
+
+  private async removeObjectsOfMissingServer(params: {
+    namespace: string;
+    deployment: k8s.V1Deployment;
+    serverId: string;
+    ownedBy: (object: k8s.KubernetesObject) => boolean;
+    reason: "missing-server" | "retired-namespace";
+  }): Promise<void> {
+    const { k8sApi, k8sAppsApi, k8sNetworkingApi } = this;
+    if (!k8sApi || !k8sAppsApi) return;
+    const { namespace, deployment, serverId, ownedBy } = params;
+    const deploymentName = deployment.metadata?.name as string;
+    const ignoreNotFound = (error: unknown) => {
+      if (!isK8sNotFoundError(error)) throw error;
+    };
+    logger.info(
+      {
+        namespace,
+        deploymentName,
+        serverId,
+        createdAt: deployment.metadata?.creationTimestamp,
+      },
+      params.reason === "retired-namespace"
+        ? "Deleting MCP deployment left in a retired workload namespace"
+        : "Deleting MCP deployment whose server no longer exists",
+    );
+    // The uid precondition keeps a deployment recreated under the same name
+    // since the list from being deleted.
+    await k8sAppsApi
+      .deleteNamespacedDeployment({
+        name: deploymentName,
+        namespace,
+        body: { preconditions: { uid: deployment.metadata?.uid } },
+      })
+      .catch(ignoreNotFound);
+
+    const selector = `mcp-server-id=${sanitizeLabelValue(serverId)}`;
+    const services = await k8sApi.listNamespacedService({
+      namespace,
+      labelSelector: `app=mcp-server,${selector}`,
+    });
+    for (const service of services.items.filter(ownedBy)) {
+      await k8sApi
+        .deleteNamespacedService({
+          name: service.metadata?.name as string,
+          namespace,
+        })
+        .catch(ignoreNotFound);
+    }
+    // The server's own Secret and its registry pull Secrets.
+    const secrets = await k8sApi.listNamespacedSecret({
+      namespace,
+      labelSelector: selector,
+    });
+    for (const secret of secrets.items.filter(ownedBy)) {
+      await k8sApi
+        .deleteNamespacedSecret({
+          name: secret.metadata?.name as string,
+          namespace,
+        })
+        .catch(ignoreNotFound);
+    }
+    if (k8sNetworkingApi) {
+      const policyName = constructManagedNetworkPolicyName(deploymentName);
+      const policy = await k8sNetworkingApi
+        .readNamespacedNetworkPolicy({ name: policyName, namespace })
+        .catch((error) => {
+          ignoreNotFound(error);
+          return null;
+        });
+      if (policy && ownedBy(policy)) {
+        await k8sNetworkingApi
+          .deleteNamespacedNetworkPolicy({ name: policyName, namespace })
+          .catch(ignoreNotFound);
+      }
     }
   }
 
@@ -4390,6 +4604,30 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Another process restarted this install: the Deployment under its name is
+   * a new one. The cached object still holds the catalog row, install row and
+   * endpoint it was built from, so rebuild it from the current rows — the same
+   * load a process does the first time it meets an install.
+   */
+  private async reloadIfReplacedByAnotherProcess(
+    mcpServerId: string,
+    deployment: K8sDeployment,
+  ): Promise<void> {
+    if (
+      !deployment.wasReplacedByAnotherProcess ||
+      this.mcpServerIdToDeploymentMap.get(mcpServerId) !== deployment
+    ) {
+      return;
+    }
+    logger.info(
+      { mcpServerId },
+      "MCP server deployment was replaced by another process; reloading it",
+    );
+    this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+    await this.getOrLoadDeployment(mcpServerId);
+  }
+
+  /**
    * Coalesce bursts of watch events (a rollout emits many per pod) into one
    * refreshAllStates() sweep, then notify listeners so fresh states are
    * pushed to websocket subscribers immediately.
@@ -4604,6 +4842,10 @@ function watchStreamKey(namespace: string, kind: WatchStreamKind): string {
 }
 
 /** Coalesce watch-event bursts (rollouts emit many events) into one sweep. */
+// How often MCP objects of deleted servers are removed, and how old a
+// deployment must be before its missing row counts (creation in flight).
+const ORPHANED_SERVER_SWEEP_INTERVAL_MS = 10 * 60_000;
+const ORPHANED_SERVER_GRACE_MS = 30 * 60_000;
 const WATCH_REFRESH_DEBOUNCE_MS = 1_000;
 /** Reopen delay after a watch stream closes (routine or error). */
 const WATCH_STREAM_RECONNECT_DELAY_MS = 15_000;

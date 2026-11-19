@@ -1,9 +1,15 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { PaneHeader } from "@/components/log-detail/pane-header";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 // The pieces the details pane's left column is built from, whichever kind of
@@ -74,14 +80,32 @@ export function OverviewSection({
 /** A label/value row; render inside a `<dl>`. */
 export function OverviewFact({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** Explains the fact behind an info icon beside its label. */
+  hint?: string;
   children: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-[3px] text-xs">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dt className="inline-flex shrink-0 items-center gap-1 text-muted-foreground">
+        {label}
+        {hint ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <UnstyledButton
+                aria-label={`About ${label}`}
+                className="inline-flex cursor-default items-center rounded-sm hover:text-foreground"
+              >
+                <Info className="size-3" aria-hidden="true" />
+              </UnstyledButton>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </dt>
       <dd className="flex min-w-0 justify-end text-right tabular-nums">
         {children}
       </dd>

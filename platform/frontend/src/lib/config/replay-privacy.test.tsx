@@ -178,7 +178,7 @@ describe("replay privacy", () => {
         return null;
       },
     });
-    analytics.clear_opt_in_out_capturing();
+    analytics.reset();
     try {
       const link = document.createElement("a");
       link.href = "https://example.com/private-source?token=private-token";
@@ -293,7 +293,8 @@ function captureReplay(events: unknown): string {
       return null;
     },
   });
-  analytics.clear_opt_in_out_capturing();
+  // Memory persistence is shared by token across SDK instances.
+  analytics.reset();
   try {
     analytics.capture("$snapshot", { $snapshot_data: events });
     return JSON.stringify(captured);

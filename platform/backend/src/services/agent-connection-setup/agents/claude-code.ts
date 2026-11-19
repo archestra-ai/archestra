@@ -36,7 +36,7 @@ import type {
 // One shared source for the proxy env keys connect writes into
 // ~/.claude/settings.json — the Disconnect panel and the startup guard strip
 // exactly the same lists.
-const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY] =
+const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY, GATEWAY_HINT_KEY] =
   CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 
 const [
@@ -396,10 +396,12 @@ function claudeAnthropicProxyBash(proxy: SetupScriptProxySection): string {
     : [ANTHROPIC_AUTH_TOKEN_KEY, "ANTHROPIC_API_KEY"];
   const env: Record<string, string> = {
     [`ARCHESTRA_SET_ENV_${ANTHROPIC_BASE_URL_KEY}`]: proxy.url,
+    [`ARCHESTRA_SET_ENV_${GATEWAY_HINT_KEY}`]: "1",
     ARCHESTRA_REMOVE_VIRTUAL_KEY_ENV: removeVirtualKeyEnv.join(","),
   };
   const manualEnv: Record<string, string> = {
     [ANTHROPIC_BASE_URL_KEY]: proxy.url,
+    [GATEWAY_HINT_KEY]: "1",
   };
   if (proxy.virtualKey) {
     env[`ARCHESTRA_SET_ENV_${ANTHROPIC_AUTH_TOKEN_KEY}`] = proxy.virtualKey;
@@ -430,12 +432,14 @@ function claudeBedrockProxyBash(proxy: SetupScriptProxySection): string {
     [`ARCHESTRA_SET_ENV_${CLAUDE_USE_BEDROCK_KEY}`]: "1",
     [`ARCHESTRA_SET_ENV_${AWS_REGION_KEY}`]: "us-east-1",
     [`ARCHESTRA_SET_ENV_${BEDROCK_BASE_URL_KEY}`]: proxy.url,
+    [`ARCHESTRA_SET_ENV_${GATEWAY_HINT_KEY}`]: "1",
     ARCHESTRA_REMOVE_VIRTUAL_KEY_ENV: removeVirtualKeyEnv.join(","),
   };
   const manualEnv: Record<string, string> = {
     [CLAUDE_USE_BEDROCK_KEY]: "1",
     [AWS_REGION_KEY]: "us-east-1",
     [BEDROCK_BASE_URL_KEY]: proxy.url,
+    [GATEWAY_HINT_KEY]: "1",
   };
   if (proxy.virtualKey) {
     // The virtual key authenticates against the proxy as a Bedrock bearer
@@ -492,6 +496,7 @@ function claudeAnthropicProxyPowerShell(
 ): string {
   const values: Record<string, string> = {
     [ANTHROPIC_BASE_URL_KEY]: proxy.url,
+    [GATEWAY_HINT_KEY]: "1",
   };
   if (proxy.virtualKey) {
     values[ANTHROPIC_AUTH_TOKEN_KEY] = proxy.virtualKey;
@@ -555,6 +560,7 @@ function claudeBedrockProxyPowerShell(proxy: SetupScriptProxySection): string {
     [CLAUDE_USE_BEDROCK_KEY]: "1",
     [AWS_REGION_KEY]: "us-east-1",
     [BEDROCK_BASE_URL_KEY]: proxy.url,
+    [GATEWAY_HINT_KEY]: "1",
   };
   if (proxy.virtualKey) {
     // The virtual key authenticates against the proxy as a Bedrock bearer

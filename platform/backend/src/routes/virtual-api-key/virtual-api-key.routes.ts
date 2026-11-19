@@ -16,7 +16,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
-import config from "@/config";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
@@ -762,7 +761,6 @@ async function updateVirtualApiKey(params: {
       !(
         body.modelPoolIds?.length ||
         (body.modelPoolIds === undefined &&
-          config.llmProxy.modelPoolsEnabled &&
           (await ModelPoolModel.hasVirtualApiKeyGrant(id)))
       )
     ) {
@@ -866,8 +864,7 @@ async function setModelPools(params: {
   organizationId: string;
   virtualApiKeyId: string;
 }): Promise<void> {
-  if (params.modelPoolIds === undefined || !config.llmProxy.modelPoolsEnabled)
-    return;
+  if (params.modelPoolIds === undefined) return;
   await ModelPoolModel.setPoolsForVirtualApiKey({
     organizationId: params.organizationId,
     virtualApiKeyId: params.virtualApiKeyId,
@@ -880,7 +877,7 @@ async function setAutoRouters(
   virtualApiKeyId: string,
   autoRouterIds: string[] | undefined,
 ): Promise<void> {
-  if (autoRouterIds === undefined || !config.autoRouting.enabled) return;
+  if (autoRouterIds === undefined) return;
   await AutoRouterModel.setRoutersForVirtualApiKey(
     virtualApiKeyId,
     autoRouterIds,

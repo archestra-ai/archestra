@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   allowedIntegrationIds,
+  CUSTOM_IMAGE_RUNTIME_ID,
   copilotEnterprisePlanLabel,
   integrationLabel,
   isCopilotPlanHidden,
@@ -15,6 +16,7 @@ import {
   PopularAgentOverridesSchema,
   pruneIntegrationOverrides,
   StoredModelProviderOverridesSchema,
+  StoredPopularAgentOverridesSchema,
   withAllowedIntegrationIds,
   withOrderedPopularAgentIds,
 } from "./integration-overrides";
@@ -172,9 +174,10 @@ describe("popular agent request contract", () => {
   it("exposes the accepted optional template IDs to JSON Schema consumers", () => {
     const schema = z.toJSONSchema(PopularAgentOverridesSchema);
     expect(schema.additionalProperties).toBe(false);
-    expect(Object.keys(schema.properties ?? {})).toEqual(
-      PopularAgentIdSchema.options,
-    );
+    expect(Object.keys(schema.properties ?? {})).toEqual([
+      ...PopularAgentIdSchema.options,
+      CUSTOM_IMAGE_RUNTIME_ID,
+    ]);
     expect(schema.required ?? []).toEqual([]);
   });
 });
@@ -212,6 +215,18 @@ describe("coding agent ordering", () => {
     expect(orderedPopularAgentIds(overrides, catalog)).toEqual(order);
     expect(overrides.hermes).toEqual({ position: 0 });
     expect(overrides.opencode).toEqual({ hidden: true });
+  });
+  it("keeps the Custom image switch when the runtimes are reordered", () => {
+    const overrides = withOrderedPopularAgentIds(
+      { [CUSTOM_IMAGE_RUNTIME_ID]: { hidden: true } },
+      catalog,
+      ["codex"],
+    );
+    expect(isIntegrationHidden(overrides, CUSTOM_IMAGE_RUNTIME_ID)).toBe(true);
+    expect(PopularAgentOverridesSchema.safeParse(overrides).success).toBe(true);
+    expect(StoredPopularAgentOverridesSchema.parse(overrides)).toEqual(
+      overrides,
+    );
   });
 });
 

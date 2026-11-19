@@ -11,6 +11,7 @@ import {
 } from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   createK8sClients,
   getK8sNamespace,
@@ -29,6 +30,7 @@ import {
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
+  buildDaggerEngineIngressPolicy,
   type DaggerEgressPolicyObject,
   daggerEngineDeploymentName,
   daggerEnginePodLabels,
@@ -449,6 +451,14 @@ class DaggerEnvironmentRuntimeManager {
         const defaultIds = new Set(
           defaults.map((org) => deriveOrgEngineId(org.id)),
         );
+        // A default engine is kept only in its organization's engine
+        // namespace; a copy left where it ran before is torn down.
+        const defaultEngineNamespaces = new Map(
+          defaults.map((org) => [
+            deriveOrgEngineId(org.id),
+            this.engineNamespace(org.defaultEnvironmentNamespace),
+          ]),
+        );
         // Likewise read after enumeration: an agent engine is kept only in the
         // namespace its agent currently runs in. One whose agent was deleted,
         // cleared its policy, or moved is an orphan like any other.
@@ -459,7 +469,8 @@ class DaggerEnvironmentRuntimeManager {
           ]),
         );
         for (const [id, candidate] of candidates) {
-          if (candidate.foreign || defaultIds.has(id)) continue;
+          if (candidate.foreign) continue;
+          if (defaultEngineNamespaces.get(id) === namespace) continue;
           if (agentEngineNamespaces.get(id) === namespace) continue;
           // An explicitly shared external runtime-owner Role is not a database
           // identity. Require the resource's organization to exist here too.
@@ -669,6 +680,12 @@ class DaggerEnvironmentRuntimeManager {
       ...(owner ? { [OWNER_LABEL]: owner } : {}),
     };
 
+    // Before the engine exists, so it is never reachable over the pod network.
+    await this.applyNetworkPolicy(
+      clients.networkingApi,
+      namespace,
+      buildDaggerEngineIngressPolicy(owner ? { [OWNER_LABEL]: owner } : {}),
+    );
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
     await this.applyEngineConfig(
@@ -728,12 +745,20 @@ class DaggerEnvironmentRuntimeManager {
     return config.skillsSandbox.enabled && isK8sConfigured();
   }
 
-  // Every namespace an engine may be provisioned in: the release namespace and
-  // the declared environment namespaces (see `engineNamespace`).
+  // Every namespace an engine may be provisioned in: the dedicated engine
+  // namespace, the release namespace and the declared environment namespaces
+  // (see `engineNamespace`). Engines found anywhere but their resolved
+  // namespace are torn down, which is how turning on the dedicated namespace
+  // moves them out of the MCP namespaces.
   private managedNamespaces(): Set<string> {
     return new Set([
+      ...(config.daggerRuntime.namespace
+        ? [config.daggerRuntime.namespace]
+        : []),
       getK8sNamespace(),
       ...config.orchestrator.kubernetes.environmentNamespaces,
+      // Never an engine's namespace, so every engine there is torn down.
+      ...retiredWorkloadNamespaces(),
     ]);
   }
 
@@ -749,7 +774,13 @@ class DaggerEnvironmentRuntimeManager {
   // release namespace — the behaviour those installs already had — rather than
   // wedging them. Provisioning and routing both resolve through here, so they
   // cannot disagree about where the engine lives.
+  //
+  // ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE takes every engine, whatever its
+  // Environment's namespace: engines are privileged, and keeping them out of
+  // the MCP namespaces is what lets those enforce a stricter Pod Security
+  // level. Each Environment keeps its own engine and egress policy there.
   private engineNamespace(namespace: string | null | undefined): string {
+    if (config.daggerRuntime.namespace) return config.daggerRuntime.namespace;
     const trimmed = namespace?.trim();
     if (!trimmed) return getK8sNamespace();
     if (!KubernetesNamespaceSchema.safeParse(trimmed).success) {

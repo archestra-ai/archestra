@@ -1,6 +1,5 @@
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import AutoRouterModel from "@/models/auto-router";
 import { ApiError } from "@/types";
 
@@ -18,10 +17,6 @@ export async function assertCanGrantAutoRouters(params: {
 }): Promise<void> {
   const { autoRouterIds } = params;
   if (autoRouterIds === undefined) return;
-  if (!config.autoRouting.enabled) {
-    if (autoRouterIds.length === 0) return;
-    throw new ApiError(400, "Auto routing is not enabled");
-  }
   const allowed = await userHasPermission(
     params.userId,
     params.organizationId,

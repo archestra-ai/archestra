@@ -1,14 +1,9 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import { PluginModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import skillShareRoutes from "./skill-share.routes";
-
-beforeEach(() => {
-  config.beta = false;
-});
 
 describe("executable marketplace link permissions", () => {
   const ctx = useRouteTestApp(skillShareRoutes);

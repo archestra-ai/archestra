@@ -11,12 +11,7 @@ import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import {
-  OrganizationModel,
-  ServiceAccountModel,
-  SessionModel,
-  UserModel,
-} from "@/models";
+import { OrganizationModel, SessionModel, UserModel } from "@/models";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
@@ -45,6 +40,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
+  SPIFFE_ISSUER_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
   WORKLOAD_IDENTITY_TOKEN_PATH,
@@ -53,6 +49,7 @@ import {
   appIdFromConnectorPath,
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { ApiError } from "@/types";
 
 /**
@@ -257,6 +254,9 @@ export class Authnz {
       // Workload identity token exchange: the OIDC token in the body is the
       // proof, verified in-route against the account's federated credentials.
       (method === "POST" && url === WORKLOAD_IDENTITY_TOKEN_PATH) ||
+      // The SPIFFE issuer's discovery document, key set and trust bundle are
+      // public by design: verifiers fetch them to trust agents' JWT-SVIDs.
+      (isGetOrHead && url.startsWith(`${SPIFFE_ISSUER_PATH}/`)) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&
@@ -301,6 +301,21 @@ export class Authnz {
 
   private isAuthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
+    const authHeader = headers.get("authorization");
+
+    // Service-account tokens go before the session lookup. With
+    // enableSessionForAPIKeys, Better Auth's api-key hook reads the
+    // Authorization header on every getSession call and throws "Invalid API
+    // key" for anything that is not an API key, so a service-account request
+    // could never resolve a session anyway. Asking first spares each one a
+    // failed hook, which tracing records as an error span.
+    if (
+      authHeader &&
+      (await this.verifyServiceAccountToken(request, authHeader))
+    ) {
+      logger.trace("[Authnz] Service account token verification succeeded");
+      return true;
+    }
 
     try {
       logger.trace("[Authnz] Attempting session-based authentication");
@@ -323,19 +338,11 @@ export class Authnz {
       );
     }
 
-    const authHeader = headers.get("authorization");
     if (authHeader) {
-      // Service-account tokens go first. Both token kinds carry the platform
-      // prefix, but a service-account token is one indexed lookup by hash,
-      // while Better Auth's API-key check reads the apikey table by key and
-      // logs an error on every miss. Checking API keys first charged every
-      // service-account request that miss twice: here and again in
-      // populateUserInfo.
-      if (await this.verifyServiceAccountToken(request, authHeader)) {
-        logger.trace("[Authnz] Service account token verification succeeded");
-        return true;
-      }
-
+      // Service-account tokens were checked above. Both token kinds carry the
+      // platform prefix, but a service-account token is one indexed lookup by
+      // hash, while Better Auth's API-key check reads the apikey table by key
+      // and logs an error on every miss.
       const apiKey = await this.verifyApiKey(request, authHeader);
       if (apiKey?.valid) {
         logger.trace("[Authnz] API key verification succeeded");
@@ -548,9 +555,17 @@ export class Authnz {
     try {
       // RFC 6750 clients send `Bearer <token>`; the API has always taken the
       // bare token. Both name the same service-account token.
-      const result = await ServiceAccountModel.verifyToken(
-        authHeader.replace(/^Bearer\s+/i, ""),
-      );
+      const result = await verifyServiceAccountBearer({
+        token: authHeader.replace(/^Bearer\s+/i, ""),
+        request: {
+          method: request.method,
+          path: request.url.split("?")[0],
+          route: request.routeOptions.url ?? null,
+          requestId: request.id,
+          sourceIp: request.ip,
+          userAgent: request.headers["user-agent"] ?? null,
+        },
+      });
       if (result) {
         request.serviceAccountAuthResult = result;
       }

@@ -1,3 +1,8 @@
+import {
+  ENVIRONMENT_DEPLOY_KINDS,
+  type EnvironmentDeployKind,
+  environmentDeployGrantActions,
+} from "@archestra/shared";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createEnvironment } from "@/services/environments/environment";
 
@@ -27,11 +32,27 @@ export async function createRestrictedEnvironment(
   return environment;
 }
 
-/** Let one user deploy into one environment, keeping its other grants. */
+/** Let one user deploy every kind of object into one environment. */
 export async function grantEnvironmentUse(params: {
   organizationId: string;
   environmentId: string;
   userId: string;
+}) {
+  await grantEnvironmentDeployKinds({
+    ...params,
+    kinds: [...ENVIRONMENT_DEPLOY_KINDS],
+  });
+}
+
+/**
+ * Let one user deploy only some kinds of object into one environment, keeping
+ * the environment's other grants.
+ */
+export async function grantEnvironmentDeployKinds(params: {
+  organizationId: string;
+  environmentId: string;
+  userId: string;
+  kinds: EnvironmentDeployKind[];
 }) {
   const key = {
     organizationId: params.organizationId,
@@ -49,7 +70,7 @@ export async function grantEnvironmentUse(params: {
       ),
       {
         subject: { type: "user", id: params.userId },
-        actions: ["read", "use"],
+        actions: environmentDeployGrantActions(params.kinds),
       },
     ],
   });

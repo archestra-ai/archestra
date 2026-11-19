@@ -23,13 +23,15 @@ vi.mock("@/lib/openappa-batteries.query", () => ({
   usePolicyDeclarations: () => ({ data: { batteries: [] } }),
 }));
 
-test("the footer names the composed revision and the runtime revision open conversations follow", () => {
+test("the footer names the policy revision this was built from, and the runtime revision in force", () => {
   render(<EffectivePolicyView />);
 
   expect(
-    screen.getByText("Composed from revision 3 · 0123456789ab"),
+    screen.getByText("Built from policy revision 3 · 0123456789ab"),
   ).toBeInTheDocument();
-  expect(screen.getByText(/Runtime revision 5/)).toHaveTextContent(
-    "open conversations follow it",
-  );
+  expect(
+    screen.getByText(
+      /^Runtime revision 5 · in force since \d\d\/\d\d \d\d:\d\d$/,
+    ),
+  ).toBeInTheDocument();
 });

@@ -12,6 +12,8 @@ import {
 const MAX_CACHED_ISSUERS = 100;
 const KEYS_TTL_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 60 * 1000;
+/** How long a failed fetch is remembered before the issuer is asked again. */
+const FAILURE_TTL_MS = 30 * 1000;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 128 * 1024;
 const MAX_REDIRECTS = 3;
@@ -43,6 +45,12 @@ class OidcIssuerKeys {
     maxSize: MAX_CACHED_ISSUERS,
     defaultTtl: KEYS_TTL_MS,
   });
+  private failures = new LRUCacheManager<string>({
+    maxSize: MAX_CACHED_ISSUERS,
+    defaultTtl: FAILURE_TTL_MS,
+  });
+  /** Fetches under way, not a cache: each entry lives until it settles. */
+  private inFlight = new Map<string, Promise<JSONWebKeySet>>();
 
   /**
    * The issuer's key set. With `refresh`, a cached copy older than a minute
@@ -59,14 +67,35 @@ class OidcIssuerKeys {
       !(options.refresh && Date.now() - cached.fetchedAt > MIN_REFRESH_MS)
     )
       return cached.keys;
+    // An issuer that just failed is not asked again for a while, so tokens
+    // naming an issuer that is down cannot each start a fetch.
+    const failure = this.failures.get(issuer);
+    if (failure) {
+      if (cached) return cached.keys;
+      throw new OidcIssuerKeysError(failure);
+    }
 
-    const keys = await fetchIssuerKeys(issuer);
-    this.cache.set(issuer, { keys, fetchedAt: Date.now() });
-    return keys;
+    // Requests arriving together share one fetch.
+    const pending = this.inFlight.get(issuer);
+    if (pending) return pending;
+    const fetching = fetchIssuerKeys(issuer)
+      .then((keys) => {
+        this.cache.set(issuer, { keys, fetchedAt: Date.now() });
+        return keys;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof OidcIssuerKeysError)
+          this.failures.set(issuer, error.reason);
+        throw error;
+      })
+      .finally(() => this.inFlight.delete(issuer));
+    this.inFlight.set(issuer, fetching);
+    return fetching;
   }
 
   clear(): void {
     this.cache.clear();
+    this.failures.clear();
   }
 }
 

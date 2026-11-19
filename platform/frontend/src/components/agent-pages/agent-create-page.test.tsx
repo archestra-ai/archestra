@@ -1,4 +1,8 @@
-import { E2eTestId, getAgentCatalogImages } from "@archestra/shared";
+import {
+  AGENT_CATALOG_IDS,
+  E2eTestId,
+  getAgentCatalogImages,
+} from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -22,7 +26,20 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
   useBuiltInRuntimeDefaults: () => () => undefined,
-  useLockedRuntimeName: () => null,
+  useAgentRuntimeAccess: () => runtimeAccess.current,
+  useAgentRuntimePermissions: () => ({ canChange: true, readOnlyBy: null }),
+}));
+const runtimeAccess = vi.hoisted(() => ({
+  current: {} as {
+    data?: {
+      runtimes: { id: string; canUse: boolean; canConfigure: boolean }[];
+      canConfigureAny: boolean;
+    };
+    isPending: boolean;
+    isFetching: boolean;
+    isError: boolean;
+    refetch: () => void;
+  },
 }));
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
@@ -97,6 +114,20 @@ function renderAgentCreatePage({
 
 describe("AgentCreatePage", () => {
   beforeEach(() => {
+    runtimeAccess.current = {
+      data: {
+        runtimes: AGENT_CATALOG_IDS.map((id) => ({
+          id,
+          canUse: true,
+          canConfigure: true,
+        })),
+        canConfigureAny: true,
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
     vi.clearAllMocks();
     vi.mocked(useOrganization).mockReturnValue({
       data: makeOrganization(),
@@ -227,18 +258,15 @@ describe("AgentCreatePage", () => {
   it.each([
     false,
     undefined,
-  ])("hides runtime choices until Configure runtime is granted (%s)", (allowed) => {
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: permissions.agent?.includes("configure-runtime")
-            ? allowed
-            : true,
-          isPending:
-            permissions.agent?.includes("configure-runtime") &&
-            allowed === undefined,
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+  ])("hides runtime choices until a runtime may be used (%s)", (allowed) => {
+    runtimeAccess.current = {
+      ...runtimeAccess.current,
+      data:
+        allowed === undefined
+          ? undefined
+          : { runtimes: [], canConfigureAny: false },
+      isPending: allowed === undefined,
+    };
     renderAgentCreatePage();
     expect(
       screen.getByRole("button", { name: /^archestra built into/i }),
@@ -249,9 +277,6 @@ describe("AgentCreatePage", () => {
     for (const name of [/claude code/i, /codex/i, /custom image/i]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
-    expect(
-      screen.queryByText("Configure runtime permission required"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Some agent options are unavailable."),
     ).not.toBeInTheDocument();
@@ -356,6 +381,35 @@ describe("AgentCreatePage", () => {
         },
       }),
     );
+
+    // The form seeds itself again whenever its initial values change
+    // identity, so a new object per render would discard every keystroke.
+    const seeded = formProps.mock.lastCall?.[0].initialValues;
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    expect(formProps.mock.calls.length).toBeGreaterThan(1);
+    expect(formProps.mock.lastCall?.[0].initialValues).toBe(seeded);
+  });
+
+  it("leaves Custom image out of the catalog once an administrator removes it", () => {
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime"
+        ? true
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
+          : undefined,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: makeOrganization({
+        popularAgentOverrides: { "custom-image": { hidden: true } },
+      }),
+    } as ReturnType<typeof useOrganization>);
+
+    renderAgentCreatePage();
+
+    expect(screen.getByRole("button", { name: /codex/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /custom image/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("prefills OpenCode with its maintained Responses runtime", async () => {

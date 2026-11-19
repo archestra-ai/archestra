@@ -1086,6 +1086,7 @@ async function handleUpdateKnowledgeBase(params: {
         organizationId: context.organizationId,
         userId: context.userId,
         environmentId: args.uploadedFilesEnvironmentId,
+        resource: "knowledgeSource",
       });
       updates.uploadedFilesEnvironmentId = args.uploadedFilesEnvironmentId;
     }

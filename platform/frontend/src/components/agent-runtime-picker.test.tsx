@@ -1,4 +1,8 @@
-import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
+import {
+  AGENT_CATALOG_IDS,
+  archestraApiClient,
+  getAgentCatalogImages,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -63,7 +67,22 @@ const server = setupServer(
   http.get("http://localhost:9000/api/agent-runtime-templates/built-ins", () =>
     HttpResponse.json([]),
   ),
+  http.get("http://localhost:9000/api/agent-runtime-templates/access", () =>
+    HttpResponse.json(runtimeAccess(true)),
+  ),
 );
+const CUSTOM_RUNTIME_ID = "00000000-0000-4000-8000-000000000001";
+/** Every built-in runtime and the custom one these tests use. */
+function runtimeAccess(canUse: boolean) {
+  return {
+    runtimes: [...AGENT_CATALOG_IDS, CUSTOM_RUNTIME_ID].map((id) => ({
+      id,
+      canUse,
+      canConfigure: canUse,
+    })),
+    canConfigureAny: canUse,
+  };
+}
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
@@ -101,7 +120,7 @@ describe("AgentRuntimePicker", () => {
         () => {
           served = true;
           return HttpResponse.json([
-            { id: "codex", locked: false, settings: { ttlHours: 6 } },
+            { id: "codex", settings: { ttlHours: 6 } },
           ]);
         },
       ),
@@ -116,7 +135,7 @@ describe("AgentRuntimePicker", () => {
     });
   });
 
-  it("shows a locked runtime's limits read-only and keeps its ports editable", async () => {
+  it("shows a runtime's limits read-only to someone who can't configure it, and keeps its ports editable", async () => {
     const user = userEvent.setup();
     render(
       <AgentRuntimePicker
@@ -126,7 +145,7 @@ describe("AgentRuntimePicker", () => {
         onChange={vi.fn()}
         modelBlock={<div>Model settings content</div>}
         modelSummary="summary"
-        lockedBy="Codex"
+        readOnlyBy="Codex"
       />,
       { wrapper: QueryWrapper },
     );
@@ -527,12 +546,8 @@ describe("custom runtime catalog permission integration", () => {
   it.each([
     false,
     true,
-  ])("gates custom template selection on Configure runtime (%s)", async (allowed) => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: allowed,
-      isPending: false,
-    } as ReturnType<typeof useHasPermissions>);
-    const id = "00000000-0000-4000-8000-000000000001";
+  ])("offers a custom template only to people who may use it (%s)", async (allowed) => {
+    const id = CUSTOM_RUNTIME_ID;
     const runtime = {
       ...defaultAgentRuntime(),
       image: "registry.example.com/team-agent:v2",
@@ -550,6 +565,9 @@ describe("custom runtime catalog permission integration", () => {
     let resolutions = 0;
     let catalogReads = 0;
     server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates/access", () =>
+        HttpResponse.json(runtimeAccess(allowed)),
+      ),
       http.get("http://localhost:9000/api/agent-runtime-templates", () => {
         catalogReads++;
         return HttpResponse.json([summary]);

@@ -110,7 +110,7 @@ class ReleaseStepTests(unittest.TestCase):
         return result, calls, outputs
 
     def release_state(self, **env):
-        return self.run_step("publish", "Read the version and whether it is published", ROOT, **env)
+        return self.run_step("release-state", "Read the version and whether it is published", ROOT, **env)
 
     def publish(self, **env):
         return self.run_step("publish", "Create and publish release", self.work, **env)
@@ -232,7 +232,7 @@ class ReleaseStepTests(unittest.TestCase):
                 # As actions/checkout leaves it: the head commit alone, no tags.
                 git("clone", "-q", "--depth=1", "--no-tags", origin.as_uri(), str(checkout), cwd=root)
                 result, _, _ = self.run_step(
-                    "publish", "Skip a published version", checkout,
+                    "release-state", "Skip a published version", checkout,
                     ARCHESTRA_TEST_RELEASE="found", GH_TOKEN="fixture", GITHUB_ACTIONS="true", **{
                         key: env[key] for key in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")
                     },
@@ -429,23 +429,38 @@ class LockPullRequestTests(unittest.TestCase):
 
 class WorkflowPolicyTests(unittest.TestCase):
     def test_jobs(self):
-        self.assertEqual(list(JOBS), ["version", "build", "publish", "lock"])
+        self.assertEqual(list(JOBS), ["version", "build", "release-state", "sign-windows", "publish", "lock"])
 
-    def test_every_action_is_pinned_by_commit_or_is_this_repository_s_own(self):
+    def test_every_action_is_locked_or_is_this_repository_s_own(self):
         uses = re.findall(r"^\s+(?:- )?uses: (\S+)", WORKFLOW, re.M)
         self.assertTrue(uses)
+        locked = locked_dependencies(".github/workflows/build-archestra-cli.yml")
         for action in uses:
             with self.subTest(action=action):
-                self.assertRegex(action, r"^(\$/\.github/actions/[a-z-]+|[\w.-]+/[\w./-]+@[0-9a-f]{40})$")
+                if action.startswith("$/"):
+                    self.assertRegex(action, r"^\$/\.github/actions/[a-z-]+$")
+                else:
+                    # The lockfile keys an action by repository and ref, without its path.
+                    name, ref = action.lower().split("@", 1)
+                    key = "/".join(name.split("/")[:2]) + "@" + ref
+                    self.assertIn(key, locked)
+                    self.assertRegex(locked[key], r"^sha1-[0-9a-f]{40}$")
 
-    def test_pinned_actions_are_ones_other_workflows_already_use(self):
+    def test_remote_actions_are_ones_other_workflows_already_use(self):
         others = "".join(
             path.read_text() for path in (ROOT / ".github/workflows").glob("*.yml")
             if path.name != "build-archestra-cli.yml"
         )
-        for line in re.findall(r"^\s+(?:- )?uses: (\S+@[0-9a-f]{40} # \S+)$", WORKFLOW, re.M):
-            with self.subTest(action=line):
-                self.assertTrue(line in others)
+        # Microsoft's actions for Windows signing, reviewed for this workflow
+        # and used by no other one, only in sign-windows.
+        signing = {"azure/login", "azure/artifact-signing-action"}
+        only_here = set()
+        for action in re.findall(r"^\s+(?:- )?uses: ([^$\s]\S*@\S+)$", WORKFLOW, re.M):
+            with self.subTest(action=action):
+                if f"uses: {action}\n" not in others:
+                    only_here.add(action.split("@", 1)[0])
+                    self.assertTrue(f"uses: {action}\n" in JOBS["sign-windows"])
+        self.assertEqual(only_here, signing)
 
     def test_permissions_are_minimal_and_credentials_never_persist(self):
         self.assertTrue("\npermissions: {}\n" in WORKFLOW)
@@ -455,8 +470,13 @@ class WorkflowPolicyTests(unittest.TestCase):
         }
         self.assertEqual(permissions, {
             "version": [("contents", "read")], "build": [("contents", "read")],
+            "release-state": [("contents", "read")], "sign-windows": [("contents", "read")],
             "publish": [("contents", "write")], "lock": [("contents", "read")],
         })
+        # OIDC tokens: Azure login in sign-windows, the attestation in publish.
+        for job, text in JOBS.items():
+            with self.subTest(job=job):
+                self.assertEqual("      id-token: write" in text, job in ("sign-windows", "publish"))
         self.assertEqual(WORKFLOW.count("uses: actions/checkout@"), WORKFLOW.count("persist-credentials: false"))
         for job, text in JOBS.items():
             with self.subTest(job=job):
@@ -472,11 +492,19 @@ class WorkflowPolicyTests(unittest.TestCase):
             "      && github.ref == 'refs/heads/main'\n"
             "      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')\n"
         )
-        for job in ("publish", "lock"):
+        for job in ("release-state", "publish", "lock"):
             with self.subTest(job=job):
                 self.assertTrue(condition in JOBS[job])
-        self.assertTrue("    needs: [build]\n" in JOBS["publish"])
-        self.assertTrue("    needs: [publish]\n" in JOBS["lock"])
+        self.assertTrue("    needs: [build, release-state]\n" in JOBS["sign-windows"])
+        self.assertTrue("    if: needs.release-state.outputs.published == 'false'\n" in JOBS["sign-windows"])
+        self.assertTrue("    needs: [build, release-state, sign-windows]\n" in JOBS["publish"])
+        self.assertTrue(
+            "      && (needs.sign-windows.result == 'success' || needs.release-state.outputs.published == 'true')\n"
+            in JOBS["publish"]
+        )
+        self.assertTrue("    needs: [release-state, publish]\n" in JOBS["lock"])
+        # A published version skips sign-windows; lock still re-attempts its pull request.
+        self.assertTrue("      && !cancelled()\n      && needs.publish.result == 'success'\n" in JOBS["lock"])
         self.assertTrue("    if: github.event_name == 'pull_request'\n" in JOBS["version"])
         # Both triggers are for main: nothing is built or published from another branch's pushes.
         triggers = WORKFLOW.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
@@ -484,6 +512,26 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(triggers.count("    branches: [main]\n"), 2)
         self.assertTrue("github.event_name != 'pull_request'\n" in JOBS["build"])
         self.assertTrue("  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n" in WORKFLOW)
+
+    def test_only_sign_windows_can_sign_and_it_signs_both_windows_files(self):
+        sign = JOBS["sign-windows"]
+        windows = [name for name in writer.FILES if "windows" in name]
+        self.assertEqual(len(windows), 2)
+        for job, text in JOBS.items():
+            with self.subTest(job=job):
+                self.assertEqual("environment:" in text, job == "sign-windows")
+                self.assertEqual("secrets.AZURE_" in text, job == "sign-windows")
+        self.assertTrue("    environment: archestra-cli-release\n" in sign)
+        self.assertTrue("    runs-on: windows-latest\n" in sign)
+        self.assertFalse("cargo" in sign)
+        self.assertTrue("          certificate-profile-name: archestra-cli\n" in sign)
+        self.assertTrue("          endpoint: https://neu.codesigning.azure.net/\n" in sign)
+        self.assertTrue("          timestamp-rfc3161: http://timestamp.acs.microsoft.com\n" in sign)
+        for name in windows:
+            with self.subTest(name=name):
+                self.assertTrue(f"          name: {name}\n          path: dist/{name}\n" in sign)
+        # The verify step accepts exactly the two Windows files.
+        self.assertTrue(",".join(sorted(windows)) in sign)
 
     def test_matrix_builds_the_six_served_files_from_locked_sources_without_a_cache(self):
         build = JOBS["build"]
@@ -516,6 +564,15 @@ class WorkflowPolicyTests(unittest.TestCase):
                     check=True, capture_output=True, env=os.environ | {"TARGET": target, "FILE": name},
                 )
                 self.assertEqual((Path(directory) / "target/served" / name).read_bytes(), content(name))
+
+def locked_dependencies(workflow):
+    """Map each action the lockfile lists for a workflow to its locked commit."""
+    text = (ROOT / ".github/workflows/actions.lock").read_text()
+    section = text.split(f"    '{workflow}':\n", 1)[1]
+    listed = re.findall(r"^        - '([^']+)'$", section.split("\n    '", 1)[0], re.M)
+    dependencies = text.split("\ndependencies:\n", 1)[1]
+    commits = dict(re.findall(r"^    '([^']+)':\n(?:        .*\n)*?        commit: '([^']+)'$", dependencies, re.M))
+    return {action: commits[action] for action in listed}
 
 
 if __name__ == "__main__":

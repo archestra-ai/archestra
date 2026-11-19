@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  catalogToolPrefix,
   isBuiltInCatalogId,
-  slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -12,7 +12,10 @@ import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
-import { catalogToolPrefixes } from "@/openappa/batteries";
+import {
+  catalogToolPrefixes,
+  openappaBatteriesService,
+} from "@/openappa/batteries";
 import {
   asRecord,
   governsServerTool,
@@ -28,6 +31,7 @@ import {
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
+  serverRulesPrefix,
   withRequester,
   withServerRulesFolderIncluded,
 } from "@/openappa/policy-text";
@@ -46,6 +50,7 @@ import {
 import {
   checkAppaPullRequestsSoon,
   checkIntegrationId,
+  getAppaSelfService,
   heldMergeReason,
   listedNames,
   mergeReadiness,
@@ -78,6 +83,14 @@ import { ApiError } from "@/types";
  */
 
 type Caller = { organizationId: string; userId: string };
+
+/** A server's rules file as one member may open it. */
+type ServerRulesFile = {
+  path: string;
+  /** The servers it governs that the member may open, by name. */
+  servers: { id: string; name: string }[];
+  canEdit: boolean;
+};
 
 /** What a caller reads about one server's rules. */
 export async function getServerRules(params: Caller & { catalogId: string }) {
@@ -313,6 +326,95 @@ const SETTLED: ReadonlySet<ChangePhase> = new Set([
   "applied",
   "closed",
 ]);
+
+/**
+ * The servers' rules files the policy includes that a member may open on the
+ * Policy page, with no Guardrails permission: each file that governs a server
+ * the member may open in the MCP registry, and whether they may change it
+ * there. Empty while self-service is off: the files are then the
+ * organization's policy alone.
+ */
+export async function listServerRulesFiles(
+  params: Caller,
+): Promise<ServerRulesFile[]> {
+  const { organizationId, userId } = params;
+  if (!(await getAppaSelfService(organizationId)).enabled) return [];
+  const folder = serverRulesFolderOf(
+    await OpenAppaGithubSyncModel.find(organizationId),
+  );
+  const { repositoryFiles } =
+    await openappaBatteriesService.policyDeclarations(organizationId);
+  const named = repositoryFiles.flatMap(({ path }) => {
+    const prefix = serverRulesPrefix(folder, path);
+    return prefix === null ? [] : [{ path, prefix }];
+  });
+  if (named.length === 0) return [];
+  const prefixes = await catalogToolPrefixes(organizationId, {
+    targets: named.map((file) => file.prefix),
+    catalogIds: [],
+  });
+  const files = await Promise.all(
+    named.map(async ({ path, prefix }) => {
+      const servers = await rulesFileServers(prefix, prefixes);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The registry's own rules: whoever may open a server the file governs
+      // reads it, and whoever may edit every server that owns it changes it.
+      const readable = await Promise.all(
+        servers.map((server) =>
+          ResourcePermissions.allows({
+            organizationId,
+            userId,
+            resource: "mcpRegistry",
+            scope: server.id,
+            action: "read",
+          }),
+        ),
+      );
+      const seen = servers.filter((_, index) => readable[index]);
+      if (seen.length === 0) return null;
+      const notEditable = await ownersNotEditable({
+        organizationId,
+        userId,
+        servers,
+      });
+      // SPDX-SnippetEnd
+      return {
+        path,
+        servers: seen.map(({ id, name }) => ({ id, name })),
+        canEdit: notEditable.length === 0,
+      };
+    }),
+  );
+  return files.filter((file) => file !== null);
+}
+
+/** One of those files, as the repository holds it at the accepted commit. */
+export async function readServerRulesFile(
+  params: Caller & { path: string },
+): Promise<{
+  entry: string;
+  name: string;
+  kind: "repository";
+  content: string;
+}> {
+  const { path } = params;
+  // The same answer for a file that is not included and for one the member
+  // may not open, so the path of another server's file tells nothing.
+  const allowed = (await listServerRulesFiles(params)).some(
+    (file) => file.path === path,
+  );
+  const content = allowed
+    ? await acceptedFile({ organizationId: params.organizationId, path })
+    : null;
+  if (content === null)
+    throw new ApiError(
+      404,
+      "This policy file is not included or you don't have access",
+    );
+  return { entry: path, name: path, kind: "repository", content };
+}
 
 /**
  * Where a server's rules pull request stands: its policy check, whether the
@@ -691,9 +793,9 @@ async function serverFor(
       409,
       `${catalog.name} has no tools yet. Connect it first, so its rules have tools to name.`,
     );
-  // The file is named by the server's own slug, and governs every server
-  // whose tools carry that prefix: those servers share it.
-  const prefix = slugifyMcpServerName(catalog.name);
+  // The file is named by the server's own tool prefix, and governs every
+  // server whose tools carry that prefix: those servers share it.
+  const prefix = catalogToolPrefix(catalog);
   const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [prefix],
     catalogIds: [catalog.id],

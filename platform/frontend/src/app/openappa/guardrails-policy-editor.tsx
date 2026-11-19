@@ -1,366 +1,498 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
-import type { OnMount } from "@monaco-editor/react";
-import { ExternalLink, LockKeyhole, TriangleAlert } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { Editor } from "@/components/editor";
-import { QueryLoadError } from "@/components/query-load-error";
-import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  BookOpen,
+  GitBranch,
+  LockKeyhole,
+  MessageSquare,
+  PanelBottom,
+  PanelRight,
+  SquarePen,
+  TriangleAlert,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  SERVER_RULES_LABEL,
+  ServerRulesButton,
+} from "@/app/mcp/registry/_parts/server-rules-launch";
+import {
+  FileKindChip,
+  FilePathLabel,
+  FileWorkspace,
+  FileWorkspaceNotice,
+  IconBadge,
+  IconLink,
+  WorkspacePanelToggle,
+} from "@/components/file-workspace/file-workspace";
+import { useStoredFlag } from "@/components/file-workspace/use-stored-flag";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type PolicyDeclarations,
   useEffectivePolicy,
-  usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { batteryDisplayName } from "./_parts/battery-display-name";
-import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
-import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";
-import {
-  batteryWorks,
-  compositionNotice,
-  compositionOf,
-  enforcedStatus,
-} from "./_parts/composition-view";
+import { cn } from "@/lib/utils/tailwind";
+import { BatteryEditDialog } from "./_parts/batteries-panel";
+import { BATTERY_PROBLEM } from "./_parts/battery-status";
+import { compositionOf } from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
-import {
-  GithubManagedPolicyNotice,
-  githubPolicyFileUrl,
-} from "./_parts/github-managed-policy-notice";
+import { GithubManagedPolicyNotice } from "./_parts/github-managed-policy-notice";
 import { OpenAppaChatButton } from "./_parts/openappa-chat-button";
+import { PolicyExplorer } from "./_parts/policy-explorer";
 import {
-  annotationDecorations,
-  focusPolicyLine,
-  policyAnnotations,
-} from "./_parts/policy-decorations";
-import { POLICY_EDITOR_OPTIONS } from "./_parts/policy-editor-options";
+  POLICY_FILE_KIND,
+  PolicyStatusDot,
+  policyFileIcon,
+} from "./_parts/policy-file-kind";
+import { PolicyOutline } from "./_parts/policy-outline";
+import {
+  PolicyProblemsPanel,
+  type ValidationProblem,
+  validationProblems,
+} from "./_parts/policy-problems-panel";
+import { policyQuickOpen } from "./_parts/policy-quick-open";
+import {
+  PolicyPaneSkeleton,
+  PolicyReadOnlyMessage,
+  PolicySourcePane,
+} from "./_parts/policy-source-pane";
+import {
+  POLICY_VALIDATION_CSS,
+  PolicyValidationPane,
+} from "./_parts/policy-validation-pane";
+import {
+  type PolicyWorkspace,
+  usePolicyWorkspace,
+} from "./_parts/use-policy-workspace";
+import {
+  ValidationProvider,
+  validationEntry,
+} from "./_parts/validation-context";
 
-export function GuardrailsPolicyEditor({
-  sourceEntry,
-  focusLine,
-}: {
-  sourceEntry?: string;
-  focusLine?: number;
-}) {
-  const declarations = usePolicyDeclarations();
-  const sync = useAppaGithubSync();
-  const router = useRouter();
-  const [tab, setTab] = useState<"policy" | "effective">("policy");
-  // The self-service folder's files are MCP servers' rules; any other file
-  // the root includes is the repository's own.
-  const selfService = sync.data?.selfService;
-  const serversFolder =
-    selfService?.enabled && selfService.directory
-      ? `${selfService.directory}/`
+/**
+ * The Policy page, laid out as an editor: the policy's files in an explorer,
+ * the open one read-only beside it with its rules outlined, and one bar on
+ * top. It takes the height its page gives it.
+ */
+export function GuardrailsPolicyEditor() {
+  return (
+    <ValidationProvider>
+      <PolicyEditor />
+    </ValidationProvider>
+  );
+}
+
+function PolicyEditor() {
+  const workspace = usePolicyWorkspace();
+  const [outlineOpen, setOutlineOpen] = useStoredFlag(
+    "openappa-policy-outline-open",
+  );
+  const [problemsOpen, setProblemsOpen] = useStoredFlag(
+    "openappa-policy-problems-open",
+  );
+  const [fixingBattery, setFixingBattery] = useState<string | null>(null);
+
+  const batteryProblem =
+    workspace.active.kind === "battery" &&
+    workspace.active.status &&
+    workspace.active.status !== "active"
+      ? BATTERY_PROBLEM[workspace.active.status]
       : null;
-  const effective = useEffectivePolicy(tab === "effective");
+  const suite = workspace.validations;
+  const problems = useMemo(
+    () => (suite ? validationProblems(suite) : []),
+    [suite],
+  );
+  const [activeProblemId, setActiveProblemId] = useState<string>();
+  const { open: openEntry } = workspace;
+  const pickProblem = useCallback(
+    (problem: ValidationProblem) => {
+      setActiveProblemId(problem.id);
+      openEntry(validationEntry(problem.path), problem.line);
+    },
+    [openEntry],
+  );
+  // F8 walks the problems, wrapping at either end.
+  const stepProblem = useCallback(
+    (direction: 1 | -1) => {
+      if (problems.length === 0) return;
+      const at = problems.findIndex((item) => item.id === activeProblemId);
+      const next =
+        at < 0
+          ? direction === 1
+            ? 0
+            : problems.length - 1
+          : (at + direction + problems.length) % problems.length;
+      pickProblem(problems[next]);
+    },
+    [problems, activeProblemId, pickProblem],
+  );
+  const keys = useRef({ stepProblem, problemsOpen, setProblemsOpen });
+  keys.current = { stepProblem, problemsOpen, setProblemsOpen };
+  const hasValidations = suite !== null;
+
+  // Cmd/Ctrl+J folds the problems and F8 walks them, as in an IDE; the
+  // workspace opens the file palette on Cmd/Ctrl+P. Capture phase, so the
+  // editor does not take the key first.
+  useEffect(() => {
+    if (!hasValidations) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const command = (event.metaKey || event.ctrlKey) && !event.altKey;
+      if (command && !event.shiftKey && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        keys.current.setProblemsOpen(!keys.current.problemsOpen);
+      } else if (event.key === "F8") {
+        event.preventDefault();
+        keys.current.stepProblem(event.shiftKey ? -1 : 1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [hasValidations]);
+
+  const isSource = workspace.view === "source";
+
   return (
-    <div className="space-y-4">
-      {declarations.data?.managedInGithub && <GithubManagedPolicyNotice />}
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* A healthy sync is the bar's repository icon; this asks for something. */}
+      {workspace.managed && <GithubManagedPolicyNotice hideHealthy />}
       <Tabs
-        className="gap-0"
-        value={tab}
-        onValueChange={(next) => setTab(next === "effective" ? next : "policy")}
-      >
-        {/* The card's header; each view's card below completes it. */}
-        <div className="flex flex-wrap items-center gap-3 rounded-t-lg border border-b-0 bg-background px-4 py-2.5">
-          <TabsList size="sm" aria-label="Policy view">
-            <TabsTrigger value="policy">Source</TabsTrigger>
-            <TabsTrigger value="effective">Effective</TabsTrigger>
-          </TabsList>
-          {tab === "policy" && (
-            <SearchableSelect
-              value={sourceEntry ?? "root"}
-              onValueChange={(value) =>
-                router.push(
-                  value === "root"
-                    ? "/openappa/policy"
-                    : `/openappa/policy?${new URLSearchParams({ entry: value })}`,
-                )
-              }
-              ariaLabel="Policy source file"
-              searchPlaceholder="Search batteries and files"
-              // On phones the picker takes its own full-width row under the
-              // view toggle and the guide link, instead of a ragged middle row.
-              className="order-last h-8 w-full sm:order-none sm:w-64"
-              pinnedItems={[{ value: "root", label: "Organization policy" }]}
-              items={[
-                ...(declarations.data?.batteries ?? []).map((battery) => ({
-                  value: battery.entry,
-                  label: batteryDisplayName(battery.name),
-                  description:
-                    BATTERY_STATUS[
-                      declarations.data
-                        ? enforcedStatus(declarations.data, battery)
-                        : battery.status
-                    ].label,
-                  disabled: battery.status === "unavailable",
-                })),
-                // The repository's files the root folds in, in include order.
-                ...(declarations.data?.repositoryFiles ?? []).map((file) => ({
-                  value: file.path,
-                  label: file.path,
-                  description:
-                    serversFolder && file.path.startsWith(serversFolder)
-                      ? "MCP server rules"
-                      : "Repository file",
-                })),
-              ]}
-            />
-          )}
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3">
-            {tab === "effective" ? (
-              effective.data &&
-              (effective.data.lastError !== null ? (
-                <span className="text-xs font-medium">
-                  {servedHeading(compositionOf(effective.data))}
-                </span>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  What the runtime enforces, batteries included.
-                </span>
-              ))
-            ) : sourceEntry ? (
-              <>
-                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                  {sourceEntry}
-                </span>
-                {focusLine && (
-                  <span className="text-xs text-muted-foreground">{`Line ${focusLine}`}</span>
-                )}
-              </>
-            ) : (
-              <>
-                {/* Last, so on a phone the bare icon sits on the card's edge
-                    above the picker's end rather than floating mid-row. */}
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="-mr-2 w-8 has-[>svg]:px-0 sm:mr-0 sm:w-auto sm:has-[>svg]:px-2.5"
-                >
-                  <a
-                    href={getDocsUrl(
-                      DocsPage.PlatformAiToolGuardrails,
-                      "configure-with-the-agent",
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <span className="sr-only sm:not-sr-only">Policy guide</span>
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-        <TabsContent value="policy">
-          {sourceEntry ? (
-            <BatteryPolicySourceView
-              key={`${sourceEntry}:${focusLine ?? ""}`}
-              entry={sourceEntry}
-              focusLine={focusLine}
-            />
-          ) : (
-            <RootPolicySource
-              focusLine={focusLine}
-              declarations={declarations.data}
-            />
-          )}
-        </TabsContent>
-        <TabsContent value="effective">
-          <EffectivePolicyView />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
-
-function RootPolicySource({
-  focusLine,
-  declarations,
-}: {
-  focusLine?: number;
-  declarations: PolicyDeclarations | null | undefined;
-}) {
-  const policy = useGuardrailsPolicy();
-  const sync = useAppaGithubSync();
-  const { data: canUpdate } = useHasPermissions({
-    guardrailsPolicy: ["update"],
-  });
-  const managed = declarations?.managedInGithub === true;
-  const editUrl = managed ? githubPolicyFileUrl(sync.data, "edit") : null;
-  if (policy.isLoading)
-    return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
-  if (policy.isError || !policy.data)
-    return (
-      <QueryLoadError
-        title="Could not load policy"
-        error={policy.error}
-        onRetry={() => policy.refetch()}
-      />
-    );
-  return (
-    <div className="overflow-hidden rounded-b-lg border bg-background">
-      <InlineNotice variant="neutral">
-        <LockKeyhole aria-hidden />
-        <span className="font-medium">Read-only source</span>
-        <InlineNoticeText>
-          {managed
-            ? "Change this policy in its connected repository."
-            : canUpdate
-              ? "Change this policy with the configuration agent in chat."
-              : "Ask an administrator to change this policy."}
-        </InlineNoticeText>
-        {editUrl && (
-          <Button asChild size="xs" variant="outline" className="ml-auto">
-            <a href={editUrl} target="_blank" rel="noopener noreferrer">
-              <span>Edit in repository</span>
-              <ExternalLink aria-hidden />
-            </a>
-          </Button>
-        )}
-        {!managed && canUpdate && (
-          <OpenAppaChatButton size="xs" variant="outline" className="ml-auto">
-            <span>Change in chat</span>
-          </OpenAppaChatButton>
-        )}
-      </InlineNotice>
-      <AnnotatedEditor
-        content={policy.data.content}
-        focusLine={focusLine}
-        declarations={
-          // The annotations are line numbers into the revision they were read at.
-          declarations?.rootRevision === policy.data.revision
-            ? declarations
-            : null
+        className="min-h-0 flex-1 gap-0"
+        value={workspace.view}
+        onValueChange={(next) =>
+          workspace.setView(next === "effective" ? next : "source")
         }
-      />
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>Conversations follow saved changes.</span>
-        <CompositionSummary declarations={declarations} />
-      </div>
+      >
+        <FileWorkspace
+          className="flex-1"
+          explorerStorageKey="openappa-policy-explorer-open"
+          explorer={
+            isSource
+              ? (overlay) => (
+                  <PolicyExplorer workspace={workspace} overlay={overlay} />
+                )
+              : null
+          }
+          activeKey={workspace.active.key}
+          shortcutScope="window"
+          quickOpenLabel="Open a policy file"
+          quickOpen={policyQuickOpen(workspace)}
+          title={<PolicyBarTitle workspace={workspace} />}
+          actions={
+            <PolicyBarActions
+              workspace={workspace}
+              outlineOpen={outlineOpen}
+              onToggleOutline={() => setOutlineOpen(!outlineOpen)}
+              problemsOpen={suite ? problemsOpen : null}
+              onToggleProblems={() => setProblemsOpen(!problemsOpen)}
+            />
+          }
+          notice={
+            workspace.notice && (
+              <FileWorkspaceNotice
+                data-testid="composition-notice"
+                variant={workspace.notice.variant}
+                title={workspace.notice.title}
+              >
+                {workspace.notice.body}
+              </FileWorkspaceNotice>
+            )
+          }
+        >
+          <TabsContent
+            value="source"
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+          >
+            <div className="flex min-h-0 flex-1">
+              {workspace.isPending || !workspace.active.key ? (
+                // Whose files these are is not known yet: nothing to read.
+                <PolicyPaneSkeleton className="min-w-0 flex-1" />
+              ) : workspace.active.kind === "validation" ? (
+                <PolicyValidationPane
+                  className="min-w-0 flex-1"
+                  path={workspace.active.path}
+                  focusLine={workspace.focusLine}
+                  repositoryUrl={workspace.editUrl}
+                  onDeleted={() => workspace.open(null)}
+                />
+              ) : (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {batteryProblem && (
+                    // What is wrong is in the battery's settings, not in this file.
+                    <p className="flex shrink-0 items-start gap-2 border-b bg-amber-500/10 px-3 py-1 text-xs text-amber-700 dark:text-amber-400">
+                      <TriangleAlert
+                        className="mt-0.5 size-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <span className="min-w-0">
+                        <span>{batteryProblem.text}</span>{" "}
+                        <UnstyledButton
+                          onClick={() =>
+                            setFixingBattery(
+                              workspace.active.batteryName ?? null,
+                            )
+                          }
+                          className="font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:text-foreground"
+                        >
+                          {batteryProblem.action}
+                        </UnstyledButton>
+                      </span>
+                    </p>
+                  )}
+                  <PolicyReadOnlyMessage.Provider
+                    value={
+                      workspace.editUrl
+                        ? `Read-only. [Edit in ${workspace.gitLabel}](${workspace.editUrl})`
+                        : workspace.active.kind === "battery"
+                          ? "Read-only. A battery's rules come with the battery."
+                          : workspace.canChangeInChat
+                            ? "Read-only. Ask the configuration agent in chat to change it."
+                            : null
+                    }
+                  >
+                    <PolicySourcePane
+                      className="min-h-0 min-w-0 flex-1"
+                      file={workspace.active}
+                      files={workspace.files}
+                      focusLine={workspace.focusLine}
+                      onOpenEntry={workspace.open}
+                      serverRules={workspace.scoped}
+                    />
+                  </PolicyReadOnlyMessage.Provider>
+                </div>
+              )}
+              {outlineOpen && workspace.active.kind !== "validation" && (
+                <PolicyOutline workspace={workspace} />
+              )}
+            </div>
+            {suite && (
+              <PolicyProblemsPanel
+                suite={suite}
+                problems={problems}
+                open={problemsOpen}
+                onOpenChange={setProblemsOpen}
+                activeId={activeProblemId}
+                onPick={pickProblem}
+                onOpenFile={(path) => workspace.open(validationEntry(path))}
+                onStep={stepProblem}
+              />
+            )}
+          </TabsContent>
+          <TabsContent
+            value="effective"
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <EffectivePolicyView />
+          </TabsContent>
+        </FileWorkspace>
+      </Tabs>
+      {fixingBattery && (
+        <BatteryEditDialog
+          name={fixingBattery}
+          onClose={() => setFixingBattery(null)}
+        />
+      )}
+      <style>{POLICY_VALIDATION_CSS}</style>
     </div>
   );
 }
 
-/** The policy text with a glyph beside each line the declarations speak for. */
-function AnnotatedEditor({
-  content,
-  focusLine,
-  declarations,
-}: {
-  content: string;
-  focusLine?: number;
-  declarations: PolicyDeclarations | null;
-}) {
-  const [editor, setEditor] = useState<Parameters<OnMount>[0] | null>(null);
-  const decorations = useMemo(
-    () =>
-      declarations
-        ? annotationDecorations(policyAnnotations(declarations))
-        : [],
-    [declarations],
-  );
-  useEffect(() => {
-    if (!editor) return;
-    const collection = editor.createDecorationsCollection(decorations);
-    return () => collection.clear();
-  }, [editor, decorations]);
-  useEffect(() => {
-    if (!editor) return;
-    return focusPolicyLine(editor, focusLine);
-  }, [editor, focusLine]);
-  return (
-    <Editor
-      height="min(50vh, 560px)"
-      language="ini"
-      value={content}
-      onMount={setEditor}
-      options={{
-        ...POLICY_EDITOR_OPTIONS,
-        readOnly: true,
-        ariaLabel: "Organization guardrails policy",
-        glyphMargin: true,
-      }}
-    />
-  );
-}
-
-/** One line on what the text composes to, beside the editor's own footer. */
-function CompositionSummary({
-  declarations,
-}: {
-  declarations: PolicyDeclarations | null | undefined;
-}) {
-  if (!declarations) return null;
-  const { served } = compositionOf(declarations);
-  if (served.kind === "root_only")
+/** The bar's middle: the open file, or what the effective view shows. */
+function PolicyBarTitle({ workspace }: { workspace: PolicyWorkspace }) {
+  const isSource = workspace.view === "source";
+  const effective = useEffectivePolicy(!isSource);
+  const { active } = workspace;
+  const kind = POLICY_FILE_KIND[active.kind];
+  const KindIcon = policyFileIcon(active);
+  if (!isSource)
     return (
-      <output
-        data-testid="composition-summary"
-        data-failed="true"
-        className="text-destructive"
-      >
-        Composition failed: nothing is enforced
-      </output>
+      <>
+        <span className="shrink-0 font-medium text-foreground">
+          Effective policy
+        </span>
+        <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+          {effective.data && effective.data.lastError !== null
+            ? servedHeading(compositionOf(effective.data))
+            : "What the runtime enforces, batteries included."}
+        </span>
+      </>
     );
-  const total = declarations.batteries.length;
-  const files = declarations.repositoryFiles.length;
-  const notEnforced = declarations.batteries.filter(
-    (battery) => !batteryWorks(declarations, battery),
-  ).length;
-  const stale = served.kind === "previous";
   return (
-    <output
-      data-testid="composition-summary"
-      data-batteries={total}
-      data-not-enforced={notEnforced}
-      data-stale={stale}
-      // Each part keeps to one line and they wrap as wholes, so a phone
-      // never strands a separator or splits "1 not enforced".
-      className="flex flex-wrap items-center gap-x-3 gap-y-1"
-    >
-      <span className={stale ? undefined : "whitespace-nowrap"}>
-        {stale
-          ? `${compositionNotice(declarations)?.title ?? "The latest revision was refused"} · an earlier composition stays enforced`
-          : `${[
-              total === 1 ? "1 battery" : `${total} batteries`,
-              ...(files > 0
-                ? [
-                    files === 1
-                      ? "1 repository file"
-                      : `${files} repository files`,
-                  ]
-                : []),
-            ].join(
-              " and ",
-            )} ${total + files === 1 ? "composes" : "compose"} into this policy`}
-      </span>
-      {notEnforced > 0 && (
-        // Every included battery with a problem is in the Needs attention group.
-        <Link
-          href={batteriesHref("attention")}
-          className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-destructive underline-offset-2 hover:underline"
-        >
-          <TriangleAlert className="size-3.5" />
-          <span>{notEnforced} not enforced</span>
-        </Link>
+    <>
+      <KindIcon
+        className={cn("size-3.5 shrink-0", kind.iconClass)}
+        aria-hidden
+      />
+      <FilePathLabel path={active.path} />
+      <FileKindChip data-testid="policy-file-kind" className={kind.chipClass}>
+        {active.mcpServerRules ? "MCP server rules" : kind.label}
+      </FileKindChip>
+      {active.severity && (
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <PolicyStatusDot severity={active.severity} />
+          <span className="hidden sm:inline">{active.statusLabel}</span>
+        </span>
       )}
-    </output>
+      {workspace.focusLine && (
+        <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{`Line ${workspace.focusLine}`}</span>
+      )}
+    </>
   );
 }
 
-/** What the effective tab says it shows while the latest attempt is refused. */
+/** The bar's end: where the open file is changed, the views, the panels. */
+function PolicyBarActions({
+  workspace,
+  outlineOpen,
+  onToggleOutline,
+  problemsOpen,
+  onToggleProblems,
+}: {
+  workspace: PolicyWorkspace;
+  outlineOpen: boolean;
+  onToggleOutline: () => void;
+  /** Null when there are no validations to have problems. */
+  problemsOpen: boolean | null;
+  onToggleProblems: () => void;
+}) {
+  const isSource = workspace.view === "source";
+  const { active } = workspace;
+  // A reader of MCP servers' rules changes a file from the server it governs.
+  const editServer =
+    workspace.scoped && active.canEdit ? active.servers?.[0] : undefined;
+  const serverNames = (active.servers ?? [])
+    .map((server) => server.name)
+    .join(", ");
+  const validation = active.kind === "validation";
+  const suite = workspace.validations;
+  const readOnly = validation
+    ? suite?.github
+      ? "Read-only. Change this validation in "
+      : suite?.canWrite
+        ? null
+        : "Read-only. Ask an administrator to change this validation."
+    : workspace.scoped
+      ? active.canEdit
+        ? `Read-only here. ${SERVER_RULES_LABEL} proposes a change as a pull request.`
+        : `Read-only. Changing these rules takes edit access to ${serverNames || "the server"} in the MCP registry.`
+      : workspace.managed
+        ? active.kind === "repository"
+          ? "Read-only. Change this file in its connected repository."
+          : "Read-only. Change this policy in its connected repository."
+        : workspace.canChangeInChat
+          ? "Read-only. Change this policy with the configuration agent in chat."
+          : "Read-only. Ask an administrator to change this policy.";
+  const managedIn = `Managed in ${workspace.gitLabel}`;
+
+  return (
+    <>
+      {readOnly && (
+        <IconBadge
+          label={
+            validation && suite?.github
+              ? `${readOnly}its repository.`
+              : readOnly
+          }
+          tooltip={
+            validation && suite?.github ? (
+              <>
+                <span>{readOnly}</span>
+                {workspace.editUrl ? (
+                  <a
+                    href={workspace.editUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    its repository
+                  </a>
+                ) : (
+                  <span>its repository</span>
+                )}
+                <span>.</span>
+              </>
+            ) : undefined
+          }
+        >
+          <LockKeyhole className="size-3.5" aria-hidden />
+        </IconBadge>
+      )}
+      {workspace.managed &&
+        (workspace.repositoryUrl ? (
+          <IconLink href={workspace.repositoryUrl} label={managedIn}>
+            <GitBranch className="size-3.5" />
+          </IconLink>
+        ) : (
+          <IconBadge label={managedIn}>
+            <GitBranch className="size-3.5" aria-hidden />
+          </IconBadge>
+        ))}
+      {workspace.editUrl && isSource && (
+        <IconLink href={workspace.editUrl} label="Edit in repository">
+          <SquarePen className="size-3.5" />
+        </IconLink>
+      )}
+      <IconLink href={workspace.guideUrl} label="Policy guide">
+        <BookOpen className="size-3.5" />
+      </IconLink>
+      {editServer && isSource && (
+        <ServerRulesButton
+          catalog={editServer}
+          size="xs"
+          variant="ghost"
+          className="h-6 px-1.5 text-xs"
+        >
+          <SquarePen className="size-3.5" aria-hidden />
+          <span className="sr-only xl:not-sr-only">{SERVER_RULES_LABEL}</span>
+        </ServerRulesButton>
+      )}
+      {workspace.canChangeInChat && !validation && (
+        <OpenAppaChatButton
+          size="xs"
+          variant="ghost"
+          className="h-6 px-1.5 text-xs"
+        >
+          <MessageSquare className="size-3.5" aria-hidden />
+          <span className="sr-only xl:not-sr-only">Change in chat</span>
+        </OpenAppaChatButton>
+      )}
+      {/* The composed policy is the organization's: not a server reader's. */}
+      {!workspace.scoped && (
+        <TabsList size="sm" aria-label="Policy view" className="mx-1 h-6">
+          <TabsTrigger value="source" className="h-5 text-[11px]">
+            Source
+          </TabsTrigger>
+          <TabsTrigger value="effective" className="h-5 text-[11px]">
+            Effective
+          </TabsTrigger>
+        </TabsList>
+      )}
+      {isSource && problemsOpen !== null && (
+        <WorkspacePanelToggle
+          label={problemsOpen ? "Hide problems" : "Show problems"}
+          tooltip={problemsOpen ? "Hide problems (⌘J)" : "Show problems (⌘J)"}
+          pressed={problemsOpen}
+          onClick={onToggleProblems}
+          className="hidden md:inline-flex"
+        >
+          <PanelBottom className="size-3.5" />
+        </WorkspacePanelToggle>
+      )}
+      {isSource && !validation && (
+        <WorkspacePanelToggle
+          label={outlineOpen ? "Hide rule outline" : "Show rule outline"}
+          pressed={outlineOpen}
+          onClick={onToggleOutline}
+          className="hidden lg:inline-flex"
+        >
+          <PanelRight className="size-3.5" />
+        </WorkspacePanelToggle>
+      )}
+    </>
+  );
+}
+
+/** What the effective view says it shows while the latest attempt is refused. */
 function servedHeading(composition: PolicyDeclarations["composition"]): string {
   const { served, refusal } = composition;
   if (served.kind === "root_only")

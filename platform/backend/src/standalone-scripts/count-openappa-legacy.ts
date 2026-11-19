@@ -43,6 +43,7 @@ async function main() {
   const url = new URL(
     await resolveNativeDatabaseConnectionString(getDatabaseConnectionString(), {
       iamAuthEnabled: config.database.iamAuthEnabled,
+      entraAuthEnabled: config.database.entraAuthEnabled,
       awsRegion: config.database.awsRegion || undefined,
     }),
   );

@@ -1,13 +1,14 @@
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { describe, expect, test } from "@/test";
 import {
+  grantRuntime,
   makeTemplate,
   useTemplateRouteTestApp,
 } from "./runtime-template.test-data";
 
 describe("GET /api/agent-runtime-templates/:id", () => {
   const ctx = useTemplateRouteTestApp();
-  test("requires agent create/update permission and refuses hidden or cross-organization templates", async ({
+  test("requires use of the runtime and refuses hidden or cross-organization templates", async ({
     makeOrganization,
     makeMember,
     makeCustomRole,
@@ -39,9 +40,15 @@ describe("GET /api/agent-runtime-templates/:id", () => {
     ctx.member = await makeUser();
     ctx.caller = ctx.member;
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: { agent: ["create", "configure-runtime"] },
+      permission: { agent: ["create"] },
     });
     await makeMember(ctx.member.id, ctx.organizationId, { role: role.role });
+    await grantRuntime({
+      organizationId: ctx.organizationId,
+      scope: template.id,
+      userId: ctx.member.id,
+      actions: ["read", "use"],
+    });
     const resolved = await ctx.app.inject({
       url: `/api/agent-runtime-templates/${template.id}`,
     });

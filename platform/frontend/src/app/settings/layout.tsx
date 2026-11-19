@@ -9,7 +9,10 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
 import { Badge } from "@/components/ui/badge";
-import { useDisableInvitations } from "@/lib/config/config.query";
+import {
+  useDisableInvitations,
+  useEnterpriseFeature,
+} from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
 import { AgentsSubnav } from "./agents/_parts/agents-navigation";
@@ -106,20 +109,7 @@ const PAGE_CONFIG: Record<
   },
   "/settings/roles": {
     title: "Roles",
-    description: (
-      <>
-        Manage built-in and custom roles and what they allow. People who sign up
-        with email and password, or join through ChatOps, get the default role.
-        You can change it in{" "}
-        <Link
-          href="/settings/auth"
-          className="font-medium underline underline-offset-4"
-        >
-          Settings → Auth
-        </Link>
-        .
-      </>
-    ),
+    description: <RolesDescription />,
   },
   "/settings/secrets": {
     title: "Secrets",
@@ -141,6 +131,31 @@ const PAGE_CONFIG: Record<
  * invitations at all (`ARCHESTRA_AUTH_DISABLE_INVITATIONS`), so the blurb
  * stops promising it when the tab and the invite button are hidden.
  */
+/**
+ * The link opens the built-in roles reference, a dialog the enterprise roles
+ * page renders; without that feature there is nothing for it to open.
+ */
+function RolesDescription() {
+  const enterprise = useEnterpriseFeature("core");
+  return (
+    <>
+      <span>Custom roles, for access the built-in roles don't cover.</span>
+      {enterprise && (
+        <>
+          {" "}
+          <Link
+            href="/settings/roles?role=admin"
+            scroll={false}
+            className="font-medium underline underline-offset-4"
+          >
+            View built-in roles
+          </Link>
+        </>
+      )}
+    </>
+  );
+}
+
 function UsersDescription() {
   const disableInvitations = useDisableInvitations();
   return disableInvitations === false
@@ -271,8 +286,9 @@ export default function SettingsLayout({
         {/* The section list sits beside the content rather than as a tab row
             above it: at sixteen entries the row scrolled sideways, so the
             settings you were not already looking at were off-screen. Below
-            `lg` the row sits 8px under the header: PageLayout pads the content
-            16px on phones and 24px from `sm`, so the pull-up follows suit. */}
+            `lg` it is one button, 8px under the header: PageLayout pads the
+            content 16px on phones and 24px from `sm`, so the pull-up follows
+            suit. */}
         <div className="-mt-2 grid items-start gap-2 sm:-mt-4 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav

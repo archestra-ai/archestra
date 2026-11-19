@@ -94,7 +94,6 @@ import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
   desktopAddPromptCopy,
   hasToolPartsWithAuthErrors,
-  isAuthInstructionText,
   isInstallAuthAction,
   isInstallAuthResolved,
   isNoDeviceError,
@@ -150,6 +149,7 @@ import {
   RemedyGuardrailsSteps,
 } from "./openappa-remedy-chain-card";
 import type { RemedyChain } from "./openappa-remedy-chains";
+import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -405,6 +405,14 @@ export function ChatMessages({
         ]),
       ),
     [messages, getToolShortName],
+  );
+  const policyDiffCollector = useMemo(
+    () => new PolicyDiffReferenceCollector(),
+    [],
+  );
+  const policyDiffReferences = useMemo(
+    () => policyDiffCollector.collect(messages, getToolShortName),
+    [messages, getToolShortName, policyDiffCollector],
   );
   const groupedAskUserToolCallIds = useMemo(
     () =>
@@ -971,32 +979,29 @@ export function ChatMessages({
                             return null;
                           }
 
-                          const assistantAuthState =
-                            resolveAssistantTextAuthState(part.text);
-
                           // Use editable component for assistant messages
                           if (message.role === "assistant") {
-                            if (
-                              hasMessageAuthToolError(message) &&
-                              isAuthInstructionText(part.text)
-                            ) {
-                              return null;
-                            }
-
-                            const authToolPart = renderAssistantAuthPart({
-                              toolName: "authentication",
-                              authState: assistantAuthState,
-                              connectedCatalogIds:
-                                orchestrator.connectedCatalogIds,
-                              onInstallMcp:
-                                orchestrator.triggerInstallByCatalogId,
-                              onReauthMcp:
-                                orchestrator.triggerReauthByCatalogIdAndServerId,
-                            });
+                            // A failed tool call in this message already shows
+                            // the auth card. What the model then writes about
+                            // it is its answer, so it stays as text: only a
+                            // message with no such card turns auth text into one.
+                            const authToolPart = hasMessageAuthToolError(
+                              message,
+                            )
+                              ? null
+                              : renderAssistantAuthPart({
+                                  toolName: "authentication",
+                                  authState: resolveAssistantTextAuthState(
+                                    part.text,
+                                  ),
+                                  connectedCatalogIds:
+                                    orchestrator.connectedCatalogIds,
+                                  onInstallMcp:
+                                    orchestrator.triggerInstallByCatalogId,
+                                  onReauthMcp:
+                                    orchestrator.triggerReauthByCatalogIdAndServerId,
+                                });
                             if (authToolPart) {
-                              if (hasMessageAuthToolError(message)) {
-                                return null;
-                              }
                               return (
                                 <Fragment key={partKey}>
                                   {authToolPart}
@@ -1110,6 +1115,9 @@ export function ChatMessages({
                                         partIndex={i}
                                         partKey={partKey}
                                         text={parsedPart.text}
+                                        policyDiffReferences={policyDiffReferences
+                                          .get(message.id)
+                                          ?.get(i)}
                                         isEditing={editingPartKey === partKey}
                                         showActions={
                                           showActions && isLastParsedTextPart
@@ -1150,6 +1158,9 @@ export function ChatMessages({
                                   partIndex={i}
                                   partKey={partKey}
                                   text={part.text}
+                                  policyDiffReferences={policyDiffReferences
+                                    .get(message.id)
+                                    ?.get(i)}
                                   isEditing={editingPartKey === partKey}
                                   showActions={showActions}
                                   citationParts={citationParts}

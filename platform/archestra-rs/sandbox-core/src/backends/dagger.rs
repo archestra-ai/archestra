@@ -754,8 +754,8 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     container
         .sync()
         .await
-        .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
         .map_err(|err| warm_base_error(&image, err))
+        .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
         .map(|id| client.load_container_from_id(id))
         .inspect(|_| tracing::debug!("warm base image ready"))
 }
@@ -1232,28 +1232,64 @@ fn is_overlay_mount_overflow(err: &DaggerError) -> bool {
     )
 }
 
-/// build an engine-unreachable error from a non-exec SDK failure (warm-base
-/// build), classifying the fault from the typed error.
-fn engine(err: DaggerError) -> SandboxError {
-    SandboxError::EngineUnreachable {
-        fault: classify_engine_fault(&err),
-        message: err.to_string(),
-    }
-}
-
-/// classify a warm-base build failure. the engine answering with a pull or
-/// registry-resolution error means it is healthy but cannot fetch `image` (a
-/// blocked registry under restricted egress, or a missing or private image), so
-/// that failure names the image and registry instead of reading as an engine
-/// outage. everything else keeps the engine classification.
+/// Setup exec failures are per-call failures, even when their output mentions
+/// a registry. Never return arbitrary command output: custom images may print
+/// credentials in their package-manager diagnostics.
 fn warm_base_error(image: &str, err: DaggerError) -> SandboxError {
+    if matches!(err, DaggerError::Query(GraphQLError::DomainError { .. }))
+        && let Some(exit_code) = exec_exit_code(&err)
+    {
+        let (stage, guidance) = warm_base_setup_stage(&err);
+        return SandboxError::CommandFailed {
+            exit_code,
+            message: format!(
+                "sandbox base image setup failed during {stage} (exit code {exit_code}). {guidance}"
+            ),
+        };
+    }
     if is_image_pull_failure(image, &err) {
         return SandboxError::ImagePullFailed {
             image: image.to_string(),
             registry: registry_host(image).to_string(),
         };
     }
-    engine(err)
+    SandboxError::EngineUnreachable {
+        fault: classify_engine_fault(&err),
+        message: err.to_string(),
+    }
+}
+
+fn warm_base_setup_stage(err: &DaggerError) -> (&'static str, &'static str) {
+    if let DaggerError::Query(GraphQLError::DomainError { fields, .. }) = err {
+        for field in fields {
+            if let Some(GraphQlExtension::ExecError { cmd, .. }) = &field.extensions {
+                if cmd.iter().any(|arg| arg == &warm_base_root_setup(false)) {
+                    return (
+                        "system package setup (apt)",
+                        "Check the base image's apt configuration, required package availability, and access to package repositories.",
+                    );
+                }
+                if let Some(setup) = warm_base_user_setup_exec(false)
+                    && cmd.contains(&setup)
+                {
+                    return (
+                        "Python package setup (uv)",
+                        "Check the base image's Python and uv installation, dependency compatibility, and access to package repositories.",
+                    );
+                }
+                if cmd.iter().any(|arg| arg == &warm_base_root_setup(true)) {
+                    return (
+                        "prebuilt base verification",
+                        "Check that the configured runtime image is the baked sandbox base and contains its provenance marker.",
+                    );
+                }
+            }
+        }
+    }
+    (
+        "base image setup",
+        "Check the configured base image, package-manager configuration, and access to package repositories.",
+    )
 }
 
 /// substrings the engine uses when resolving or fetching an image fails. only
@@ -2045,7 +2081,7 @@ mod tests {
         // transport errors never reached the engine, so they are not pull failures
         // even when the message happens to mention the image.
         let transport = DaggerError::Query(GraphQLError::HttpError(format!(
-            "connection refused while resolving {IMAGE}"
+            "connection refused while resolving {IMAGE}; exit code: 1"
         )));
         assert!(matches!(
             warm_base_error(IMAGE, transport),
@@ -2066,13 +2102,63 @@ mod tests {
                 ..
             }
         ));
+    }
 
-        // the warm base's setup exec failing is not an image pull failure.
-        let setup = exec_error(100, "process \"sh -c apt-get install\" did not complete");
-        assert!(!matches!(
-            warm_base_error(IMAGE, setup),
-            SandboxError::ImagePullFailed { .. }
+    #[test]
+    fn warm_base_setup_failures_name_the_stage_without_exposing_process_output() {
+        for (command, exit_code, stage) in [
+            (
+                warm_base_root_setup(false),
+                100,
+                "system package setup (apt)",
+            ),
+            (
+                warm_base_user_setup_exec(false).unwrap(),
+                1,
+                "Python package setup (uv)",
+            ),
+            (warm_base_root_setup(true), 1, "prebuilt base verification"),
+        ] {
+            let err = domain_error(
+                "failed to fetch https://example.invalid/packages: synthetic-private-output",
+                Some(GraphQlExtension::ExecError {
+                    cmd: vec!["sh".into(), "-c".into(), command],
+                    exit_code,
+                    stderr: "synthetic-private-output".into(),
+                    stdout: "synthetic-private-output".into(),
+                }),
+            );
+            let mapped = warm_base_error(IMAGE, err);
+            assert!(
+                matches!(mapped, SandboxError::CommandFailed { exit_code: code, .. } if code == exit_code)
+            );
+            assert_eq!(mapped.code(), "ARCHESTRA_COMMAND_FAILED");
+            let message = mapped.to_string();
+            assert!(message.contains(stage), "{message}");
+            assert!(
+                message.contains(&format!("exit code {exit_code}")),
+                "{message}"
+            );
+            assert!(!message.contains("synthetic-"), "{message}");
+            assert!(!message.contains("example.invalid"), "{message}");
+            assert!(!message.contains("blocked"), "{message}");
+        }
+    }
+
+    #[test]
+    fn warm_base_setup_without_typed_details_still_reports_the_exit_code() {
+        let mapped = warm_base_error(
+            IMAGE,
+            domain_error(
+                "process did not complete successfully: exit code: 127",
+                None,
+            ),
+        );
+        assert!(matches!(
+            mapped,
+            SandboxError::CommandFailed { exit_code: 127, .. }
         ));
+        assert!(mapped.to_string().contains("base image setup"));
     }
 
     #[test]

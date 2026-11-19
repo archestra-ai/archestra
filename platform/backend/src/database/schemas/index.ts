@@ -61,6 +61,7 @@ export { default as agentExcludedConnectorsTable } from "./agent-excluded-connec
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";
 export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
+export { default as agentIdentityBindingsTable } from "./agent-identity-binding";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentPinsTable } from "./agent-pin";
@@ -304,6 +305,7 @@ export { default as skillUsageEventsTable } from "./skill-usage-event";
 export { default as skillUsersTable } from "./skill-user";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
+export { default as spiffeSigningKeysTable } from "./spiffe-signing-key";
 export { default as startupMigrationsTable } from "./startup-migration";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";

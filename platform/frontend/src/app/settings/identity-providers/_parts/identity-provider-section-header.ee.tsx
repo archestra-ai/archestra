@@ -10,7 +10,7 @@ export function IdentityProviderSectionHeader({
 }) {
   return (
     <div className="space-y-1">
-      <h3 className="text-sm font-medium">{title}</h3>
+      <h3 className="text-base font-semibold">{title}</h3>
       <p className="text-xs leading-relaxed text-muted-foreground">
         {children}
       </p>

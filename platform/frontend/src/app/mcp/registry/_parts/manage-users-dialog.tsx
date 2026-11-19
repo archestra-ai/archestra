@@ -10,6 +10,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
+  withSharedMultitenantStatuses,
 } from "@archestra/shared";
 import { format } from "date-fns/format";
 import {
@@ -21,6 +22,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Trash,
   Trash2,
   User,
@@ -35,7 +37,9 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -53,6 +57,7 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -84,7 +89,18 @@ import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { AddServiceAccountDialog } from "./add-service-account-dialog";
+import {
+  BulkRemoveConnectionsDialog,
+  type BulkRemoveCopy,
+} from "./bulk-remove-connections-dialog";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
+import {
+  type ConnectionFilter,
+  countConnectionFilters,
+  type FilterableConnection,
+  matchesConnectionFilter,
+  matchesConnectionSearch,
+} from "./connection-filters";
 import {
   type DeploymentState,
   DeploymentStatusDot,
@@ -186,7 +202,7 @@ export function ManageUsersContent({
   onAddPersonalConnection,
   onAddSharedConnection,
   onAddOrgConnection,
-  deploymentStatuses = {},
+  deploymentStatuses: reportedDeploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
   bodyTestId,
@@ -234,6 +250,14 @@ export function ManageUsersContent({
 
   // The catalog item for connection labels and add-connection behavior.
   const catalogItem = catalogItemById ?? undefined;
+  // Every install on a multitenant item shares one pod, so an install the
+  // runtime has no entry for shows the shared pod rather than none.
+  const deploymentStatuses = catalogItem?.multitenant
+    ? withSharedMultitenantStatuses({
+        serverIds: allServers.map((server) => server.id),
+        deploymentStatuses: reportedDeploymentStatuses,
+      })
+    : reportedDeploymentStatuses;
 
   const canReauthenticate = useCanReauthenticate();
 
@@ -777,10 +801,15 @@ interface ConnectionGroup {
 }
 
 /**
- * Every credential in one table: a summary line, then a group per kind
- * (personal, then shared), each opened by a header row that names it and holds
- * its add action. Scope reads from the avatar, so there is no scope column, and
- * the date and creator share a meta line under the owner.
+ * Every credential in one table: a group per kind (personal, then shared),
+ * each opened by a header row that names it and holds its add action. Scope
+ * reads from the avatar, so there is no scope column, and the date and creator
+ * share a meta line under the owner.
+ *
+ * Rows the viewer may remove carry a checkbox, and ticking any shows the bulk
+ * actions above the table. A long list also gets count tiles that narrow it by
+ * kind and a search by owner in the table's header, and shows each group a
+ * page at a time.
  */
 function ConnectionsTable({
   noun,
@@ -792,6 +821,14 @@ function ConnectionsTable({
   personal: ConnectionGroup | null;
   shared: ConnectionGroup | null;
 } & RowRenderProps) {
+  const [filter, setFilter] = useState<ConnectionFilter>("all");
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [shownByGroup, setShownByGroup] = useState<Record<string, number>>({});
+
   const groups = [personal, shared].filter(
     (group): group is ConnectionGroup => group !== null,
   );
@@ -801,64 +838,346 @@ function ConnectionsTable({
     allRows.some((row) => rowProps.deploymentStatuses[row.server.id]);
   const needSignIn = allRows.filter((row) => row.server.oauthRefreshError);
   const grouped = groups.length > 1;
-  const columnCount = showPod ? 3 : 2;
+
+  const describe = (
+    row: ConnectionRow,
+    group: ConnectionGroup,
+  ): FilterableConnection => ({
+    owner: rowProps.getCredentialOwnerName(row.server),
+    createdBy:
+      resolveServerScope(row.server) === "personal"
+        ? null
+        : (row.server.ownerEmail ?? null),
+    needsSignIn: Boolean(row.server.oauthRefreshError),
+    shared: group === shared,
+  });
+
+  const showTools = allRows.length >= CONNECTION_TOOLS_FROM;
+  const narrowed = showTools && (filter !== "all" || query.trim() !== "");
+  const visibleGroups = groups
+    .map((group) => ({
+      group,
+      rows: narrowed
+        ? group.rows.filter((row) => {
+            const connection = describe(row, group);
+            return (
+              matchesConnectionFilter(connection, filter) &&
+              matchesConnectionSearch(connection, query)
+            );
+          })
+        : group.rows,
+    }))
+    .filter(({ rows }) => !narrowed || rows.length > 0);
+  const matching = visibleGroups.flatMap(({ rows }) => rows);
+
+  // A desktop MCP server is disconnected from one person's device at a time,
+  // each with its own confirmation, so its rows are not selectable.
+  const canSelect = (server: ServerEntry) =>
+    !rowProps.desktop && rowProps.canRevoke(server);
+  const showSelection =
+    allRows.filter((row) => canSelect(row.server)).length > 1;
+  const selectable = matching.filter((row) => canSelect(row.server));
+  const pickedHere = selectable.filter((row) =>
+    selectedIds.has(row.server.id),
+  ).length;
+  const allPicked = selectable.length > 0 && pickedHere === selectable.length;
+  // Read from the live rows, so a connection removed elsewhere drops out of
+  // the selection instead of being asked for again.
+  const chosen = groups.flatMap((group) =>
+    group.rows
+      .filter((row) => selectedIds.has(row.server.id) && canSelect(row.server))
+      .map((row) => ({
+        id: row.server.id,
+        label: rowProps.getCredentialOwnerName(row.server),
+        shared: group === shared,
+      })),
+  );
+  const copy = noun === "installation" ? UNINSTALL_COPY : REVOKE_COPY;
+
+  const clearSelection = () => setSelectedIds(new Set());
+  const toggle = (id: string) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // The header checkbox takes every row that matches, not only the ones
+  // shown so far.
+  const toggleAll = (on: boolean) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const row of selectable) {
+        if (on) next.add(row.server.id);
+        else next.delete(row.server.id);
+      }
+      return next;
+    });
+  const selectAll = showSelection ? (
+    <Checkbox
+      aria-label={`Select all ${narrowed ? "matching " : ""}${noun}s`}
+      checked={allPicked || (pickedHere > 0 && "indeterminate")}
+      onCheckedChange={(value) => toggleAll(value === true)}
+      disabled={selectable.length === 0}
+    />
+  ) : null;
+  const columnCount = (showPod ? 3 : 2) + (showSelection ? 1 : 0);
+
+  const tiles: { id: ConnectionFilter; label: string; hint: string }[] = [
+    { id: "all", label: `All ${noun}s`, hint: `Every ${noun} of this server.` },
+    {
+      id: "needs-sign-in",
+      label: "Need sign-in",
+      hint: "Sign-in expired. Unusable until the owner connects again.",
+    },
+    ...(personal && shared
+      ? [
+          {
+            id: "personal" as const,
+            label: personal.title,
+            hint: personal.description,
+          },
+          {
+            id: "shared" as const,
+            label: shared.title,
+            hint: shared.description,
+          },
+        ]
+      : []),
+  ];
+  const counts = countConnectionFilters(
+    groups.flatMap((group) => group.rows.map((row) => describe(row, group))),
+  );
 
   return (
     <TooltipProvider>
       <div className="space-y-2.5">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-          <span className="font-medium tabular-nums">
-            {allRows.length} {allRows.length === 1 ? noun : `${noun}s`}
-          </span>
-          {grouped ? (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {personal?.rows.length} personal
-              <span className="px-1 text-muted-foreground/50">·</span>
-              {shared?.rows.length} shared
+        {showTools ? (
+          <div className="@container">
+            <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
+              {tiles.map((tile) => {
+                const on = filter === tile.id;
+                return (
+                  <UnstyledButton
+                    key={tile.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      setFilter(tile.id);
+                      clearSelection();
+                    }}
+                    className={cn(
+                      "flex cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                      on
+                        ? "border-foreground/60 bg-muted/50"
+                        : "hover:bg-muted/30",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "text-xs",
+                        on ? "text-foreground" : "text-muted-foreground",
+                        tile.id === "needs-sign-in" &&
+                          counts[tile.id] > 0 &&
+                          "text-amber-600 dark:text-amber-500",
+                      )}
+                    >
+                      {tile.label}
+                    </span>
+                    <span className="text-2xl leading-7 font-semibold tracking-tight tabular-nums">
+                      {counts[tile.id].toLocaleString("en-US")}
+                    </span>
+                    <span className="text-[11px] leading-4 text-muted-foreground">
+                      {tile.hint}
+                    </span>
+                  </UnstyledButton>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+            <span className="font-medium tabular-nums">
+              {allRows.length} {allRows.length === 1 ? noun : `${noun}s`}
             </span>
-          ) : null}
-          {needSignIn.length > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 tabular-nums dark:text-amber-500">
-              <span className="size-1.5 rounded-full bg-current" />
-              {needSignIn.length} {needSignIn.length === 1 ? "needs" : "need"}{" "}
-              sign-in
-            </span>
-          ) : null}
-        </div>
+            {grouped ? (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {personal?.rows.length} personal
+                <span className="px-1 text-muted-foreground/50">·</span>
+                {shared?.rows.length} shared
+              </span>
+            ) : null}
+            {needSignIn.length > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 tabular-nums dark:text-amber-500">
+                <span className="size-1.5 rounded-full bg-current" />
+                {needSignIn.length} {needSignIn.length === 1 ? "needs" : "need"}{" "}
+                sign-in
+              </span>
+            ) : null}
+          </div>
+        )}
 
-        <div className="overflow-x-auto rounded-lg border">
-          {/* Only the Pod column needs a floor width; without it the owner
-              cell wraps and the table fits a phone. */}
-          <Table className={showPod ? "min-w-[640px]" : undefined}>
-            <colgroup>
-              <col />
-              {showPod ? <col className="w-[34%]" /> : null}
-              <col className="w-[104px]" />
-            </colgroup>
-            <TableHeader className="bg-muted/30">
-              <TableRow className="hover:bg-transparent">
-                <ColumnHead>Owner</ColumnHead>
-                {showPod ? <ColumnHead>Pod</ColumnHead> : null}
-                <ColumnHead className="pr-4 text-right md:pr-4">
-                  Actions
-                </ColumnHead>
-              </TableRow>
-            </TableHeader>
-            {groups.map((group) => (
-              <ConnectionGroupRows
-                key={group.testId}
-                group={group}
-                showTitle={grouped}
-                showPod={showPod}
-                columnCount={columnCount}
-                {...rowProps}
-              />
-            ))}
-          </Table>
+        {showSelection ? (
+          <BulkActionsBar
+            count={chosen.length}
+            noun={noun}
+            onClear={clearSelection}
+            compact
+          >
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmingRemoval(true)}
+            >
+              <Trash2 className="size-4" />
+              <span>{copy.action}</span>
+            </Button>
+          </BulkActionsBar>
+        ) : null}
+
+        <div className="@container overflow-hidden rounded-lg border">
+          {showTools ? (
+            <div className="flex items-center gap-3 border-b bg-muted/20 py-2 pr-3 pl-4">
+              {selectAll}
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search by owner or team"
+                  aria-label={`Search ${noun}s by owner or team`}
+                  className="h-8 pl-8"
+                />
+              </div>
+              <span className="hidden shrink-0 text-xs text-muted-foreground tabular-nums @md:inline">
+                <span>
+                  {matching.length.toLocaleString("en-US")}{" "}
+                  {matching.length === 1 ? noun : `${noun}s`}
+                </span>
+                {narrowed ? <span> match</span> : null}
+              </span>
+            </div>
+          ) : null}
+          <div
+            className={cn(
+              "overflow-x-auto",
+              showTools && "max-h-[520px] overflow-y-auto",
+            )}
+          >
+            {/* Only the Pod column needs a floor width; without it the owner
+                cell wraps and the table fits a phone. */}
+            <Table className={showPod ? "min-w-[640px]" : undefined}>
+              <colgroup>
+                {showSelection ? <col className="w-10" /> : null}
+                <col />
+                {showPod ? <col className="w-[34%]" /> : null}
+                <col className="w-[104px]" />
+              </colgroup>
+              {/* The search header stands in for the column heads of a long
+                  list; they stay for assistive technology. */}
+              <TableHeader className={showTools ? "sr-only" : "bg-muted/30"}>
+                <TableRow className="hover:bg-transparent">
+                  {showSelection ? (
+                    <TableHead className="h-8 pr-0 pl-3">
+                      {showTools ? (
+                        <span className="sr-only">Select</span>
+                      ) : (
+                        selectAll
+                      )}
+                    </TableHead>
+                  ) : null}
+                  <ColumnHead>Owner</ColumnHead>
+                  {showPod ? <ColumnHead>Pod</ColumnHead> : null}
+                  <ColumnHead className="pr-4 text-right md:pr-4">
+                    Actions
+                  </ColumnHead>
+                </TableRow>
+              </TableHeader>
+              {visibleGroups.map(({ group, rows }) => (
+                <ConnectionGroupRows
+                  key={group.testId}
+                  group={group}
+                  rows={rows}
+                  shown={shownByGroup[group.testId] ?? CONNECTION_ROWS_SHOWN}
+                  onShowMore={() =>
+                    setShownByGroup((current) => ({
+                      ...current,
+                      [group.testId]:
+                        (current[group.testId] ?? CONNECTION_ROWS_SHOWN) +
+                        CONNECTION_ROWS_SHOWN,
+                    }))
+                  }
+                  showTitle={grouped}
+                  showPod={showPod}
+                  columnCount={columnCount}
+                  selection={
+                    showSelection
+                      ? { selectedIds, canSelect, onToggle: toggle }
+                      : null
+                  }
+                  {...rowProps}
+                />
+              ))}
+              {narrowed && matching.length === 0 ? (
+                <TableBody>
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={columnCount}
+                      className="h-16 text-center text-sm text-muted-foreground"
+                    >
+                      No {noun}s match.
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              ) : null}
+            </Table>
+          </div>
         </div>
       </div>
+
+      <BulkRemoveConnectionsDialog
+        open={confirmingRemoval}
+        onClose={() => setConfirmingRemoval(false)}
+        connections={chosen}
+        copy={{ ...copy, noun }}
+        onRemoved={() => {
+          setConfirmingRemoval(false);
+          clearSelection();
+        }}
+      />
     </TooltipProvider>
   );
+}
+
+/** A list this long gets the count tiles and the search in its header. */
+const CONNECTION_TOOLS_FROM = 10;
+/** How many rows of a group are shown before "Show more". */
+const CONNECTION_ROWS_SHOWN = 50;
+
+const REVOKE_COPY: Omit<BulkRemoveCopy, "noun"> = {
+  action: "Revoke",
+  verb: "Revoked",
+  failureVerb: "revoke",
+  consequence:
+    "Agents that sign in with these credentials lose access to this server's tools until their owner connects again.",
+  sharedNoun: "service account",
+};
+
+const UNINSTALL_COPY: Omit<BulkRemoveCopy, "noun"> = {
+  action: "Uninstall",
+  verb: "Uninstalled",
+  failureVerb: "uninstall",
+  failureParticiple: "uninstalled",
+  consequence:
+    "Agents that use these installations lose access to this server's tools until it is installed again.",
+  sharedNoun: "shared installation",
+};
+
+/** Ticking rows for the bulk actions; null when nothing can be selected. */
+interface RowSelection {
+  selectedIds: ReadonlySet<string>;
+  canSelect: (server: ServerEntry) => boolean;
+  onToggle: (serverId: string) => void;
 }
 
 /** A link-weight add action for a group's header row. */
@@ -909,17 +1228,28 @@ function ColumnHead({
 
 function ConnectionGroupRows({
   group,
+  rows,
+  shown,
+  onShowMore,
   showTitle,
   showPod,
   columnCount,
+  selection,
   ...rowProps
 }: {
   group: ConnectionGroup;
+  /** The group's rows that pass the filters. */
+  rows: ConnectionRow[];
+  /** How many of them are rendered. */
+  shown: number;
+  onShowMore: () => void;
   /** False when the group is the only one: the section title names it. */
   showTitle: boolean;
   showPod: boolean;
   columnCount: number;
+  selection: RowSelection | null;
 } & RowRenderProps) {
+  const hidden = Math.max(0, rows.length - shown);
   return (
     <TableBody
       data-testid={group.testId}
@@ -936,7 +1266,7 @@ function ConnectionGroupRows({
                       {group.title}
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                      {group.rows.length}
+                      {rows.length}
                     </span>
                   </>
                 ) : null}
@@ -952,7 +1282,7 @@ function ConnectionGroupRows({
           </TableCell>
         </TableRow>
       ) : null}
-      {group.rows.length === 0 ? (
+      {rows.length === 0 ? (
         <TableRow className="hover:bg-transparent">
           <TableCell
             colSpan={columnCount}
@@ -962,15 +1292,33 @@ function ConnectionGroupRows({
           </TableCell>
         </TableRow>
       ) : (
-        group.rows.map((row) => (
-          <ConnectionTableRow
-            key={row.server.id}
-            row={row}
-            showPod={showPod}
-            {...rowProps}
-          />
-        ))
+        rows
+          .slice(0, shown)
+          .map((row) => (
+            <ConnectionTableRow
+              key={row.server.id}
+              row={row}
+              showPod={showPod}
+              selection={selection}
+              {...rowProps}
+            />
+          ))
       )}
+      {hidden > 0 ? (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={columnCount} className="h-11 py-0 text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={onShowMore}
+            >
+              Show {Math.min(CONNECTION_ROWS_SHOWN, hidden)} more of{" "}
+              {hidden.toLocaleString("en-US")}
+            </Button>
+          </TableCell>
+        </TableRow>
+      ) : null}
     </TableBody>
   );
 }
@@ -978,6 +1326,7 @@ function ConnectionGroupRows({
 function ConnectionTableRow({
   row: { server, isYou },
   showPod,
+  selection,
   deploymentStatuses,
   canonicalStateByPod,
   getCredentialOwnerName,
@@ -993,8 +1342,11 @@ function ConnectionTableRow({
 }: {
   row: ConnectionRow;
   showPod: boolean;
+  selection: RowSelection | null;
 } & RowRenderProps) {
   const owner = getCredentialOwnerName(server);
+  const selected = selection?.selectedIds.has(server.id) ?? false;
+  const selectable = selection?.canSelect(server) ?? false;
   const scope = resolveServerScope(server);
   const needsSignIn = Boolean(server.oauthRefreshError);
   const createdBy = scope !== "personal" ? (server.ownerEmail ?? null) : null;
@@ -1038,19 +1390,34 @@ function ConnectionTableRow({
       : `${E2eTestId.RevokeCredentialButton}-${owner}`,
   });
 
+  // The mark sits on the row's leading edge, whichever cell that is.
+  const signInMark = needsSignIn ? (
+    <span
+      aria-hidden
+      className="absolute inset-y-0 left-0 w-0.5 bg-amber-500"
+    />
+  ) : null;
+
   return (
     <TableRow
       data-testid={E2eTestId.CredentialRow}
       data-server-id={server.id}
-      className={cn("h-11", needsSignIn && "bg-amber-500/[0.04]")}
+      data-state={selected ? "selected" : undefined}
+      className={cn("h-11", needsSignIn && !selected && "bg-amber-500/[0.04]")}
     >
-      <TableCell className="relative py-1.5">
-        {needsSignIn ? (
-          <span
-            aria-hidden
-            className="absolute inset-y-0 left-0 w-0.5 bg-amber-500"
+      {selection ? (
+        <TableCell className="relative py-0 pr-0 pl-3">
+          {signInMark}
+          <Checkbox
+            aria-label={`Select ${owner}`}
+            checked={selected}
+            disabled={!selectable}
+            onCheckedChange={() => selection.onToggle(server.id)}
           />
-        ) : null}
+        </TableCell>
+      ) : null}
+      <TableCell className="relative py-1.5">
+        {selection ? null : signInMark}
         <div className="flex min-w-0 items-center gap-2.5">
           <ScopeAvatar owner={owner} server={server} />
           <div className="min-w-0 flex-1 leading-4">

@@ -1,0 +1,102 @@
+suite: AlloyDB Auth Proxy sidecar
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+set:
+  postgresql.enabled: false
+  postgresql.external_database_url: postgresql://app%40project.iam@127.0.0.1:5432/archestra?sslmode=disable
+  archestra.database.alloyDbProxy.enabled: true
+  archestra.database.alloyDbProxy.instanceUri: projects/project/locations/us-central1/clusters/cluster/instances/primary
+tests:
+  - it: starts the proxy as the first, native sidecar of the web pod
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: alloydb-auth-proxy
+      - equal:
+          path: spec.template.spec.initContainers[0].restartPolicy
+          value: Always
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: --auto-iam-authn
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: --exit-zero-sigterm
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: projects/project/locations/us-central1/clusters/cluster/instances/primary
+      - equal:
+          path: spec.template.spec.initContainers[0].startupProbe.httpGet.path
+          value: /startup
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+
+  - it: runs the proxy in worker pods
+    template: archestra-worker.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: alloydb-auth-proxy
+
+  - it: runs the proxy in the migration Job so migrations reach the database
+    template: migration-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: alloydb-auth-proxy
+      - equal:
+          path: spec.template.spec.initContainers[0].restartPolicy
+          value: Always
+
+  - it: renders no proxy when disabled
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.alloyDbProxy.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content:
+            name: alloydb-auth-proxy
+          any: true
+
+  - it: requires an instance URI
+    template: migration-job.yaml
+    set:
+      archestra.database.alloyDbProxy.instanceUri: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: archestra.database.alloyDbProxy.instanceUri is required when the AlloyDB Auth Proxy is enabled
+
+  - it: rejects a Cloud SQL style connection name
+    template: migration-job.yaml
+    set:
+      archestra.database.alloyDbProxy.instanceUri: project:us-central1:instance
+    asserts:
+      - failedTemplate:
+          errorMessage: archestra.database.alloyDbProxy.instanceUri must look like projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE
+
+  - it: refuses to run alongside the bundled PostgreSQL
+    template: migration-job.yaml
+    set:
+      postgresql.enabled: true
+      postgresql.external_database_url: null
+    asserts:
+      - failedTemplate:
+          errorMessage: archestra.database.alloyDbProxy requires postgresql.enabled=false
+
+  - it: refuses to run both proxies at once
+    template: migration-job.yaml
+    set:
+      archestra.database.cloudSqlProxy.enabled: true
+      archestra.database.cloudSqlProxy.instanceConnectionName: project:us-central1:instance
+    asserts:
+      - failedTemplate:
+          errorMessage: Enable only one of archestra.database.cloudSqlProxy and archestra.database.alloyDbProxy

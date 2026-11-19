@@ -33,6 +33,24 @@ describe("buildToolIconMap", () => {
     });
   });
 
+  it("resolves a tool by its server's allocated prefix when the name was too long", () => {
+    const map = buildToolIconMap({
+      agentTools: [],
+      catalogItems: [
+        {
+          id: "cat-long",
+          name: "Acme Planning Board Description Review Server",
+          toolPrefix: "acme_planning_board_description",
+          icon: "📋",
+        },
+      ],
+    });
+
+    expect(
+      map.get("acme_planning_board_description__validate-description-review"),
+    ).toEqual({ icon: "📋", catalogId: "cat-long" });
+  });
+
   it("returns nothing for a tool with no matching catalog", () => {
     const map = buildToolIconMap({ agentTools: [], catalogItems });
 

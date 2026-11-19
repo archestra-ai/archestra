@@ -149,6 +149,13 @@ const interactionsTable = pgTable(
     attemptOutcome: varchar("attempt_outcome"),
     failureReason: text("failure_reason"),
     /**
+     * Whether the stored response is an error (`{ error }`), including a
+     * stream that failed after usage arrived. Derived on write, before content
+     * is encrypted or withheld, so list and session aggregates can read it
+     * without the response payload. Null on rows written before the column.
+     */
+    failed: boolean("failed"),
+    /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)

@@ -61,6 +61,7 @@ const MCP_RUNTIME_FIELDS = [
   "userConfig",
   "oauthConfig",
   "enterpriseManagedConfig",
+  "awsIamConfig",
   "requiresAuth",
   "authDescription",
   "authFields",

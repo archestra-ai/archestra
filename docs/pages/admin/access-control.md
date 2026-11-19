@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-17
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -66,7 +66,7 @@ You need **Manage access** on the item to share it. To share every current and f
 
 Sharing with everyone or a role also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
 
-Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers).
+Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers). Agent Runtimes have a **Can use and configure** level instead of **Can update**; see [who can use each runtime](/docs/agents/runtime#choose-who-can-use-each-runtime).
 
 ### Share Across Teams
 
@@ -86,6 +86,20 @@ Roles control organization actions, such as creating resources and managing user
 | Admin | Full organization administration, including everyone's logs and user impersonation. |
 
 See the [exact permission matrix](/docs/reference/permissions#predefined-roles). To change a member's roles, open **Settings → Users**, choose **Change role** on their row, and save with **Update Roles**.
+
+## Compose Access from Granular Roles
+
+Give someone exactly what their job needs without writing a custom role: assign a few granular roles, such as **Agent Writer** and **Log Reader**, and their permissions add up. Granular roles are built in, grouped by area, and cannot be edited.
+
+1. Open the role picker where roles are assigned: **Change role** on a row in **Settings → Users**, **Inherited Roles** on a team, or **Roles** on a service account.
+2. Pick an area on the left, such as **Agents** or **MCP**, and check the roles you need on the right. The checkbox beside an area takes all of its roles. The chevron at the end of a role shows what it grants.
+3. Each choice applies as you make it. Close the picker and save.
+
+What to know:
+
+- Each granular role grants a few permissions, such as [`agent:read`](/docs/reference/permissions#agent:read). **View built-in roles** on **Settings → Roles** lists every built-in role and what it grants, and the [permissions reference](/docs/reference/permissions#granular-roles) has the full table.
+- A granular role opens a page, not every item on it. Which agents or servers someone sees still depends on what is shared with them.
+- A new custom role can start from one of the four preset roles or from another custom role, not from a granular role.
 
 <span id="custom-roles"></span>
 

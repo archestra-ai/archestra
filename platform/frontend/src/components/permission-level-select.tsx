@@ -79,7 +79,7 @@ export function PermissionLevelSelect({
   // open, otherwise the chosen one.
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const selected = options.find((option) => option.value === value);
-  const SelectedIcon = selected ? levelIcon(selected) : null;
+  const SelectedIcon = selected ? permissionLevelIcon(selected) : null;
   const shown =
     options.find((option) => option.value === highlighted) ?? selected;
 
@@ -124,7 +124,7 @@ export function PermissionLevelSelect({
         className="w-[min(22rem,calc(100vw-2rem))]"
       >
         {options.map((option) => {
-          const Icon = levelIcon(option);
+          const Icon = permissionLevelIcon(option);
           return (
             <SelectItem
               key={option.value}
@@ -179,7 +179,7 @@ export function PermissionLevelLabel({
   title?: string;
   className?: string;
 }) {
-  const Icon = levelIcon({ actions });
+  const Icon = permissionLevelIcon({ actions });
   return (
     <span
       className={cn(
@@ -252,33 +252,44 @@ function LevelDetail({
   );
 }
 
-function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
+/** The icon a level carries wherever levels are listed. */
+export function permissionLevelIcon(
+  option: Pick<PermissionLevelOption, "actions">,
+): LucideIcon {
   const has = (action: ResourcePermissionAction) =>
     option.actions.includes(action);
   if (has("configure-deployment-spec")) return Server;
   if (has("manage-permissions")) return KeyRound;
-  if (has("update")) return Pencil;
-  if (has("use")) return Play;
+  if (has("update") || has("configure")) return Pencil;
+  if (has("use") || option.actions.some(isDeployAction)) return Play;
   return Eye;
 }
 
 // The action item's value: never a level, so the select never shows it.
 const ACTION_VALUE = "__action";
 
-const actionOrder: ResourcePermissionAction[] = [
+const actionOrder = [
   "read",
   "use",
+  "configure",
   "update",
   "delete",
   "manage-permissions",
   "configure-deployment-spec",
-];
+] as const satisfies readonly ResourcePermissionAction[];
 
-const actionChipLabels: Record<ResourcePermissionAction, string> = {
+// The per-kind deploy actions of an environment are chosen beside the level,
+// not listed as capabilities of it, so they carry no chip.
+const actionChipLabels: Record<(typeof actionOrder)[number], string> = {
   read: "Read",
   use: "Use",
   update: "Update",
   delete: "Delete",
   "manage-permissions": "Manage access",
   "configure-deployment-spec": "Deploy",
+  configure: "Configure",
 };
+
+function isDeployAction(action: ResourcePermissionAction): boolean {
+  return action.startsWith("deploy-");
+}

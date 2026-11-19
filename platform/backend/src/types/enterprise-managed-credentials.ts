@@ -65,12 +65,13 @@ export const EnterpriseManagedAssertionModeSchema = z.enum([
 /**
  * Which client an exchanged credential was issued to: the identity provider's
  * own client, the MCP server's override client, or the calling agent's Entra
- * agent identity. Recorded on MCP tool call logs.
+ * agent identity or Okta AI agent. Recorded on MCP tool call logs.
  */
 export const EnterpriseCredentialClientTypeSchema = z.enum([
   "identity_provider",
   "mcp_server",
   "entra_agent_identity",
+  "okta_ai_agent",
 ]);
 
 export const EnterpriseManagedCredentialConfigSchema = z.object({

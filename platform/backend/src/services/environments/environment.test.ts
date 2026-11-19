@@ -1,4 +1,8 @@
-import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  ENVIRONMENT_DEPLOY_KINDS,
+  type EnvironmentDeployKind,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { describe, expect, vi } from "vitest";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
@@ -14,11 +18,14 @@ import {
   createEnvironment,
   deleteEnvironment,
   listEnvironments,
+  resolveDefaultEnvironmentForNewResource,
   updateEnvironment,
+  updateEnvironmentResourceDefaults,
 } from "@/services/environments/environment";
 import { test } from "@/test";
 import {
   createRestrictedEnvironment,
+  grantEnvironmentDeployKinds,
   grantEnvironmentUse,
 } from "@/test/environments";
 
@@ -269,6 +276,7 @@ describe("EnvironmentService", () => {
         environmentId: null,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).resolves.toBeUndefined();
   });
@@ -290,6 +298,7 @@ describe("EnvironmentService", () => {
         environmentId: env.id,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).resolves.toBeUndefined();
   });
@@ -311,6 +320,7 @@ describe("EnvironmentService", () => {
         environmentId: env.id,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
@@ -332,6 +342,7 @@ describe("EnvironmentService", () => {
         environmentId: env.id,
         organizationId: org.id,
         userId: admin.id,
+        resource: "mcpRegistry",
       }),
     ).resolves.toBeUndefined();
   });
@@ -362,6 +373,7 @@ describe("EnvironmentService", () => {
         environmentId: env.id,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
@@ -396,6 +408,7 @@ describe("EnvironmentService", () => {
         environmentId: granted.id,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).resolves.toBeUndefined();
     await expect(
@@ -403,8 +416,151 @@ describe("EnvironmentService", () => {
         environmentId: other.id,
         organizationId: org.id,
         userId: member.id,
+        resource: "mcpRegistry",
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("a grant limited to some kinds deploys those kinds into the environment and no others", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const launch = await createRestrictedEnvironment({
+      organizationId: org.id,
+      data: { name: "Launch" },
+    });
+    const other = await createRestrictedEnvironment({
+      organizationId: org.id,
+      data: { name: "Other" },
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    await grantEnvironmentDeployKinds({
+      organizationId: org.id,
+      environmentId: launch.id,
+      userId: member.id,
+      kinds: ["agent", "app"],
+    });
+
+    const deployable = async (environmentId: string) => {
+      const kinds: EnvironmentDeployKind[] = [];
+      for (const resource of ENVIRONMENT_DEPLOY_KINDS) {
+        const allowed = await assertCanAssignEnvironment({
+          environmentId,
+          organizationId: org.id,
+          userId: member.id,
+          resource,
+        }).then(
+          () => true,
+          (error) => {
+            expect(error).toMatchObject({ statusCode: 403 });
+            return false;
+          },
+        );
+        if (allowed) kinds.push(resource);
+      }
+      return kinds;
+    };
+    expect(await deployable(launch.id)).toEqual(["agent", "app"]);
+    // The limit names one environment: it opens nothing elsewhere.
+    expect(await deployable(other.id)).toEqual([]);
+
+    // Widening the same person to `use` deploys every kind there.
+    await grantEnvironmentUse({
+      organizationId: org.id,
+      environmentId: launch.id,
+      userId: member.id,
+    });
+    expect(await deployable(launch.id)).toEqual(ENVIRONMENT_DEPLOY_KINDS);
+  });
+
+  test("the environment list reports the kinds the caller may deploy into each environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const open = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Sandbox" },
+    });
+    const limited = await createRestrictedEnvironment({
+      organizationId: org.id,
+      data: { name: "Launch" },
+    });
+    const closed = await createRestrictedEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod" },
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    await grantEnvironmentDeployKinds({
+      organizationId: org.id,
+      environmentId: limited.id,
+      userId: member.id,
+      kinds: ["agent"],
+    });
+
+    const { environments } = await listEnvironments({
+      organizationId: org.id,
+      userId: member.id,
+    });
+    const byId = new Map(
+      environments.map((environment) => [environment.id, environment]),
+    );
+    expect(byId.get(open.id)).toMatchObject({
+      canDeploy: true,
+      deployKinds: ENVIRONMENT_DEPLOY_KINDS,
+    });
+    expect(byId.get(limited.id)).toMatchObject({
+      canDeploy: false,
+      deployKinds: ["agent"],
+    });
+    expect(byId.get(closed.id)).toMatchObject({
+      canDeploy: false,
+      deployKinds: [],
+    });
+  });
+
+  test("a new resource falls back to the Default environment when its landing environment is closed to that kind", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const launch = await createRestrictedEnvironment({
+      organizationId: org.id,
+      data: { name: "Launch" },
+    });
+    await updateEnvironmentResourceDefaults({
+      organizationId: org.id,
+      data: { agent: launch.id, mcpRegistry: launch.id },
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    await grantEnvironmentDeployKinds({
+      organizationId: org.id,
+      environmentId: launch.id,
+      userId: member.id,
+      kinds: ["agent"],
+    });
+
+    expect(
+      await resolveDefaultEnvironmentForNewResource({
+        organizationId: org.id,
+        userId: member.id,
+        resource: "agent",
+      }),
+    ).toBe(launch.id);
+    expect(
+      await resolveDefaultEnvironmentForNewResource({
+        organizationId: org.id,
+        userId: member.id,
+        resource: "mcpRegistry",
+      }),
+    ).toBeNull();
   });
 
   test("assertCanAssignEnvironment throws 404 for an unknown environment", async ({
@@ -420,6 +576,7 @@ describe("EnvironmentService", () => {
         environmentId: MISSING_ID,
         organizationId: org.id,
         userId: admin.id,
+        resource: "mcpRegistry",
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
   });

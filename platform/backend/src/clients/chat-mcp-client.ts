@@ -2,11 +2,17 @@ import {
   ApiError,
   isAgentTool,
   isBrowserMcpTool,
+  isSkillTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   type ModelSelection,
   SOURCE_HEADER,
   TimeInMs,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type {
   McpUiResourceCsp,
@@ -272,6 +278,7 @@ function getToolCacheKey(params: {
   delegationChain?: string;
   sessionId?: string;
   parentLlm?: ModelSelection;
+  suppressContentLogging?: boolean;
 }): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const {
     agentId,
@@ -280,6 +287,7 @@ function getToolCacheKey(params: {
     delegationChain,
     sessionId,
     parentLlm,
+    suppressContentLogging,
   } = params;
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
@@ -295,6 +303,7 @@ function getToolCacheKey(params: {
   // chat keys both by the conversation id, which leaves its key unchanged.
   if (sessionId && sessionId !== isolationKey)
     parts.push(`session=${sessionId}`);
+  if (suppressContentLogging) parts.push("encrypted");
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -974,6 +983,7 @@ export async function getChatMcpTools({
     delegationChain,
     sessionId,
     parentLlm,
+    suppressContentLogging,
   });
   const shouldUseToolCache =
     !oauthExecution && !abortSignal && !appaSubagent && !openappaReviewPause;
@@ -996,7 +1006,10 @@ export async function getChatMcpTools({
       modelAcceptsImageToolResults ?? true;
     cached.context.parentLlm = parentLlm;
     cached.context.runId = runId;
+    cached.context.launchedRunIds = undefined;
     cached.context.agentRuntimeTier = agentRuntimeTier;
+    cached.context.suppressContentLogging = suppressContentLogging;
+    cached.context.encryptedChatAudit = encryptedChatAudit;
     logger.info(
       {
         agentId,
@@ -1085,12 +1098,19 @@ export async function getChatMcpTools({
     const delegatedRun =
       !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
-      if (isAgentTool(tool.name)) return false;
+      if (isAgentTool(tool.name) || isSkillTool(tool.name)) return false;
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
-        delegatedRun &&
-        isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))
-      )
+        suppressContentLogging &&
+        (shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+          shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
+          shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME ||
+          shortName === TOOL_POST_AGENT_RUN_FILE_SHORT_NAME ||
+          shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME)
+      ) {
         return false;
+      }
+      if (delegatedRun && isOpenappaTool(shortName)) return false;
       const uiVisibility = (tool._meta as { ui?: McpUiToolMeta } | undefined)
         ?.ui?.visibility;
       return !(uiVisibility && !uiVisibility.includes("model"));

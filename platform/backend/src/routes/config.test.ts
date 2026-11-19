@@ -42,8 +42,7 @@ describe("config routes", () => {
     await app.register(configRoutes);
   });
 
-  test("advertises plugins with beta disabled", async () => {
-    config.beta = false;
+  test("advertises plugins", async () => {
     const response = await app.inject({ method: "GET", url: "/api/config" });
     expect(response.statusCode).toBe(200);
     expect(response.json().features.plugins).toBe(true);
@@ -61,16 +60,6 @@ describe("config routes", () => {
 
     expect(off.json().features.devFeedbackEnabled).toBe(false);
     expect(on.json().features.devFeedbackEnabled).toBe(true);
-  });
-
-  test("advertises auto routing only when its flag is set", async () => {
-    config.autoRouting.enabled = true;
-    const on = await app.inject({ method: "GET", url: "/api/config" });
-    config.autoRouting.enabled = false;
-    const off = await app.inject({ method: "GET", url: "/api/config" });
-
-    expect(off.json().features.autoRoutingEnabled).toBe(false);
-    expect(on.json().features.autoRoutingEnabled).toBe(true);
   });
 
   test.for([
@@ -177,8 +166,7 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Beta-derived flags may inherit an ambient ARCHESTRA_BETA in dev/CI.
-      mcpIdleHibernationBetaEnabled: expect.any(Boolean),
+      mcpIdleHibernationBetaEnabled: true,
       // SPDX-SnippetEnd
     });
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");
@@ -225,9 +213,7 @@ describe("config routes", () => {
     ]);
   });
 
-  test("reports Agent Runtime and OpenAPPA without enabling beta features", async () => {
-    const originalBeta = config.beta;
-    config.beta = false;
+  test("reports Agent Runtime and OpenAPPA availability", async () => {
     const sandboxInstalled = vi
       .spyOn(agentSandboxApi, "isInstalled", "get")
       .mockReturnValue(false);
@@ -253,7 +239,6 @@ describe("config routes", () => {
       const installed = (
         await app.inject({ method: "GET", url: "/api/config" })
       ).json();
-      expect(installed.features.betaEnabled).toBe(false);
       expect(installed.features.openappaEnabled).toBe(true);
       expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
       expect(installed.features.agentRuntime).toBe(true);
@@ -262,7 +247,6 @@ describe("config routes", () => {
         available: true,
       });
     } finally {
-      config.beta = originalBeta;
       sandboxInstalled.mockRestore();
     }
   });

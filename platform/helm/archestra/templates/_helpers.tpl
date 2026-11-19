@@ -113,6 +113,11 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
   value: "true"
 {{- end }}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict }}
+{{- if and $entraAuth.enabled (not (hasKey $envOverrides "ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED")) }}
+- name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+  value: "true"
+{{- end }}
 {{- if and $iamAuth.awsRegion (not (hasKey $envOverrides "ARCHESTRA_DATABASE_AWS_REGION")) }}
 - name: ARCHESTRA_DATABASE_AWS_REGION
   value: {{ $iamAuth.awsRegion | quote }}
@@ -411,6 +416,10 @@ the injection.
 - name: ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE
   value: {{ .Values.archestra.orchestrator.kubernetes.agentRuntimeNamespace | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.daggerRuntimeNamespace (not (hasKey .Values.archestra.env "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE")) }}
+- name: ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE
+  value: {{ .Values.archestra.orchestrator.kubernetes.daggerRuntimeNamespace | quote }}
+{{- end }}
 {{/* The release name, told to the backend rather than left for it to infer.
      Cluster objects the backend creates for ITSELF (the MCP image pre-pull
      DaemonSet) are named after it, so two releases sharing a namespace never
@@ -530,6 +539,10 @@ the injection.
 {{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
 - name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
   value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.retiredNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.retiredNamespaces | quote }}
 {{- end }}
 {{- if .Values.archestra.sre.enabled }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_SRE_AGENT_ENABLED") }}
@@ -734,8 +747,9 @@ File storage PVC claim name
 
 {{/*
 Annotations for the platform ServiceAccount, as YAML: the configured
-annotations plus the IRSA role derived from archestra.database.iamAuth. The
-migration Job's hook ServiceAccount carries the same annotations.
+annotations plus the IRSA role derived from archestra.database.iamAuth and the
+Workload Identity client ID from archestra.database.entraAuth. The migration
+Job's hook ServiceAccount carries the same annotations.
 */}}
 {{- define "archestra-platform.serviceAccountAnnotations" -}}
 {{- $saAnnotations := deepCopy (.Values.archestra.orchestrator.kubernetes.serviceAccount.annotations | default dict) -}}
@@ -743,7 +757,27 @@ migration Job's hook ServiceAccount carries the same annotations.
 {{- if and $iamAuth.roleArn (not $iamAuth.injectWebIdentityTokenVolume) (not (hasKey $saAnnotations "eks.amazonaws.com/role-arn")) -}}
 {{- $_ := set $saAnnotations "eks.amazonaws.com/role-arn" $iamAuth.roleArn -}}
 {{- end -}}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict -}}
+{{- if and $entraAuth.clientId (not (hasKey $saAnnotations "azure.workload.identity/client-id")) -}}
+{{- $_ := set $saAnnotations "azure.workload.identity/client-id" $entraAuth.clientId -}}
+{{- end -}}
 {{- toYaml $saAnnotations -}}
+{{- end }}
+
+{{/*
+Extra labels for the web, worker, and migration Job pods, as YAML:
+archestra.podLabels plus the AKS Workload Identity opt-in label when
+archestra.database.entraAuth.clientId is set. Renders nothing when empty.
+*/}}
+{{- define "archestra-platform.podLabels" -}}
+{{- $podLabels := deepCopy (.Values.archestra.podLabels | default dict) -}}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict -}}
+{{- if and $entraAuth.clientId (not (hasKey $podLabels "azure.workload.identity/use")) -}}
+{{- $_ := set $podLabels "azure.workload.identity/use" "true" -}}
+{{- end -}}
+{{- with $podLabels -}}
+{{- toYaml . -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -1097,44 +1131,36 @@ args:
 {{- end }}
 
 {{/*
-Shared init containers for both platform and worker Deployments.
-Handles the Cloud SQL Auth Proxy sidecar, Vault secret injection, pgvector
-extension setup, and PostgreSQL readiness.
+A database auth proxy (Cloud SQL or AlloyDB) as a native sidecar: it starts
+before the remaining init containers, keeps running beside the app, and stops
+after it. Takes a dict with name, proxy (its values), exitZeroFlag (the
+proxy's flag for exiting 0 on SIGTERM), and target (the instance to serve).
 */}}
-{{- define "archestra-platform.initContainers" -}}
-{{- $cloudSqlProxy := (.Values.archestra.database).cloudSqlProxy | default dict }}
-{{- if $cloudSqlProxy.enabled }}
-{{- if not $cloudSqlProxy.instanceConnectionName }}
-{{- fail "archestra.database.cloudSqlProxy.instanceConnectionName is required when the Cloud SQL Auth Proxy is enabled" }}
-{{- end }}
-{{- if .Values.postgresql.enabled }}
-{{- fail "archestra.database.cloudSqlProxy requires postgresql.enabled=false" }}
-{{- end }}
-# Cloud SQL Auth Proxy as a native sidecar: it starts before the remaining
-# init containers, keeps running beside the app, and stops after it.
-- name: cloud-sql-proxy
-  image: {{ printf "%s:%s" $cloudSqlProxy.image.repository $cloudSqlProxy.image.tag }}{{ with $cloudSqlProxy.image.digest }}@{{ . }}{{ end }}
+{{- define "archestra-platform.databaseProxySidecar" -}}
+{{- $proxy := .proxy -}}
+- name: {{ .name }}
+  image: {{ printf "%s:%s" $proxy.image.repository $proxy.image.tag }}{{ with $proxy.image.digest }}@{{ . }}{{ end }}
   restartPolicy: Always
   args:
-    - --port={{ $cloudSqlProxy.port }}
+    - --port={{ $proxy.port }}
     - --health-check
     - --http-address=0.0.0.0
-    - --http-port={{ $cloudSqlProxy.healthPort }}
-    - --exit-zero-on-sigterm
-    {{- range $cloudSqlProxy.args }}
+    - --http-port={{ $proxy.healthPort }}
+    - {{ .exitZeroFlag }}
+    {{- range $proxy.args }}
     - {{ . | quote }}
     {{- end }}
-    - {{ $cloudSqlProxy.instanceConnectionName | quote }}
+    - {{ .target | quote }}
   startupProbe:
     httpGet:
       path: /startup
-      port: {{ $cloudSqlProxy.healthPort }}
+      port: {{ $proxy.healthPort }}
     periodSeconds: 1
     failureThreshold: 60
   livenessProbe:
     httpGet:
       path: /liveness
-      port: {{ $cloudSqlProxy.healthPort }}
+      port: {{ $proxy.healthPort }}
     periodSeconds: 10
     failureThreshold: 6
   securityContext:
@@ -1143,10 +1169,43 @@ extension setup, and PostgreSQL readiness.
     readOnlyRootFilesystem: true
     capabilities:
       drop: ["ALL"]
-  {{- with $cloudSqlProxy.resources }}
+  {{- with $proxy.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+{{- end }}
+
+{{/*
+Shared init containers for both platform and worker Deployments.
+Handles the Cloud SQL or AlloyDB Auth Proxy sidecar, Vault secret injection,
+pgvector extension setup, and PostgreSQL readiness.
+*/}}
+{{- define "archestra-platform.initContainers" -}}
+{{- $cloudSqlProxy := (.Values.archestra.database).cloudSqlProxy | default dict }}
+{{- $alloyDbProxy := (.Values.archestra.database).alloyDbProxy | default dict }}
+{{- if and $cloudSqlProxy.enabled $alloyDbProxy.enabled }}
+{{- fail "Enable only one of archestra.database.cloudSqlProxy and archestra.database.alloyDbProxy" }}
+{{- end }}
+{{- if $cloudSqlProxy.enabled }}
+{{- if not $cloudSqlProxy.instanceConnectionName }}
+{{- fail "archestra.database.cloudSqlProxy.instanceConnectionName is required when the Cloud SQL Auth Proxy is enabled" }}
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+{{- fail "archestra.database.cloudSqlProxy requires postgresql.enabled=false" }}
+{{- end }}
+{{ include "archestra-platform.databaseProxySidecar" (dict "name" "cloud-sql-proxy" "proxy" $cloudSqlProxy "exitZeroFlag" "--exit-zero-on-sigterm" "target" $cloudSqlProxy.instanceConnectionName) }}
+{{- end }}
+{{- if $alloyDbProxy.enabled }}
+{{- if not $alloyDbProxy.instanceUri }}
+{{- fail "archestra.database.alloyDbProxy.instanceUri is required when the AlloyDB Auth Proxy is enabled" }}
+{{- end }}
+{{- if not (regexMatch "^projects/[^/]+/locations/[^/]+/clusters/[^/]+/instances/[^/]+$" $alloyDbProxy.instanceUri) }}
+{{- fail "archestra.database.alloyDbProxy.instanceUri must look like projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE" }}
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+{{- fail "archestra.database.alloyDbProxy requires postgresql.enabled=false" }}
+{{- end }}
+{{ include "archestra-platform.databaseProxySidecar" (dict "name" "alloydb-auth-proxy" "proxy" $alloyDbProxy "exitZeroFlag" "--exit-zero-sigterm" "target" $alloyDbProxy.instanceUri) }}
 {{- end }}
 {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
 # Vault secret injection init container

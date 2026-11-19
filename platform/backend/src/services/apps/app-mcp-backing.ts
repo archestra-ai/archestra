@@ -11,6 +11,7 @@ import McpServerModel from "@/models/mcp-server";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { appLaunchToolDescription } from "@/services/apps/app-run-link";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
@@ -69,15 +70,17 @@ export async function createAppBacking(params: {
     // (APP_LAUNCH_TOOL_NAME) so it shows up in the guardrails UI and is
     // env/scope-filtered like any tool. Plain insert (not
     // bulkCreateToolsIfNotExists, which would adopt a pre-existing NULL-catalog
-    // proxy tool of the same name). The name is suffixed with the app id so two
-    // apps that legitimately share a name across scopes don't produce the same
-    // `<name>__open` and shadow each other in the gateway's dedupe-by-name when
-    // both are assigned to one profile.
+    // proxy tool of the same name). An app's catalog gets a tool prefix of its
+    // own (`<name>`, else `<name>-2`, ...), so two apps that legitimately share
+    // a name across scopes don't produce the same `<name>__open` and shadow
+    // each other in the gateway's dedupe-by-name when both are assigned to one
+    // profile. The prefix is stored, so a rename leaves the name alone.
+    const toolNameFor = await mintCatalogToolNames({
+      catalogId: catalog.id,
+      rawToolNames: [APP_LAUNCH_TOOL_NAME],
+    });
     const tool = await ToolModel.create({
-      name: ToolModel.slugifyName(
-        `${app.name}-${app.id.slice(0, 8)}`,
-        APP_LAUNCH_TOOL_NAME,
-      ),
+      name: toolNameFor(APP_LAUNCH_TOOL_NAME),
       description: appLaunchToolDescription(app.name),
       parameters: { type: "object", properties: {} },
       catalogId: catalog.id,
@@ -143,8 +146,9 @@ export async function syncAppBacking(app: App): Promise<void> {
     // extra query on ordinary (e.g. HTML-only) edits.
     const nameChanged = server.name !== app.name;
     // Keep the backing server name in lockstep with the app. The launch tool's
-    // name is id-suffixed (stable + globally unique), so it is NOT re-slugified
-    // on rename — renaming can't reintroduce a dedupe collision.
+    // name carries the app's allocated tool prefix (stable + globally unique),
+    // so it is NOT re-slugified on rename — renaming can't reintroduce a
+    // dedupe collision.
     if (nameChanged) {
       await McpServerModel.update(server.id, { name: app.name });
     }

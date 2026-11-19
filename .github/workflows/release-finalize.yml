@@ -13,10 +13,12 @@ run-name: ${{ inputs.request_id && format('Finalize release request {0}', inputs
 # - The schedule sweeps draft releases and dispatches it for each one whose
 #   newest publisher run succeeded, in case Release Gate missed it.
 #
-# Neither is trusted: the finalize job reads the request from this
-# repository's own release run, then checks the publisher run and every
-# public name (release-publish-verify) before it writes anything. Only
-# release-publisher's publish.yml on main writes public names.
+# Neither is trusted. The shared workflow (archestra-ai/.github
+# release-finalize.yml) reads the request from this repository's own release
+# run, then checks the publisher run and every public name
+# (release-publish-verify). Only then does `publish` check the publication
+# policy and write anything. Only release-publisher's publish.yml on main writes
+# public names.
 
 on:
   workflow_dispatch:
@@ -37,147 +39,100 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sweep:
-    name: Find approved releases
-    if: ${{ github.event_name == 'schedule' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Holds the archestra-releaser App's key; main and release/* only.
-    environment:
-      name: releaser
-      deployment: false # A secrets and branch gate; nothing is deployed.
+  finalize:
+    name: Check
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     permissions:
       contents: write # List draft releases (push access only).
-      actions: write # Dispatch this workflow on each request's branch.
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-          persist-credentials: false
+      actions: write # Read the release run; the sweep dispatches this workflow on each request's branch.
+      attestations: read # Verify the published digests' attestations.
+    uses: archestra-ai/.github/.github/workflows/release-finalize.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    with:
+      # Holds the archestra-releaser App's key; main and release/* only.
+      environment: releaser
+      project: archestra
+      release-workflow: .github/workflows/release-please.yml
+      finalize-workflow: release-finalize.yml
+      request-id: ${{ inputs.request_id || '' }}
+      release-branches: 'main|release/\d+\.\d+'
+      tag-template: platform-v{version}
+      image-tag: "{version}"
+      chart-repositories: |
+        archestra-platform oci://ghcr.io/archestra-ai/helm-charts
+      # `publish` checks the publication policy first, which decides `latest`.
+      upload: false
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Generate a publisher token
-        id: publisher-token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
-        with:
-          owner: archestra-ai
-          repositories: release-publisher
-          permission-actions: read # Read the publisher's runs.
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Dispatch the approved releases
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PUBLISHER_REPOSITORY: archestra-ai/release-publisher
-          PUBLISHER_TOKEN: ${{ steps.publisher-token.outputs.token }}
-        run: python3 .github/scripts/release-finalize.py sweep
-
-  finalize:
+  publish:
     name: Publish release
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+    needs: finalize
+    if: ${{ needs.finalize.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     concurrency:
       # Serialize publication within each release channel.
       group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
-    # Holds the archestra-releaser App's key; main and release/* only.
+    # Holds RELEASE_FREEZE; main and release/* only.
     environment:
       name: releaser
       deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: write # Read draft releases, attach the chart and publish the release.
       actions: read # Download the release run's request and chart.
-      attestations: read # Verify the published digests' attestations.
     outputs:
-      published: ${{ steps.request.outputs.publish }}
+      published: ${{ steps.publish.outputs.published || 'false' }}
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Read the release run's request
-        id: request
-        env:
-          REQUEST_ID: ${{ inputs.request_id }}
-          REQUEST_DIR: ${{ runner.temp }}/release-request
-        run: python3 .github/scripts/release-finalize.py request
-
       - name: Check publication is still allowed
         id: publication-policy
-        if: ${{ steps.request.outputs.publish == 'true' }}
         env:
-          VERSION: ${{ steps.request.outputs.version }}
-          TAG_NAME: ${{ steps.request.outputs.tag_name }}
+          VERSION: ${{ needs.finalize.outputs.version }}
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: bash .github/scripts/release-publication-policy.sh
 
-      - name: Generate a publisher token
-        id: publisher-token
-        if: ${{ steps.request.outputs.publish == 'true' }}
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
-        with:
-          owner: archestra-ai
-          repositories: release-publisher
-          permission-actions: read # Read the publisher's runs.
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      # The publisher run succeeded and every public name holds the digest
-      # this repository attested.
-      - name: Verify the publication
-        if: ${{ steps.request.outputs.publish == 'true' }}
-        uses: archestra-ai/.github/actions/release-publish-verify@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
-        with:
-          token: ${{ steps.publisher-token.outputs.token }}
-          attestation-token: ${{ github.token }}
-          request-file: ${{ steps.request.outputs.request_file }}
-          requester: archestra-releaser[bot]
-          signer-repository: ${{ github.repository }}
-          signer-workflow: ${{ github.repository }}/.github/workflows/release-please.yml
-          image-tag: "{version}"
-          chart-repositories: |
-            archestra-platform oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
-
-      - name: Download the release run's chart
-        if: ${{ steps.request.outputs.publish == 'true' }}
+      - name: Download the release run's request and chart
         env:
-          RUN_ID: ${{ steps.request.outputs.run_id }}
-          VERSION: ${{ steps.request.outputs.version }}
-          REQUEST_FILE: ${{ steps.request.outputs.request_file }}
+          RUN_ID: ${{ needs.finalize.outputs.run-id }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          RELEASE_DIR: ${{ runner.temp }}/release
         run: |
-          gh run download "$RUN_ID" --name release-helm-chart --dir .
-          EXPECTED=$(jq -er '.charts.sha256["archestra-platform"]' "$REQUEST_FILE")
-          ACTUAL=$(sha256sum "archestra-platform-${VERSION}.tgz" | cut -d' ' -f1)
-          test "$ACTUAL" = "$EXPECTED" \
-            || { echo "::error::The release run's chart is not the attested one"; exit 1; }
+          set -euo pipefail
+          attempt=${REQUEST_ID#*-}
+          [[ "$REQUEST_ID" == "${RUN_ID}-${attempt}" && "$attempt" =~ ^[0-9]+$ ]] \
+            || { echo "::error::request_id $REQUEST_ID is not run $RUN_ID"; exit 1; }
+          gh run download "$RUN_ID" --name "release-request-${attempt}" --dir "$RELEASE_DIR/request"
+          gh run download "$RUN_ID" --name release-helm-chart --dir "$RELEASE_DIR/chart"
 
-      # Every registry write, :latest included, belongs to release-publisher.
+      # Checks the chart against the request's sha256, then attaches it and
+      # publishes the draft. Every registry write, :latest included, belongs to
+      # release-publisher; an older line's patch keeps the newer line latest.
       - name: Publish GitHub release
-        if: ${{ steps.request.outputs.publish == 'true' }}
-        env:
-          VERSION: ${{ steps.request.outputs.version }}
-          TAG_NAME: ${{ steps.request.outputs.tag_name }}
-          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
-        run: |
-          # A retry may find an already published immutable release.
-          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
-          [ "$IS_DRAFT" = true ] || exit 0
-          gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
-          if [[ "$VERSION" == *-* ]]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
-          elif [ "$PRESERVE_LATEST" = true ]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest=false
-          else
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
-          fi
+        id: publish
+        uses: archestra-ai/.github/actions/release-finalize@v1.31.1
+        with:
+          operation: publish
+          token: ${{ github.token }}
+          project: archestra
+          release-workflow: .github/workflows/release-please.yml
+          release-branches: 'main|release/\d+\.\d+'
+          tag-template: platform-v{version}
+          tag-name: ${{ needs.finalize.outputs.tag-name }}
+          version: ${{ needs.finalize.outputs.version }}
+          request-file: ${{ runner.temp }}/release/request/request.json
+          files: ${{ runner.temp }}/release/chart/archestra-platform-${{ needs.finalize.outputs.version }}.tgz
+          latest: ${{ steps.publication-policy.outputs.preserve_latest == 'true' && 'false' || 'true' }}
 
   recheck-release-prs:
     name: Re-check open release PRs
@@ -185,9 +140,9 @@ jobs:
     # Published). Re-check them now instead of at that workflow's next
     # scheduled run: the release event this job's GITHUB_TOKEN publish caused
     # starts no workflow, a workflow_dispatch does.
-    if: ${{ needs.finalize.outputs.published == 'true' }}
+    if: ${{ needs.publish.outputs.published == 'true' }}
     needs:
-      - finalize
+      - publish
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -199,21 +154,23 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh workflow run previous-release-published.yml --ref main
 
-  update-terraform-provider:
-    name: Start Terraform provider update
-    # Propose each release from main to the Terraform provider as soon as it is
-    # published, instead of at the updater's next daily run. A workflow_dispatch
+  sync-terraform-provider:
+    name: Start Terraform provider sync
+    # Start the agent that brings the Terraform and Crossplane providers up to
+    # each release from main, as soon as it is published. A workflow_dispatch
     # sent with GITHUB_TOKEN starts a run; the release event it caused does not.
-    if: ${{ github.ref == 'refs/heads/main' && needs.finalize.outputs.published == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && needs.publish.outputs.published == 'true' }}
     needs:
       - finalize
+      - publish
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: write # Start the Update Terraform Provider workflow.
+      actions: write # Start the Sync Terraform Provider workflow.
     steps:
-      - name: Start Update Terraform Provider
+      - name: Start Sync Terraform Provider
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh workflow run update-terraform-provider.yml --ref main
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
+        run: gh workflow run sync-terraform-provider.yml --ref main -f "release_tag=$TAG_NAME"

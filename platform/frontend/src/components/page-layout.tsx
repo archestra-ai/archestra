@@ -360,11 +360,13 @@ export function PageLayout({
                           // Detail titles name a record and run long; a step
                           // smaller on phones keeps them to a line or two.
                           backLink && "text-xl sm:text-2xl",
+                          // One line with an ellipsis: a wizard's header never
+                          // changes height, and a title cut at a line break
+                          // reads as a finished one.
                           maxWidthKey === "wizard" &&
-                            (stackHeaderOnMobile
-                              ? "sm:max-h-10 sm:overflow-hidden"
-                              : "max-h-10 overflow-hidden"),
+                            (stackHeaderOnMobile ? "sm:truncate" : "truncate"),
                         )}
+                        title={typeof title === "string" ? title : undefined}
                       >
                         <span key={pathname}>{title}</span>
                       </h1>
@@ -578,7 +580,10 @@ export function PageLayout({
             } as React.CSSProperties
           }
           className={cn(
-            "w-full flex-1",
+            // Its own stacking context: a sticky or raised element inside the
+            // content (an explorer's section header, an overlay) must never
+            // paint over the sticky banner or page header.
+            "isolate w-full flex-1",
             fillContent && "flex min-h-0 flex-col",
             minWidth && "min-w-0",
             minWidth &&
@@ -595,6 +600,8 @@ export function PageLayout({
               maxWidth,
               "px-4 py-4 sm:px-6",
               !denseContent && "sm:py-6",
+              // A filled page reaches down to the viewport's bottom edge.
+              fillContent && "pb-2 sm:pb-2",
             )}
           >
             {children}

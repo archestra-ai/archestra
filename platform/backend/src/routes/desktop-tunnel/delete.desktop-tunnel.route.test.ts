@@ -101,6 +101,23 @@ describe("DELETE /v1/tunnels/:tunnelId", () => {
     expect(stored).not.toContain(desktopTunnelService.hashDeviceKey(deviceKey));
   });
 
+  test("does not read a body larger than the tunnel client sends, and keeps the device", async () => {
+    const { device, tunnelId, headers } = await connectTestDevice({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+    });
+
+    const response = await ctx.app.inject({
+      method: "DELETE",
+      url: `/v1/tunnels/${tunnelId}`,
+      headers: { ...headers, "content-type": "application/json" },
+      payload: JSON.stringify({ pad: "x".repeat(4096) }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(await DesktopDeviceModel.findById(device.id)).not.toBeNull();
+  });
+
   test("rejects a wrong device key and keeps the device", async ({
     makeUser,
   }) => {

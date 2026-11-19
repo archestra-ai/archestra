@@ -2,7 +2,6 @@ import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
@@ -17,7 +16,6 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpCatalogItemPage } from "./page.client";
@@ -135,6 +133,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useMcpServersGroupedByCatalog",
       "useInstallMcpServer",
       "useDeleteMcpServer",
+      "useBulkRemoveMcpConnections",
       "useReloadMcpServerTools",
       "useMcpServerTools",
       "useMcpServerInstallationStatus",
@@ -194,15 +193,7 @@ vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
 const serverRulesHref = vi.fn<() => string | null>(() => null);
 vi.mock("../_parts/server-rules-launch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../_parts/server-rules-launch")>()),
-  ServerRulesButton: ({
-    children,
-  }: {
-    catalog: { id: string };
-    children: ReactNode;
-  }) => {
-    const href = serverRulesHref();
-    return href ? <a href={href}>{children}</a> : null;
-  },
+  useServerRulesHref: () => serverRulesHref(),
 }));
 const initiateOAuth = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/oauth.query", () => ({
@@ -454,17 +445,15 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(section("Connection").queryByRole("link")).toBeNull();
   });
 
-  it("shows Edit Guardrails beside the header's Edit, not in the overflow menu", async () => {
+  it("keeps the header to its lead actions, with Edit Guardrails in the More actions menu", async () => {
     serverRulesHref.mockReturnValue("/chat?agent=keeper");
     renderPage();
 
-    expect(
-      screen.getByRole("link", { name: "Edit Guardrails" }),
-    ).toHaveAttribute("href", "/chat?agent=keeper");
+    expect(screen.queryByRole("link", { name: "Edit Guardrails" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.queryByRole("menuitem", { name: "Edit Guardrails" }),
-    ).toBeNull();
+      screen.getByRole("menuitem", { name: "Edit Guardrails" }),
+    ).toHaveAttribute("href", "/chat?agent=keeper");
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {
@@ -694,9 +683,6 @@ describe("McpCatalogItemDetailPage overview", () => {
         typeof useSearchParams
       >,
     );
-    vi.mocked(useFeature).mockReturnValue(
-      false as ReturnType<typeof useFeature>,
-    );
     useMcpServers.mockReturnValue({
       data: [
         {
@@ -908,20 +894,25 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Not installed")).toBeNull();
   });
 
-  it("leads an installed server with tools on to the Connect page", () => {
+  it("leads an installed server with tools on to the Connect page", async () => {
     installedWithNoDeploymentEntry();
     renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
 
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.getByRole("link", { name: "Connect a client" }),
+      screen.getByRole("menuitem", { name: "Connect a client" }),
     ).toHaveAttribute("href", "/connection");
   });
 
-  it("offers no Connect before the server is installed", () => {
+  it("offers no Connect before the server is installed", async () => {
     useMcpServers.mockReturnValue({ data: [] });
     renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
 
-    expect(screen.queryByRole("link", { name: "Connect a client" })).toBeNull();
+    const more = screen.queryByRole("button", { name: "More actions" });
+    if (more) await userEvent.click(more);
+    expect(
+      screen.queryByRole("menuitem", { name: "Connect a client" }),
+    ).toBeNull();
   });
 
   it("says it is still checking while the deployment feed is loading", () => {

@@ -1,8 +1,9 @@
-import type {
-  ArchestraToolShortName,
-  Permission,
-  ResourcePermissionAction,
-  ScopedResource,
+import {
+  type ArchestraToolShortName,
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  type Permission,
+  type ResourcePermissionAction,
+  type ScopedResource,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -269,9 +270,10 @@ export const TOOL_PERMISSIONS: Record<
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
   // Plugins — executable opaque bytes, so only the metadata catalog is
-  // readable without managing every plugin; byte reads and every mutation
-  // also require `update` on every plugin (a grant at `*`), which each handler
-  // checks, matching the REST routes (plugin.routes.ts).
+  // readable without managing every plugin; byte reads and every change to an
+  // existing plugin also require `update` on every plugin (a grant at `*`),
+  // which each handler checks, matching the REST routes (plugin.routes.ts).
+  // Creating a plugin takes `plugin:create` alone.
   list_plugins: { resource: "plugin", action: "read" },
   get_plugin: { resource: "plugin", action: "read" },
   create_plugin: { resource: "plugin", action: "create" },
@@ -398,20 +400,17 @@ export async function checkToolPermission(
     );
   }
 
-  const allowed =
-    perm.action === "manage-permissions" ||
-    perm.action === "use" ||
-    perm.action === "configure-deployment-spec"
-      ? false
-      : await userHasPermission(
-          context.userId,
-          context.organizationId,
-          // A scoped resource whose name is not a role action maps onto the
-          // one that used to gate it, so knowledge tools keep asking for
-          // `knowledgeSource`.
-          roleActionResourceFor(perm.resource),
-          perm.action,
-        );
+  const allowed = isGrantOnlyAction(perm.action)
+    ? false
+    : await userHasPermission(
+        context.userId,
+        context.organizationId,
+        // A scoped resource whose name is not a role action maps onto the
+        // one that used to gate it, so knowledge tools keep asking for
+        // `knowledgeSource`.
+        roleActionResourceFor(perm.resource),
+        perm.action,
+      );
 
   const scopedAction = SCOPED_CATALOG_TOOLS[typedShortName];
   // People can edit what they create, so a role that can create the resource
@@ -548,9 +547,7 @@ export async function filterToolNamesByPermission(
       if (!permResults.has(key)) {
         permResults.set(
           key,
-          perm.action === "manage-permissions" ||
-            perm.action === "use" ||
-            perm.action === "configure-deployment-spec"
+          isGrantOnlyAction(perm.action)
             ? false
             : (permissions[roleActionResourceFor(perm.resource)]?.includes(
                 perm.action,
@@ -686,3 +683,23 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   update_runtime_credential: { resource: "credential", action: "update" },
   delete_runtime_credential: { resource: "credential", action: "delete" },
 };
+
+/** Actions only a stored grant confers: no role holds them. */
+type GrantOnlyAction = Exclude<
+  ResourcePermissionAction,
+  "read" | "update" | "delete"
+>;
+
+function isGrantOnlyAction<A extends string>(
+  action: A,
+): action is A & GrantOnlyAction {
+  return GRANT_ONLY_ACTIONS.has(action);
+}
+
+const GRANT_ONLY_ACTIONS: ReadonlySet<string> = new Set<GrantOnlyAction>([
+  "use",
+  "manage-permissions",
+  "configure-deployment-spec",
+  "configure",
+  ...Object.values(ENVIRONMENT_DEPLOY_ACTIONS),
+]);

@@ -133,11 +133,10 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
-     * Microsoft Entra agent identity (its app ID) this agent acts as when its
-     * tools exchange the caller's Entra token On-Behalf-Of. Downstream tokens
-     * then name the agent identity as the client, so Entra consent, Conditional
-     * Access and audit apply per agent. Null = the identity provider's (or MCP
-     * server's) shared client.
+     * @deprecated Replaced by `agent_identity_bindings`, which ties the
+     * identity to an identity provider. Migration 0641 copied its values
+     * there. Nothing reads or writes it; kept because columns are never
+     * dropped.
      */
     entraAgentIdentityId: text("entra_agent_identity_id"),
 

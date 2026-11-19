@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
-import type { Resource } from "@archestra/shared";
+import {
+  ENVIRONMENT_DEPLOY_KINDS,
+  type EnvironmentDeployKind,
+  type Resource,
+} from "@archestra/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { userHasPermission } from "@/auth/utils";
@@ -10,6 +14,7 @@ import AgentUserModel from "@/models/agent-user";
 import AppAccessModel from "@/models/app-access";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
 import TeamModel from "@/models/team";
@@ -83,8 +88,11 @@ describe("upgrade access preservation", () => {
     // A role that withholds every read action: everything is invisible to it
     // before the upgrade, and it stays invisible afterwards except for the
     // organization-wide agent, which the widening to the `use` preset lets it
-    // read.
-    const blindRole = await makeCustomRole(org.id, { permission: {} });
+    // read. It may deploy agents into a restricted environment and no other
+    // kind of object, so the matrix also holds a role with part of the split.
+    const blindRole = await makeCustomRole(org.id, {
+      permission: { agent: ["deploy-to-restricted"] },
+    });
     await makeMember(restricted.id, org.id, { role: blindRole.role });
 
     const teamA = await makeTeam(org.id, creator.id);
@@ -211,27 +219,6 @@ describe("upgrade access preservation", () => {
       loner,
       admin,
       restricted,
-    };
-
-    const heldDeployToRestricted = async (userId: string) => {
-      for (const resource of [
-        "agent",
-        "skill",
-        "app",
-        "mcpGateway",
-        "mcpRegistry",
-        "knowledgeSource",
-      ] as const)
-        if (
-          await heldBeforeRetirement({
-            userId,
-            organizationId: org.id,
-            resource,
-            action: "deploy-to-restricted",
-          })
-        )
-          return true;
-      return false;
     };
 
     const snapshot = async () => {
@@ -397,12 +384,12 @@ describe("upgrade access preservation", () => {
                 });
           }
         }
-        // Deploying into a restricted environment. Before the conversion the
-        // retired `deploy-to-restricted` role action IS the answer — holding
-        // it on any one of the six kinds of deployable object was enough, and
+        // Deploying into a restricted environment, asked once per kind of
+        // deployable object. Before the conversion the retired
+        // `deploy-to-restricted` role action on that kind IS the answer, and
         // an open environment was open to all. Afterwards the environment
         // grant is, asked through the real gate. A mismatch here is somebody
-        // who gained or lost the ability to deploy.
+        // who gained or lost the ability to deploy one kind of object.
         for (const [what, environmentId, restricted] of [
           ["open", openEnvironment.id, false],
           ["restricted", restrictedEnvironment.id, true],
@@ -410,16 +397,25 @@ describe("upgrade access preservation", () => {
           // before; it no longer can be, a deliberate widening.
           ["default", null, false],
         ] as const) {
-          rows[`deploy:${what}:${who}`] = converted
-            ? await assertCanAssignEnvironment({
-                environmentId,
-                organizationId: org.id,
-                userId: principal.id,
-              }).then(
-                () => true,
-                () => false,
-              )
-            : !restricted || (await heldDeployToRestricted(principal.id));
+          for (const kind of ENVIRONMENT_DEPLOY_KINDS) {
+            rows[`deploy:${what}:${kind}:${who}`] = converted
+              ? await assertCanAssignEnvironment({
+                  environmentId,
+                  organizationId: org.id,
+                  userId: principal.id,
+                  resource: kind,
+                }).then(
+                  () => true,
+                  () => false,
+                )
+              : !restricted ||
+                (await heldBeforeRetirement({
+                  userId: principal.id,
+                  organizationId: org.id,
+                  resource: kind,
+                  action: "deploy-to-restricted",
+                }));
+          }
         }
         // List filtering has its own query, so a matching single check is not
         // enough: a resource missing from the list is just as inaccessible.
@@ -458,11 +454,15 @@ describe("upgrade access preservation", () => {
     expect(before["serviceAccount:second:restricted:update"]).toBe(false);
     // Deploy authority before the conversion: only the admin tier held any
     // `deploy-to-restricted` action, and an open environment is open to all.
-    expect(before["deploy:open:loner"]).toBe(true);
-    expect(before["deploy:restricted:admin"]).toBe(true);
-    expect(before["deploy:restricted:loner"]).toBe(false);
-    expect(before["deploy:default:admin"]).toBe(true);
-    expect(before["deploy:default:loner"]).toBe(true);
+    expect(before["deploy:open:mcpRegistry:loner"]).toBe(true);
+    expect(before["deploy:restricted:mcpRegistry:admin"]).toBe(true);
+    expect(before["deploy:restricted:mcpRegistry:loner"]).toBe(false);
+    // The role that holds one kind and not the others: the split the
+    // conversion has to carry across.
+    expect(before["deploy:restricted:agent:restricted"]).toBe(true);
+    expect(before["deploy:restricted:mcpRegistry:restricted"]).toBe(false);
+    expect(before["deploy:default:mcpRegistry:admin"]).toBe(true);
+    expect(before["deploy:default:mcpRegistry:loner"]).toBe(true);
 
     await runScopedResourcePermissionCutover();
     converted = true;
@@ -488,28 +488,24 @@ describe("upgrade access preservation", () => {
   });
 
   /**
-   * What the six-way split cost, stated in full.
+   * The six-way split survives the conversion.
    *
    * `deploy-to-restricted` was one action per kind of thing deployed, so a
    * role could be allowed to put an agent in a restricted environment and
-   * refused an MCP server in the same one. `environment:use` asks about the
-   * environment instead, and a policy key holds one resource and one scope —
-   * there is no room for both axes. So the split does not survive.
+   * refused an MCP server in the same one. An environment grant carries the
+   * same split: `use` deploys every kind, and a grant holding per-kind deploy
+   * actions instead deploys only those kinds.
    *
-   * The consequences are asserted here rather than left to be discovered:
+   * - A holder of ALL six converts to `use`. It could reach every restricted
+   *   environment with every kind before and it still can.
+   * - A holder of a STRICT SUBSET converts to exactly that subset. It keeps
+   *   every kind it could deploy and gains none it was refused.
    *
-   * - A holder of ALL six converts exactly. It could reach every restricted
-   *   environment before and it still can.
-   * - A holder of a STRICT SUBSET widens to the kinds it was refused. This is
-   *   intended. The split is being retired deliberately, and in exchange an
-   *   administrator can now say WHICH restricted environment a subject may
-   *   deploy to, which the retired actions could never express.
-   *
-   * If this test fails because a partial holder no longer widens, do not
-   * "fix" the assertion — someone has changed the upgrade rule, and the docs
-   * and the conversion have to change with it.
+   * If this test fails because a partial holder widened, somebody who was
+   * refused a kind of object in a restricted environment can now deploy it
+   * there after upgrading. Fix the conversion, not the assertion.
    */
-  test("the six-way split retires: a full holder converts exactly, a partial holder widens", async ({
+  test("the six-way split converts exactly: a full holder gets use, a partial holder keeps only its kinds", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -520,54 +516,118 @@ describe("upgrade access preservation", () => {
       organizationId: org.id,
       data: { name: "Prod" },
     });
+    const open = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Sandbox" },
+    });
 
     // Holds every one of the six, like the built-in Admin and Editor roles.
     const full = await makeUser();
     await makeMember(full.id, org.id, { role: "admin" });
 
-    // Holds exactly one. Nothing built-in is shaped like this; it has to be
-    // written by hand, which is why the widening is narrow in practice.
+    // A hand-authored role that holds every one of the six.
+    const everyKind = await makeUser();
+    const everyKindRole = await makeCustomRole(org.id, {
+      permission: Object.fromEntries(
+        ENVIRONMENT_DEPLOY_KINDS.map((kind) => [
+          kind,
+          ["read", "deploy-to-restricted"],
+        ]),
+      ),
+    });
+    await makeMember(everyKind.id, org.id, { role: everyKindRole.role });
+
+    // Holds two of the six: agents and apps, and deliberately not MCP
+    // servers. Nothing built-in is shaped like this; it is written by hand.
     const partial = await makeUser();
     const partialRole = await makeCustomRole(org.id, {
-      permission: { agent: ["read", "deploy-to-restricted"] },
+      permission: {
+        agent: ["read", "create", "deploy-to-restricted"],
+        app: ["read", "create", "deploy-to-restricted"],
+        mcpRegistry: ["read", "create"],
+      },
     });
     await makeMember(partial.id, org.id, { role: partialRole.role });
 
-    // The historical rule, asked the way the old call sites asked it.
-    const couldDeploy = (userId: string, resource: "agent" | "mcpRegistry") =>
-      heldBeforeRetirement({
-        userId,
-        organizationId: org.id,
-        resource,
-        action: "deploy-to-restricted",
-      });
-    expect(await couldDeploy(full.id, "agent")).toBe(true);
-    expect(await couldDeploy(full.id, "mcpRegistry")).toBe(true);
-    expect(await couldDeploy(partial.id, "agent")).toBe(true);
-    // The refusal that does not survive.
-    expect(await couldDeploy(partial.id, "mcpRegistry")).toBe(false);
-
-    await runScopedResourcePermissionCutover();
-
-    const canDeploy = (userId: string) =>
-      assertCanAssignEnvironment({
-        environmentId: restricted.id,
-        organizationId: org.id,
-        userId,
-      }).then(
-        () => true,
-        () => false,
-      );
-    // Exact for the full holder.
-    expect(await canDeploy(full.id)).toBe(true);
-    // Widened for the partial one, deliberately: it may now deploy an MCP
-    // server into this restricted environment, which it could not before.
-    expect(await canDeploy(partial.id)).toBe(true);
-
-    // And nobody who held none of the six gains anything.
     const outsider = await makeUser();
     await makeMember(outsider.id, org.id, { role: "member" });
-    expect(await canDeploy(outsider.id)).toBe(false);
+
+    const principals = { full, everyKind, partial, outsider };
+    let converted = false;
+    const snapshot = async () => {
+      const rows: Record<string, boolean> = {};
+      for (const [who, principal] of Object.entries(principals))
+        for (const [where, environment] of [
+          ["restricted", restricted],
+          ["open", open],
+        ] as const)
+          for (const kind of ENVIRONMENT_DEPLOY_KINDS)
+            rows[`${who}:${where}:${kind}`] = converted
+              ? await assertCanAssignEnvironment({
+                  environmentId: environment.id,
+                  organizationId: org.id,
+                  userId: principal.id,
+                  resource: kind,
+                }).then(
+                  () => true,
+                  () => false,
+                )
+              : where === "open" ||
+                (await heldBeforeRetirement({
+                  userId: principal.id,
+                  organizationId: org.id,
+                  resource: kind,
+                  action: "deploy-to-restricted",
+                }));
+      return rows;
+    };
+
+    const before = await snapshot();
+    const deployable = (rows: Record<string, boolean>, who: string) =>
+      ENVIRONMENT_DEPLOY_KINDS.filter(
+        (kind) => rows[`${who}:restricted:${kind}`],
+      );
+    expect(deployable(before, "full")).toEqual(ENVIRONMENT_DEPLOY_KINDS);
+    expect(deployable(before, "everyKind")).toEqual(ENVIRONMENT_DEPLOY_KINDS);
+    expect(deployable(before, "partial")).toEqual<EnvironmentDeployKind[]>([
+      "agent",
+      "app",
+    ]);
+    expect(deployable(before, "outsider")).toEqual([]);
+
+    await runScopedResourcePermissionCutover();
+    converted = true;
+
+    // Every cell, for every principal, kind and environment, is unchanged.
+    expect(await snapshot()).toEqual(before);
+
+    // The stored grants say the same thing the gate does: `use` for whoever
+    // held all six, the two kinds alone for the partial holder.
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "environment",
+      scope: "*",
+    });
+    const actionsOf = (roleId: string) =>
+      [
+        ...(policy?.grants.find(
+          (grant) =>
+            grant.subject.type === "role" && grant.subject.id === roleId,
+        )?.actions ?? []),
+      ].sort();
+    expect(actionsOf(everyKindRole.id)).toEqual(["read", "use"]);
+    expect(actionsOf(partialRole.id)).toEqual([
+      "deploy-agent",
+      "deploy-app",
+      "read",
+    ]);
+
+    // A second run is a no-op down to the byte: the retired flags are gone,
+    // so the partial grant is neither rewritten nor widened on restart.
+    const policiesBefore = await readPolicies();
+    await runScopedResourcePermissionCutover();
+    expect(await readPolicies()).toEqual(policiesBefore);
+    expect(await snapshot()).toEqual(before);
   });
 });
 

@@ -3,8 +3,9 @@ use crate::{
     operations::{YellArguments, proposed, required_arguments},
 };
 use appa_runtime::api::ExecuteRemedyPlanArgs;
+use appa_runtime_api::{DeclaredArguments, LabelSpelling, OpenCalls};
 use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
+use serde_json::{Map, Value, value::RawValue};
 
 /// Route resolved from the proxy-stamped trajectory and the session row, plus
 /// the original call's retry text recovered from that call's stored context.
@@ -166,11 +167,53 @@ pub(crate) struct Input {
     /// rows keep no content.
     #[serde(default)]
     pub(crate) withhold_consult_content: bool,
+    /// On a stop: the raw tool-call ids whose results the stopping request
+    /// carried. Present, the stop is held while a call it would close is not
+    /// answered; absent, it closes every such call as unreported.
+    #[serde(default)]
+    pub(crate) answered_call_ids: Option<Vec<String>>,
+    /// On a spawn's tool call: the return the host declares for its subagent, applied by
+    /// the runtime within this one hook when the spawn is held for it.
+    #[serde(default)]
+    pub(crate) declares: Option<DeclaredReturn>,
+}
+
+/// The return a spawn declares for its subagent: the lowest label the parent accepts from
+/// it, in the policy's `delta` spelling, and for an attested return the schema it matches.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeclaredReturn {
+    pub(crate) label: LabelSpelling,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) return_schema: Option<Map<String, Value>>,
+}
+
+impl From<DeclaredReturn> for DeclaredArguments {
+    fn from(declared: DeclaredReturn) -> Self {
+        DeclaredArguments {
+            label: Some(declared.label),
+            return_schema: declared.return_schema.map(Value::Object),
+        }
+    }
 }
 
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
 const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
+
+/// Maximum number of answered tool-call ids one stop carries.
+const MAX_ANSWERED_CALL_IDS: usize = 10_000;
+
+/// What a stop does with the calls still open at it. A tool call is
+/// recorded under `call:<tool-call-id>`, so an answered id is named the same.
+pub(crate) fn open_calls(input: &Input) -> OpenCalls {
+    match &input.answered_call_ids {
+        None => OpenCalls::Abandon,
+        Some(answered) => OpenCalls::Hold {
+            answered: answered.iter().map(|id| format!("call:{id}")).collect(),
+        },
+    }
+}
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -281,6 +324,29 @@ pub(crate) fn validate(input: &Input) -> napi::Result<()> {
         && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
     {
         return Err(invalid_input("invalid yell tool presentation"));
+    }
+    if let Some(answered) = &input.answered_call_ids {
+        if !matches!(
+            input.event,
+            HookEventKind::TurnEnd | HookEventKind::ChildTurnEnd | HookEventKind::ChildEnd
+        ) {
+            return Err(invalid_input("only a stop carries answered_call_ids"));
+        }
+        if answered.len() > MAX_ANSWERED_CALL_IDS
+            || answered
+                .iter()
+                .any(|id| id.is_empty() || id.len() > 1024 || id.chars().any(char::is_control))
+        {
+            return Err(invalid_input("invalid answered_call_ids"));
+        }
+    }
+    match (&input.declares, input.event, input.spawn) {
+        (None, _, _) | (Some(_), HookEventKind::ToolCall, true) => {}
+        (Some(_), _, _) => {
+            return Err(invalid_input(
+                "only a spawn's tool call declares its subagent's return",
+            ));
+        }
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),
@@ -496,6 +562,72 @@ mod tests {
         assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
         let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
         assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
+    }
+
+    fn tool_call_input(spawn: bool, declares: Value) -> serde_json::Result<Input> {
+        serde_json::from_value(json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "operation_id": "call:spawn",
+            "tool": "subagent",
+            "arguments": { "prompt": "go" },
+            "spawn": spawn,
+            "declares": declares,
+        }))
+    }
+
+    #[test]
+    fn only_a_spawns_tool_call_declares_a_return() {
+        let spoken = json!({ "label": {} });
+        let attested = json!({ "label": {}, "return_schema": { "type": "object" } });
+        for declares in [&spoken, &attested] {
+            assert!(validate(&tool_call_input(true, declares.clone()).unwrap()).is_ok());
+            let plain = tool_call_input(false, declares.clone()).unwrap();
+            assert_eq!(
+                crate::errors::rejected_input(validate(&plain).unwrap_err()),
+                "only a spawn's tool call declares its subagent's return"
+            );
+        }
+        let mut stop = remedy_input(json!({}));
+        stop.event = HookEventKind::TurnEnd;
+        stop.operation_id = Some("turn-end".to_owned());
+        assert!(validate(&stop).is_ok());
+        stop.declares = tool_call_input(true, spoken).unwrap().declares;
+        assert_eq!(
+            crate::errors::rejected_input(validate(&stop).unwrap_err()),
+            "only a spawn's tool call declares its subagent's return"
+        );
+    }
+
+    #[test]
+    fn a_declared_return_is_typed_at_the_entry() {
+        for malformed in [
+            json!({}),
+            json!({ "label": {}, "floor": {} }),
+            json!({ "label": { "rank": "trusted" } }),
+            json!({ "label": {}, "return_schema": "object" }),
+            json!({ "label": {}, "return_schema": [] }),
+        ] {
+            assert!(tool_call_input(true, malformed).is_err());
+        }
+        let declared = tool_call_input(
+            true,
+            json!({ "label": { "trust": "trusted" }, "return_schema": { "type": "object" } }),
+        )
+        .unwrap()
+        .declares
+        .map(appa_runtime_api::DeclaredArguments::from);
+        assert_eq!(
+            declared,
+            Some(appa_runtime_api::DeclaredArguments {
+                label: Some(appa_runtime_api::LabelSpelling {
+                    trust: Some("trusted".to_owned()),
+                    audience: None,
+                }),
+                return_schema: Some(json!({ "type": "object" })),
+            })
+        );
     }
 
     #[test]

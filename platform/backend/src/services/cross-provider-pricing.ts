@@ -3,6 +3,7 @@ import {
   type ModelsDevApiResponse,
   type ModelsDevModel,
   modelsDevCostToPerToken,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 
@@ -15,6 +16,7 @@ export interface CrossProviderPrices {
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
+  syncedLongContextPricing: ReturnType<typeof modelsDevLongContextPricing>;
 }
 
 /**
@@ -464,7 +466,12 @@ function pricesFromEntries(
   exactBedrockEntry?: ModelsDevModel,
 ): CrossProviderPrices | null {
   const entry = entries.find((e) => e.cost);
-  const fallback = entry?.cost ? modelsDevCostToPerToken(entry.cost) : null;
+  const fallback = entry?.cost
+    ? {
+        ...modelsDevCostToPerToken(entry.cost),
+        syncedLongContextPricing: modelsDevLongContextPricing(entry.cost),
+      }
+    : null;
   if (!exactBedrockEntry?.cost) {
     return fallback;
   }
@@ -473,7 +480,22 @@ function pricesFromEntries(
   // vendor model. Only an exact full-id match overrides the existing fallback;
   // omitted meters can still use the canonical cache prices.
   const exact = modelsDevCostToPerToken(exactBedrockEntry.cost);
+  const exactTier = modelsDevLongContextPricing(exactBedrockEntry.cost);
+  // An empty cost object supplies no tariff: all flat meters below fall through,
+  // so its tier must follow that same source rather than hiding the fallback.
+  const hasExactPrimaryPrice =
+    exact.promptPricePerToken !== null ||
+    exact.completionPricePerToken !== null;
+  const hasExactCachePrice =
+    exact.cacheReadPricePerToken !== null ||
+    exact.cacheWritePricePerToken !== null;
   return {
+    // Never mix a canonical vendor tier with an exact reseller flat tariff.
+    syncedLongContextPricing: hasExactPrimaryPrice
+      ? exactTier
+      : hasExactCachePrice
+        ? null
+        : (fallback?.syncedLongContextPricing ?? null),
     promptPricePerToken:
       exact.promptPricePerToken ?? fallback?.promptPricePerToken ?? null,
     completionPricePerToken:

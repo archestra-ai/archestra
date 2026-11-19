@@ -3,7 +3,7 @@ title: MCP Server Credentials
 sidebarTitle: Server Credentials
 description: Set how Archestra signs in to each MCP server, and whose account each call uses
 order: 3
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,7 @@ Pick the method the server's own docs name. You set it when you [add the server]
 | **OAuth 2.0 client credentials** | One app account, with no person | The server serves machines, not people |
 | **IdP token exchange** | Nobody. Archestra uses the person's company identity. | You want per-person accounts without installs. See [IdP Token Exchange](/docs/mcp/authentication/idp-token-exchange). |
 | **IdP signed JWT** | Nobody. Archestra sends the person's company JWT. | The server checks your identity provider's tokens itself |
+| **AWS IAM (SigV4)** | Nobody. Each agent assumes an IAM role. | The server sits behind AWS, such as a Bedrock AgentCore Gateway. See [AWS IAM](/docs/mcp/authentication/aws-iam). |
 
 OAuth tokens refresh by themselves when the provider allows it. A **stdio** server gets its credentials once, at start, so per-call methods need **streamable-http**.
 

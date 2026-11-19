@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -202,85 +201,79 @@ describe("agent activation-skill policy routes", () => {
   test("keeps collision-projected names stable across the editor and runtime policy", async ({
     makeAgent,
   }) => {
-    const previousPluginsEnabled = config.beta;
-    config.beta = false;
-    try {
-      const name = `shared-${crypto.randomUUID().slice(0, 8)}`;
-      await makeSkill({ name });
-      const plugin = await PluginModel.create({
-        ...accessGrants("org"),
-        organizationId,
-        userId: user.id,
-        input: {
-          displayName: "Policy collision bundle",
-          description: "Policy collision test",
-          clientType: "claude-code",
-          supportedPlatforms: ["posix"],
-          files: [
-            {
-              path: "skills/shared/SKILL.md",
-              content: [
-                "---",
-                `name: ${name}`,
-                "description: Plugin copy",
-                "---",
-                "",
-                "Use the plugin procedure.",
-              ].join("\n"),
-              encoding: "utf8",
-              mode: "100644",
-            },
-          ],
-        },
-      });
-      if (!plugin) throw new Error("plugin seed failed");
-      const agent = await makeAgent({ agentType: "agent", organizationId });
+    const name = `shared-${crypto.randomUUID().slice(0, 8)}`;
+    await makeSkill({ name });
+    const plugin = await PluginModel.create({
+      ...accessGrants("org"),
+      organizationId,
+      userId: user.id,
+      input: {
+        displayName: "Policy collision bundle",
+        description: "Policy collision test",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "skills/shared/SKILL.md",
+            content: [
+              "---",
+              `name: ${name}`,
+              "description: Plugin copy",
+              "---",
+              "",
+              "Use the plugin procedure.",
+            ].join("\n"),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("plugin seed failed");
+    const agent = await makeAgent({ agentType: "agent", organizationId });
 
-      const eligible = await app.inject({
-        method: "GET",
-        url: "/api/agents/activation-skills?view=eligible&limit=100&offset=0",
-      });
-      expect(eligible.statusCode, eligible.body).toBe(200);
-      const projectedPlugin = eligible
-        .json()
-        .data.find(
-          (skill: { reference: { source: string; pluginId?: string } }) =>
-            skill.reference.source === "plugin" &&
-            skill.reference.pluginId === plugin.id,
-        );
-      expect(projectedPlugin).toMatchObject({
-        name,
-        activationName: `${name}-from-plugin`,
-      });
+    const eligible = await app.inject({
+      method: "GET",
+      url: "/api/agents/activation-skills?view=eligible&limit=100&offset=0",
+    });
+    expect(eligible.statusCode, eligible.body).toBe(200);
+    const projectedPlugin = eligible
+      .json()
+      .data.find(
+        (skill: { reference: { source: string; pluginId?: string } }) =>
+          skill.reference.source === "plugin" &&
+          skill.reference.pluginId === plugin.id,
+      );
+    expect(projectedPlugin).toMatchObject({
+      name,
+      activationName: `${name}-from-plugin`,
+    });
 
-      const patched = await app.inject({
-        method: "PATCH",
-        url: `/api/agents/${agent.id}/activation-skill-policy`,
-        payload: {
-          expectedRevision: 0,
-          mode: "manual",
-          operations: [
-            {
-              op: "add",
-              disposition: "allow",
-              reference: projectedPlugin.reference,
-            },
-          ],
-        },
-      });
-      expect(patched.statusCode, patched.body).toBe(200);
-      expect(patched.json().allowedSkills).toEqual([projectedPlugin]);
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/agents/${agent.id}/activation-skill-policy`,
+      payload: {
+        expectedRevision: 0,
+        mode: "manual",
+        operations: [
+          {
+            op: "add",
+            disposition: "allow",
+            reference: projectedPlugin.reference,
+          },
+        ],
+      },
+    });
+    expect(patched.statusCode, patched.body).toBe(200);
+    expect(patched.json().allowedSkills).toEqual([projectedPlugin]);
 
-      const runtime = await getAgentActivationSkills({
-        enabled: true,
-        organizationId,
-        userId: user.id,
-        agentId: agent.id,
-      });
-      expect(runtime.skills).toEqual([projectedPlugin]);
-    } finally {
-      config.beta = previousPluginsEnabled;
-    }
+    const runtime = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+    expect(runtime.skills).toEqual([projectedPlugin]);
   });
 
   test("rejects a stale revision without changing the saved policy", async ({

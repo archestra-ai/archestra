@@ -37,6 +37,7 @@ vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
   useSessionLineage: vi.fn(() => ({ data: undefined })),
+  useSessionChatErrors: vi.fn(() => ({ data: undefined })),
   useSessionHandoffs: vi.fn(() => ({ data: undefined })),
   useHandedOffRecords: vi.fn(() => ({
     requests: [],
@@ -723,8 +724,10 @@ function sessionToolCall(
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
+    credentialActorClientId: null,
     source: "chat",
     durationMs: 1_500,
     createdAt: "2026-09-19T10:00:09.000Z",

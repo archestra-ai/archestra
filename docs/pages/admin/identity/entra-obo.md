@@ -68,7 +68,7 @@ Tell Archestra where to run the exchange, and ask for the app's own scope at sig
 
 1. In **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**.
 2. Under **OIDC Settings**, add `api://<client-id>/access_as_user` to **Scopes**.
-3. Open **Tool Authentication** and set:
+3. Open **Tool Access** and set:
    - **Exchange Token Endpoint:** `https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token`
    - **Exchange Client Authentication:** **Client secret POST**
    - **User's Token to Exchange:** **Access token**
@@ -84,7 +84,7 @@ Pick **IdP token exchange** on the server, and set **Managed Resource Identifier
 
 To check it works, call one of the server's tools, then open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Identity provider's client**.
 
-Every agent's calls reach the API as that one app. To have Entra tell your agents apart, give each one its own identity with [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id). To give one server its own app, see [Give a Server Its Own Exchange Client](/docs/mcp/authentication/idp-token-exchange#give-a-server-its-own-exchange-client).
+Every agent's calls reach the API as that one app. To have Entra tell your agents apart, give each one its own identity with [Microsoft Entra Agent ID](/docs/agents/identity/entra). To give one server its own app, see [Give a Server Its Own Exchange Client](/docs/mcp/authentication/idp-token-exchange#give-a-server-its-own-exchange-client).
 
 ## Troubleshooting
 

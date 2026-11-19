@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 vi.mock("@/observability");
@@ -203,11 +204,17 @@ describe("agent type permission isolation (routes)", () => {
       makeCustomRole,
       makeMember,
     }) => {
-      await makeCustomRole(organizationId, {
+      const agentOnly = await makeCustomRole(organizationId, {
         role: "agent_only",
         permission: {
-          agent: ["read", "create", "update", "delete", "configure-runtime"],
+          agent: ["read", "create", "update", "delete"],
         },
+      });
+      await grantRoleEverywhere({
+        organizationId,
+        resource: "agentRuntime",
+        roleId: agentOnly.id,
+        actions: ["read", "use", "configure"],
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);

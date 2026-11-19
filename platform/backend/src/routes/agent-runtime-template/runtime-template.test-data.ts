@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { buildCustomAgentRuntime } from "@archestra/shared";
+import {
+  buildCustomAgentRuntime,
+  type ResourcePermissionAction,
+} from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import type { User } from "@/types";
@@ -47,6 +51,29 @@ export function useTemplateRouteTestApp() {
   return ctx;
 }
 
+/** Give one user actions on one Agent Runtime (a permission scope). */
+export async function grantRuntime(params: {
+  organizationId: string;
+  scope: string;
+  userId: string;
+  actions: ResourcePermissionAction[];
+}) {
+  const key = {
+    organizationId: params.organizationId,
+    resource: "agentRuntime" as const,
+    scope: params.scope,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      { subject: { type: "user", id: params.userId }, actions: params.actions },
+    ],
+  });
+}
+
 export function makeTemplate(
   overrides: Partial<AgentRuntimeTemplate> = {},
 ): AgentRuntimeTemplate {
@@ -57,7 +84,6 @@ export function makeTemplate(
     icon: null,
     hidden: false,
     position: 1,
-    locked: false,
     runtime: {
       ...buildCustomAgentRuntime({ image: "registry.example.com/agent:v1" }),
       privileged: false,

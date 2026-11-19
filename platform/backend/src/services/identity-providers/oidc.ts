@@ -1,5 +1,5 @@
 import type { IdentityProviderOidcConfig } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema as dbSchema } from "@/database";
 import logger from "@/logging";
@@ -32,6 +32,7 @@ export interface ExternalIdentityProviderOidcConfig {
 
 export async function findExternalIdentityProviderById(
   identityProviderId: string,
+  options?: { organizationId?: string },
 ): Promise<ExternalIdentityProviderConfig | null> {
   const [provider] = await db
     .select({
@@ -41,7 +42,17 @@ export async function findExternalIdentityProviderById(
       oidcConfig: dbSchema.identityProvidersTable.oidcConfig,
     })
     .from(dbSchema.identityProvidersTable)
-    .where(eq(dbSchema.identityProvidersTable.id, identityProviderId));
+    .where(
+      and(
+        eq(dbSchema.identityProvidersTable.id, identityProviderId),
+        options?.organizationId
+          ? eq(
+              dbSchema.identityProvidersTable.organizationId,
+              options.organizationId,
+            )
+          : undefined,
+      ),
+    );
 
   if (!provider) {
     return null;

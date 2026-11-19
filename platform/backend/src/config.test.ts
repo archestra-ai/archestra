@@ -13,7 +13,6 @@ import {
 } from "vitest";
 import config, {
   agentRuntimeWorkspaceStorage,
-  betaFeatureEnabled,
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
@@ -37,10 +36,6 @@ import config, {
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  parseAgentRuntimeNamespace,
   parseAnthropicWifConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
@@ -77,6 +72,10 @@ import config, {
   parseNonNegativeInt,
   parseOpenAppaConfig,
   parseOpenAppaPolicyCheckName,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseOptionalNamespace,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -85,6 +84,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -536,6 +536,37 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parseSpiffeTrustDomain", () => {
+  test("defaults to the frontend's hostname", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: undefined,
+        frontendBaseUrl: "https://archestra.example.com:8443",
+      }),
+    ).toBe("archestra.example.com");
+  });
+
+  test("takes a configured trust domain", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: " prod.example.org ",
+        frontendBaseUrl: "https://archestra.example.com",
+      }),
+    ).toBe("prod.example.org");
+  });
+
+  test("rejects a value that is not a trust domain", () => {
+    for (const rawValue of ["Example.com", "spiffe://example.com", "a b"]) {
+      expect(() =>
+        parseSpiffeTrustDomain({
+          rawValue,
+          frontendBaseUrl: "https://archestra.example.com",
+        }),
+      ).toThrow(/SPIFFE trust domain/);
+    }
   });
 });
 
@@ -3067,24 +3098,59 @@ describe("parseMcpIdleHibernationSeconds", () => {
 });
 // SPDX-SnippetEnd
 
-describe("parseAgentRuntimeNamespace", () => {
+describe("parseOptionalNamespace", () => {
   test("takes a valid namespace name", () => {
-    expect(parseAgentRuntimeNamespace("agent-runtimes")).toBe("agent-runtimes");
-    expect(parseAgentRuntimeNamespace("  agent-runtimes  ")).toBe(
-      "agent-runtimes",
-    );
+    expect(
+      parseOptionalNamespace(
+        "agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+    expect(
+      parseOptionalNamespace(
+        "  agent-runtimes  ",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
   });
 
   test("unset or blank leaves runs in their fallback namespace", () => {
-    expect(parseAgentRuntimeNamespace(undefined)).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("   ")).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        undefined,
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace("   ", "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE"),
+    ).toBeUndefined();
   });
 
   test("ignores a name Kubernetes would reject", () => {
-    expect(parseAgentRuntimeNamespace("Agent-Runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("agent_runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("-agent-runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("a".repeat(64))).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "Agent-Runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "agent_runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "-agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "a".repeat(64),
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -3468,77 +3534,6 @@ describe("parseRetentionDays", () => {
     expect(parse("30days")).toBe(0);
     expect(parse("1.5")).toBe(0);
     expect(logger.warn).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("betaFeatureEnabled", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.ARCHESTRA_BETA;
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  describe("with ARCHESTRA_BETA unset", () => {
-    test("an unset flag stays off", () => {
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-
-    test("a blank flag stays off", () => {
-      expect(betaFeatureEnabled("")).toBe(false);
-    });
-
-    test('an explicit "true" enables the flag', () => {
-      expect(betaFeatureEnabled("true")).toBe(true);
-    });
-
-    test('an explicit "false" disables the flag', () => {
-      expect(betaFeatureEnabled("false")).toBe(false);
-    });
-  });
-
-  describe("with ARCHESTRA_BETA=true", () => {
-    beforeEach(() => {
-      process.env.ARCHESTRA_BETA = "true";
-    });
-
-    test("an unset flag falls back to beta (on)", () => {
-      expect(betaFeatureEnabled(undefined)).toBe(true);
-    });
-
-    test("a blank flag falls back to beta (on)", () => {
-      expect(betaFeatureEnabled("")).toBe(true);
-    });
-
-    test('an explicit "false" still wins over beta', () => {
-      expect(betaFeatureEnabled("false")).toBe(false);
-    });
-
-    test('an explicit "true" stays on', () => {
-      expect(betaFeatureEnabled("true")).toBe(true);
-    });
-  });
-
-  describe("with ARCHESTRA_BETA set to a non-true value", () => {
-    test('"false" does not trigger the fallback', () => {
-      process.env.ARCHESTRA_BETA = "false";
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-
-    test("any other value is treated as off", () => {
-      process.env.ARCHESTRA_BETA = "1";
-      expect(betaFeatureEnabled(undefined)).toBe(false);
-    });
-  });
-
-  test('only the exact string "true" enables a flag', () => {
-    expect(betaFeatureEnabled("TRUE")).toBe(false);
-    expect(betaFeatureEnabled("yes")).toBe(false);
-    expect(betaFeatureEnabled("1")).toBe(false);
   });
 });
 
@@ -3959,12 +3954,7 @@ describe("OpenAPPA feature configuration", () => {
     }
   });
 
-  test.each([
-    undefined,
-    "false",
-    "true",
-  ])("makes OpenAPPA available independently of the beta switch (value=%s)", (beta) => {
-    vi.stubEnv("ARCHESTRA_BETA", beta);
+  test("enables OpenAPPA and the appa proxy plugin by default", () => {
     expect(parseOpenAppaConfig().enabled).toBe(true);
     expect(parseLlmProxyPlugins(undefined)).toEqual(["appa"]);
     expect(parseLlmProxyPlugins("")).toEqual(["appa"]);

@@ -59,8 +59,9 @@ Do not hard-code ruleset IDs, check names, integration IDs, or queue parameters 
    - `draft: true`
 2. Open the release-configuration PR against `release/X.Y`, monitor its required checks, and merge it through the new queue.
 3. Inventory open PRs against the previous stable line. Recreate every still-required fix that already landed on `main` as a `cherry-pick -x` backport to `release/X.Y` and merge it before the initial release. Wait for Release Please to update the release PR.
-4. Wait for Release Please to create or update the `X.Y.0` PR. Verify its base, manifest version, changelog, release configuration, and required checks. Finish qualification before merging; the release workflow publishes automatically.
-5. Complete the old-line retirement below before merging the release PR. The selected beta and backported fixes must already have passed qualification.
+4. Write the upgrade guide from the previous line to `X.Y` (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), with the `archestra-upgrade-guide` skill. Merge it to `release/X.Y` through the queue. The `Release Freeze Check` on the `X.Y.0` release PR fails until it exists; never bypass that failure.
+5. Wait for Release Please to create or update the `X.Y.0` PR. Verify its base, manifest version, changelog, release configuration, and required checks. Finish qualification before merging; the release workflow publishes automatically.
+6. Complete the old-line retirement below before merging the release PR. The selected beta and backported fixes must already have passed qualification.
 
 ### 4. Commit The Cutover And Publish
 
@@ -90,7 +91,7 @@ The initial migration from stable `1.3.x` started `1.4.0-beta.1`; do not use tha
 
 - **Qualification:** Finish release qualification before merging the release PR. Preserve required CI, image CVE checks, migration checks, the release freeze, and publication ordering guards. Verify the exact saved build artifacts (`release-helm-chart` and `release-image-*`) after automatic publication.
 - **Workflow owns publication:** The GitHub Actions workflow handles container image pushes, chart publication, and git tags. Never push release images, publish Helm charts, or update `latest` tags manually.
-- **Failed build:** Re-run failed jobs in the same workflow run.
+- **Failed build:** Re-run all jobs in the same workflow run (not only the failed ones: build digests are per-attempt artifacts). It promotes the same queue-scanned archives again while that scan is under 24 hours old.
 - **Failed qualification:** Do not merge the release PR. If an unpublished candidate already exists, cancel the run and delete its GitHub draft release only with explicit recovery authorization, but keep its tag. Fix on `main`, backport to `release/X.Y`, set temporary `release-as` to the next patch (for example, `X.Y.1` after a rejected `X.Y.0`), qualify the fix before merging the new release PR, and verify the new artifacts after publication. Never reuse a failed version number.
 - **Cutover failure before publication:** If the old line was locked but the new workflow cannot begin publication, stop. With explicit recovery authorization, cancel the new run, delete its blocking draft but keep its tag, restore the old exact merge queue, and remove its EOL rule before accepting old-line changes. When the cut resumes, fix and backport the cause and use the next patch version; never recreate the tagged candidate.
 - **Partial publication:** Keep the draft release and tag. With explicit retry authorization, re-run failed jobs in the original run using the saved artifacts; the retry can publish automatically. Never rebuild already published versions or move `latest` backward.

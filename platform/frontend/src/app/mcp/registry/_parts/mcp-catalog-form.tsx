@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Ban,
   ChevronDown,
+  Cloud,
   Code,
   ExternalLink,
   Globe,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -33,7 +35,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DesktopMcpTargetField } from "@/components/desktop-mcp-target-field";
 import {
@@ -102,7 +104,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
-import { desktopHostingOffered } from "@/lib/mcp/desktop-mcp";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
@@ -125,6 +126,13 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+const AwsIamAuthFields = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("./aws-iam-auth-fields.ee").then((m) => ({
+    default: m.AwsIamAuthFields,
+  })),
+);
 
 // Markdown renderer for catalog-supplied setup instructions shown atop the form.
 const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
@@ -245,7 +253,6 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
@@ -364,6 +371,13 @@ export function McpCatalogForm({
     const previousAuthMethod = form.getValues("authMethod");
     if (nextAuthMethod === previousAuthMethod) return;
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
+    if (nextAuthMethod === "aws_iam" && !form.getValues("awsIamConfig")) {
+      form.setValue(
+        "awsIamConfig",
+        { roleArn: "", region: "", service: "bedrock-agentcore" },
+        { shouldDirty: true },
+      );
+    }
 
     if (nextAuthMethod === "none" || nextAuthMethod === "auth_header") {
       form.setValue("requiresAuth", nextAuthMethod === "auth_header", {
@@ -559,7 +573,8 @@ export function McpCatalogForm({
       isReallyDirty(dirtyFields.authHeaderName) ||
       isReallyDirty(dirtyFields.includeBearerPrefix) ||
       isReallyDirty(dirtyFields.oauthConfig) ||
-      isReallyDirty(dirtyFields.enterpriseManagedConfig));
+      isReallyDirty(dirtyFields.enterpriseManagedConfig) ||
+      isReallyDirty(dirtyFields.awsIamConfig));
   // Env-var dirtiness alone isn't enough to require reinstall — adding an
   // OPTIONAL prompted env var leaves existing installs valid (they just
   // don't fill the new var). Mirror the backend's `promptedEnvVarsChanged`
@@ -1079,7 +1094,6 @@ export function McpCatalogForm({
                   <HostingChoice
                     value={currentServerType}
                     localEnabled={isLocalMcpEnabled === true}
-                    desktopEnabled={desktopMcpEnabled}
                     onChange={(value) => form.setValue("serverType", value)}
                   />
                 )}
@@ -1651,6 +1665,20 @@ export function McpCatalogForm({
                           disabledReason: enterpriseAuthDisabledReason,
                         },
                         {
+                          value: "aws_iam",
+                          title: "AWS IAM (SigV4)",
+                          description:
+                            "Each agent assumes an IAM role to call AWS",
+                          icon: <Cloud className="h-4 w-4" />,
+                          available:
+                            currentServerType === "remote" &&
+                            isEnterpriseCoreEnabled,
+                          disabledReason:
+                            currentServerType === "remote"
+                              ? enterpriseAuthDisabledReason
+                              : null,
+                        },
+                        {
                           value: "bearer",
                           title: "Access token header (legacy)",
                           description:
@@ -2095,6 +2123,10 @@ export function McpCatalogForm({
                                   </div>
                                 </div>
                               )}
+                              {authMethod === "aws_iam" && (
+                                <AwsIamAuthFields form={form} />
+                              )}
+
                               {authMethod === "oauth_client_credentials" && (
                                 <div className="space-y-4 border-t pt-5">
                                   <div>
@@ -2934,13 +2966,10 @@ const EMPTY_DESKTOP_CONFIG: NonNullable<McpCatalogFormValues["desktopConfig"]> =
 function HostingChoice({
   value,
   localEnabled,
-  desktopEnabled,
   onChange,
 }: {
   value: McpCatalogFormValues["serverType"];
   localEnabled: boolean;
-  /** Desktop MCP is offered: the deployment's beta flag is on. */
-  desktopEnabled: boolean;
   onChange: (value: McpCatalogFormValues["serverType"]) => void;
 }) {
   const options = [
@@ -2950,7 +2979,7 @@ function HostingChoice({
       description: "Connect to a server running elsewhere.",
       icon: Globe,
       disabled: false,
-      alpha: false,
+      beta: false,
     },
     {
       value: "local" as const,
@@ -2960,7 +2989,7 @@ function HostingChoice({
         : LOCAL_MCP_DISABLED_MESSAGE,
       icon: Server,
       disabled: !localEnabled,
-      alpha: false,
+      beta: false,
     },
     {
       value: "desktop_mcp" as const,
@@ -2968,15 +2997,9 @@ function HostingChoice({
       description: "Runs an MCP server installed on a user's device.",
       icon: Laptop,
       disabled: false,
-      alpha: true,
+      beta: true,
     },
-  ].filter(
-    // Desktop MCP is in alpha, offered only with the beta flag; an item that
-    // already is one keeps its choice.
-    (option) =>
-      option.value !== "desktop_mcp" ||
-      desktopHostingOffered({ betaEnabled: desktopEnabled, current: value }),
-  );
+  ];
   return (
     <div className="space-y-2">
       <Label id="server-hosting-label">Hosting</Label>
@@ -3015,7 +3038,7 @@ function HostingChoice({
               <span className="min-w-0 space-y-0.5">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <span>{option.title}</span>
-                  {option.alpha && <AlphaBadge />}
+                  {option.beta && <BetaBadge />}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {option.description}

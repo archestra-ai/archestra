@@ -23,9 +23,9 @@ type Attachment = Awaited<
 /**
  * Returns a deep copy of `messages` where any file part whose `url` is a
  * chat-attachment reference has been rehydrated to an inline `data:` URL for
- * the LLM call. Adds Anthropic `cache_control: ephemeral` to materialized
- * document parts so prompt caching kicks in across turns. Legacy inline
- * `data:` URLs pass through unchanged (backward compat).
+ * the LLM call. Legacy inline `data:` URLs pass through unchanged (backward
+ * compat). Cache breakpoints are left to `applyPromptCacheBreakpoints`, whose
+ * rolling marker already covers every earlier attachment.
  *
  * Refs are scoped to `conversationId` — a client crafting a message with an
  * attachment id from a different conversation will see the ref left
@@ -39,11 +39,6 @@ export async function materializeAttachments({
   messages,
   conversationId,
   ingestibleMimeTypes,
-  // Anthropic `cache_control` is an Anthropic-only request-body feature. Emit it
-  // by default (it is inert metadata for non-Anthropic SDKs), but suppress it
-  // when the call targets an Anthropic-compatible third-party endpoint that
-  // rejects the marker with a turn-0 400. The caller knows the provider/endpoint.
-  applyAnthropicCacheControl = true,
   // True for an Anthropic-compatible third-party endpoint (custom base URL, non
   // Claude model) that rejects an Anthropic `document` content block. A binary
   // document (e.g. a PDF) that such an endpoint can't accept is rerouted to the
@@ -71,7 +66,6 @@ export async function materializeAttachments({
   messages: ChatMessage[];
   conversationId: string;
   ingestibleMimeTypes?: Set<string>;
-  applyAnthropicCacheControl?: boolean;
   rerouteBinaryDocsToSandbox?: boolean;
   sandboxAvailable?: boolean;
   inlineByteLimit?: number;
@@ -79,11 +73,6 @@ export async function materializeAttachments({
   conversationKey?: ConversationContentKey | null;
 }): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
-  // Even when there are no refs to rehydrate, we still walk every part —
-  // data: URL file parts (legacy messages or same-tab follow-ups whose FE
-  // state lags the backend rewrite) need cache_control applied here, since
-  // the alternative is Anthropic re-billing the full file on every turn.
-  //
   // Metadata first: an attachment the model can't read is described from its
   // mime type and size alone. Reading its bytes on every turn would mean
   // re-streaming a large file out of Postgres for the whole life of the
@@ -104,7 +93,6 @@ export async function materializeAttachments({
 
   const policy: MaterializePolicy = {
     ingestibleMimeTypes,
-    applyAnthropicCacheControl,
     rerouteBinaryDocsToSandbox,
     sandboxAvailable,
     inlineByteLimit,
@@ -139,7 +127,6 @@ export async function materializeAttachments({
 
 type MaterializePolicy = {
   ingestibleMimeTypes: Set<string> | undefined;
-  applyAnthropicCacheControl: boolean;
   rerouteBinaryDocsToSandbox: boolean;
   sandboxAvailable: boolean;
   inlineByteLimit: number;
@@ -210,11 +197,7 @@ function materializePart({
   bytesById: Map<string, Buffer>;
   policy: MaterializePolicy;
 }): ChatMessagePart | ChatMessagePart[] {
-  const {
-    applyAnthropicCacheControl,
-    rerouteBinaryDocsToSandbox,
-    sandboxAvailable,
-  } = policy;
+  const { rerouteBinaryDocsToSandbox, sandboxAvailable } = policy;
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
   }
@@ -222,9 +205,7 @@ function materializePart({
     // Inline data: URL — either a legacy pre-v1 message persisted that way,
     // or a same-tab follow-up where the FE's local state still holds the
     // original data URL while the persisted state has a ref. Either way, the
-    // LLM payload is correct (data URL inline), but we still want Anthropic
-    // to prompt-cache the file across turns. Without this marker, the same
-    // bytes get re-billed at full input price on every turn until reload.
+    // LLM payload is correct (data URL inline).
     if (part.url.startsWith("data:")) {
       // No attachment row backs an inline data URL, so it was never staged into
       // the sandbox — a binary document an Anthropic-compatible endpoint rejects
@@ -237,9 +218,7 @@ function materializePart({
       ) {
         return unavailableBinaryDocPart(part, mime);
       }
-      return applyAnthropicCacheControl
-        ? withAnthropicCacheControl(part)
-        : { ...part };
+      return { ...part };
     }
     return { ...part };
   }
@@ -286,33 +265,12 @@ function materializePart({
     return { ...part };
   }
   const dataUrl = `data:${attachment.mimeType};base64,${fileData.toString("base64")}`;
-  // Mark the part for Anthropic ephemeral prompt caching when the endpoint
-  // accepts it. The AI SDK reads this via the file UI part's provider metadata
-  // (`providerMetadata`); convertToModelMessages translates it into the
-  // provider's cache_control directive. Suppressed for Anthropic-compatible
-  // third-party endpoints that reject the marker; the bytes still inline.
-  const filePart: ChatMessagePart = applyAnthropicCacheControl
-    ? {
-        ...part,
-        url: dataUrl,
-        mediaType: attachment.mimeType,
-        filename: attachment.originalName,
-        providerMetadata: {
-          ...(typeof part.providerMetadata === "object" &&
-          part.providerMetadata !== null
-            ? (part.providerMetadata as Record<string, unknown>)
-            : {}),
-          anthropic: {
-            cacheControl: { type: "ephemeral" },
-          },
-        },
-      }
-    : {
-        ...part,
-        url: dataUrl,
-        mediaType: attachment.mimeType,
-        filename: attachment.originalName,
-      };
+  const filePart: ChatMessagePart = {
+    ...part,
+    url: dataUrl,
+    mediaType: attachment.mimeType,
+    filename: attachment.originalName,
+  };
 
   // Dual availability: a text-document that is shown inline is ALSO auto-staged
   // into the sandbox (same byte limit), so the model can both read it in context
@@ -444,21 +402,6 @@ function referenceSandboxFilePart(
   return {
     type: "text",
     text: `[Attachment ${label} ${why}, so it is not shown inline. It has been placed in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then read it with run_command.]`,
-  };
-}
-
-function withAnthropicCacheControl(part: ChatMessagePart): ChatMessagePart {
-  return {
-    ...part,
-    providerMetadata: {
-      ...(typeof part.providerMetadata === "object" &&
-      part.providerMetadata !== null
-        ? (part.providerMetadata as Record<string, unknown>)
-        : {}),
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-    },
   };
 }
 

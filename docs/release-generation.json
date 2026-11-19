@@ -1,54 +1,34 @@
 {
   "schema": 1,
-  "sourceSha": "ede7d510351c7121f2b088bf2f01de11fe529d32",
-  "baseSha": "d61c2f4244afb3f54e576886cd6e953a67b99dd5",
-  "runId": 43550751766,
+  "sourceSha": "c439a5f82db27bf88062d880fd7670ea4cd24cbe",
+  "baseSha": "3d53243ef634f214ebbd9d9f3caa2018fe281927",
+  "runId": 44544124043,
   "attempt": 1,
-  "platformTree": "ab59df40ef9d0eb6b73ad74d66b1c7d3a805dbf0",
+  "platformTree": "b910d60b2208e3cc63717fd2f94bd06974f27963",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "2ad7a9d2c7cb7c61bd8609215428063b47d8c823"
+      "blob": "9415422ef0b43ec37d768f892dfaa138c575ce04"
     },
     {
-      "path": "docs/assets/automated_screenshots/agents-runtime-setup_tier-memory.dark.webp",
-      "blob": "b2a193db0a060b1418a71178354690f9c37e2b61"
+      "path": "docs/assets/automated_screenshots/admin-logs_session-waterfall.dark.webp",
+      "blob": "f6d0ecefd6869e69fc050ecb344f8d5aa4dd2768"
     },
     {
-      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.dark.webp",
-      "blob": "f066fa1c7472ec7bfb68c5af1e47abc2a3a5287d"
+      "path": "docs/assets/automated_screenshots/admin-logs_session-waterfall.webp",
+      "blob": "b0721e5831ae3f9a02d9f2901c4bb9941bedee9c"
     },
     {
-      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.webp",
-      "blob": "25fb1281b034d242ff388cfdf36c6050f9046798"
+      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
+      "blob": "1525cbe93aeaa48798b2b354631f1281fe3047e2"
     },
     {
-      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.dark.webp",
-      "blob": "a2ad12778383fd9749867fa89fdfce3b4048e47f"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.webp",
-      "blob": "0d4d7a0e3a00569deef2bf6a1a21aec8f318a50e"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
-      "blob": "cd1041a6904cbb1cb1e70033e79d83920c024f56"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
-      "blob": "a045b6ba3b61c7cdcc74adde7ed7df3d541d6395"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
+      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
+      "blob": "7b89eb86574572b0d1c3c6d02e9f7855a87b3939"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "0c6d43ddfac59009f4dfb361b9205a97f1fd3650"
+      "blob": "24d53f6927e5f141acce6e95933e46bf27589bda"
     }
   ]
 }

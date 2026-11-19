@@ -7,6 +7,7 @@ import {
 } from "./mcp-executed-as";
 import { MCP_HUMAN_RULING_META_KEY } from "./mcp-human-ruling";
 import { SEEDED_APP_RENDER_META_KEY } from "./seeded-app-render";
+import { LOAD_BALANCED_RUNTIME_ROUTER_META_KEY } from "./subagent-load-balancing";
 
 const personal: McpExecutedAs = {
   kind: "personal",
@@ -90,6 +91,7 @@ describe("stripReservedPlatformMeta", () => {
         [SEEDED_APP_RENDER_META_KEY]: true,
         [MCP_EXECUTED_AS_META_KEY]: { kind: "org" },
         [MCP_HUMAN_RULING_META_KEY]: "deny",
+        [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
       }),
     ).toEqual({ ui: { resourceUri: "ui://app" } });
   });

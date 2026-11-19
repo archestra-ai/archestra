@@ -63,9 +63,6 @@ test.each([
   ["/openappa", "Overview", "Guardrails"],
   ["/openappa/batteries", "Batteries", "Batteries"],
   ["/openappa/policy", "Policy", "Policy"],
-  ["/openappa/validation", "Validations", "Validations"],
-  ["/openappa/validation/new", "Validations", "Add validation"],
-  ["/openappa/validation/history", "Validations", "Validation run history"],
 ])("selects %s as the %s tab", async (pathname, tabName, title) => {
   setupState.isFresh = false;
   vi.mocked(usePathname).mockReturnValue(pathname);

@@ -128,7 +128,7 @@ test("anthropic non-native endpoint: bytes inlined as text, no cache_control, no
   expect(textContent(modelMessages)).not.toContain("/home/sandbox");
 });
 
-test("native Anthropic (default flag): document file part survives with cache_control", async ({
+test("native Anthropic: document file part survives without spending a cache breakpoint", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -158,9 +158,10 @@ test("native Anthropic (default flag): document file part survives with cache_co
     config.skillsSandbox.enabled = prevEnabled;
   }
 
-  // Native path keeps the document as a file part and marks it for caching.
+  // The breakpoint budget is left to applyPromptCacheBreakpoints, whose
+  // rolling marker covers the attachment.
   expect(hasFilePart(modelMessages)).toBe(true);
-  expect(anthropicCacheControlSeen(modelMessages)).toBe(true);
+  expect(anthropicCacheControlSeen(modelMessages)).toBe(false);
 });
 
 // End-to-end through the public entry point: buildModelMessages must resolve

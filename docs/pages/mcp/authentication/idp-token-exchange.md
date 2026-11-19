@@ -19,7 +19,7 @@ The exchange depends on your identity provider:
 | --- | --- | --- |
 | Microsoft Entra ID | [On-Behalf-Of](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-on-behalf-of-flow) | [Microsoft Entra ID](/docs/admin/identity/entra-obo) |
 | Okta | Okta's token exchange | [Okta](/docs/admin/identity/okta) |
-| Keycloak, Auth0, and other OIDC providers | [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693) token exchange | [Single Sign-On](/docs/admin/identity/sso), then **Tool Authentication** |
+| Keycloak, Auth0, and other OIDC providers | [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693) token exchange | [Single Sign-On](/docs/admin/identity/sso), then **Tool Access** |
 
 ## Set Up a Server
 
@@ -27,7 +27,7 @@ Set it once per server, and every person's calls use their own account.
 
 Before you start:
 
-- Your identity provider's **Tool Authentication** is set up, using the guide for your provider above.
+- Your identity provider's **Tool Access** is set up, using the guide for your provider above.
 - A server that runs in your cluster uses **streamable-http** transport, so it gets a token on every call.
 - People call with their own identity: through OAuth, an identity provider JWT, or a personal token, after signing in to Archestra with your provider. A team or organization token has no person to exchange.
 
@@ -42,9 +42,9 @@ To check it works, call one of the server's tools. The call succeeds, and the se
 
 ## Which App the Token Is Issued To
 
-With Entra, every downstream token names a person and an app, and Entra consent, sign-in logs, and the API's own logs all see that app. Archestra picks the app in this order:
+Every downstream token names a person and an app, and your identity provider's consent, logs, and the API's own logs all see that app. Archestra picks the app in this order:
 
-1. **Entra agent identity:** the calling agent's own identity, when it has one. See [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id).
+1. **The agent's own identity:** an Entra agent identity or an Okta AI agent, when the calling agent has one. See [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 2. **MCP server's client:** the server's exchange client, when it sets one. See [Give a Server Its Own Exchange Client](#give-a-server-its-own-exchange-client).
 3. **Identity provider's client:** the app in your identity provider's settings, otherwise.
 
@@ -74,4 +74,4 @@ The [MCP Gateway](/docs/mcp/authentication/gateway#id-jag) does not accept an ID
 | --- | --- |
 | "Configure a Managed Resource Identifier or scopes…" | Set **Managed Resource Identifier** on the server |
 | "This MCP server overrides the token exchange client, but has no client secret or private key…" | Set **Client Secret** or **Certificate Private Key** under **Exchange Client** |
-| An `AADSTS` error from Entra | See [Microsoft Entra ID troubleshooting](/docs/admin/identity/entra-obo#troubleshooting), or [Entra Agent ID troubleshooting](/docs/admin/identity/entra-agent-id#troubleshooting) for an agent with its own identity |
+| An `AADSTS` error from Entra | See [Microsoft Entra ID troubleshooting](/docs/admin/identity/entra-obo#troubleshooting), or [Entra Agent ID troubleshooting](/docs/agents/identity/entra#troubleshooting) for an agent with its own identity |

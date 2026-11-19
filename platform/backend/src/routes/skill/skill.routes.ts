@@ -544,6 +544,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId,
           organizationId,
           userId: visibilityUserId,
+          resource: "mcpGateway",
         });
         publishedToOrganization = true;
         publishableOverMcp = true;
@@ -598,6 +599,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 environmentId,
                 organizationId,
                 userId: visibilityUserId,
+                resource:
+                  agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
               });
             }
           } else if (agent.accessAllSkills) {
@@ -2037,11 +2040,17 @@ async function assertSkillEnvironmentsAssignable(params: {
       environmentId: null,
       organizationId,
       userId,
+      resource: "skill",
     });
     return;
   }
   for (const environmentId of environmentIds) {
-    await assertCanAssignEnvironment({ environmentId, organizationId, userId });
+    await assertCanAssignEnvironment({
+      environmentId,
+      organizationId,
+      userId,
+      resource: "skill",
+    });
   }
 }
 

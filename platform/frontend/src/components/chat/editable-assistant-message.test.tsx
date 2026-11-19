@@ -112,3 +112,73 @@ describe("EditableAssistantMessage actions", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 });
+
+describe("EditableAssistantMessage policy previews", () => {
+  const text = "Explanation.\n\n```diff\n-old\n+new\n```";
+  const policyDiffReferences = [
+    {
+      before: "old",
+      after: "new",
+      path: "organization.appa.toml",
+      changes: JSON.stringify(["-old", "+new"]),
+    },
+  ];
+
+  it("shows the explanation once and retains the original diff when editing", () => {
+    const props = {
+      ...baseProps,
+      text,
+      policyDiffReferences,
+      onSave: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditableAssistantMessage {...props} isEditing={false} />,
+    );
+    expect(screen.getByText("Explanation.")).toBeInTheDocument();
+    expect(screen.queryByText(/-old/)).toBeNull();
+
+    rerender(<EditableAssistantMessage {...props} isEditing />);
+    expect(screen.getByRole("textbox")).toHaveValue(text);
+  });
+
+  it("does not leave an empty bubble when the whole part repeats a preview", () => {
+    const { container } = render(
+      <EditableAssistantMessage
+        {...baseProps}
+        text={"```diff\n-old\n+new\n```"}
+        policyDiffReferences={policyDiffReferences}
+        isEditing={false}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("keeps copy, edit and feedback reachable when the final part repeats a preview", async () => {
+    const user = userEvent.setup();
+    const rawText = "```diff\n-old\n+new\n```";
+    const onStartEdit = vi.fn();
+    const onFeedbackChange = vi.fn();
+    const props = {
+      ...baseProps,
+      text: rawText,
+      policyDiffReferences,
+      showActions: true,
+      onStartEdit,
+      onFeedbackChange,
+      onSave: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditableAssistantMessage {...props} isEditing={false} />,
+    );
+    expect(screen.queryByText(/-old/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(rawText);
+    await user.click(screen.getByRole("button", { name: "Good response" }));
+    expect(onFeedbackChange).toHaveBeenCalledWith("message-1", "up");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onStartEdit).toHaveBeenCalledWith("part-1");
+    rerender(<EditableAssistantMessage {...props} isEditing />);
+    expect(screen.getByRole("textbox")).toHaveValue(rawText);
+  });
+});

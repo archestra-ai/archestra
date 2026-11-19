@@ -114,7 +114,7 @@ jobs:
       reused: ${{ steps.reuse.outputs.reused }}
     steps:
       - name: Checkout image source and previous commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
@@ -130,7 +130,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -168,7 +168,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || inputs.checkout_fetch_depth }}
@@ -184,7 +184,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -208,7 +208,10 @@ jobs:
         env:
           CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
           USE_REGISTRY_CACHE: ${{ inputs.auth_provider != 'dockerhub' }}
-          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' }}
+          # The merge queue's release builds read this cache. Only builds of
+          # main and release/*, which take reviewed code, write it; a build
+          # dispatched from any other branch reads it and leaves it alone.
+          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
           CACHE_COMPRESSION: ${{ inputs.cache_compression }}
         run: |
           if [ "${USE_REGISTRY_CACHE}" != "true" ]; then
@@ -314,12 +317,14 @@ jobs:
       contents: read # Required to download per-arch digests and publish the merged manifest.
       packages: write # Publish images and caches using the repository token.
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
+      attestations: write # Attest the pushed CI image.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          # A release reads its handoff scripts at the workflow's own commit.
+          fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || '1' }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
@@ -341,7 +346,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -413,7 +418,36 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Download the release candidate selection
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: $/.github/actions/github-download-artifact
+        with:
+          name: release-candidate-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-selection
+
+      # The merge queue wrote this image's multi-arch index from the two
+      # scanned roots promoted above and signed its build provenance; push those
+      # bytes, so the release digest is the one the queue built.
+      - name: Push the queue's signed release index
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        env:
+          SELECTION_FILE: ${{ runner.temp }}/release-selection/release-candidate-selection.json
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_DESTINATION: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          POLICY_SHA: ${{ github.workflow_sha }}
+        run: |
+          [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          policy_dir="$RUNNER_TEMP/release-handoff-policy"
+          mkdir -p "$policy_dir"
+          for script in release-handoff.py release-candidate.py release-image-policy.py release-oci.py; do
+            git show "$POLICY_SHA:.github/scripts/$script" > "$policy_dir/$script"
+          done
+          python3 "$policy_dir/release-handoff.py" push-index
+
       - name: Create manifest list and push
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
         working-directory: /tmp/digests
         run: |
           # Stable aliases move only in the release workflow's approved publication job.
@@ -439,6 +473,28 @@ jobs:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}
+
+      # Attest CI images so Dockerfiles that build on them can verify them
+      # (the organization supply-chain policy's base-image check). A release
+      # build is attested by release-please.yml before it is published.
+      - name: Resolve manifest digest
+        id: manifest
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' \
+            | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest CI image
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-name: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
 
       - name: Preserve release image reference
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}

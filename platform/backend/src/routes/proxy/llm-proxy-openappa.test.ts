@@ -9341,12 +9341,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
-  test.each([
-    "chat:tool_call_repair",
-    "chat:compaction",
-  ])("binds authenticated Chat %s calls to the conversation root", async (source) => {
+  test("binds authenticated Chat tool-call repair calls to the conversation root", async () => {
     const response = await post(payload(false), {
-      "x-archestra-source": source,
+      "x-archestra-source": "chat:tool_call_repair",
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -9357,6 +9354,68 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         tool: "get_weather",
       }),
     );
+  });
+
+  test.for(
+    (["chat:compaction", "a2a:compaction"] as const).flatMap((source) =>
+      (["refuse", "allow"] as const).map((blockMode) => ({
+        source,
+        blockMode,
+      })),
+    ),
+  )("rejects a $source summary's tool call before recording it (unapprovable blocks: $blockMode)", async ({
+    source,
+    blockMode,
+  }) => {
+    // The summary request carries the turn's tools only so the cached prefix
+    // matches; a call it makes is never the conversation's. Nor is it a soft
+    // block to waive: that would release it and exempt the session.
+    const overrides = config.openappa.breakTheGlassOverrides;
+    config.openappa.breakTheGlassOverrides = {
+      ...overrides,
+      unapprovableBlockMode: blockMode,
+    };
+    const response = await post(payload(false), {
+      "x-archestra-source": source,
+    }).finally(() => {
+      config.openappa.breakTheGlassOverrides = overrides;
+    });
+
+    expect(response.statusCode, response.body).toBe(422);
+    expect(response.json().error.message).toBe(
+      "OpenAPPA rejected tool calls from a compaction response",
+    );
+    // Governed in the run's session: Chat's is the conversation, an A2A run's
+    // is scoped to its caller.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringMatching(new RegExp(`(^|\\|)${sessionId}$`)),
+      }),
+    );
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+  });
+
+  test.for([
+    { source: "chat", lifecycle: ["prompt", "turn_end"] },
+    { source: "chat:compaction", lifecycle: [] },
+    { source: "a2a:compaction", lifecycle: [] },
+  ])("a $source reply without tool calls notes the turn: $lifecycle", async ({
+    source,
+    lifecycle,
+  }) => {
+    // A summary taken mid-turn must leave the conversation's turn open.
+    options = { includeToolUse: false };
+    const response = await post(payload(false), {
+      "x-archestra-source": source,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      events
+        .map((event) => event.event)
+        .filter((name) => name === "prompt" || name === "turn_end"),
+    ).toEqual(lifecycle);
   });
 
   test("rejects a Chat APPA root bound to another profile", async ({
@@ -9388,6 +9447,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const compactionAgent = await makeAgent({
       organizationId: agent.organizationId,
     });
+    options = { includeToolUse: false };
 
     const response = await app.inject({
       method: "POST",
@@ -10138,10 +10198,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test("Chat compaction stays on the conversation root and a new conversation opens a fresh root", async ({
     makeConversation,
   }) => {
+    options = { includeToolUse: false };
     const compact = await post(payload(false), {
       "x-archestra-source": "chat:compaction",
     });
     expect(compact.statusCode, compact.body).toBe(200);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
+    };
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "session_start",

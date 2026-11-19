@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.33" # x-release-please-version
+  imageTag: "1.5.0-rc.40" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -82,6 +82,22 @@ archestra:
       # Expiration (in seconds) for the projected ServiceAccount token when
       # injectWebIdentityTokenVolume is true.
       webIdentityTokenExpirationSeconds: 3600
+    # Microsoft Entra ID database authentication for Azure Database for
+    # PostgreSQL flexible server. Each new connection in the query pool, cache
+    # pool, LISTEN/NOTIFY client, and migration Job signs in with an Entra
+    # access token for the pod's Azure identity (AKS Workload Identity, a
+    # managed identity, or AZURE_* variables), with TLS verification.
+    # Put the managed identity's name as the user in ARCHESTRA_DATABASE_URL.
+    # Enable at most one of iamAuth and entraAuth.
+    entraAuth:
+      enabled: false
+      # Optional client ID of the user-assigned managed identity for AKS
+      # Workload Identity. Sets the `azure.workload.identity/client-id`
+      # annotation on the platform ServiceAccount (unless already set in
+      # `archestra.orchestrator.kubernetes.serviceAccount.annotations`) and
+      # the `azure.workload.identity/use: "true"` label on the web, worker,
+      # and migration Job pods.
+      clientId: ""
     # Google Cloud SQL Auth Proxy, run as a native sidecar (Kubernetes 1.29+)
     # in the web, worker, and migration Job pods. The proxy opens a TLS
     # connection to the instance with an ephemeral client certificate and, with
@@ -108,6 +124,39 @@ archestra:
       # Extra flags. Defaults connect over the VPC and log in with IAM.
       args:
         - --private-ip
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    # Google AlloyDB Auth Proxy, run the same way as cloudSqlProxy: a native
+    # sidecar in the web, worker, and migration Job pods that connects over
+    # the instance's private IP and, with --auto-iam-authn, logs in as the
+    # pod's Google service account. Enable at most one of the two proxies.
+    # Google publishes this image for linux/amd64 only.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    alloyDbProxy:
+      enabled: false
+      # projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE
+      instanceUri: ""
+      image:
+        repository: gcr.io/alloydb-connectors/alloydb-auth-proxy
+        tag: "1.17.2"
+        digest: "sha256:a6ca5f3f344dd8c8bd5e5d81661bf395e78cdff2265e9dddeaadc8c2ffcd66dd"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. The proxy connects over private IP by default; add --psc
+      # for a Private Service Connect instance.
+      args:
         - --auto-iam-authn
         - --structured-logs
       resources:
@@ -666,7 +715,7 @@ archestra:
     enabled: true
 
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.33" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.40" # x-release-please-version
     # (released charts pin it to its digest; see releaseImageDigests)
     baseImage: ""
 
@@ -769,6 +818,14 @@ archestra:
       # permissions there.
       agentRuntimeNamespace: ""
 
+      # Namespace for the code sandbox's Dagger engines
+      # (ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE). Engines run privileged, so
+      # keeping them here lets the MCP namespaces enforce a stricter Pod
+      # Security level. When set, every engine runs here, whatever its
+      # Environment's namespace. Create this namespace before installing; the
+      # chart grants its platform ServiceAccount the same permissions there.
+      daggerRuntimeNamespace: ""
+
       # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
       # If not set, defaults to cluster.local
       clusterDomain: ""
@@ -870,6 +927,21 @@ archestra:
         #     - staging
         #     - production
         environmentNamespaces: []
+        # Namespaces workloads ran in before you changed `namespace`,
+        # `agentRuntimeNamespace`, `daggerRuntimeNamespace` or an environment
+        # namespace. List the old namespace here instead of just dropping it:
+        # the chart keeps the platform's Roles there, so Agent Runtime sessions
+        # still running there can finish, and the platform cleans up what it
+        # left (MCP servers, warm pools, code sandbox engines and their disks).
+        # Once the platform logs that a namespace is clean, remove it from this
+        # list. Only objects this release created are deleted. A namespace that
+        # is still in use above is ignored. Surfaced to the app as
+        # ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES.
+        #
+        # Example:
+        #   retiredNamespaces:
+        #     - archestra-mcp-old
+        retiredNamespaces: []
 
       # RBAC configuration for MCP server pods that need Kubernetes API access
       # Creates a dedicated service account with namespace-scoped permissions for K8s resources

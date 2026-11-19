@@ -1,6 +1,7 @@
 import config from "@/config";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
+import AgentIdentityBindingModel from "@/models/agent-identity-binding";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -250,6 +251,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "organization.updated",
     fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
+  // The handler records which agents took the runtime's settings.
+  "/api/agent-runtime-templates/:id/apply-to-agents": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",
@@ -265,6 +272,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // An agent's identities decide whose consents its tool calls run under.
+  "/api/agents/:id/identity-bindings": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: async (id, orgId) => {
+      const agent = await AgentModel.findIdentityForAudit(id, orgId);
+      return agent
+        ? {
+            ...agent,
+            identityBindings: await AgentIdentityBindingModel.findForAgent(id),
+          }
+        : null;
+    },
+    onlyWhenChanged: true,
+  },
+  // SPDX-SnippetEnd
   "/api/agents/:id/runtime/credentials/:key": {
     resourceType: "agent",
     action: "agent.updated",

@@ -18,7 +18,12 @@ debug = "line-tables-only"
 # Fast local build of the NAPI addons: inherits release (which carries no LTO)
 # but adds codegen units so rebuilds parallelize across cores, plus incremental
 # for quick edit->rebuild. Used by `pnpm build:dev`; CI/publish still use `release`.
+#
+# Unstripped: on macOS 27.2, dyld refuses a stripped openappa-rs addon
+# ("mis-aligned LINKEDIT string pool"), with `strip` set to "symbols" or
+# "debuginfo" alike. Leaving symbols in costs ~7 MB per addon.
 [profile.release-fast]
 inherits = "release"
 codegen-units = 256
 incremental = true
+strip = false

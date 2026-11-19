@@ -360,7 +360,7 @@ describe("entraOboStrategy with Entra Agent ID", () => {
       identityProvider: makeAgentIdIdentityProvider(),
       assertion: makeJwt({ aud: SSO_CLIENT_ID, oid: "user-1" }),
       enterpriseManagedConfig: DOWNSTREAM_CONFIG,
-      entraAgentIdentityId: AGENT_IDENTITY_ID,
+      agentIdentity: agentIdentity(AGENT_IDENTITY_ID),
     });
 
     expect(result).toMatchObject({
@@ -406,7 +406,7 @@ describe("entraOboStrategy with Entra Agent ID", () => {
         identityProvider: makeAgentIdIdentityProvider(),
         assertion: makeJwt({ aud: BLUEPRINT_CLIENT_ID, oid }),
         enterpriseManagedConfig: DOWNSTREAM_CONFIG,
-        entraAgentIdentityId: agentIdentityId,
+        agentIdentity: agentIdentity(agentIdentityId),
       });
     }
 
@@ -434,7 +434,7 @@ describe("entraOboStrategy with Entra Agent ID", () => {
       }),
       assertion: makeJwt({ aud: BLUEPRINT_CLIENT_ID }),
       enterpriseManagedConfig: DOWNSTREAM_CONFIG,
-      entraAgentIdentityId: "99999999-2222-3333-4444-555555555555",
+      agentIdentity: agentIdentity("99999999-2222-3333-4444-555555555555"),
     });
 
     const [exchangeToken] = requestBodies(fetchMock);
@@ -462,7 +462,7 @@ describe("entraOboStrategy with Entra Agent ID", () => {
         }),
         assertion: makeJwt({ aud: SSO_CLIENT_ID }),
         enterpriseManagedConfig: DOWNSTREAM_CONFIG,
-        entraAgentIdentityId: null,
+        agentIdentity: null,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -495,7 +495,7 @@ describe("entraOboStrategy with Entra Agent ID", () => {
         identityProvider: makeAgentIdIdentityProvider(null),
         assertion: makeJwt({ aud: SSO_CLIENT_ID }),
         enterpriseManagedConfig: DOWNSTREAM_CONFIG,
-        entraAgentIdentityId: AGENT_IDENTITY_ID,
+        agentIdentity: agentIdentity(AGENT_IDENTITY_ID),
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -515,7 +515,7 @@ describe("entraOboStrategy with an MCP server override client", () => {
         clientIdOverride: OVERRIDE_CLIENT_ID,
         clientSecretOverride: "override-secret",
       },
-      entraAgentIdentityId: null,
+      agentIdentity: null,
     });
 
     expect(result.issuedTo).toEqual({
@@ -547,7 +547,7 @@ describe("entraOboStrategy with an MCP server override client", () => {
         clientIdOverride: OVERRIDE_CLIENT_ID,
         clientSecretOverride: "override-secret",
       },
-      entraAgentIdentityId: "77777777-2222-3333-4444-555555555555",
+      agentIdentity: agentIdentity("77777777-2222-3333-4444-555555555555"),
     });
 
     expect(result.issuedTo?.clientType).toBe("entra_agent_identity");
@@ -647,6 +647,10 @@ function makeJwt(payload: Record<string, unknown>): string {
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "none" })}.${encode(payload)}.signature`;
+}
+
+function agentIdentity(externalId: string) {
+  return { identityProviderId: "idp-1", externalId };
 }
 
 function makeIdentityProvider(

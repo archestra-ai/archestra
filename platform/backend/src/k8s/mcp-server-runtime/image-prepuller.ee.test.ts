@@ -297,14 +297,12 @@ describe("buildPrepullDaemonSet", () => {
 describe("McpImagePrepuller.reconcileNow", () => {
   let cluster: FakeCluster;
   let prepullEnabled: boolean;
-  let betaEnabled: boolean;
   let hardDisabled: boolean;
   let helmReleaseName: string | undefined;
   let ownerRoleName: string | undefined;
 
   beforeEach(() => {
     prepullEnabled = config.orchestrator.mcpImagePrepull.enabled;
-    betaEnabled = config.orchestrator.mcpIdleHibernation.betaEnabled;
     hardDisabled = config.orchestrator.mcpIdleHibernation.hardDisabled;
     helmReleaseName = config.orchestrator.kubernetes.helmReleaseName;
     ownerRoleName = config.orchestrator.kubernetes.runtimeOwnerRoleName;
@@ -318,7 +316,6 @@ describe("McpImagePrepuller.reconcileNow", () => {
     // Pre-pulling only ever runs where hibernation runs: offered by the
     // deployment, licensed, and opted into by the organization.
     config.orchestrator.mcpImagePrepull.enabled = true;
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
     config.orchestrator.mcpIdleHibernation.hardDisabled = false;
     vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(true);
     vi.spyOn(
@@ -337,7 +334,6 @@ describe("McpImagePrepuller.reconcileNow", () => {
 
   afterEach(() => {
     config.orchestrator.mcpImagePrepull.enabled = prepullEnabled;
-    config.orchestrator.mcpIdleHibernation.betaEnabled = betaEnabled;
     config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
     config.orchestrator.kubernetes.helmReleaseName = helmReleaseName;
     config.orchestrator.kubernetes.runtimeOwnerRoleName = ownerRoleName;

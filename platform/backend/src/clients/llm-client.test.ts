@@ -14,6 +14,7 @@ import config from "@/config";
 import {
   ConversationModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   UserTokenModel,
 } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -967,6 +968,31 @@ describe("createDirectLLMModel", () => {
     it("keeps the configured sampling options on the wire", async () => {
       const body = await wireBodyFor({ num_ctx: 4096, top_k: 40 });
       expect(body.options).toMatchObject({ num_ctx: 4096, top_k: 40 });
+    });
+
+    test.for([
+      // A summary or title request sets no options of its own.
+      { caller: "a request without options", configured: null, numCtx: 16384 },
+      { caller: "a turn", configured: { num_ctx: 4096 }, numCtx: 4096 },
+    ])("sends the admin's num_ctx on $caller", async ({
+      configured,
+      numCtx,
+    }) => {
+      const row = await ModelModel.create({
+        externalId: "ollama-native/qwen3:4b",
+        provider: "ollama-native",
+        modelId: "qwen3:4b",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(row.id, {
+        configuredParameters: { num_ctx: 16384 },
+      });
+
+      const body = await wireBodyFor(configured);
+
+      expect(body.options).toMatchObject({ num_ctx: numCtx });
     });
 
     it("passes a non-JSON body through untouched", async () => {

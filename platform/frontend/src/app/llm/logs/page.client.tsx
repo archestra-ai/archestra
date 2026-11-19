@@ -35,6 +35,7 @@ import type { LogSession } from "./_parts/logs-table-format";
 import { ModelCell, makerLogoCount } from "./_parts/model-cell";
 import { OriginFilter } from "./_parts/origin-filter";
 import { SessionCell } from "./_parts/session-cell";
+import { StatusCell } from "./_parts/status-cell";
 import { TimeCell } from "./_parts/time-cell";
 import { UsageCell } from "./_parts/usage-cell";
 
@@ -211,6 +212,13 @@ function SessionsTable() {
         size: 340,
         minSize: 280,
         cell: ({ row }) => <SessionCell session={row.original} />,
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 132,
+        minSize: 112,
+        cell: ({ row }) => <StatusCell session={row.original} />,
       },
       {
         id: "agent",

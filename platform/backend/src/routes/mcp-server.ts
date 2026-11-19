@@ -12,6 +12,7 @@ import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -74,6 +75,7 @@ import {
 } from "@/services/mcp-reinstall";
 import { filterMcpServersAssignableToTarget } from "@/services/mcp-server-assignability";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -956,7 +958,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           try {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
-            const capturedCatalogName = catalogItem.name;
             const capturedCatalogItem = catalogItem;
             const capturedEnterpriseManagedConfig =
               catalogItem.enterpriseManagedConfig;
@@ -1041,11 +1042,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     })
                   : await McpServerModel.getToolsFromServer(mcpServer);
 
-                // Persist tools in the database
-                // Use catalog item name (without userId) for tool naming to avoid duplicates across users
-                const toolNamePrefix = capturedCatalogName || mcpServer.name;
+                // Persist tools in the database, named by the catalog item
+                // (not the per-user install) so users share them.
+                const toolNameFor = await mintCatalogToolNames({
+                  catalogId: capturedCatalogId,
+                  rawToolNames: tools.map((tool) => tool.name),
+                });
                 const toolsToCreate = tools.map((tool) => ({
-                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  name: toolNameFor(tool.name),
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
@@ -1101,12 +1105,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   if (toolIds.length > 0) {
                     const targetAgentIds: string[] = [];
                     if (!mcpServer.teamId) {
-                      const personalGateway =
-                        await AgentModel.ensurePersonalMcpGateway({
+                      const personalGatewayId =
+                        await installerPersonalGatewayId({
                           userId: targetUserId,
                           organizationId,
                         });
-                      targetAgentIds.push(personalGateway.id);
+                      if (personalGatewayId) {
+                        targetAgentIds.push(personalGatewayId);
+                      }
                     }
                     if (agentIds && agentIds.length > 0) {
                       targetAgentIds.push(...agentIds);
@@ -1224,10 +1230,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogItem.enterpriseManagedConfig !== null,
         });
 
-        // Persist tools in the database with source='mcp_server' and mcpServerId
-        // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
+        // Persist tools in the database, named by the catalog item.
+        const toolNameFor = await mintCatalogToolNames({
+          catalogId: catalogItem.id,
+          rawToolNames: tools.map((tool) => tool.name),
+        });
         const toolsToCreate = tools.map((tool) => ({
-          name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          name: toolNameFor(tool.name),
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
@@ -1282,13 +1291,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
             if (!mcpServer.teamId) {
-              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
-                {
-                  userId: targetUserId,
-                  organizationId,
-                },
-              );
-              targetAgentIds.push(personalGateway.id);
+              const personalGatewayId = await installerPersonalGatewayId({
+                userId: targetUserId,
+                organizationId,
+              });
+              if (personalGatewayId) {
+                targetAgentIds.push(personalGatewayId);
+              }
             }
             if (agentIds && agentIds.length > 0) {
               targetAgentIds.push(...agentIds);
@@ -3948,4 +3957,18 @@ async function validateScopeAndAuthorization(params: {
       );
     }
   }
+}
+
+/**
+ * The gateway an installer's newly discovered tools are added to, or null when
+ * the installer is a service account: it has no personal gateway, and asking
+ * for one fails the install after the server has already started.
+ */
+async function installerPersonalGatewayId(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<string | null> {
+  if (isServiceAccountUserId(params.userId)) return null;
+  const gateway = await AgentModel.ensurePersonalMcpGateway(params);
+  return gateway.id;
 }

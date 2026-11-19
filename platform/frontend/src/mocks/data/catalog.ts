@@ -10,6 +10,7 @@ export function makeCatalogItem(
   return {
     id: "test-catalog",
     name: "test-catalog",
+    toolPrefix: null,
     version: null,
     description: null,
     instructions: null,
@@ -32,6 +33,7 @@ export function makeCatalogItem(
     userConfig: null,
     oauthConfig: null,
     enterpriseManagedConfig: null,
+    awsIamConfig: null,
     icon: null,
     organizationId: null,
     authorId: null,

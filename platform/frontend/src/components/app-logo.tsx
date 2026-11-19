@@ -23,26 +23,29 @@ export function AppLogo() {
 
   if (effectiveLogo) {
     return (
-      <div className="flex justify-center">
-        <div className="flex flex-col items-center gap-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={effectiveLogo}
-            alt={`${appName} logo`}
-            width={200}
-            height={60}
-            className="object-contain max-w-full max-h-12 w-auto h-auto"
-          />
-          {/* SPDX-SnippetBegin */}
-          {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
-          {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          {!config.enterpriseFeatures.fullWhiteLabeling && (
-            <p className="text-[10px] text-muted-foreground">
-              Powered by {APP_DISPLAY_NAME}
-            </p>
-          )}
-          {/* SPDX-SnippetEnd */}
-        </div>
+      // The logo slot has a width of its own (the 200px the settings page
+      // asks for) and lays the image out as a block. An SVG that declares no
+      // width and height, only a viewBox, has no size of its own: it takes
+      // the width of its container, and in a container sized by its content
+      // that width is zero, so the logo would not show at all.
+      <div className="mx-auto w-[200px] max-w-full space-y-1 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={effectiveLogo}
+          alt={`${appName} logo`}
+          width={200}
+          height={60}
+          className="mx-auto block object-contain max-w-full max-h-12 w-auto h-auto"
+        />
+        {/* SPDX-SnippetBegin */}
+        {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+        {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        {!config.enterpriseFeatures.fullWhiteLabeling && (
+          <p className="text-[10px] text-muted-foreground">
+            Powered by {APP_DISPLAY_NAME}
+          </p>
+        )}
+        {/* SPDX-SnippetEnd */}
       </div>
     );
   }

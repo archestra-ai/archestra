@@ -172,7 +172,13 @@ test("read-only roles and personal access expose permissions and keyboard source
   ).toHaveCount(3);
   await expect(
     personalAgents.getByTitle("From Admin", { exact: true }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
+  // Skills come from Admin alone.
+  await expect(
+    personal
+      .getByRole("region", { name: "Skills", exact: true })
+      .getByTitle("From Admin", { exact: true }),
+  ).toHaveCount(adminPermissions.skill.length);
   await expect(personal.getByRole("checkbox")).toHaveCount(0);
   await personal.getByRole("button", { name: "Other", exact: true }).click();
   await expect(

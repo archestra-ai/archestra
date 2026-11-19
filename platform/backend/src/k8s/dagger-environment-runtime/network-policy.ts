@@ -30,6 +30,7 @@ import type {
  */
 
 const DAGGER_ENGINE_APP_LABEL = "dagger-engine";
+const DAGGER_ENGINE_INGRESS_POLICY_NAME = "dagger-engine-deny-ingress";
 
 /** RFC1123 deployment name for an environment's dedicated Dagger engine. */
 export function daggerEngineDeploymentName(environmentId: string): string {
@@ -48,6 +49,36 @@ export function daggerEnginePodLabels(
   return {
     app: DAGGER_ENGINE_APP_LABEL,
     "dagger-environment-id": environmentId,
+  };
+}
+
+/**
+ * Deny all inbound traffic to every Dagger engine pod in a namespace. The
+ * platform drives an engine through the Kubernetes API (`kube-pod://` is a
+ * pod exec), never over the pod network, so no pod needs to connect to one;
+ * without this any pod in the cluster could reach a privileged engine.
+ * Namespace-wide and the same for every engine, so it is applied before each
+ * engine and never removed with one.
+ */
+export function buildDaggerEngineIngressPolicy(
+  labels: Record<string, string>,
+): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: DAGGER_ENGINE_INGRESS_POLICY_NAME,
+      labels: {
+        ...labels,
+        "app.kubernetes.io/managed-by": "archestra",
+        "archestra.io/resource": "dagger-ingress-policy",
+      },
+    },
+    spec: {
+      podSelector: { matchLabels: { app: DAGGER_ENGINE_APP_LABEL } },
+      policyTypes: ["Ingress"],
+      ingress: [],
+    },
   };
 }
 

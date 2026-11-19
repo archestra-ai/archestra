@@ -63,6 +63,12 @@ import {
 } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import {
+  type AgentIdentityBindingDrafts,
+  AgentIdentityBindingsField,
+  agentIdentityBindingsToSave,
+  hasAgentIdentityProviders,
+} from "@/components/agent-identity-bindings-field";
+import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
@@ -77,7 +83,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
   isClaudeCodeRuntimeConfig,
-  LockedRuntimeNotice,
+  RuntimeSettingsNotice,
   supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
@@ -104,7 +110,6 @@ import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
-import { EntraAgentIdentityField } from "@/components/entra-agent-identity-field";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -180,12 +185,16 @@ import {
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
+  useAgentIdentityBindings,
+  useReplaceAgentIdentityBindings,
+} from "@/lib/agent-identity-bindings.query";
+import {
   useAgentKnowledgeSourceExclusions,
   useUpdateAgentKnowledgeSourceExclusions,
 } from "@/lib/agent-knowledge-source-exclusions.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useLockedRuntimeName } from "@/lib/agent-runtime-templates.query";
+import { useAgentRuntimePermissions } from "@/lib/agent-runtime-templates.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -1082,9 +1091,6 @@ export function AgentForm({
   // overwriting them with the empty default.
   const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
-  const { data: canConfigureRuntime } = useHasPermissions({
-    agent: ["configure-runtime"],
-  });
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
@@ -1121,9 +1127,7 @@ export function AgentForm({
   // surface only: publishing is what an MCP gateway is for, while an agent
   // reaches skills through `load_skill` in its own runtime and has no client
   // to serve `skill://` resources to. Legacy `profile` rows are gateways under
-  // an older name, so they keep the control. Shown only where the deployment
-  // has enabled the draft extension; the API enforces the same split.
-  const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
+  // an older name, so they keep the control. The API enforces the same split.
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
   // something gateway permission alone buys. Hiding the section for a caller
@@ -1131,7 +1135,6 @@ export function AgentForm({
   // and one that 403s when they save.
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const showSkills =
-    mcpGatewaySkillsEnabled === true &&
     !!canReadSkills &&
     !agent?.builtIn &&
     (agentType === "mcp_gateway" || agentType === "profile");
@@ -1223,6 +1226,23 @@ export function AgentForm({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
+  // The bindings endpoint is a full replace: it is written only once its
+  // current set has loaded, so a failed read never becomes an empty write.
+  const { data: persistedIdentityBindings, isSuccess: identityBindingsLoaded } =
+    useAgentIdentityBindings(
+      shouldLoadIdentityProviders ? agent?.id : undefined,
+    );
+  const replaceIdentityBindings = useReplaceAgentIdentityBindings();
+  const persistedIdentityBindingDrafts = useMemo(
+    (): AgentIdentityBindingDrafts =>
+      Object.fromEntries(
+        (persistedIdentityBindings ?? []).map((binding) => [
+          binding.identityProviderId,
+          binding.externalId,
+        ]),
+      ),
+    [persistedIdentityBindings],
+  );
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -1324,7 +1344,11 @@ export function AgentForm({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
-  const [entraAgentIdentityId, setEntraAgentIdentityId] = useState("");
+  // Null until edited: the form then shows the agent's saved bindings.
+  const [identityBindingDrafts, setIdentityBindingDrafts] =
+    useState<AgentIdentityBindingDrafts | null>(null);
+  const identityBindings =
+    identityBindingDrafts ?? persistedIdentityBindingDrafts;
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
@@ -1526,9 +1550,13 @@ export function AgentForm({
     runtimeSupportsClaudeCodeSubscription(runtime);
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentCatalogImages = useAgentCatalogImages();
-  // Its Agent Runtime's settings, when locked, are this agent's: read-only.
-  // An existing agent's runtime is the saved one, never the unsaved draft.
-  const lockedRuntimeName = useLockedRuntimeName(
+  // Who may set this agent's runtime, and whether its settings are the
+  // runtime's own (read-only). An existing agent's runtime is the saved one,
+  // never the unsaved draft.
+  const {
+    canChange: canConfigureRuntime,
+    readOnlyBy: runtimeSettingsReadOnlyBy,
+  } = useAgentRuntimePermissions(
     agent ? agent.runtime : runtime,
     agentCatalogImages,
   );
@@ -1570,15 +1598,12 @@ export function AgentForm({
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "agent";
-  const entraAgentIdBlueprintConfigured = identityProviders.some(
-    (provider) =>
-      !!provider.oidcConfig?.enterpriseManagedCredentials?.entraAgentId
-        ?.blueprintClientId,
-  );
-  // Shown once a blueprint is set, or while a binding remains to be cleared.
-  const showEntraAgentIdentity =
+  // Shown while any provider is set up for agent identities, or a binding
+  // remains to be cleared.
+  const showAgentIdentities =
     supportsIdentityProvider &&
-    (entraAgentIdBlueprintConfigured || !!persistedAgent?.entraAgentIdentityId);
+    (hasAgentIdentityProviders(identityProviders) ||
+      Object.keys(identityBindings).length > 0);
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
   // Auto pins the behaviour, so the row reports what will happen rather than
@@ -1736,7 +1761,6 @@ export function AgentForm({
             modelPoolId: agentData.modelPoolId ?? null,
             autoRouterId: agentData.autoRouterId ?? null,
             identityProviderId: agentData.identityProviderId ?? undefined,
-            entraAgentIdentityId: agentData.entraAgentIdentityId ?? "",
             environmentId: agentData.environmentId ?? undefined,
             networkPolicy: agentData.networkPolicy ?? null,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1774,7 +1798,6 @@ export function AgentForm({
             modelPoolId: null,
             autoRouterId: null,
             identityProviderId: undefined,
-            entraAgentIdentityId: "",
             environmentId: undefined,
             networkPolicy: null,
             knowledgeBaseIds: [],
@@ -1807,7 +1830,7 @@ export function AgentForm({
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setIdentityProviderId(nextValues.identityProviderId);
-      setEntraAgentIdentityId(nextValues.entraAgentIdentityId);
+      setIdentityBindingDrafts(null);
       setEnvironmentId(nextValues.environmentId);
       setNetworkPolicy(nextValues.networkPolicy);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
@@ -2227,9 +2250,13 @@ export function AgentForm({
     hasUnsavedChanges(persistedAgent.networkPolicy ?? null, networkPolicy);
   // Saving it asks whether the editor may use its GitHub App, so it is sent
   // only when it changed.
-  const entraAgentIdentityIdChanged =
-    !!persistedAgent &&
-    (persistedAgent.entraAgentIdentityId ?? "") !== entraAgentIdentityId.trim();
+  const identityBindingsToSave = agentIdentityBindingsToSave(identityBindings);
+  const identityBindingsChanged =
+    supportsIdentityProvider &&
+    hasUnsavedChanges(
+      agentIdentityBindingsToSave(persistedIdentityBindingDrafts),
+      identityBindingsToSave,
+    );
   const githubActionsAccessChanged =
     !!persistedAgent &&
     hasUnsavedChanges(
@@ -2440,10 +2467,6 @@ export function AgentForm({
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
-              ...(supportsIdentityProvider &&
-                entraAgentIdentityIdChanged && {
-                  entraAgentIdentityId: entraAgentIdentityId.trim() || null,
-                }),
               ...(agentType === "mcp_gateway" && {
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -2512,10 +2535,6 @@ export function AgentForm({
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
-          ...(supportsIdentityProvider &&
-            entraAgentIdentityId.trim() && {
-              entraAgentIdentityId: entraAgentIdentityId.trim(),
-            }),
           knowledgeBaseIds: knowledgeBaseIds,
           connectorIds: connectorIds,
           toolExposureMode,
@@ -2588,6 +2607,12 @@ export function AgentForm({
               });
             }
             await savePublishedSkills(savedAgentId);
+            if (identityBindingsToSave.length > 0) {
+              await replaceIdentityBindings.mutateAsync({
+                agentId: savedAgentId,
+                bindings: identityBindingsToSave,
+              });
+            }
             // Channels picked on the wizard's messaging step, which had no id
             // to be written against until a moment ago.
             if (channelAssignmentsDirty) {
@@ -2701,6 +2726,18 @@ export function AgentForm({
         });
       }
 
+      if (
+        agent &&
+        savedAgentId &&
+        identityBindingsLoaded &&
+        identityBindingsChanged
+      ) {
+        await replaceIdentityBindings.mutateAsync({
+          agentId: savedAgentId,
+          bindings: identityBindingsToSave,
+        });
+      }
+
       // Existing agents save policy changes through the revisioned endpoint.
       // Create carries the staged policy in the initial agent request above.
       if (agent) {
@@ -2749,8 +2786,10 @@ export function AgentForm({
     agentModelPoolId,
     llmSelectionChanged,
     identityProviderId,
-    entraAgentIdentityId,
-    entraAgentIdentityIdChanged,
+    identityBindingsLoaded,
+    identityBindingsChanged,
+    identityBindingsToSave,
+    replaceIdentityBindings,
     environmentId,
     environmentChanged,
     knowledgeBaseIds,
@@ -2912,7 +2951,6 @@ export function AgentForm({
     modelPoolId,
     autoRouterId,
     identityProviderId,
-    entraAgentIdentityId,
     environmentId,
     networkPolicy,
     knowledgeBaseIds,
@@ -2934,6 +2972,7 @@ export function AgentForm({
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
       hasPendingToolChanges ||
+      (identityBindingsLoaded && identityBindingsChanged) ||
       activationSkillsDirty ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
@@ -3314,7 +3353,7 @@ export function AgentForm({
           {isClaudeCodeRuntime ? (
             <fieldset disabled={canConfigureRuntime !== true}>
               <ClaudeCodeInferenceSettings
-                authenticationLocked={!!lockedRuntimeName}
+                authenticationLocked={!!runtimeSettingsReadOnlyBy}
                 agentId={agent?.id ?? ""}
                 authentication={
                   usesClaudeSubscription ? "subscription" : "provider"
@@ -3549,7 +3588,7 @@ export function AgentForm({
                             }
                           }}
                           onChange={setAgentRuntime}
-                          lockedBy={lockedRuntimeName}
+                          readOnlyBy={runtimeSettingsReadOnlyBy}
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
@@ -4043,7 +4082,7 @@ export function AgentForm({
                   !isActiveSection("runtime") && "hidden",
                 )}
               >
-                {!canConfigureRuntime && (
+                {canConfigureRuntime === false && (
                   <InlineNotice variant="info">
                     <InfoIcon className="size-4 shrink-0" />
                     <InlineNoticeBody>
@@ -4051,20 +4090,20 @@ export function AgentForm({
                         Runtime settings are read-only
                       </span>
                       <InlineNoticeText>
-                        Configure runtime permission is required to change this
-                        agent's runtime. Existing settings are preserved.
+                        You don't have permission to use this agent's runtime.
+                        Existing settings are preserved.
                       </InlineNoticeText>
                     </InlineNoticeBody>
                   </InlineNotice>
                 )}
-                {canConfigureRuntime && lockedRuntimeName && (
-                  <LockedRuntimeNotice name={lockedRuntimeName} />
+                {canConfigureRuntime && runtimeSettingsReadOnlyBy && (
+                  <RuntimeSettingsNotice name={runtimeSettingsReadOnlyBy} />
                 )}
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
                     onChange={setAgentRuntime}
-                    locked={!!lockedRuntimeName}
+                    locked={!!runtimeSettingsReadOnlyBy}
                   />
                 </fieldset>
               </div>
@@ -4424,16 +4463,16 @@ export function AgentForm({
               )}
 
               {/* Identity: the issuer incoming requests may authenticate
-                  with, and the Entra identity outgoing tool calls act through. */}
+                  with, and the identities outgoing tool calls act through. */}
               {supportsIdentityProvider &&
-                (identityProviders.length > 0 || showEntraAgentIdentity) && (
+                (identityProviders.length > 0 || showAgentIdentities) && (
                   <SettingsSection
                     title={
-                      showEntraAgentIdentity ? "Identity" : "Identity provider"
+                      showAgentIdentities ? "Identity" : "Identity provider"
                     }
                     description={
-                      showEntraAgentIdentity
-                        ? `Who may call this ${agentTypeDisplayName[agentType] || "agent"}, and the Microsoft Entra identity its tools act through.`
+                      showAgentIdentities
+                        ? `Who may call this ${agentTypeDisplayName[agentType] || "agent"}, and the identities its tools act through.`
                         : "The issuer whose JWTs incoming requests may authenticate with."
                     }
                     contentClassName="space-y-6"
@@ -4447,7 +4486,7 @@ export function AgentForm({
                         </Label>
                         <FieldDescription>
                           {agentType === "agent"
-                            ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                            ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Tools that exchange the user's token use it too, unless their MCP server names another. Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
                             : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                           {mcpAuthDocsUrl ? (
                             <>
@@ -4470,10 +4509,13 @@ export function AgentForm({
                         />
                       </div>
                     )}
-                    {showEntraAgentIdentity && (
-                      <EntraAgentIdentityField
-                        value={entraAgentIdentityId}
-                        onChange={setEntraAgentIdentityId}
+                    {showAgentIdentities && (
+                      <AgentIdentityBindingsField
+                        agentId={persistedAgent?.id ?? null}
+                        identityProviders={identityProviders}
+                        selectedIdentityProviderId={identityProviderId}
+                        value={identityBindings}
+                        onChange={setIdentityBindingDrafts}
                       />
                     )}
                   </SettingsSection>
@@ -4632,7 +4674,6 @@ type AgentFormFields = {
   modelPoolId: string | null;
   autoRouterId: string | null;
   identityProviderId: string | null | undefined;
-  entraAgentIdentityId: string;
   environmentId: string | null | undefined;
   networkPolicy: AgentNetworkPolicy | null;
   knowledgeBaseIds: string[];

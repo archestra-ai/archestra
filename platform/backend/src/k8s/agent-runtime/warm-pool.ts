@@ -6,6 +6,7 @@ import {
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   createK8sClients,
   isK8sConflictError,
@@ -39,6 +40,7 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import { AGENT_RUNTIME_WORKSPACE_LABEL, agentRuntimeLabels } from "./naming";
+import { resolveAgentRuntimeNodeSelector } from "./node-placement";
 import { resolveAgentRuntimeNamespace } from "./runtime-namespace";
 import { AGENT_SANDBOX_EXTENSIONS_API, agentSandboxApi } from "./sandbox-api";
 import { warmPoolTemplate } from "./warm-pool-template";
@@ -188,6 +190,8 @@ class AgentWarmPoolManager {
             ? [organization.defaultEnvironmentNamespace]
             : [],
         ),
+        // No pool is wanted there, so its pools, templates and their disks go.
+        ...retiredWorkloadNamespaces(),
       ]);
       for (const agent of candidates) {
         // Pool the image a launch resolves to, or no claim would ever match.
@@ -239,7 +243,9 @@ class AgentWarmPoolManager {
           warmTiers: [],
           workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
-          nodeSelector: config.agentRuntime.nodeSelector,
+          nodeSelector: resolveAgentRuntimeNodeSelector({
+            privileged: runtime.privileged,
+          }),
           runtimeClassName: config.agentRuntime.runtimeClassName,
           imagePullSecrets: [],
           effectiveNetworkPolicy,
@@ -307,6 +313,24 @@ class AgentWarmPoolManager {
               if (!isK8sNotFoundError(error)) throw error;
             });
         }
+        await this.removeLeftoverWarmObjects({
+          clients,
+          namespace,
+          keptPools: new Set(
+            existing.items
+              .map((pool) => pool.metadata.name)
+              .filter(
+                (name) =>
+                  desired.has(`${namespace}/${name}`) || claimedPools.has(name),
+              ),
+          ),
+          desiredHere: new Set(
+            [...desired.values()]
+              .filter((entry) => entry.namespace === namespace)
+              .map((entry) => entry.template.name),
+          ),
+          managedSelector,
+        });
         for (const {
           namespace: target,
           organizationId,
@@ -327,7 +351,7 @@ class AgentWarmPoolManager {
             .createNamespacedNetworkPolicy({
               namespace,
               body: {
-                metadata: { ...metadata, name: "archestra-warm-workspaces" },
+                metadata: { ...metadata, name: WARM_WORKSPACES_POLICY },
                 spec: {
                   podSelector: {
                     matchExpressions: [{ key: POOL_LABEL, operator: "Exists" }],
@@ -514,6 +538,59 @@ class AgentWarmPoolManager {
         );
     }
   }
+
+  /**
+   * Delete warm-pool objects a pool left behind: templates whose pool is gone
+   * (its template delete failed, or the pool moved to another namespace), and
+   * the namespace's warm-workspace policy once no warm pool remains there.
+   */
+  private async removeLeftoverWarmObjects(params: {
+    clients: ReturnType<typeof createK8sClients>;
+    namespace: string;
+    keptPools: Set<string>;
+    /** Names of the pools (and their templates) wanted in this namespace. */
+    desiredHere: Set<string>;
+    managedSelector: string;
+  }) {
+    const { clients, namespace, keptPools, managedSelector } = params;
+    const ignoreNotFound = (error: unknown) => {
+      if (!isK8sNotFoundError(error)) throw error;
+    };
+    const templates =
+      (await clients.customObjectsApi.listNamespacedCustomObject({
+        ...TEMPLATE_API,
+        namespace,
+        labelSelector: managedSelector,
+      })) as { items: Array<{ metadata: { name: string } }> };
+    for (const template of templates.items) {
+      const name = template.metadata.name;
+      if (keptPools.has(name) || params.desiredHere.has(name)) continue;
+      await clients.customObjectsApi
+        .deleteNamespacedCustomObject({
+          ...TEMPLATE_API,
+          namespace,
+          name,
+        })
+        .catch(ignoreNotFound);
+    }
+    if (params.desiredHere.size > 0 || keptPools.size > 0) return;
+    // The policy name is shared by every install in the namespace; keep it
+    // while any warm pool, whoever owns it, is still there.
+    const anyPools = (await clients.customObjectsApi.listNamespacedCustomObject(
+      {
+        ...POOL_API,
+        namespace,
+        labelSelector: MANAGED_SELECTOR,
+      },
+    )) as { items: unknown[] };
+    if (anyPools.items.length > 0) return;
+    await clients.networkingApi
+      .deleteNamespacedNetworkPolicy({
+        name: WARM_WORKSPACES_POLICY,
+        namespace,
+      })
+      .catch(ignoreNotFound);
+  }
 }
 
 export const agentWarmPoolManager = new AgentWarmPoolManager();
@@ -588,6 +665,7 @@ const RECENT_RUN_WINDOW_MS = 7 * TimeInMs.Day;
 const POOL_LABEL = "archestra.io/warm-pool";
 const MANAGED_LABELS = { "archestra.io/purpose": "agent-warm-pool" };
 const MANAGED_SELECTOR = "archestra.io/purpose=agent-warm-pool";
+const WARM_WORKSPACES_POLICY = "archestra-warm-workspaces";
 const API_VERSION = "extensions.agents.x-k8s.io/v1beta1";
 const POOL_API = { ...SANDBOX_CLAIM_API, plural: "sandboxwarmpools" };
 const TEMPLATE_API = { ...SANDBOX_CLAIM_API, plural: "sandboxtemplates" };

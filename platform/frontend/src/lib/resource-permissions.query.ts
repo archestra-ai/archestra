@@ -124,6 +124,7 @@ export function useUpdateResourcePermissions(
         client.invalidateQueries({ queryKey: ["runtime-credentials"] }),
         client.invalidateQueries({ queryKey: ["github-app-configs"] }),
         client.invalidateQueries({ queryKey: ["github-pats"] }),
+        client.invalidateQueries({ queryKey: ["agent-runtime-access"] }),
       ]);
       toast.success("Permissions saved");
     },

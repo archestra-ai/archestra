@@ -416,6 +416,43 @@ class AgentModel {
   }
 
   /**
+   * Batch fetch minimal subagent-pool routing fields for candidate router agents
+   * in `organizationId`.
+   */
+  static async findRouterPoolConfigsByOrganizationIdAndIds(params: {
+    organizationId: string;
+    agentIds: string[];
+  }): Promise<
+    Array<
+      Pick<
+        Agent,
+        "id" | "environmentId" | "accessAllSubagents" | "subagentLoadBalancing"
+      >
+    >
+  > {
+    const { organizationId, agentIds } = params;
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    return await db
+      .select({
+        id: schema.agentsTable.id,
+        environmentId: schema.agentsTable.environmentId,
+        accessAllSubagents: schema.agentsTable.accessAllSubagents,
+        subagentLoadBalancing: schema.agentsTable.subagentLoadBalancing,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          inArray(schema.agentsTable.id, agentIds),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
+  /**
    * Auto-mode agents (accessAllTools = true) grouped by organization. These
    * agents have implicit access to every tool, so they can reach every MCP
    * server without an explicit tool assignment. They are therefore surfaced
@@ -1774,7 +1811,10 @@ class AgentModel {
   static async findA2ARegistryCandidates(
     organizationId: string,
   ): Promise<
-    Pick<Agent, "id" | "name" | "description" | "systemPrompt" | "updatedAt">[]
+    Pick<
+      Agent,
+      "id" | "name" | "description" | "systemPrompt" | "updatedAt" | "modelId"
+    >[]
   > {
     return db
       .select({
@@ -1783,6 +1823,7 @@ class AgentModel {
         description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
         updatedAt: schema.agentsTable.updatedAt,
+        modelId: schema.agentsTable.modelId,
       })
       .from(schema.agentsTable)
       .where(
@@ -3208,37 +3249,6 @@ class AgentModel {
     return result ?? null;
   }
 
-  /** The Microsoft Entra agent identity the agent acts as, if it is bound to one. */
-  static async findEntraAgentIdentityId(id: string): Promise<string | null> {
-    const [result] = await db
-      .select({ entraAgentIdentityId: schema.agentsTable.entraAgentIdentityId })
-      .from(schema.agentsTable)
-      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
-      .limit(1);
-
-    return result?.entraAgentIdentityId ?? null;
-  }
-
-  /** The agent bound to a Microsoft Entra agent identity, if any. */
-  static async findIdByEntraAgentIdentityId(params: {
-    organizationId: string;
-    entraAgentIdentityId: string;
-  }): Promise<string | null> {
-    const [result] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          sql`lower(${schema.agentsTable.entraAgentIdentityId}) = ${params.entraAgentIdentityId.toLowerCase()}`,
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
-
-    return result?.id ?? null;
-  }
-
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })
@@ -3513,7 +3523,7 @@ class AgentModel {
     userId: string;
     isAdmin: boolean;
     organizationId: string;
-    excludeAgentId: string;
+    excludeAgentId?: string;
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
@@ -3524,6 +3534,7 @@ class AgentModel {
   }): Promise<
     (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
       hasRuntime: boolean;
+      hasSubagentLoadBalancing: boolean;
     })[]
   > {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
@@ -3533,7 +3544,7 @@ class AgentModel {
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
       AgentModel.isRegularOrSreAgent(),
-      ne(schema.agentsTable.id, excludeAgentId),
+      ...(excludeAgentId ? [ne(schema.agentsTable.id, excludeAgentId)] : []),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
         : eq(schema.agentsTable.environmentId, environmentId),
@@ -3555,6 +3566,7 @@ class AgentModel {
               ? sql<Agent["builtInAgentConfig"]>`NULL`
               : schema.agentsTable.builtInAgentConfig,
           hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+          hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3580,6 +3592,7 @@ class AgentModel {
             ? sql<Agent["builtInAgentConfig"]>`NULL`
             : schema.agentsTable.builtInAgentConfig,
         hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+        hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
       })
       .from(schema.agentsTable)
       .where(
@@ -3753,6 +3766,149 @@ class AgentModel {
       );
 
     return [...new Set(rows.map((row) => row.targetAgentId))];
+  }
+
+  /**
+   * Structural Auto-mode (`access_all_subagents = true`) equivalent of
+   * {@link findAssignedRuntimeSubagentIds}: resolves all non-excluded regular/SRE
+   * internal runtime agents in `organizationId` and `environmentId` (excluding
+   * `callerAgentId` itself), sorted deterministically by `id`.
+   */
+  static async findAutoRuntimeSubagentIds(params: {
+    callerAgentId: string;
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          AgentModel.isRegularOrSreAgent(),
+          ne(schema.agentsTable.id, params.callerAgentId),
+          isNotNull(schema.agentsTable.runtime),
+          params.environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, params.environmentId),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(
+                    schema.agentExcludedSubagentsTable.agentId,
+                    params.callerAgentId,
+                  ),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    schema.agentsTable.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.id));
+
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Batch equivalent of {@link findAssignedRuntimeSubagentIds}: resolves the
+   * ordered, environment-fenced, non-excluded runtime subagent IDs explicitly
+   * assigned to each agent in `agentIds` in a single query.
+   */
+  static async findAssignedRuntimeSubagentIdsByAgents(
+    agentIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (agentIds.length === 0) {
+      return result;
+    }
+
+    const targetAgents = alias(schema.agentsTable, "target_agents");
+    const rows = await db
+      .select({
+        callerAgentId: schema.agentToolsTable.agentId,
+        targetAgentId: targetAgents.id,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        targetAgents,
+        eq(schema.toolsTable.delegateToAgentId, targetAgents.id),
+      )
+      .where(
+        and(
+          inArray(schema.agentToolsTable.agentId, agentIds),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+          isNotNull(targetAgents.runtime),
+          or(
+            and(
+              isNull(schema.agentsTable.environmentId),
+              isNull(targetAgents.environmentId),
+            ),
+            eq(schema.agentsTable.environmentId, targetAgents.environmentId),
+          ),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(
+                    schema.agentExcludedSubagentsTable.agentId,
+                    schema.agentToolsTable.agentId,
+                  ),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    targetAgents.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.agentsTable),
+          notDeleted(schema.toolsTable),
+          notDeleted(targetAgents),
+        ),
+      )
+      .orderBy(
+        asc(schema.agentToolsTable.agentId),
+        asc(schema.agentToolsTable.createdAt),
+        asc(schema.agentToolsTable.id),
+      );
+
+    const seenByCaller = new Map<string, Set<string>>();
+    for (const row of rows) {
+      let seen = seenByCaller.get(row.callerAgentId);
+      if (!seen) {
+        seen = new Set();
+        seenByCaller.set(row.callerAgentId, seen);
+      }
+      if (seen.has(row.targetAgentId)) {
+        continue;
+      }
+      seen.add(row.targetAgentId);
+      const list = result.get(row.callerAgentId);
+      if (list) {
+        list.push(row.targetAgentId);
+      } else {
+        result.set(row.callerAgentId, [row.targetAgentId]);
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -5884,7 +6040,6 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
-      entraAgentIdentityId: row.entraAgentIdentityId ?? null,
       subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,

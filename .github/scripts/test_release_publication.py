@@ -143,35 +143,22 @@ gh() {
             with self.subTest(version=version):
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
 
-    def test_github_publication_marks_prereleases_without_latest(self):
-        section = FINALIZE.read_text().split(
-            "      - name: Publish GitHub release\n", 1
-        )[1]
-        # The publish step can be the last step in its job.
-        lines = section.split("        run: |\n", 1)[1].splitlines()
-        script_lines = []
-        for line in lines:
-            if line.strip() and not line.startswith("          "):
-                break
-            script_lines.append(line)
-        script = textwrap.dedent("\n".join(script_lines))
-        stub = "gh() { if [ \"$2\" = view ]; then echo true; else printf '%s\\n' \"$*\"; fi; };\n"
-        for version, flags in (
-            ("1.4.0-beta.13", "--prerelease --latest=false"),
-            ("1.4.0-rc.14", "--prerelease --latest=false"),
-            ("1.4.0", "--prerelease=false --latest"),
-        ):
-            with self.subTest(version=version):
-                result = subprocess.run(
-                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
-                    env={**os.environ, "VERSION": version, "TAG_NAME": f"platform-v{version}"},
-                    capture_output=True, text=True, timeout=10,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.splitlines(), [
-                    f"release upload platform-v{version} archestra-platform-{version}.tgz --clobber",
-                    f"release edit platform-v{version} --draft=false {flags}",
-                ])
+    def test_github_publication_follows_the_publication_policy(self):
+        # The shared release-finalize action publishes (its own tests pin the
+        # prerelease and latest flags); this repository decides first whether
+        # the release may publish and whether it may become latest.
+        job = FINALIZE.read_text().split("\n  publish:\n", 1)[1].split("\n  recheck-release-prs:\n", 1)[0]
+        steps = job.split("      - name: ")
+        names = [step.split("\n", 1)[0] for step in steps[1:]]
+        self.assertLess(names.index("Check publication is still allowed"), names.index("Publish GitHub release"))
+        policy = steps[1 + names.index("Check publication is still allowed")]
+        self.assertIn("run: bash .github/scripts/release-publication-policy.sh", policy)
+        self.assertIn("RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}", policy)
+        publish = steps[1 + names.index("Publish GitHub release")]
+        self.assertIn("archestra-ai/.github/actions/release-finalize@", publish)
+        # An older line's patch (preserve_latest) must not take latest.
+        self.assertIn("latest: ${{ steps.publication-policy.outputs.preserve_latest == 'true' && 'false' || 'true' }}",
+                      publish)
 
     def test_main_policy_rc_transition_and_rolling_releases(self):
         section = WORKFLOW.read_text().split(
@@ -361,22 +348,6 @@ gh() {
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.decision, ["move=false"])
 
-    def test_older_line_patch_publishes_github_release_without_latest(self):
-        section = FINALIZE.read_text().split("      - name: Publish GitHub release\n", 1)[1]
-        lines = section.split("        run: |\n", 1)[1].splitlines()
-        script_lines = []
-        for line in lines:
-            if line.strip() and not line.startswith("          "):
-                break
-            script_lines.append(line)
-        script = textwrap.dedent("\n".join(script_lines))
-        env = os.environ | {"VERSION": "1.3.80", "TAG_NAME": "platform-v1.3.80", "PRESERVE_LATEST": "true"}
-        result = subprocess.run(
-            ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script],
-            env=env, capture_output=True, text=True, timeout=10,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--draft=false --prerelease=false --latest=false", result.stdout)
 
 SCRIPTS = Path(__file__).resolve().parent
 DIGEST_A, DIGEST_B = "a" * 64, "b" * 64

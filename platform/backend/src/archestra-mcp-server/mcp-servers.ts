@@ -57,14 +57,17 @@ import {
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   ApiError,
   agentOwner,
+  awsIamConfigConflict,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   type LocalConfig,
+  mergedAwsIamSettings,
   PartialUpdateInternalMcpCatalogSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -1092,6 +1095,10 @@ async function handleEditMcpConfig(
     // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
+    const awsIamConflict = awsIamConfigConflict(
+      mergedAwsIamSettings({ update: validatedUpdate, current: existing }),
+    );
+    if (awsIamConflict) return errorResult(awsIamConflict);
     await moveCatalogSecretsToBag({
       updateData: validatedUpdate as Record<string, unknown>,
       catalogName: existing.name,
@@ -1199,6 +1206,7 @@ async function handleCreateMcpServer(
         environmentId: targetEnvironmentId,
         organizationId,
         userId: context.userId,
+        resource: "mcpRegistry",
       });
     } catch (error) {
       return errorResult(
@@ -1797,11 +1805,12 @@ async function discoverLocalMcpServerTools(params: {
     broadcastMcpInstallationStatus(mcpServer.id, "discovering-tools", null);
 
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
+    const toolNameFor = await mintCatalogToolNames({
+      catalogId: catalogItem.id,
+      rawToolNames: discoveredTools.map((tool) => tool.name),
+    });
     const toolsToCreate = discoveredTools.map((tool) => ({
-      name: ToolModel.slugifyName(
-        catalogItem.name || mcpServer.name,
-        tool.name,
-      ),
+      name: toolNameFor(tool.name),
       rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
@@ -1871,8 +1880,12 @@ async function discoverRemoteMcpServerTools(params: {
   try {
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
     if (discoveredTools.length > 0) {
+      const toolNameFor = await mintCatalogToolNames({
+        catalogId: catalogItem.id,
+        rawToolNames: discoveredTools.map((tool) => tool.name),
+      });
       const toolsToCreate = discoveredTools.map((tool) => ({
-        name: ToolModel.slugifyName(catalogItem.name, tool.name),
+        name: toolNameFor(tool.name),
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,

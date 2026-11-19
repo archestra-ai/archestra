@@ -2,7 +2,7 @@ import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import {
-  buildCompactionPrompt,
+  buildCompactionTranscript,
   estimateChatMessagesTokens,
 } from "./message-text";
 
@@ -143,8 +143,7 @@ test("summary path includes text_preview for a ref attachment in the same conver
     },
   ];
 
-  const prompt = await buildCompactionPrompt({
-    previousSummary: null,
+  const prompt = await summarizerInput({
     messages,
     conversationId: conversation.id,
   });
@@ -196,8 +195,7 @@ test("summary path silently drops refs from a DIFFERENT conversation (ACL)", asy
     },
   ];
 
-  const prompt = await buildCompactionPrompt({
-    previousSummary: null,
+  const prompt = await summarizerInput({
     messages,
     conversationId: requestConvo.id,
   });
@@ -244,8 +242,7 @@ test("summary path falls back when ref's preview status is 'failed'", async ({
     },
   ];
 
-  const prompt = await buildCompactionPrompt({
-    previousSummary: null,
+  const prompt = await summarizerInput({
     messages,
     conversationId: conversation.id,
   });
@@ -279,11 +276,17 @@ test("backward-compat: data: URL summary path still decodes text PDFs", async ({
     },
   ];
 
-  const prompt = await buildCompactionPrompt({
-    previousSummary: null,
+  const prompt = await summarizerInput({
     messages,
     conversationId: conversation.id,
   });
 
   expect(prompt).toContain("LEGACY_TEXT_FOR_COMPACTION");
 });
+
+/** Everything the compaction summarizer is given, as one searchable string. */
+async function summarizerInput(
+  params: Parameters<typeof buildCompactionTranscript>[0],
+): Promise<string> {
+  return JSON.stringify(await buildCompactionTranscript(params));
+}

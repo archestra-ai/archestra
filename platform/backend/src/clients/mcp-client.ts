@@ -72,6 +72,7 @@ import {
 } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AgentIdentityBindingModel,
   AgentModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -96,16 +97,25 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { awsIamMcpSigner } from "@/services/aws-iam/aws-iam-mcp-signer";
 import {
   filterToolsByCallerCatalogAccess,
   getCallerAccessibleCatalogIds,
   isToolCatalogAccessible,
 } from "@/services/caller-catalog-access";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
+import { resolveExchangeIdentityProviderId } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
 import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  type AgentIdentityContext,
+  agentIdentityKind,
+  assertAgentIdentityRequirement,
+  identityProviderRequiresAgentIdentity,
+} from "@/services/identity-providers/enterprise-managed/exchange";
+import { spiffeIdForAgent } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -141,6 +151,7 @@ import type {
 } from "@/types";
 import { agentOwner } from "@/types";
 import type { A2AOAuthExecution } from "@/types/a2a-actor";
+import type { AwsIamMcpAuthConfig } from "@/types/aws-iam-mcp-auth";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -447,6 +458,8 @@ type ToolCallAuthInfo = {
   /** Client the call's enterprise-managed credential was issued to. */
   credentialClientId?: string;
   credentialClientType?: EnterpriseCredentialClientType;
+  /** Agent the credential exchange named as the actor (RFC 8693 `act`). */
+  credentialActorClientId?: string;
   serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
@@ -934,6 +947,12 @@ class McpClient {
             enterpriseTransportCredential.issuedTo.clientType,
         };
       }
+      if (enterpriseTransportCredential?.actor) {
+        authInfo = {
+          ...authInfo,
+          credentialActorClientId: enterpriseTransportCredential.actor.clientId,
+        };
+      }
 
       if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
         const authError =
@@ -955,6 +974,41 @@ class McpClient {
           startedAt,
         });
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM server is called as the agent: assume its role now, so a
+      // refusal reaches the model as a clear error rather than a failed
+      // request. Apps have no agent to assume it as.
+      const awsIamIdentity: AwsIamIdentity | undefined =
+        owner.type === "agent" ? { agentId: owner.id } : undefined;
+      if (catalogItem.awsIamConfig) {
+        const awsIamError = !awsIamIdentity
+          ? "This MCP server signs in with AWS IAM as the calling agent, so only agents can call its tools."
+          : await awsIamMcpSigner
+              .assumeRole({
+                config: catalogItem.awsIamConfig,
+                agentId: owner.id,
+              })
+              .then(
+                () => null,
+                (error: unknown) =>
+                  error instanceof Error ? error.message : String(error),
+              );
+        if (awsIamError) {
+          return this.createErrorResult({
+            toolCall,
+            owner,
+            error: awsIamError,
+            mcpServerName,
+            authInfo,
+            encryptedChatContent,
+            startedAt,
+          });
+        }
+      }
+      // SPDX-SnippetEnd
 
       const secretsResult = await this.getSecretsForMcpServer({
         targetMcpServerId: targetMcpServerId,
@@ -1041,6 +1095,18 @@ class McpClient {
       if (externalIdpUserId) {
         connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM connection signs as one agent's role session: never share
+      // it with another agent, even without a conversation.
+      if (catalogItem.awsIamConfig) {
+        connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+          config: catalogItem.awsIamConfig,
+          ownerKey: `${owner.type}:${owner.id}`,
+        })}`;
+      }
+      // SPDX-SnippetEnd
       if (options?.elicitationHandler) {
         // Elicitation support is declared during MCP initialize. Keep these
         // clients separate so a connection opened without the capability is not
@@ -1548,6 +1614,8 @@ class McpClient {
                   connectionKey,
                   tokenAuth,
                   enterpriseTransportCredential ?? undefined,
+                  undefined,
+                  awsIamIdentity,
                 ),
               resetSecrets,
               true,
@@ -1645,6 +1713,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             ),
           secrets,
         );
@@ -1691,6 +1761,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             );
           }, secrets),
       );
@@ -2912,6 +2984,7 @@ class McpClient {
       headerValue: string;
     },
     onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     await assertMayConnect(catalogItem.id, caller);
     // Also covers queued calls and retry paths that bypass getTransport().
@@ -2985,6 +3058,7 @@ class McpClient {
             enterpriseTransportCredential,
           );
         } else if (
+          !catalogItem.awsIamConfig &&
           !staticCredentialsProvideAuthorization({ catalogItem, secrets }) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
@@ -3051,6 +3125,16 @@ class McpClient {
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, headers);
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const baseFetch = catalogItem.awsIamConfig
+          ? awsIamMcpSigner.signingFetch({
+              config: catalogItem.awsIamConfig,
+              agentId: requireAwsIamIdentity(awsIamIdentity),
+            })
+          : undefined;
+        // SPDX-SnippetEnd
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
           {
@@ -3059,7 +3143,7 @@ class McpClient {
             // known Bearer error code. Never retain an upstream body or header.
             fetch: onHttpFailure
               ? async (url, init) => {
-                  const response = await fetch(url, init);
+                  const response = await (baseFetch ?? fetch)(url, init);
                   if (!response.ok) {
                     onHttpFailure({
                       status: response.status,
@@ -3070,7 +3154,7 @@ class McpClient {
                   }
                   return response;
                 }
-              : undefined,
+              : baseFetch,
           },
         );
       }
@@ -3313,6 +3397,7 @@ class McpClient {
       headerValue: string;
     },
     onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     if (
       PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
@@ -3349,6 +3434,7 @@ class McpClient {
       tokenAuth,
       enterpriseTransportCredential,
       onHttpFailure,
+      awsIamIdentity,
     );
   }
 
@@ -4320,15 +4406,19 @@ class McpClient {
               : Math.max(0, Math.round(performance.now() - params.startedAt)),
           toolCall: storedToolCall,
           toolResult: storedToolResult,
-          userId: authInfo?.userId ?? null,
+          userId: authInfo?.serviceAccountId
+            ? null
+            : (authInfo?.userId ?? null),
           runId: authInfo?.runId ?? null,
           sessionId: authInfo?.llmSessionId ?? null,
           llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          serviceAccountId: authInfo?.serviceAccountId ?? null,
           source: authInfo?.source ?? null,
           credentialClientId: authInfo?.credentialClientId ?? null,
           credentialClientType: authInfo?.credentialClientType ?? null,
+          credentialActorClientId: authInfo?.credentialActorClientId ?? null,
         },
         audit,
       );
@@ -4449,6 +4539,7 @@ class McpClient {
           (failure) => {
             httpFailure = failure;
           },
+          "platform",
         );
 
         // No `roots` — see the identical omission above.
@@ -4480,10 +4571,7 @@ class McpClient {
           // A Skills-only server may intentionally expose neither tools/list
           // nor resources/list. Its declared extension is enough to keep the
           // installation; the companion metadata pass will call skills/list.
-          if (
-            config.mcpGateway.skillsEnabled &&
-            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
-          ) {
+          if (Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)) {
             tools = [];
           } else {
             throw error;
@@ -4634,6 +4722,8 @@ class McpClient {
         undefined,
         undefined,
         enterpriseTransportCredential,
+        undefined,
+        "platform",
       );
 
       const client = new Client(buildMcpClientInfo("archestra-inspector"), {
@@ -4773,6 +4863,8 @@ class McpClient {
         undefined,
         options?.tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        awsIamIdentityFor(options),
       );
       const client = new Client(
         buildMcpClientInfo(options?.clientName ?? "archestra-app-runner"),
@@ -5498,8 +5590,15 @@ class McpClient {
         undefined,
         tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        { agentId },
       );
-      const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+      const connectionKey = catalogItem.awsIamConfig
+        ? `${catalogItem.id}:${server.id}:${agentId}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`
+        : `${catalogItem.id}:${server.id}:${agentId}`;
       const client = await this.getOrCreateClient(
         connectionKey,
         transport,
@@ -5758,6 +5857,17 @@ class McpClient {
         if (externalIdpUserId) {
           connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
         }
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Signed as this agent's role session: never shared across agents.
+        if (catalogItem.awsIamConfig) {
+          connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`;
+        }
+        // SPDX-SnippetEnd
         clients.push({
           execute: async <T>(operation: (client: Client) => Promise<T>) => {
             const connectAndRun = async () => {
@@ -5770,6 +5880,8 @@ class McpClient {
                 connectionKey,
                 tokenAuth,
                 enterpriseTransportCredential ?? undefined,
+                undefined,
+                { agentId },
               );
               const client = await this.getOrCreateClient(
                 connectionKey,
@@ -5957,17 +6069,20 @@ class McpClient {
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
-    // Read before the cache key, so rebinding an agent to another Entra agent
-    // identity takes effect on its next call rather than when tokens expire.
-    // `null` for an app or an unbound agent: both are callers, so an identity
-    // provider that requires agent identities refuses them.
-    const entraAgentIdentityId =
-      params.enterpriseManagedConfig && params.owner.type === "agent"
-        ? await AgentModel.findEntraAgentIdentityId(params.owner.id)
-        : null;
+    // Read before the cache key, and checked before the cache, so rebinding
+    // the agent or turning on "require an agent identity" takes effect on the
+    // next call rather than when tokens expire. `null` for an app or an
+    // unbound agent: both are callers, so a provider that requires agent
+    // identities refuses them.
+    const agentIdentity = params.enterpriseManagedConfig
+      ? await this.resolveCallerAgentIdentity({
+          owner: params.owner,
+          enterpriseManagedConfig: params.enterpriseManagedConfig,
+        })
+      : null;
     const cacheKey = this.buildEnterpriseCredentialCacheKey({
       ...params,
-      entraAgentIdentityId,
+      agentIdentity,
     });
     if (cacheKey) {
       const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
@@ -5978,7 +6093,7 @@ class McpClient {
 
     const credential = await resolveEnterpriseTransportCredential({
       ...params,
-      entraAgentIdentityId,
+      agentIdentity,
     });
     if (cacheKey && credential) {
       this.enterpriseCredentialCache.set(
@@ -5991,11 +6106,57 @@ class McpClient {
     return credential;
   }
 
+  /**
+   * The identity the calling agent acts as at the identity provider this
+   * tool's token exchange runs at: its SPIFFE ID when the provider takes
+   * those, else its binding there. Null for an app or an agent bound to none.
+   * Refuses a caller without one when the provider requires it.
+   */
+  private async resolveCallerAgentIdentity(params: {
+    owner: ToolOwner;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+  }): Promise<AgentIdentityContext | null> {
+    const identityProviderId = await resolveExchangeIdentityProviderId({
+      owner: params.owner,
+      identityProviderId: params.enterpriseManagedConfig.identityProviderId,
+    });
+    if (!identityProviderId) {
+      return null;
+    }
+    const identityProvider =
+      await findExternalIdentityProviderById(identityProviderId);
+    const externalId =
+      params.owner.type !== "agent"
+        ? null
+        : identityProvider && agentIdentityKind(identityProvider) === "spiffe"
+          ? spiffeIdForAgent(params.owner.id)
+          : await AgentIdentityBindingModel.findExternalId({
+              agentId: params.owner.id,
+              identityProviderId,
+            });
+    const agentIdentity = externalId
+      ? { identityProviderId, externalId }
+      : null;
+    // Passthrough forwards the person's own token: no shared client acts.
+    if (
+      !agentIdentity &&
+      params.enterpriseManagedConfig.assertionMode !== "passthrough"
+    ) {
+      assertAgentIdentityRequirement({
+        agentIdentity,
+        requireAgentIdentity:
+          !!identityProvider &&
+          identityProviderRequiresAgentIdentity(identityProvider),
+      });
+    }
+    return agentIdentity;
+  }
+
   private buildEnterpriseCredentialCacheKey(params: {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
-    entraAgentIdentityId: string | null;
+    agentIdentity: AgentIdentityContext | null;
   }): string | null {
     if (!params.enterpriseManagedConfig || !params.tokenAuth) {
       return null;
@@ -6015,7 +6176,7 @@ class McpClient {
       audience: params.enterpriseManagedConfig.audience,
       scopes: params.enterpriseManagedConfig.scopes ?? [],
       clientIdOverride: params.enterpriseManagedConfig.clientIdOverride ?? null,
-      entraAgentIdentityId: params.entraAgentIdentityId,
+      agentIdentity: params.agentIdentity,
       tokenId: params.tokenAuth.tokenId,
       userId: params.tokenAuth.userId ?? null,
       teamId: params.tokenAuth.teamId,
@@ -6756,9 +6917,7 @@ function mcpClientExtensionCapabilities() {
   return {
     ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...(config.mcpGateway.skillsEnabled
-      ? MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES
-      : {}),
+    ...MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
   } as const;
 }
 
@@ -6835,3 +6994,64 @@ function fingerprintHeaders(headers: Record<string, string>): string {
     .update(JSON.stringify(canonicalHeaders))
     .digest("base64url");
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Who assumes an AWS IAM server's role: the agent making a tool call, or the
+ * platform itself when it lists the server's tools.
+ */
+type AwsIamIdentity = { agentId: string } | "platform";
+
+/**
+ * The agent an AWS IAM server's role is assumed as, or null for the platform.
+ * A path that names neither fails closed rather than falling back to the
+ * platform's own session.
+ */
+/**
+ * The connection-key part for an AWS IAM server: the owner whose role session
+ * signs it, and the signing settings, so an edited role or region never
+ * reuses a connection that signs with the old ones.
+ */
+function awsIamConnectionSegment(params: {
+  config: AwsIamMcpAuthConfig;
+  ownerKey: string;
+}) {
+  const { roleArn, region, service, audience } = params.config;
+  const settings = createHash("sha256")
+    .update(JSON.stringify([roleArn, region, service, audience ?? null]))
+    .digest("hex")
+    .slice(0, 16);
+  return `aws:${params.ownerKey}:${settings}`;
+}
+
+/**
+ * Who a direct server session to an AWS IAM server signs as: the agent that
+ * owns it, or the platform for maintenance that only reads what the server
+ * advertises. Anything else has no identity, so its transport fails closed.
+ */
+function awsIamIdentityFor(options: {
+  caller: GatedCaller;
+  owner?: ToolOwner;
+}): AwsIamIdentity | undefined {
+  if (options.owner?.type === "agent") return { agentId: options.owner.id };
+  if (
+    options.caller.kind === "internal" &&
+    (options.caller.purpose === "tool-discovery" ||
+      options.caller.purpose === "skills-discovery")
+  ) {
+    return "platform";
+  }
+  return undefined;
+}
+
+function requireAwsIamIdentity(identity: AwsIamIdentity | undefined) {
+  if (!identity) {
+    throw new Error(
+      "This MCP server signs in with AWS IAM as the calling agent, and this call has no agent.",
+    );
+  }
+  return identity === "platform" ? null : identity.agentId;
+}
+// SPDX-SnippetEnd

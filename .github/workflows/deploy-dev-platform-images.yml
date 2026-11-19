@@ -35,14 +35,14 @@ jobs:
       previous_image: ${{ steps.previous-main-image.outputs.previous-image || steps.deployed-platform-image.outputs.previous-image }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       # gcloud for GKE credentials only; images live on GHCR.
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.16.0
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -101,6 +101,7 @@ jobs:
       contents: read # Required to checkout the repository and build the image.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation when pushing images.
+      attestations: write # Passed to the image build, which attests CI images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform
@@ -136,6 +137,7 @@ jobs:
       contents: read # Required to invoke the reusable MCP server base image workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
@@ -152,6 +154,7 @@ jobs:
       contents: read # Required to invoke the reusable Agent image workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
@@ -168,6 +171,7 @@ jobs:
       contents: read # Required to invoke the reusable p4 shim image workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
@@ -186,6 +190,7 @@ jobs:
       contents: read # Required to invoke the reusable sandbox base image workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true

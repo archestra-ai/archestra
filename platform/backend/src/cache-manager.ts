@@ -742,12 +742,16 @@ function createPostgresStore(): KeyvStoreAdapter {
     { max: 10 },
     {
       iamAuthEnabled: config.database.iamAuthEnabled,
+      entraAuthEnabled: config.database.entraAuthEnabled,
       awsRegion: config.database.awsRegion || undefined,
     },
   );
   return new KeyvPostgres({
     ...pgPoolOptions,
-    uri: config.database.iamAuthEnabled ? undefined : config.database.url,
+    uri:
+      config.database.iamAuthEnabled || config.database.entraAuthEnabled
+        ? undefined
+        : config.database.url,
     table: "keyv_cache",
     max: 10,
     /**

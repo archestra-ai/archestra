@@ -43,7 +43,8 @@ def fixture_archive(arch="amd64", *, subject=None, provenance=True):
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
     return output.getvalue(), {"config": config, "runtime_manifest": runtime,
-                              "attestations": attestations, "provenance": statements}
+                              "attestations": attestations, "provenance": statements,
+                              "root": root, "descriptors": manifests}
 
 
 class OciTests(unittest.TestCase):
@@ -66,6 +67,19 @@ class OciTests(unittest.TestCase):
         payload, proof = fixture_archive("arm64")
         with self.assertRaises(ValueError):
             self.inspect(payload, proof, "amd64")
+
+    def test_the_release_index_is_both_roots_entries_in_fixed_bytes(self):
+        proofs = {arch: fixture_archive(arch)[1] for arch in ("arm64", "amd64")}
+        data = OCI.multi_arch_index(proofs)
+        self.assertEqual(data, OCI.multi_arch_index(dict(reversed(list(proofs.items())))))
+        index = json.loads(data)
+        self.assertEqual(index["mediaType"], "application/vnd.oci.image.index.v1+json")
+        self.assertEqual(index["manifests"], proofs["amd64"]["descriptors"] + proofs["arm64"]["descriptors"])
+        self.assertEqual(data, json.dumps(index, separators=(",", ":"), sort_keys=True).encode())
+        for broken in ({"amd64": proofs["amd64"]},
+                       {**proofs, "arm64": {**proofs["arm64"], "descriptors": proofs["arm64"]["descriptors"][:1]}}):
+            with self.subTest(broken=list(broken)), self.assertRaises(ValueError):
+                OCI.multi_arch_index(broken)
 
     def test_modified_blob_is_rejected_before_promotion(self):
         payload, proof = fixture_archive()

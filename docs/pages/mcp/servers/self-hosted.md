@@ -2,7 +2,7 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,8 +49,6 @@ Find the symptom, then open the server in MCP Registry to fix it. Its **Logs**, 
 <span id="idle-hibernation"></span>
 
 ## Idle Hibernation
-
-:::beta:::
 
 Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/docs/get-started/pricing-model). Turn it on in **Settings → MCP**.
 

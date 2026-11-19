@@ -6,14 +6,24 @@ import AgentModel from "@/models/agent";
 import TeamModel from "@/models/team";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import routes from "./agent";
 
 vi.mock("@/observability");
 
+// An image that is none of the organization's runtimes: free-form, so it needs
+// `configure` on every runtime.
 const runtime = buildCustomAgentRuntime({ image: "example.test/worker:v1" });
 
 describe("agent runtime configuration permission", () => {
   const ctx = useRouteTestApp(routes);
+  const grantRuntimeEverywhere = (roleId: string) =>
+    grantRoleEverywhere({
+      organizationId: ctx.organizationId,
+      resource: "agentRuntime",
+      roleId,
+      actions: ["read", "use", "configure"],
+    });
   beforeEach(() => {
     vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   });
@@ -28,13 +38,10 @@ describe("agent runtime configuration permission", () => {
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
-        agent: [
-          "read",
-          "create",
-          ...(allowed ? ["configure-runtime" as const] : []),
-        ],
+        agent: ["read", "create"],
       },
     });
+    if (allowed) await grantRuntimeEverywhere(role.id);
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const plain = await ctx.app.inject({
       method: "POST",
@@ -72,13 +79,10 @@ describe("agent runtime configuration permission", () => {
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
-        agent: [
-          "read",
-          "create",
-          ...(allowed ? ["configure-runtime" as const] : []),
-        ],
+        agent: ["read", "create"],
       },
     });
+    if (allowed) await grantRuntimeEverywhere(role.id);
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const agent = await makeAgent({
       agentType: "agent",
@@ -125,8 +129,9 @@ describe("agent runtime configuration permission", () => {
   }) => {
     await makeMember(ctx.user.id, ctx.organizationId);
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: { agent: ["configure-runtime"] },
+      permission: { agent: ["read"] },
     });
+    await grantRuntimeEverywhere(role.id);
     const team = await makeTeam(ctx.organizationId, ctx.user.id);
     await TeamModel.update(team.id, { roles: [role.role] });
     await makeTeamMember(team.id, ctx.user.id);
@@ -155,13 +160,10 @@ describe("agent runtime configuration permission", () => {
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
-        agent: [
-          "read",
-          "create",
-          ...(allowed ? ["configure-runtime" as const] : []),
-        ],
+        agent: ["read", "create"],
       },
     });
+    if (allowed) await grantRuntimeEverywhere(role.id);
     const account = await makeServiceAccount(ctx.organizationId, {
       role: role.role,
     });

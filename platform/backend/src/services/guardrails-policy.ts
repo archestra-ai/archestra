@@ -444,8 +444,8 @@ function isLocalHostname(hostname: string): boolean {
  * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
  * onto Claude Code's tools, and the root maps it onto the other clients'. It
  * reads the organization's members as `internal`, and has the organization's
- * default model label each sandbox command, each shell command the client
- * batteries route to a model, and each tool no rule names.
+ * default model label each sandbox command, each shell command and URL fetch
+ * the client batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
   return `include = [
@@ -504,14 +504,18 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
-# The client batteries' shell and Monitor annotators, with the batteries' own
-# mandate, asked of the annotator model instead of a local claude process.
+# The client batteries' shell, fetch and Monitor annotators, with the batteries'
+# own mandate, asked of the annotator model instead of a local claude process.
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.fetch-requirements"
 builtin = "archestra"
 
 [[policy.annotator]]

@@ -2,6 +2,9 @@ export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
   ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  ListAgentRuntimeAccess: "listAgentRuntimeAccess",
+  ApplyAgentRuntimeToAgents: "applyAgentRuntimeToAgents",
+  CountAgentsBehindRuntime: "countAgentsBehindRuntime",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
@@ -53,6 +56,8 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
+  GetAgentIdentityBindings: "getAgentIdentityBindings",
+  ReplaceAgentIdentityBindings: "replaceAgentIdentityBindings",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
@@ -287,6 +292,7 @@ export const RouteId = {
   GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
   GetLlmProxyLogSessions: "getLlmProxyLogSessions",
   GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionChatErrors: "getLlmProxyLogSessionChatErrors",
   GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
   GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
   GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
@@ -485,6 +491,12 @@ export const RouteId = {
 
   // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
   // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotMessagesWithDefaultAgent:
+    "githubCopilotMessagesWithDefaultAgent",
+  GithubCopilotMessagesWithAgent: "githubCopilotMessagesWithAgent",
+  GithubCopilotCountTokensWithDefaultAgent:
+    "githubCopilotCountTokensWithDefaultAgent",
+  GithubCopilotCountTokensWithAgent: "githubCopilotCountTokensWithAgent",
   GithubCopilotResponsesWithDefaultAgent:
     "githubCopilotResponsesWithDefaultAgent",
   GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
@@ -622,6 +634,9 @@ export const RouteId = {
   DeleteServiceAccountFederatedCredential:
     "deleteServiceAccountFederatedCredential",
   ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
+  GetSpiffeDiscoveryDocument: "getSpiffeDiscoveryDocument",
+  GetSpiffeJwks: "getSpiffeJwks",
+  GetSpiffeTrustBundle: "getSpiffeTrustBundle",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
@@ -1016,6 +1031,8 @@ export const RouteId = {
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
   GetAppaSelfService: "getAppaSelfService",
+  GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
+  GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",
@@ -1061,6 +1078,7 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaGuardrailEvents: "getOpenappaGuardrailEvents",
   GetOpenappaExternalConsult: "getOpenappaExternalConsult",
   GetOpenappaLabelChanges: "getOpenappaLabelChanges",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",

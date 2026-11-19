@@ -36,6 +36,7 @@
     "src/routes/proxy/adapters/gemini-tool-names.ts",
     "src/routes/proxy/adapters/gemini.ts",
     "src/routes/proxy/adapters/github-copilot-responses.ts",
+    "src/routes/proxy/adapters/github-copilot-messages.ts",
     "src/routes/proxy/adapters/github-copilot.ts",
     "src/routes/proxy/adapters/groq.ts",
     "src/routes/proxy/adapters/image-generation.ts",

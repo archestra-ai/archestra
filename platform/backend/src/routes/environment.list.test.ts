@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { ENVIRONMENT_DEPLOY_KINDS } from "@archestra/shared";
 import { PGlite } from "@electric-sql/pglite";
 import { vi } from "vitest";
 import EnvironmentModel from "@/models/environment";
@@ -193,27 +194,27 @@ describe("environment listing", () => {
       userId: `service-account:${account.id}`,
       environmentIds: [environment.id],
     };
-    expect(await ResourcePermissions.getUsableEnvironmentIds(params)).toEqual(
-      new Set([environment.id]),
+    expect(await ResourcePermissions.getEnvironmentDeployKinds(params)).toEqual(
+      new Map([[environment.id, ENVIRONMENT_DEPLOY_KINDS]]),
     );
     const otherOrg = await makeOrganization();
     expect(
-      await ResourcePermissions.getUsableEnvironmentIds({
+      await ResourcePermissions.getEnvironmentDeployKinds({
         ...params,
         organizationId: otherOrg.id,
       }),
-    ).toEqual(new Set());
+    ).toEqual(new Map([[environment.id, []]]));
     await ServiceAccountModel.update(account.id, ctx.organizationId, {
       disabled: true,
     });
-    expect(await ResourcePermissions.getUsableEnvironmentIds(params)).toEqual(
-      new Set(),
+    expect(await ResourcePermissions.getEnvironmentDeployKinds(params)).toEqual(
+      new Map([[environment.id, []]]),
     );
     expect(
-      await ResourcePermissions.getUsableEnvironmentIds({
+      await ResourcePermissions.getEnvironmentDeployKinds({
         ...params,
         environmentIds: [],
       }),
-    ).toEqual(new Set());
+    ).toEqual(new Map());
   });
 });

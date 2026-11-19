@@ -27,6 +27,7 @@ export type AppearanceDraft = Pick<
   chatErrorSupportMessage: string;
   notificationContent: string;
   notificationExpiresAt: Date | null;
+  notificationDismissible: boolean;
   notificationDeleted: boolean;
 };
 
@@ -54,6 +55,7 @@ export function appearanceDefaults(
     notificationExpiresAt: notification?.expiresAt
       ? new Date(notification.expiresAt)
       : null,
+    notificationDismissible: notification?.dismissible ?? true,
     notificationDeleted: false,
   };
 }

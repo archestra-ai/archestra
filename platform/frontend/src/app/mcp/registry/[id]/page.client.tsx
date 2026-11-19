@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { OverviewFact } from "@/components/overview-summary";
@@ -60,7 +60,7 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useSavedBrowserLogins } from "@/lib/browser-storage-state.query";
-import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -139,7 +139,7 @@ import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import {
   SERVER_RULES_LABEL,
-  ServerRulesButton,
+  useServerRulesHref,
 } from "../_parts/server-rules-launch";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
@@ -603,6 +603,9 @@ function CatalogItemDetails({
     hasInstallation: isInstalledForViewer,
   });
 
+  const rulesHref = useServerRulesHref(item);
+  const serverRulesHref = canModify && variant !== "builtin" ? rulesHref : null;
+
   const [deleteRequested, setDeleteRequested] = useState(false);
   // Recreate the K8s pods with a freshly pulled image (local servers only).
   const refreshImageMutation = useRefreshInternalMcpCatalogImage();
@@ -630,7 +633,7 @@ function CatalogItemDetails({
       title={
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{item.name}</span>
-          {item.serverType === "desktop_mcp" && <AlphaBadge />}
+          {item.serverType === "desktop_mcp" && <BetaBadge />}
         </span>
       }
       status={
@@ -656,19 +659,6 @@ function CatalogItemDetails({
       mobileVisibleCount={tabIds.includes("logins") ? 2 : undefined}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
-          {/* Once installed, the next step is a client: the Connect page puts
-              these tools into Claude Code, Cursor and the rest. "a client"
-              keeps it apart from a desktop MCP server's "Connected". */}
-          {showChatButton && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/connection">
-                <Cable className="h-4 w-4" />
-                {/* On a phone only the icons show, so the actions still fit
-                    beside the title; the names stay for screen readers. */}
-                <span className="max-sm:sr-only">Connect a client</span>
-              </Link>
-            </Button>
-          )}
           {showChatButton && (
             <Button
               variant="outline"
@@ -682,14 +672,6 @@ function CatalogItemDetails({
               </span>
             </Button>
           )}
-          {/* The server's own Guardrails rules, for its editors while
-              self-service is on: a step of its own, not an overflow item. */}
-          {canModify && variant !== "builtin" && (
-            <ServerRulesButton catalog={item} variant="outline" size="sm">
-              <OpenAppaIcon />
-              <span className="max-sm:sr-only">{SERVER_RULES_LABEL}</span>
-            </ServerRulesButton>
-          )}
           {canModify && effectiveTab !== "yaml" && (
             <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
@@ -698,7 +680,11 @@ function CatalogItemDetails({
               </Link>
             </Button>
           )}
-          {(canRestartPods ||
+          {/* Two actions lead the header: use the server, change it.
+              Everything else is one menu, so the title keeps its room. */}
+          {(showChatButton ||
+            serverRulesHref ||
+            canRestartPods ||
             (userCanCreateCatalogItem && !isPlaywright) ||
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
@@ -709,6 +695,33 @@ function CatalogItemDetails({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {/* Once installed, the next step is a client: the Connect
+                    page puts these tools into Claude Code, Cursor and the
+                    rest. "a client" keeps it apart from a desktop MCP
+                    server's "Connected". */}
+                {showChatButton && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/connection">
+                      <Cable className="h-4 w-4" />
+                      Connect a client
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {/* The server's own Guardrails rules, for its editors while
+                    self-service is on. */}
+                {serverRulesHref && (
+                  <DropdownMenuItem asChild>
+                    <Link href={serverRulesHref}>
+                      <OpenAppaIcon />
+                      {SERVER_RULES_LABEL}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(showChatButton || serverRulesHref) &&
+                  (canRestartPods ||
+                    (userCanCreateCatalogItem && !isPlaywright)) && (
+                    <DropdownMenuSeparator />
+                  )}
                 {canRestartPods && (
                   <DropdownMenuItem
                     disabled={refreshImageMutation.isPending}
@@ -1042,7 +1055,6 @@ function useMcpServerSpec({
 function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
   // Only this item's installs, without agents: the fact reads their modes.
   const { data: servers = [] } = useMcpServers({
     includeAssignedAgents: false,
@@ -1051,7 +1063,6 @@ function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
 
   if (
     item.serverType !== "local" ||
-    !hibernationBeta ||
     !enterpriseCoreActive ||
     !organization?.mcpIdleHibernationEnabled
   ) {
@@ -1234,6 +1245,7 @@ const AUTH_METHOD_LABEL: Record<McpCatalogFormValues["authMethod"], string> = {
   oauth_client_credentials: "OAuth client credentials",
   enterprise_managed: "Identity provider exchange",
   idp_jwt: "Identity provider JWT",
+  aws_iam: "AWS IAM (SigV4)",
 };
 
 function _OverviewField({

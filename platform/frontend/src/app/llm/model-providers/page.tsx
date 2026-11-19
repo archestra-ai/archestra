@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Boxes,
   CheckCircle2,
+  Info,
   Loader2,
   Pencil,
   Plus,
@@ -63,6 +64,11 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -323,6 +329,18 @@ export default function ApiKeysPage() {
     // keeping its old shared secret.
     if (subscriptionSignInRequired(values, editingApiKey)) return;
 
+    // A system key's credentials come from environment variables, so only who
+    // can reach it is edited here.
+    if (editingApiKey.isSystem) {
+      try {
+        await permissionsSave.current?.();
+        closeEditDialog();
+      } catch {
+        // Error already handled by the permissions section's mutation
+      }
+      return;
+    }
+
     const apiKeyChanged =
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.apiKey !== "";
@@ -398,10 +416,9 @@ export default function ApiKeysPage() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = isEditApiKeyFormValid(
-    editFormValues,
-    editingApiKey ?? undefined,
-  );
+  const isEditValid =
+    editingApiKey?.isSystem === true ||
+    isEditApiKeyFormValid(editFormValues, editingApiKey ?? undefined);
 
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
@@ -743,8 +760,6 @@ export default function ApiKeysPage() {
                   permissions: {
                     llmProviderApiKey: ["update"],
                   },
-                  disabled: isSystem,
-                  disabledTooltip: "System keys cannot be edited",
                   onClick: () => openEditDialog(credential),
                   testId: `${E2eTestId.EditChatApiKeyButton}-${credential.name}`,
                 },
@@ -1010,7 +1025,11 @@ export default function ApiKeysPage() {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
-          description="Update the name, the API key value, or who can reach it"
+          description={
+            editingApiKey?.isSystem
+              ? "Update who can reach this key"
+              : "Update the name, the API key value, or who can reach it"
+          }
           onSubmit={handleEdit}
           footer={
             <>
@@ -1022,7 +1041,7 @@ export default function ApiKeysPage() {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                <span>Test & Save</span>
+                <span>{editingApiKey?.isSystem ? "Save" : "Test & Save"}</span>
               </Button>
             </>
           }
@@ -1044,19 +1063,34 @@ export default function ApiKeysPage() {
                   />
                 </span>
               )}
-              <LlmProviderApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                existingKey={editingApiKey}
-                existingKeys={apiKeys}
-                form={editForm}
-                isPending={updateMutation.isPending}
-                progressive
-                hidePermissions
-                labels={editLabels}
-                onLabelsChange={setEditLabels}
-                labelsRef={editLabelsRef}
-              />
+              {editingApiKey.isSystem ? (
+                <InlineNotice variant="neutral">
+                  <Info />
+                  <InlineNoticeBody>
+                    <span className="font-medium">
+                      Configured through environment variables
+                    </span>
+                    <InlineNoticeText>
+                      Change this key's credentials in the deployment's
+                      environment. Here you choose who can reach it.
+                    </InlineNoticeText>
+                  </InlineNoticeBody>
+                </InlineNotice>
+              ) : (
+                <LlmProviderApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  existingKey={editingApiKey}
+                  existingKeys={apiKeys}
+                  form={editForm}
+                  isPending={updateMutation.isPending}
+                  progressive
+                  hidePermissions
+                  labels={editLabels}
+                  onLabelsChange={setEditLabels}
+                  labelsRef={editLabelsRef}
+                />
+              )}
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 id={editingApiKey.id}

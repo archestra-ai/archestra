@@ -5,6 +5,7 @@
     "tsBuildInfoFile": "./.tsbuild/services-support.tsbuildinfo"
   },
   "files": [
+    "src/openappa/runtime-tool-proof.ts",
     "src/plugins/delivery-budget.ts",
     "src/routes/mcp-gateway/protocol.ts",
     "src/routes/mcp-gateway/tasks.ts",
@@ -71,6 +72,8 @@
     "src/services/github-pat.ts",
     "src/services/identity-providers/access-token-refresh.ts",
     "src/services/identity-providers/enterprise-managed/authorization.ts",
+    "src/services/identity-providers/enterprise-managed/client-authentication.ts",
+    "src/services/identity-providers/enterprise-managed/spiffe-issuer.ts",
     "src/services/identity-providers/enterprise-managed/exchange-strategies/entra-obo-strategy.ts",
     "src/services/identity-providers/enterprise-managed/exchange-strategies/okta-managed-credential-exchange.ts",
     "src/services/identity-providers/enterprise-managed/exchange-strategies/rfc8693-token-exchange.ts",

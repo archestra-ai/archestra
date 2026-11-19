@@ -18,6 +18,7 @@ export { default as AgentExcludedConnectorModel } from "./agent-excluded-connect
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
+export { default as AgentIdentityBindingModel } from "./agent-identity-binding";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentPinModel } from "./agent-pin";
@@ -170,6 +171,7 @@ export { default as SkillTeamModel } from "./skill-team";
 export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillUserModel } from "./skill-user";
 export { default as SkillVersionModel } from "./skill-version";
+export { default as SpiffeSigningKeyModel } from "./spiffe-signing-key";
 export { default as SreRuntimeModel } from "./sre-runtime";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";

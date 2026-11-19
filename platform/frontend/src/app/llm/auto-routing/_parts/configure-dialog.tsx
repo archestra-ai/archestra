@@ -266,7 +266,12 @@ function ConfigureForm({
             disabled={isPending}
             budgetError={budgetError}
           />
-          <DecisionSection form={form} state={state} disabled={isPending} />
+          <DecisionSection
+            form={form}
+            state={state}
+            disabled={isPending}
+            savedModel={router?.decisionModel.model ?? null}
+          />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           {problem && isDirty ? (
@@ -337,10 +342,13 @@ function DecisionSection({
   form,
   state,
   disabled,
+  savedModel,
 }: {
   form: UseFormReturn<FormValues>;
   state: AutoRoutingState;
   disabled: boolean;
+  /** The saved router's decision model; null while creating one. */
+  savedModel: string | null;
 }) {
   const decision = form.watch("decision");
   const provider = state.decisionProviders.find(
@@ -427,6 +435,16 @@ function DecisionSection({
           </span>
           <AddJevKeyLink />
         </p>
+      )}
+      {savedModel !== null && decision.model !== savedModel && (
+        <InlineNotice data-testid="auto-routing-decision-model-change">
+          <TriangleAlert />
+          <span className="font-medium">Routing starts over</span>
+          <InlineNoticeText>
+            Sessions scored by the current decision model stop counting. Until
+            enough are scored again, every session uses the normal model.
+          </InlineNoticeText>
+        </InlineNotice>
       )}
     </section>
   );

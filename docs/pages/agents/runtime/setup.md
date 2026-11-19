@@ -84,7 +84,7 @@ kubectl get pods -n <namespace> -l archestra.io/agent-workspace \
   -o custom-columns=NAME:.metadata.name,RUNTIME:.spec.runtimeClassName
 ```
 
-- Archestra does not check that the RuntimeClass exists. A misspelled name stops Kubernetes from creating the run's pod, and the run never starts.
+- Archestra checks that the RuntimeClass exists, at startup and before each run, by asking Kubernetes to admit a test pod as a dry run (nothing is created). If the class is missing, the platform logs an error and runs fail at once with a reason that names it. If the test pod is rejected for another reason, such as an admission policy, Archestra logs that it cannot check and runs start unchecked.
 - With [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) set, give the sandbox nodes that label too.
 - [Privileged runs](#privileged-containers) ignore the RuntimeClass and share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker.
 
@@ -134,7 +134,7 @@ Archestra maintains the configured pool replica count. An HPA targeting these po
 
 ## Privileged Containers
 
-Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
+Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace, and put privileged runs on their own tainted node pool with [`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR).
 
 Privileged runs ignore the [sandboxed runtime](#sandboxed-runtime). After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 

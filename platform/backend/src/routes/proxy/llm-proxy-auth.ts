@@ -363,8 +363,7 @@ async function usableModelPoolId(params: {
   caller: ModelPoolCaller;
   requestedModel?: string | null;
 }): Promise<string | undefined> {
-  if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
-    return undefined;
+  if (!params.requestedModel) return undefined;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.organizationId,
     name: stripClaudeContextVariantSuffix(params.requestedModel),
@@ -1454,8 +1453,11 @@ async function authenticatePassthroughProxyRequest(params: {
   const passthroughToken = getPassthroughVirtualKeyToken(headers);
   // Read from the raw headers so a route-level schema transform cannot strip
   // the "Bearer " prefix out from under us (same reasoning as attemptJwksAuth).
+  // Google's SDKs never send a bearer, so for Gemini a platform token in
+  // x-goog-api-key or ?key= takes the bearer's place.
   const bearerToken =
-    request.raw.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
+    request.raw.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ??
+    (provider === "gemini" ? geminiPlatformKey(request) : null);
 
   if (!passthroughToken && !bearerToken) {
     throw unauthenticated;
@@ -1698,7 +1700,9 @@ function forwardPassthroughProviderApiKey(params: {
     ? ["authorization", `Bearer ${apiKey.slice(7)}`]
     : provider === "anthropic"
       ? ["x-api-key", apiKey]
-      : ["authorization", `Bearer ${apiKey}`];
+      : provider === "gemini"
+        ? ["x-goog-api-key", apiKey]
+        : ["authorization", `Bearer ${apiKey}`];
   if (request.raw.headers[name] !== undefined) return;
   request.headers[name] = value;
   request.raw.headers[name] = value;
@@ -1717,6 +1721,24 @@ function forwardPassthroughProviderApiKey(params: {
       request.raw.headers["anthropic-beta"] = nextBeta;
     }
   }
+}
+
+/**
+ * A platform token a Gemini client put where Google's SDKs put the API key:
+ * the x-goog-api-key header or the ?key= query parameter. A raw Gemini key
+ * there is the caller's own provider credential, not a platform credential.
+ */
+function geminiPlatformKey(request: FastifyRequest): string | null {
+  const header = request.raw.headers["x-goog-api-key"];
+  const url = request.raw.url ?? "";
+  const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+  const candidates = [
+    ...(Array.isArray(header) ? header : header ? [header] : []).flatMap(
+      (value) => value.split(","),
+    ),
+    ...new URLSearchParams(query).getAll("key"),
+  ].map((value) => value.trim());
+  return candidates.find((value) => hasArchestraTokenPrefix(value)) ?? null;
 }
 
 function trimTrailingSlash(url: string | undefined): string | undefined {

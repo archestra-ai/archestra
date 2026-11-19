@@ -36,12 +36,16 @@ use crate::{
         BindingFailure, Failure, Fault, failure, fork_refused, invalid_input, invariant,
         is_policy_moved, lease_lost, panicked, policy_moved, receipt_failure, sql_failure, storage,
     },
-    input::{ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, required, validate},
+    input::{
+        ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, open_calls, required,
+        validate,
+    },
     operations::{
         CompletedOperation, OperationState, ResultClaim, YellArguments, cancellation_operation,
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
         finish_remedy, operation_semantic, proposed, read_operation_state,
-        recorded_call_presentation, remedy_binding, required_arguments, tool_call_context,
+        recorded_call_presentation, recorded_declaration, remedy_binding, required_arguments,
+        tool_call_context,
     },
     remedy::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
@@ -68,8 +72,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId,
+    Actor, DeclaredArguments, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
+    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -778,6 +782,7 @@ impl State {
                     spawn: None,
                     prompt: None,
                     ruling,
+                    declares: None,
                 },
             )
             .await;
@@ -952,6 +957,7 @@ impl State {
                     spawn: input.spawn.then_some(SpawnKind::Single),
                     prompt: None,
                     ruling: None,
+                    declares: input.declares.clone().map(DeclaredArguments::from),
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
@@ -962,6 +968,7 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
                     root: actor.root.clone(),
@@ -969,6 +976,7 @@ impl State {
                         .child
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),
@@ -977,6 +985,7 @@ impl State {
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input.output.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildReturn => HookEvent::ChildReturn {
                     root: actor.root.clone(),
@@ -1220,7 +1229,22 @@ impl State {
         .await;
         let decision = outcome.decision;
         if cancelled && !matches!(decision, HookDecision::Ack) {
-            return Err(invariant("OpenAPPA could not settle a withheld tool call"));
+            // Only the runtime's own refusal text is named: any other answer carries output.
+            let answered = match &decision {
+                HookDecision::Block { reason } => format!("a block: {reason}"),
+                HookDecision::Refuse { class, detail } => {
+                    format!("a refusal ({class:?}): {detail}")
+                }
+                other => wire(other)?
+                    .get("decision")
+                    .and_then(Value::as_str)
+                    .unwrap_or("an unnamed decision")
+                    .to_owned(),
+            };
+            let withheld = if call.spawn { "spawn" } else { "call" };
+            return Err(invariant(format!(
+                "OpenAPPA could not settle a withheld tool call: the runtime answered the cancelled {withheld} with {answered}"
+            )));
         }
         let approved = match &decision {
             HookDecision::Ack
@@ -1322,6 +1346,7 @@ impl State {
             spawn: call.spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
+            declares: recorded_declaration(&recorded)?.map(DeclaredArguments::from),
         };
         let outcome = hooks::handle_embedded_with_options(
             &self.runtime,

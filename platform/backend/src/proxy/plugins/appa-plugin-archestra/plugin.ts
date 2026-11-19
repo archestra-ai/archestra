@@ -222,6 +222,11 @@ import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
+import {
+  type ClaudeSideRequest,
+  claudeSideRequest,
+  isClaudePendingResult,
+} from "./adapters/claude-side-request";
 import { labeledQuestionRuling } from "./adapters/native-question-ruling";
 import { openCodeReviewQuestion } from "./adapters/opencode-review";
 import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
@@ -274,8 +279,17 @@ type AppaPluginBinding = {
    * counted.
    */
   pendingBackgroundSpawns: number;
+  /** Ids of this request's results that answer their calls, read unfiltered. */
+  answeredCallIds: string[];
+  /** A Claude Code request beside its agent loop: its reply ends nothing. */
+  sideRequest: ClaudeSideRequest | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  /**
+   * A compaction request: a client's own, or the platform's summary request.
+   * It never opens or ends a turn, never returns a child's result, and makes
+   * no tool calls.
+   */
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** No person is there to answer this request's approvals. */
@@ -403,7 +417,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
     if (enforcement !== "active") {
-      await this.observe(context, trustedContext);
+      // A summary is no turn or child run of the session.
+      if (!isSummaryRequest(trustedContext))
+        await this.observe(context, trustedContext);
       return;
     }
     const chat = trustedContext.chatSource !== undefined;
@@ -432,8 +448,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
       pendingBackgroundSpawns: 0,
+      answeredCallIds: [],
+      sideRequest: isClaudeCodeFamilyAdapter(trajectory.adapter?.id)
+        ? claudeSideRequest({
+            body: context.requestBody,
+            headers: context.headers,
+            isOpeningTask: (prompt) => {
+              const digest = trajectory.child?.lineage?.spawnPromptDigest;
+              return digest !== undefined && isDelegatedPrompt(prompt, digest);
+            },
+          })
+        : undefined,
       chat,
-      compaction: trustedContext.compaction === true,
+      compaction:
+        trustedContext.compaction === true || isSummaryRequest(trustedContext),
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       unattended:
@@ -478,6 +506,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    // A pending placeholder answers nothing: its call runs on, and its real
+    // result is reported when it arrives. The model still reads it as sent.
+    const answers = context.toolResults.filter(
+      (result) => !isClaudePendingResult(result),
+    );
+    // The reporting-recovery pass sees a filtered subset of this request's results.
+    if (!binding.reportingRecovery)
+      binding.answeredCallIds = answers.map((result) =>
+        withoutTrajectoryStamp(result.id),
+      );
     enterCapturedGuardrailsActivation("active");
     const completions = binding.request.childReturns?.completions ?? [];
     binding.unenforcedCalls = await findUnenforcedCalls({
@@ -501,7 +539,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // The runtime never saw a call the model made while enforcement was off,
     // nor the run of a denied call Break the glass let through, so OpenAPPA
     // ignores its result: the result reaches the model as it is.
-    const toolResults = context.toolResults.filter((result) => {
+    const toolResults = answers.filter((result) => {
       const reason = binding.unenforcedCalls.reasons.get(
         withoutTrajectoryStamp(result.id),
       );
@@ -763,9 +801,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
       if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
     }
-    // The runtime withholds the output of a spawn that failed. What the gateway
-    // recorded about the launch is not that output, so it is restored after.
-    const failedLaunchResults: Record<string, string> = {};
+    // The runtime withholds the output of a spawn that failed or of a detached
+    // background runtime launch whose open dispatch must close before an
+    // ephemeral child trajectory ends via endChild. What the gateway recorded
+    // about the launch is host-authored metadata, not child output, so restore it.
+    const settlesDetachedRuntimeLaunches =
+      Boolean(governed.parent_id) &&
+      binding.runtimeSessionId !== governed.session_id;
+    const preservedLaunchResults: Record<string, string> = {};
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -790,8 +833,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
           const content = runtimeLaunchResult(launch);
           childResultUpdates[result.id] = content;
-          if (launch?.kind === "failed")
-            failedLaunchResults[result.id] = content;
+          if (
+            launch?.kind === "failed" ||
+            (settlesDetachedRuntimeLaunches && launch?.kind === "launched")
+          ) {
+            preservedLaunchResults[result.id] = content;
+          }
           return { ...result, content };
         }
         const content = childResultUpdates[result.id];
@@ -810,7 +857,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
-          if (launch) return launch.kind === "launched" ? "pending" : "failed";
+          if (launch) {
+            return launch.kind === "launched"
+              ? settlesDetachedRuntimeLaunches
+                ? "detached"
+                : "pending"
+              : "failed";
+          }
           return answer.isError ? "failed" : "pending";
         }
         if (
@@ -1013,7 +1066,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ];
         }),
       ),
-      ...failedLaunchResults,
+      ...preservedLaunchResults,
       // Inspect answers are the platform's own instruction to re-ask for the
       // same card; they replace the client's answer text entirely.
       ...continuedReviewUpdates,
@@ -2452,7 +2505,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (binding?.compaction || isCompactionOnlyResponse(context.response))
       return;
-    if (!binding?.request.tools || binding.turnOpen) return;
+    if (!binding?.request.tools || binding.turnOpen || binding.sideRequest)
+      return;
     if (binding.session.parent_id) {
       return;
     }
@@ -2469,10 +2523,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (!binding.request.turnEndOperationId) return;
     enterCapturedGuardrailsActivation("active");
-    await endTurn(
-      this.governedSession(binding),
-      binding.request.turnEndOperationId,
-    );
+    const stop = await endTurn({
+      session: this.governedSession(binding),
+      operationId: binding.request.turnEndOperationId,
+      ...answeredCallIds(binding),
+    });
+    if (stop.decision === "held") logHeldStop(binding, "turn", stop.running);
     return undefined;
   }
 
@@ -2495,19 +2551,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     if (
-      isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
-      (binding.request.declaredTools?.some(
-        (tool) =>
-          !tool.namespace &&
-          binding.adapter?.isChildHandbackTool?.(tool.name) === true,
-      ) ||
-        isClaudeProgressLabelRequest(
-          binding.requestBody,
-          binding.child?.lineage?.spawnPromptDigest,
+      binding.sideRequest ||
+      (isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
+        binding.request.declaredTools?.some(
+          (tool) =>
+            !tool.namespace &&
+            binding.adapter?.isChildHandbackTool?.(tool.name) === true,
         ))
     ) {
       // With a native handback, intermediate text does not cross to the parent.
-      // Claude's progress-label side call also does not finish its active child.
+      // A side request's reply does not finish its active child either.
       return { decision: "release" };
     }
     if (!binding.request.turnEndOperationId) {
@@ -2543,7 +2596,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (context.responseText === "") {
       // The recorded return contract decides whether this empty completion
       // closes the child permanently or leaves it available for follow-ups.
-      await endChildTurn({
+      const stop = await endChildTurn({
         session: this.governedSession(binding),
         operationId: binding.request.turnEndOperationId.replace(
           /^turn_end:/,
@@ -2551,7 +2604,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ),
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      if (stop.decision === "held") {
+        logHeldStop(binding, "child turn", stop.running);
+        return { decision: "release" };
+      }
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2562,7 +2620,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         output: context.responseText,
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      // The child is not finished: its reply stays its own, nothing crosses.
+      if (outcome.decision === "held") {
+        logHeldStop(binding, "child end", outcome.running);
+        return { decision: "release" };
+      }
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
@@ -2693,6 +2757,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -2730,6 +2795,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onHostedToolCalls(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    rejectSummaryToolCalls(context.resources, context.hostedToolCalls.length);
     return this.withSoftBlockWaiver(
       context,
       "onHostedToolCalls",
@@ -2768,6 +2834,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    // Preparation runs before the finalizer, so the summary check runs here
+    // first, outside the waiver.
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -3681,9 +3750,6 @@ async function resolveRuntimeCalls(params: {
     )
   ) {
     const { organizationId } = params;
-    const actorUserId = params.callerId?.startsWith("user:")
-      ? params.callerId.slice("user:".length)
-      : undefined;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -3710,7 +3776,6 @@ async function resolveRuntimeCalls(params: {
         cached = callerHasCandidateRuntimeSubagents({
           callerAgentId,
           organizationId,
-          actorUserId,
         });
         candidatePoolByCaller.set(callerAgentId, cached);
       }
@@ -5941,6 +6006,13 @@ async function admitChildHandback(params: {
     spawnCallId,
     ...(childNativeId ? { childNativeId } : {}),
   });
+  if (outcome.decision === "held") {
+    logHeldStop(binding, "child handback", outcome.running);
+    return {
+      kind: "deny",
+      feedback: "OpenAPPA holds the return while a tool call is still running.",
+    };
+  }
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
@@ -6018,6 +6090,28 @@ function isCompactionOnlyResponse(value: unknown): boolean {
           item && typeof item === "object" && item.type === "compaction",
       ))
   );
+}
+
+/** The platform's own summary request: its tools are read-only context. */
+function isSummaryRequest(trusted: AppaTrustedContext): boolean {
+  return trusted.summaryRequest === true;
+}
+
+/**
+ * Refuses a summary's calls before any hook can waive them as a soft block
+ * (which would release them and exempt the session) or an observer can
+ * record them. Not retryable: the same summary would only be paid for again.
+ */
+function rejectSummaryToolCalls(
+  resources: ReadonlyMap<PropertyKey, unknown>,
+  callCount: number,
+): void {
+  const trusted = getTrustedContext(resources);
+  if (trusted && isSummaryRequest(trusted) && callCount > 0)
+    throw new ApiError(
+      422,
+      "OpenAPPA rejected tool calls from a compaction response",
+    );
 }
 
 function getTrustedContext(
@@ -7939,32 +8033,6 @@ async function pendingReviewResult(
   });
 }
 
-function isClaudeProgressLabelRequest(
-  request: unknown,
-  spawnPromptDigest: string | undefined,
-): boolean {
-  if (!isRecord(request) || !Array.isArray(request.messages)) return false;
-  const last = request.messages.at(-1);
-  if (!isRecord(last) || last.role !== "user") return false;
-  const prompt =
-    typeof last.content === "string"
-      ? last.content
-      : Array.isArray(last.content)
-        ? last.content
-            .filter((block) => isRecord(block) && block.type === "text")
-            .map((block) => block.text)
-            .join("\n")
-        : "";
-  // An admitted opening task can use the same prefix as a progress-label frame.
-  if (spawnPromptDigest && isDelegatedPrompt(prompt, spawnPromptDigest))
-    return false;
-  // Claude appends this dedicated user frame for a UI label, not a task result.
-  // Do not match tool_result text or historical task instructions.
-  return prompt.startsWith(
-    "Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.\n\n",
-  );
-}
-
 async function pendingNativeHitlOfferIds(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
@@ -9019,5 +9087,34 @@ function grokUsesDirectGatewayTools(binding: AppaPluginBinding): boolean {
     binding.request.declaredTools.some(
       (tool) => !tool.namespace && tool.name.includes("__"),
     )
+  );
+}
+
+/**
+ * Claude Code sends side requests, such as a subagent's progress label, that
+ * read as a stop while a call still runs: its stops hold on a call the
+ * request did not answer instead of closing it.
+ */
+function answeredCallIds(binding: AppaPluginBinding) {
+  return isClaudeCodeFamilyAdapter(binding.adapter?.id)
+    ? { answeredCallIds: binding.answeredCallIds }
+    : {};
+}
+
+function logHeldStop(
+  binding: AppaPluginBinding,
+  stop: "turn" | "child turn" | "child end" | "child handback",
+  running: readonly string[],
+) {
+  // A call that never reports holds every later stop of its session, and this
+  // line is the only trace of it.
+  logger.warn(
+    {
+      sessionId: binding.session.session_id,
+      parentSessionId: binding.session.parent_id,
+      stop,
+      running,
+    },
+    "OpenAPPA held a stop while calls still run",
   );
 }

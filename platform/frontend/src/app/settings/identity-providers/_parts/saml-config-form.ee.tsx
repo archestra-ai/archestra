@@ -41,7 +41,7 @@ export function SamlConfigForm({
   return (
     <div className="space-y-6">
       {(!activeSection || activeSection === "general") && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid items-start gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <IdentityProviderSectionHeader title="Provider Details">
               Identify this provider and choose who can sign in.
@@ -231,7 +231,7 @@ export function SamlConfigForm({
           <IdentityProviderSectionHeader title="Service Provider Metadata">
             Your application&apos;s SAML identity and metadata.
           </IdentityProviderSectionHeader>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid items-start gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
               name="samlConfig.spMetadata.entityID"
@@ -280,7 +280,7 @@ export function SamlConfigForm({
           <IdentityProviderSectionHeader title="Attribute Mapping">
             Choose which provider attributes supply each user’s profile.
           </IdentityProviderSectionHeader>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid items-start gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
               name="samlConfig.mapping.id"

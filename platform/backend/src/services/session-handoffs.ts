@@ -1,11 +1,14 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
+  isAgentTool,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { AgentRunModel, McpToolCallModel } from "@/models";
 import type { SessionHandoffs } from "@/types";
 
@@ -80,12 +83,25 @@ async function movesOf(params: {
   const firstStart = Math.min(
     ...params.runs.map((run) => run.startedAt.getTime()),
   );
+  const toolNames = [
+    ...new Set([
+      ...MOVE_TOOL_SHORT_NAMES.map(
+        (shortName) => `${ARCHESTRA_TOOL_PREFIX}${shortName}`,
+      ),
+      ...MOVE_TOOL_SHORT_NAMES.map((shortName) =>
+        archestraMcpBranding.getToolName(shortName),
+      ),
+      TOOL_RUN_TOOL_FULL_NAME,
+      archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME),
+    ]),
+  ];
   const calls = await McpToolCallModel.findArchestraCallsBySession({
     organizationId: params.organizationId,
     sessionId: params.originSessionId,
     // A client on a search-and-run gateway reaches the run tools through
     // run_tool; which tool it ran is only readable once the row is.
-    toolNames: [...Object.keys(MOVE_TOOLS), TOOL_RUN_TOOL_FULL_NAME],
+    toolNames,
+    includeAgentDelegations: true,
     userId: params.ownUserId,
     // No call before the first run's start can move its work.
     since: new Date(firstStart - START_CALL_SLACK_MS),
@@ -105,13 +121,19 @@ type Call = Awaited<
   ReturnType<typeof McpToolCallModel.findArchestraCallsBySession>
 >[number];
 
+const MOVE_TOOL_SHORT_NAMES = [
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+] as const;
+
 /** The run tools whose calls move work, and the move each makes. */
-const MOVE_TOOLS: Record<string, "push" | "steer" | "pull"> = {
-  [`${ARCHESTRA_TOOL_PREFIX}${TOOL_START_AGENT_RUN_SHORT_NAME}`]: "push",
-  [`${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_AGENT_RUN_SHORT_NAME}`]: "steer",
-  [`${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_AGENT_RUN_SHORT_NAME}`]: "pull",
-  [`${ARCHESTRA_TOOL_PREFIX}${TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME}`]:
-    "pull",
+const MOVE_TOOL_BY_SHORT_NAME: Record<string, "push" | "steer" | "pull"> = {
+  [TOOL_START_AGENT_RUN_SHORT_NAME]: "push",
+  [TOOL_STEER_AGENT_RUN_SHORT_NAME]: "steer",
+  [TOOL_CANCEL_AGENT_RUN_SHORT_NAME]: "pull",
+  [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: "pull",
 };
 
 /**
@@ -129,7 +151,14 @@ function movesFromCalls(params: {
     if (call.isError) continue;
     const dispatched = dispatchedCall(call);
     if (!dispatched) continue;
-    const kind = MOVE_TOOLS[dispatched.toolName];
+    const shortName = archestraMcpBranding.getToolShortName(
+      dispatched.toolName,
+    );
+    const kind = isAgentTool(dispatched.toolName)
+      ? "push"
+      : shortName
+        ? MOVE_TOOL_BY_SHORT_NAME[shortName]
+        : undefined;
     if (!kind) continue;
     const runId = runIdOf({
       call: { ...dispatched, toolResult: call.toolResult },
@@ -195,12 +224,16 @@ type DispatchedCall = {
 function dispatchedCall(call: Call): DispatchedCall | null {
   if (!call.toolName) return null;
   const args = argumentsOf(call.toolCall);
-  if (call.toolName !== TOOL_RUN_TOOL_FULL_NAME)
+  if (
+    archestraMcpBranding.getToolShortName(call.toolName) !==
+    TOOL_RUN_TOOL_SHORT_NAME
+  ) {
     return { toolName: call.toolName, args };
+  }
   const target = args?.tool_name;
   if (typeof target !== "string") return null;
   return {
-    toolName: target.startsWith(ARCHESTRA_TOOL_PREFIX)
+    toolName: target.includes("__")
       ? target
       : `${ARCHESTRA_TOOL_PREFIX}${target}`,
     args: isRecord(args?.tool_args) ? args.tool_args : null,

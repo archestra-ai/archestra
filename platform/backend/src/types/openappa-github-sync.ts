@@ -382,3 +382,20 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
 export const AppaSelfServiceAvailabilitySchema = z.object({
   enabled: z.boolean(),
 });
+
+/**
+ * The servers' rules files a member may open on the Policy page without a
+ * Guardrails permission.
+ */
+export const ServerRulesFilesSchema = z.object({
+  files: z.array(
+    z.object({
+      /** The file's include path, such as `mcp/payments_api.toml`. */
+      path: z.string(),
+      /** The MCP servers it governs that the member may open. */
+      servers: z.array(z.object({ id: z.string(), name: z.string() })),
+      /** Whether the member may change it from the MCP registry. */
+      canEdit: z.boolean(),
+    }),
+  ),
+});

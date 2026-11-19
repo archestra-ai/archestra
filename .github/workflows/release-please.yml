@@ -44,7 +44,7 @@ jobs:
       create_pr: ${{ steps.policy.outputs.create_pr }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -105,7 +105,7 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
@@ -140,14 +140,14 @@ jobs:
       platform_previous_version: ${{ steps.previous-release.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: ${{ inputs.handoff-fixture && 1 || '0' }}
           persist-credentials: false
 
       - name: Generate a token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
         with:
           # Read scanned queue artifacts from other runs.
           permission-actions: read
@@ -167,7 +167,7 @@ jobs:
       - name: Generate a publisher token
         if: ${{ !inputs.handoff-fixture }}
         id: publisher-token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
         with:
           owner: archestra-ai
           repositories: release-publisher
@@ -431,7 +431,7 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true
@@ -452,6 +452,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -473,6 +474,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -496,6 +498,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -519,6 +522,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -545,6 +549,7 @@ jobs:
       contents: read # Required to invoke the reusable Docker build workflow.
       packages: write # Stage the image in ghcr.io/archestra-ai/ci.
       id-token: write # Docker Hub OIDC login for the release scan.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_directory: ./platform
       image_name: platform
@@ -577,7 +582,7 @@ jobs:
       actions: read # List this run's artifacts.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -621,12 +626,13 @@ jobs:
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       pin_release_images: true
 
-  attest-release-images:
-    name: Attest release images and chart
-    # This repository cannot write release names (only ci/ staging). Attest
-    # the staged digests under their public names and the chart by file name;
-    # publish-release-images then asks the release publisher to publish
-    # exactly those, and it verifies the attestations first.
+  release-subjects:
+    name: Collect release images and chart
+    # This repository cannot write release names (only ci/ staging).
+    # attest-release-images attests the staged digests under their public
+    # names and the chart by file name; publish-release-images then asks the
+    # release publisher to publish exactly those, and it verifies the
+    # attestations first.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
@@ -644,25 +650,24 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       contents: read # Check out the publication policy script.
-      id-token: write # Sign the build provenance attestation.
-      attestations: write # Store the build provenance attestation.
     outputs:
       images: ${{ steps.request.outputs.images }}
       latest: ${{ steps.request.outputs.latest }}
+      subjects: ${{ steps.subjects.outputs.subjects }}
     env:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
       TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Generate a release token
         id: release-token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
         with:
           # Draft releases are listed only with push access.
           permission-contents: write
@@ -690,13 +695,20 @@ jobs:
           name: release-helm-chart
 
       - name: Collect release subjects
+        id: subjects
         shell: bash
-        run: bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
-
-      - name: Attest release images and chart
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-checksums: release-subjects.txt
+        run: |
+          bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          # Only the chart is built in this run. The images' provenance comes
+          # from the merge-queue run that built them (docker-image-scanning.yml
+          # attest-release-candidates), for the same index bytes.
+          chart=$(grep -E '^[0-9a-f]{64}  archestra-platform-[^ /]+\.tgz$' release-subjects.txt)
+          [ "$(printf '%s\n' "$chart" | grep -c .)" -eq 1 ] || { echo "::error::Expected one chart subject"; exit 1; }
+          {
+            echo "subjects<<SUBJECTS"
+            echo "$chart"
+            echo "SUBJECTS"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Decide whether the platform latest tag moves
         id: platform-latest
@@ -752,6 +764,19 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
+  # Signs the chart's build provenance in a job of its own that runs no build
+  # step (SLSA Build L3). The images carry the merge-queue run's.
+  attest-release-images:
+    name: Attest release chart
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    needs: [release-please, release-subjects]
+    permissions:
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    with:
+      subjects: ${{ needs.release-subjects.outputs.subjects }}
+
   # Hands the request to release-publisher and ends once its run exists. The
   # release waits for its approval (every release, RCs too) in the publisher,
   # for up to GitHub's 30 days; release-finalize.yml publishes the GitHub
@@ -763,17 +788,20 @@ jobs:
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
-    needs: [release-please, attest-release-images]
+    needs: [release-please, release-subjects, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
+      id-token: write # sign the image contents attestations (release-publish.yml)
+      attestations: write # store them
+      packages: read # pull the staged images to scan them
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
       project: archestra
       version: ${{ needs.release-please.outputs.platform_version }}
-      images: ${{ needs.attest-release-images.outputs.images }}
-      latest: ${{ needs.attest-release-images.outputs.latest }}
+      images: ${{ needs.release-subjects.outputs.images }}
+      latest: ${{ needs.release-subjects.outputs.latest }}
       chart-artifact: release-helm-chart
       wait: false
     secrets:
@@ -791,16 +819,15 @@ jobs:
     permissions:
       contents: read # Check out the chart and publication scripts.
       packages: write # Stage the smoke digests in ghcr.io/archestra-ai/ci.
-      id-token: write # Sign the build provenance attestation.
-      attestations: write # Store the build provenance attestation.
     outputs:
       images: ${{ steps.subjects.outputs.images }}
+      subjects: ${{ steps.subjects.outputs.subjects }}
     env:
       SOURCE_VERSION: ${{ inputs.publisher-smoke-version }}
       VERSION: 0.0.0-smoke.${{ github.run_id }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -851,18 +878,32 @@ jobs:
           jq -s add smoke-ghcr.json release-images.json > smoke-images.json
           cat smoke-images.json
           echo "images=$(jq -c . smoke-images.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "subjects<<SUBJECTS"
+            cat smoke-subjects.txt
+            echo "SUBJECTS"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Attest smoke images and chart
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-checksums: smoke-subjects.txt
+  # The same signing path as a release: the shared workflow, in a job of its own.
+  publisher-smoke-attest:
+    name: Publisher dry run (attest)
+    needs: publisher-smoke
+    permissions:
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    with:
+      subjects: ${{ needs.publisher-smoke.outputs.subjects }}
 
   publisher-smoke-publish:
     name: Publisher dry run (publish)
-    needs: publisher-smoke
+    needs: [publisher-smoke, publisher-smoke-attest]
     permissions:
       actions: read # Download the smoke chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
+      id-token: write # sign the image contents attestations (release-publish.yml)
+      attestations: write # store them
+      packages: read # pull the staged images to scan them
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -884,7 +925,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout fixture policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

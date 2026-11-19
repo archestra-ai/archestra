@@ -1,6 +1,7 @@
 import type McpServerModel from "@/models/mcp-server";
 import ToolModel from "@/models/tool";
 import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import type { InternalMcpCatalog, Tool } from "@/types";
 
 type ReportedByServer = Awaited<
@@ -29,8 +30,12 @@ export async function syncDesktopMcpTools(params: {
   tools: ReportedByServer;
 }): Promise<{ created: Tool[]; unchanged: Tool[] }> {
   const { catalogItem, tools } = params;
+  const toolNameFor = await mintCatalogToolNames({
+    catalogId: catalogItem.id,
+    rawToolNames: tools.map((tool) => tool.name),
+  });
   const reported: ReportedTool[] = tools.map((tool) => ({
-    name: ToolModel.slugifyName(catalogItem.name, tool.name),
+    name: toolNameFor(tool.name),
     rawToolName: tool.name,
     description: tool.description,
     parameters: tool.inputSchema,

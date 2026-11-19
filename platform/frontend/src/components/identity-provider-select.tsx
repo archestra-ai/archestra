@@ -75,23 +75,33 @@ export function IdentityProviderSelect({
       >
         {noneLabel && <SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>}
         {identityProviders.map((provider) => (
-          <SelectItem
-            key={provider.id}
-            value={provider.id}
-            icon={
-              <IdentityProviderIcon
-                providerId={provider.providerId}
-                className="mt-0.5 shrink-0 self-start"
-              />
-            }
-            description={<span className="break-all">{provider.issuer}</span>}
-            className="items-start [&>div]:min-w-0"
-          >
-            {provider.providerId}
-          </SelectItem>
+          <IdentityProviderSelectItem key={provider.id} provider={provider} />
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** One identity provider as a select option: brand icon, name and issuer. */
+export function IdentityProviderSelectItem({
+  provider,
+}: {
+  provider: IdentityProviderOption;
+}) {
+  return (
+    <SelectItem
+      value={provider.id}
+      icon={
+        <IdentityProviderIcon
+          providerId={provider.providerId}
+          className="mt-0.5 shrink-0 self-start"
+        />
+      }
+      description={<span className="break-all">{provider.issuer}</span>}
+      className="items-start [&>div]:min-w-0"
+    >
+      {provider.providerId}
+    </SelectItem>
   );
 }
 

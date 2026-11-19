@@ -25,11 +25,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoleSelect } from "@/components/ui/role-select";
+import { Textarea } from "@/components/ui/textarea";
 import { formatRoleName } from "@/lib/utils/role";
 import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
 export type ServiceAccountFormValues = {
   name: string;
+  description: string;
   icon: string | null;
   role: string;
   teamId: string | null;
@@ -38,6 +40,7 @@ export type ServiceAccountFormValues = {
 
 export const DEFAULT_SERVICE_ACCOUNT_FORM_VALUES: ServiceAccountFormValues = {
   name: "",
+  description: "",
   icon: null,
   role: "member",
   teamId: null,
@@ -90,6 +93,27 @@ export function ServiceAccountFormSections({
                 </FormControl>
                 <FormMessage />
               </IdentityFields>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Description{" "}
+                <span className="text-muted-foreground">(optional)</span>
+              </FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="What this account is for, and who runs it"
+                  rows={2}
+                  maxLength={1000}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
             </FormItem>
           )}
         />

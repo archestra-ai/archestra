@@ -3519,7 +3519,12 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    userId,
+    resource: "knowledgeSource",
+  });
 }
 
 /**
@@ -3546,7 +3551,7 @@ async function resolveNewConnectorEnvironmentId(params: {
  * BETA gate for everything auto-sync-permissions: selecting the visibility on
  * create/update and the permission-family endpoints (trigger, coverage,
  * user-groups, member overrides). Off by default; staging enables it
- * explicitly and ARCHESTRA_BETA turns it on with every other beta gate.
+ * explicitly.
  */
 /**
  * Enqueue a permission pass with a forced audience refresh — the follow-up to

@@ -353,7 +353,7 @@ describe("ConnectionSettingsForm", () => {
     ).toBeDisabled();
   });
 
-  it("edits plugin delivery while the deployment beta flag is off", async () => {
+  it("edits plugin delivery while deployment feature flags are off", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockReturnValue(false);
     render(<ConnectionSettingsForm />);

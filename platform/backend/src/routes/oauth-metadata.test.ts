@@ -44,6 +44,7 @@ describe("OAuth metadata validation", () => {
     "resource",
     "valid",
     "origin-resource",
+    "discovery-failure",
   ] as const)("validates %s metadata before registration and authorization", async (variant, {
     makeInternalMcpCatalog,
   }) => {
@@ -65,9 +66,21 @@ describe("OAuth metadata validation", () => {
         });
       } else if (request.url === "/.well-known/oauth-protected-resource") {
         send({ resource: origin, authorization_servers: [origin] });
-      } else if (request.url === "/.well-known/oauth-authorization-server") {
+      } else if (
+        variant === "discovery-failure" &&
+        request.url === "/.well-known/oauth-authorization-server"
+      ) {
+        response.writeHead(503);
+        response.end("unavailable");
+      } else if (
+        request.url === "/.well-known/oauth-authorization-server" ||
+        request.url === "/.well-known/openid-configuration"
+      ) {
         send({
-          issuer: variant === "issuer" ? "https://other.example.com" : origin,
+          issuer:
+            variant === "issuer" || variant === "discovery-failure"
+              ? "https://other.example.com"
+              : origin,
           authorization_endpoint: `${origin}/authorize`,
           token_endpoint: `${origin}/token`,
           registration_endpoint: `${origin}/register`,
@@ -140,6 +153,14 @@ describe("OAuth metadata validation", () => {
       if (variant !== "valid" && variant !== "origin-resource") {
         expect(initiation.statusCode, initiation.body).toBe(502);
         expect(initiation.json().error.message).toMatch(/issuer|resource/i);
+        if (variant === "discovery-failure") {
+          expect(initiation.json().error.message).toContain(
+            `${origin}/.well-known/oauth-authorization-server: HTTP 503`,
+          );
+          expect(initiation.json().error.message).toContain(
+            `expected: ${origin}; received: https://other.example.com`,
+          );
+        }
         expect(requests).not.toContain("POST /register");
         expect(requests).not.toContain("POST /token");
         expect(initiation.json()).not.toHaveProperty("authorizationUrl");
@@ -179,6 +200,109 @@ describe("OAuth metadata validation", () => {
 describe("OAuth metadata identities", () => {
   const serverUrl = "https://mcp.example.com/mcp";
   const issuer = "https://auth.example.com/tenant";
+
+  test.for([
+    "503",
+    "timeout",
+    "invalid-json",
+    "incomplete",
+  ] as const)("retains %s discovery failures alongside a fallback issuer mismatch", async (failure) => {
+    const primary =
+      "https://auth.example.com/.well-known/oauth-authorization-server/tenant";
+    const mismatch =
+      "https://auth.example.com/.well-known/oauth-authorization-server";
+    const discovery = discoverOAuthEndpoints(
+      {
+        server_url: serverUrl,
+        supports_resource_metadata: false,
+        auth_server_url: issuer,
+        authorization_endpoint: "https://configured.example.com/authorize",
+        token_endpoint: "https://configured.example.com/token",
+      },
+      {
+        fetchFn: async (input) => {
+          if (String(input) === primary) {
+            if (failure === "timeout")
+              throw new DOMException("secret response detail", "TimeoutError");
+            if (failure === "incomplete") return Response.json({ issuer });
+            if (failure === "invalid-json")
+              return new Response("secret response detail");
+            return new Response(null, { status: 503 });
+          }
+          if (String(input) === mismatch)
+            return Response.json({
+              issuer: "https://other.example.com/tenant",
+              authorization_endpoint: "https://other.example.com/authorize",
+              token_endpoint: "https://other.example.com/token",
+            });
+          return new Response(null, { status: 404 });
+        },
+      },
+    );
+    await expect(discovery).rejects.toThrow("issuer does not match");
+    await expect(discovery).rejects.toThrow(primary);
+    await expect(discovery).rejects.toThrow(mismatch);
+    await expect(discovery).rejects.toThrow(issuer);
+    await expect(discovery).rejects.toThrow("https://other.example.com/tenant");
+    await expect(discovery).rejects.toThrow(
+      failure === "503"
+        ? "HTTP 503"
+        : failure === "timeout"
+          ? "Request timed out"
+          : failure === "incomplete"
+            ? "Missing authorization or token endpoint"
+            : "Invalid JSON response",
+    );
+    await expect(discovery).rejects.not.toThrow("secret response detail");
+  });
+
+  test("accepts a valid fallback after a failed discovery endpoint", async () => {
+    const endpoints = await discoverOAuthEndpoints(
+      {
+        server_url: serverUrl,
+        supports_resource_metadata: false,
+        auth_server_url: issuer,
+      },
+      {
+        fetchFn: async (input) =>
+          String(input).endsWith("/tenant")
+            ? new Response(null, { status: 503 })
+            : Response.json({
+                issuer,
+                authorization_endpoint: `${issuer}/authorize`,
+                token_endpoint: `${issuer}/token`,
+              }),
+      },
+    );
+    expect(endpoints.issuer).toBe(issuer);
+    expect(endpoints.authorizationEndpoint).toBe(`${issuer}/authorize`);
+  });
+
+  test.for([
+    "https://user:password@OTHER.example.com/tenant?token=secret#private",
+    "https:///user:password@OTHER.example.com/tenant?token=secret#private",
+    "https://\\user:password@OTHER.example.com/tenant?token=secret#private",
+  ])("redacts URL credentials and query data from issuer diagnostics: %s", async (metadataIssuer) => {
+    const discovery = discoverOAuthEndpoints(
+      {
+        server_url: serverUrl,
+        supports_resource_metadata: false,
+        auth_server_url: issuer,
+      },
+      {
+        fetchFn: async () =>
+          Response.json({
+            issuer: metadataIssuer,
+            authorization_endpoint: "https://other.example.com/authorize",
+            token_endpoint: "https://other.example.com/token",
+          }),
+      },
+    );
+    await expect(discovery).rejects.toThrow("https://other.example.com/tenant");
+    await expect(discovery).rejects.not.toThrow("password");
+    await expect(discovery).rejects.not.toThrow("secret");
+    await expect(discovery).rejects.not.toThrow("private");
+  });
 
   test.for([
     undefined,

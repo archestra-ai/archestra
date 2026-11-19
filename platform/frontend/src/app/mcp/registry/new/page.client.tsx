@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/card";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
-import { useFeature } from "@/lib/config/config.query";
 import {
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
@@ -38,8 +37,6 @@ import {
 type SourceSubStep = "source" | "configure";
 
 export default function NewMcpCatalogItemPage() {
-  // Desktop MCP is in alpha, offered only with the beta flag.
-  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const router = useRouter();
   const searchParams = useSearchParams();
   const createMutation = useCreateInternalMcpCatalogItem();
@@ -120,8 +117,9 @@ export default function NewMcpCatalogItemPage() {
 
   return (
     <PageLayout
-      title="Add MCP Server to the Private Registry"
-      description="Once you add an MCP server here, it will be available for installation."
+      // Both short enough to sit whole beside the step indicator.
+      title="Add MCP Server"
+      description="Available to install once added."
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
       actionButton={<SetupStepper activeStep="configuration" />}
       maxWidth="wizard"
@@ -149,9 +147,9 @@ export default function NewMcpCatalogItemPage() {
                       </div>
                       <CardTitle>Start from scratch</CardTitle>
                       <CardDescription>
-                        {desktopMcpEnabled
-                          ? "Configure a custom MCP server manually — remote URL, self-hosted command, or an MCP server installed on a user's device."
-                          : "Configure a custom MCP server manually — remote URL or self-hosted command."}
+                        Configure a custom MCP server manually — remote URL,
+                        self-hosted command, or an MCP server installed on a
+                        user&apos;s device.
                       </CardDescription>
                     </CardHeader>
                   </Card>

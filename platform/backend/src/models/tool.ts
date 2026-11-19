@@ -62,6 +62,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { slugifyMcpServerNameSql } from "@/database/utils/slug-sql";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { readConfig } from "@/services/config-cache";
@@ -102,7 +103,7 @@ import { port } from "./ports";
  * Max tool-name length accepted by the OpenAI/Anthropic tool-calling APIs and
  * the MCP tool schema. Namespaced tool names are trimmed to fit this.
  */
-const MCP_TOOL_NAME_MAX_LENGTH = 64;
+export const MCP_TOOL_NAME_MAX_LENGTH = 64;
 
 /**
  * Small deterministic hash (djb2, 8 hex chars) used to disambiguate slugs that
@@ -2779,6 +2780,70 @@ class ToolModel {
   }
 
   /**
+   * The raw upstream names of the catalogs' MCP tools, soft-deleted ones
+   * included (a restore brings one back under the same prefix), for sizing
+   * the tool prefix the catalogs share.
+   */
+  static async getRawNamesByCatalogIds(
+    catalogIds: string[],
+  ): Promise<string[]> {
+    if (catalogIds.length === 0) return [];
+    const rows = await db
+      .select({
+        name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          isNull(schema.toolsTable.agentId),
+          isNull(schema.toolsTable.delegateToAgentId),
+        ),
+      );
+    return rows.map((row) => row.rawName ?? ToolModel.unslugifyName(row.name));
+  }
+
+  /**
+   * Live catalog items, oldest first, whose tool names the prefix allocation
+   * has to revisit: an item whose prefix leaves one of its tools no room
+   * under the tool-name limit (its names were cut and hashed), and an app
+   * with no prefix of its own yet. A tool whose raw name alone leaves less
+   * than `minPrefixLength` characters is not counted: no prefix fits it.
+   */
+  static async findCatalogIdsNeedingToolPrefix(params: {
+    minPrefixLength: number;
+  }): Promise<string[]> {
+    const catalog = schema.internalMcpCatalogTable;
+    const tool = schema.toolsTable;
+    const prefix = sql`coalesce(${catalog.toolPrefix}, ${slugifyMcpServerNameSql(catalog.name)})`;
+    const rawSlug = slugifyMcpServerNameSql(
+      sql`coalesce(${tool.rawName}, regexp_replace(${tool.name}, '^.*__', ''))`,
+    );
+    const separatorLength = MCP_SERVER_TOOL_NAME_SEPARATOR.length;
+    const rows = await db
+      .selectDistinct({ id: catalog.id, createdAt: catalog.createdAt })
+      .from(catalog)
+      .innerJoin(tool, eq(tool.catalogId, catalog.id))
+      .where(
+        and(
+          notDeleted(catalog),
+          isNull(tool.agentId),
+          isNull(tool.delegateToAgentId),
+          or(
+            and(eq(catalog.serverType, "app"), isNull(catalog.toolPrefix)),
+            and(
+              sql`length(${rawSlug}) + ${separatorLength} + ${params.minPrefixLength} <= ${MCP_TOOL_NAME_MAX_LENGTH}`,
+              sql`length(${prefix}) + ${separatorLength} + length(${rawSlug}) > ${MCP_TOOL_NAME_MAX_LENGTH}`,
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(catalog.createdAt), asc(catalog.id));
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Tool names of the given catalogs, narrowed to those carrying one of the
    * given server prefixes plus every tool of `catalogIds`. A guardrails policy
    * names the servers it governs, so its composition reads the tools those
@@ -3574,6 +3639,7 @@ class ToolModel {
         environmentId: string | null;
         builtInAgentConfig: Agent["builtInAgentConfig"];
         hasRuntime: boolean;
+        hasSubagentLoadBalancing: boolean;
       };
     }>
   > {
@@ -3588,6 +3654,7 @@ class ToolModel {
           environmentId: schema.agentsTable.environmentId,
           builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
           hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+          hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
         },
       })
       .from(schema.agentToolsTable)

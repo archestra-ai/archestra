@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MCP_HUMAN_RULING_META_KEY } from "./mcp-human-ruling";
 import { SEEDED_APP_RENDER_META_KEY } from "./seeded-app-render";
+import { LOAD_BALANCED_RUNTIME_ROUTER_META_KEY } from "./subagent-load-balancing";
 
 /**
  * Platform-reserved `_meta` key naming the identity whose credential served a
@@ -16,8 +17,9 @@ export const MCP_EXECUTED_AS_META_KEY = "archestraExecutedAs";
 
 /**
  * Platform-reserved metadata keys: `archestraError` (error results),
- * the seeded-app-render marker, the executed-as identity, and the human
- * ruling (reviewed remedy results).
+ * the seeded-app-render marker, the executed-as identity, the human
+ * ruling (reviewed remedy results), and the load-balanced runtime router
+ * delegation marker.
  * Renderers and trusted-data guardrails use these keys to identify
  * platform-generated results. Upstream copies are always removed.
  */
@@ -26,6 +28,7 @@ export const RESERVED_PLATFORM_META_KEYS = [
   SEEDED_APP_RENDER_META_KEY,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
 ] as const;
 
 /**

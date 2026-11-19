@@ -32,9 +32,13 @@ export function makeConfig(
       ...overrides.smallTeamTier,
     },
     features: {
-      betaEnabled: false,
       orchestratorK8sRuntime: false,
-      mcpIdleHibernationBetaEnabled: false,
+      agentIdentitySpiffe: {
+        trustDomain: "localhost",
+        issuer: "http://localhost:3000/api/agent-identity/spiffe",
+        jwksUri: "http://localhost:3000/api/agent-identity/spiffe/keys",
+        bundleUri: "http://localhost:3000/api/agent-identity/spiffe/bundle",
+      },
       sandbox: false,
       agentRuntime: false,
       agentRuntimeCatalogImages: getAgentCatalogImages({
@@ -76,7 +80,6 @@ export function makeConfig(
       // including its Application Account (OAuth) fields.
       kbMfilesConnectorEnabled: true,
       kbMfilesOauthEnabled: true,
-      llmModelPoolsEnabled: false,
       kbBm25DefaultK1: 1.2,
       kbBm25DefaultB: 0.75,
       kbContextualRetrievalDefaultMode: "disabled",
@@ -85,9 +88,7 @@ export function makeConfig(
         redirectUri:
           "http://localhost:3000/api/connectors/gdrive/oauth/callback",
       },
-      mcpGatewaySkillsEnabled: false,
       devFeedbackEnabled: false,
-      autoRoutingEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

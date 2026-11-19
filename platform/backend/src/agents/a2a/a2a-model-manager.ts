@@ -17,6 +17,7 @@ import type {
   A2ATaskApprovalRequest,
 } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
+import { toStoredParts } from "./a2a-file-parts";
 import {
   type A2AArchestraApprovalRequest,
   A2AArchestraApprovalRequestSchema,
@@ -92,7 +93,7 @@ export class A2AContextManager {
         id: message.messageId,
         contextId: context.id,
         role: message.role,
-        parts: message.parts || [],
+        parts: toStoredParts(message.parts || []),
         content: uiMessage,
       });
       return { context, dbMessage, protocolMessage: message };
@@ -360,7 +361,7 @@ export class A2ATaskManager {
         ...task.history.slice(0, -1),
         {
           ...task.history[task.history.length - 1],
-          parts: message.parts || [],
+          parts: toStoredParts(message.parts || []),
           content: uiMessage,
         },
       ];
@@ -371,7 +372,7 @@ export class A2ATaskManager {
       await A2AMessageModel.updateContentAndParts(
         task.history[task.history.length - 1].id,
         uiMessage,
-        message.parts || [],
+        toStoredParts(message.parts || []),
       );
       return {
         task: { ...task, history, statusMessage },
@@ -386,7 +387,7 @@ export class A2ATaskManager {
         contextId: task.contextId,
         taskId: task.id,
         role: message.role,
-        parts: message.parts || [],
+        parts: toStoredParts(message.parts || []),
         content: uiMessage,
       });
       const statusMessage =

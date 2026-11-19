@@ -6,6 +6,13 @@ import { withOpenAppaLease } from "./openappa-leases";
 
 setupTestCacheManager();
 
+/**
+ * How long a lease may take to claim. A claim is a locked cache read and
+ * write, which a busy shared test worker can stretch past waitFor's default
+ * second; the lease's own timing does not depend on it.
+ */
+const CLAIM_TIMEOUT_MS = 15_000;
+
 /** Work that runs until the test lets it end. */
 function heldWork<T>(value: T) {
   const state = { started: false, end: () => {} };
@@ -23,7 +30,9 @@ test("a holder whose work outlives its lease ends only its own: the caller that 
   const key: AllowedCacheKey = `${CacheKey.OpenAppaPolicyCheck}-lease-test-${randomUUID()}`;
   const firstHolder = heldWork("first");
   const first = withOpenAppaLease({ key, ttlMs: 50, work: firstHolder.work });
-  await vi.waitFor(() => expect(firstHolder.state.started).toBe(true));
+  await vi.waitFor(() => expect(firstHolder.state.started).toBe(true), {
+    timeout: CLAIM_TIMEOUT_MS,
+  });
   // The first holder's lease lapses while its work still runs, and the next
   // caller takes it over.
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -33,7 +42,9 @@ test("a holder whose work outlives its lease ends only its own: the caller that 
     ttlMs: 60_000,
     work: secondHolder.work,
   });
-  await vi.waitFor(() => expect(secondHolder.state.started).toBe(true));
+  await vi.waitFor(() => expect(secondHolder.state.started).toBe(true), {
+    timeout: CLAIM_TIMEOUT_MS,
+  });
   firstHolder.state.end();
   expect(await first).toEqual({ ran: true, value: "first" });
 
@@ -46,4 +57,4 @@ test("a holder whose work outlives its lease ends only its own: the caller that 
   expect(
     await withOpenAppaLease({ key, ttlMs: 60_000, work: async () => "fourth" }),
   ).toEqual({ ran: true, value: "fourth" });
-});
+}, 60_000);

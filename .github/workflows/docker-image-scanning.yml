@@ -38,7 +38,7 @@ jobs:
       matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
@@ -74,7 +74,7 @@ jobs:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -153,9 +153,11 @@ jobs:
     permissions:
       contents: read # Required to checkout scan policy and image sources.
       pull-requests: read # Recheck the queue release PR head and target after scanning.
+    outputs:
+      subjects: ${{ steps.gate.outputs.subjects }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
@@ -167,6 +169,7 @@ jobs:
           path: ${{ runner.temp }}/release-evidence
           merge-multiple: true
       - name: Require complete queue scan evidence or explicit PR skip
+        id: gate
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
@@ -185,12 +188,28 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Signs build provenance for each release image's multi-arch index in this
+  # run, the run that built and scanned it, in a job that runs no build step
+  # (SLSA Build L3). The release pushes the same index bytes
+  # (release-handoff.py push-index), and release-publisher accepts this
+  # run's provenance for them.
+  attest-release-candidates:
+    name: Attest release candidates
+    needs: [classify, release-image-security]
+    if: ${{ needs.classify.outputs.scan == 'true' && github.event_name == 'merge_group' && needs.release-image-security.result == 'success' }}
+    permissions:
+      id-token: write # Sign the build provenance.
+      attestations: write # Store the build provenance.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    with:
+      subjects: ${{ needs.release-image-security.outputs.subjects }}
+
   # Compatibility bridge for current main/release rulesets. These jobs depend on
   # the gate: PRs classify successfully, while version-changing queue groups
   # require complete scan evidence before any required context turns green.
   required-contexts:
     name: Docker Image Scanning (${{ matrix.name }})
-    needs: [release-image-security]
+    needs: [release-image-security, attest-release-candidates]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     strategy:
@@ -200,20 +219,23 @@ jobs:
       - name: Require release image security decision
         env:
           RESULT: ${{ needs.release-image-security.result }}
-        run: test "$RESULT" = success
+          # A release candidate that is not signed must not merge.
+          ATTESTED: ${{ needs.attest-release-candidates.result }}
+        run: test "$RESULT" = success && { test "$ATTESTED" = success || test "$ATTESTED" = skipped; }
 
   # main also requires the historical unexpanded matrix name. Construct it
   # literally without expression interpolation; remove only after ruleset rollout.
   legacy-required-context:
     name: ${{ format('Docker Image Scanning ({0}{1}{1} matrix.name {2}{2})', '$', '{', '}') }} # zizmor: ignore[obfuscation] literal legacy required context contains Actions delimiters
-    needs: [release-image-security]
+    needs: [release-image-security, attest-release-candidates]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require release image security decision
         env:
           RESULT: ${{ needs.release-image-security.result }}
-        run: test "$RESULT" = success
+          ATTESTED: ${{ needs.attest-release-candidates.result }}
+        run: test "$RESULT" = success && { test "$ATTESTED" = success || test "$ATTESTED" = skipped; }
 
   manual-platform-byte-scan:
     name: Manual Docker Image Scanning (Platform, byte-derived)
@@ -225,7 +247,7 @@ jobs:
       id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -249,7 +271,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout fixture policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

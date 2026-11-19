@@ -9,6 +9,7 @@ import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createRestrictedEnvironment,
+  grantEnvironmentDeployKinds,
   grantEnvironmentUse,
 } from "@/test/environments";
 import type { User } from "@/types";
@@ -122,6 +123,41 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
+  });
+
+  test("a grant limited to other kinds of object does not let the caller put an MCP server in a RESTRICTED env", async () => {
+    const restricted = await createRestrictedEnvironment({
+      organizationId,
+      data: { name: "Prod" },
+    });
+    await grantEnvironmentDeployKinds({
+      organizationId,
+      environmentId: restricted.id,
+      userId: user.id,
+      kinds: ["agent", "app"],
+    });
+
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: createBody(restricted.id),
+    });
+    expect(refused.statusCode).toBe(403);
+
+    // Adding MCP servers to the same grant is what opens it.
+    await grantEnvironmentDeployKinds({
+      organizationId,
+      environmentId: restricted.id,
+      userId: user.id,
+      kinds: ["agent", "app", "mcpRegistry"],
+    });
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: createBody(restricted.id),
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json().environmentId).toBe(restricted.id);
   });
 
   test("a member with no grant assigning an UNRESTRICTED env succeeds", async () => {

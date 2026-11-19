@@ -97,13 +97,12 @@ export function PolicyDiffReview({
             </div>
           </nav>
         </div>
-        {/* Align the visible X with the controls, keeping its full hit area. */}
         <DialogClose asChild>
           <Button
             size="icon-sm"
             variant="ghost"
             aria-label="Close"
-            className="col-start-2 row-start-1 -mr-3 justify-self-end text-muted-foreground"
+            className="col-start-2 row-start-1 justify-self-end text-muted-foreground"
           >
             <X />
           </Button>

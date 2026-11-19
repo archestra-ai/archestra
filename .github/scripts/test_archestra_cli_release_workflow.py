@@ -110,7 +110,7 @@ class ReleaseStepTests(unittest.TestCase):
         return result, calls, outputs
 
     def release_state(self, **env):
-        return self.run_step("publish", "Read the version and whether it is published", ROOT, **env)
+        return self.run_step("release-state", "Read the version and whether it is published", ROOT, **env)
 
     def publish(self, **env):
         return self.run_step("publish", "Create and publish release", self.work, **env)
@@ -232,7 +232,7 @@ class ReleaseStepTests(unittest.TestCase):
                 # As actions/checkout leaves it: the head commit alone, no tags.
                 git("clone", "-q", "--depth=1", "--no-tags", origin.as_uri(), str(checkout), cwd=root)
                 result, _, _ = self.run_step(
-                    "publish", "Skip a published version", checkout,
+                    "release-state", "Skip a published version", checkout,
                     ARCHESTRA_TEST_RELEASE="found", GH_TOKEN="fixture", GITHUB_ACTIONS="true", **{
                         key: env[key] for key in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")
                     },
@@ -429,7 +429,7 @@ class LockPullRequestTests(unittest.TestCase):
 
 class WorkflowPolicyTests(unittest.TestCase):
     def test_jobs(self):
-        self.assertEqual(list(JOBS), ["version", "build", "publish", "lock"])
+        self.assertEqual(list(JOBS), ["version", "build", "release-state", "sign-windows", "publish", "lock"])
 
     def test_every_action_is_pinned_by_commit_or_is_this_repository_s_own(self):
         uses = re.findall(r"^\s+(?:- )?uses: (\S+)", WORKFLOW, re.M)
@@ -443,9 +443,17 @@ class WorkflowPolicyTests(unittest.TestCase):
             path.read_text() for path in (ROOT / ".github/workflows").glob("*.yml")
             if path.name != "build-archestra-cli.yml"
         )
-        for line in re.findall(r"^\s+(?:- )?uses: (\S+@[0-9a-f]{40} # \S+)$", WORKFLOW, re.M):
+        # Microsoft's actions for Windows signing, reviewed for this workflow
+        # and used by no other one.
+        signing = {
+            "azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0",
+            "azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0",
+        }
+        pinned = re.findall(r"^\s+(?:- )?uses: (\S+@[0-9a-f]{40} # \S+)$", WORKFLOW, re.M)
+        self.assertTrue(signing <= set(pinned))
+        for line in pinned:
             with self.subTest(action=line):
-                self.assertTrue(line in others)
+                self.assertTrue(line in others or (line in signing and line in JOBS["sign-windows"]))
 
     def test_permissions_are_minimal_and_credentials_never_persist(self):
         self.assertTrue("\npermissions: {}\n" in WORKFLOW)
@@ -455,8 +463,13 @@ class WorkflowPolicyTests(unittest.TestCase):
         }
         self.assertEqual(permissions, {
             "version": [("contents", "read")], "build": [("contents", "read")],
+            "release-state": [("contents", "read")], "sign-windows": [("contents", "read")],
             "publish": [("contents", "write")], "lock": [("contents", "read")],
         })
+        # OIDC tokens: Azure login in sign-windows, the attestation in publish.
+        for job, text in JOBS.items():
+            with self.subTest(job=job):
+                self.assertEqual("      id-token: write" in text, job in ("sign-windows", "publish"))
         self.assertEqual(WORKFLOW.count("uses: actions/checkout@"), WORKFLOW.count("persist-credentials: false"))
         for job, text in JOBS.items():
             with self.subTest(job=job):
@@ -472,11 +485,19 @@ class WorkflowPolicyTests(unittest.TestCase):
             "      && github.ref == 'refs/heads/main'\n"
             "      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')\n"
         )
-        for job in ("publish", "lock"):
+        for job in ("release-state", "publish", "lock"):
             with self.subTest(job=job):
                 self.assertTrue(condition in JOBS[job])
-        self.assertTrue("    needs: [build]\n" in JOBS["publish"])
+        self.assertTrue("    needs: [build, release-state]\n" in JOBS["sign-windows"])
+        self.assertTrue("    if: needs.release-state.outputs.published == 'false'\n" in JOBS["sign-windows"])
+        self.assertTrue("    needs: [build, release-state, sign-windows]\n" in JOBS["publish"])
+        self.assertTrue(
+            "      && (needs.sign-windows.result == 'success' || needs.release-state.outputs.published == 'true')\n"
+            in JOBS["publish"]
+        )
         self.assertTrue("    needs: [publish]\n" in JOBS["lock"])
+        # A published version skips sign-windows; lock still re-attempts its pull request.
+        self.assertTrue("      && !cancelled()\n      && needs.publish.result == 'success'\n" in JOBS["lock"])
         self.assertTrue("    if: github.event_name == 'pull_request'\n" in JOBS["version"])
         # Both triggers are for main: nothing is built or published from another branch's pushes.
         triggers = WORKFLOW.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
@@ -484,6 +505,28 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(triggers.count("    branches: [main]\n"), 2)
         self.assertTrue("github.event_name != 'pull_request'\n" in JOBS["build"])
         self.assertTrue("  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n" in WORKFLOW)
+
+    def test_only_sign_windows_can_sign_and_it_signs_both_windows_files(self):
+        sign = JOBS["sign-windows"]
+        windows = [name for name in writer.FILES if "windows" in name]
+        self.assertEqual(len(windows), 2)
+        for job, text in JOBS.items():
+            with self.subTest(job=job):
+                self.assertEqual("environment:" in text, job == "sign-windows")
+                self.assertEqual("secrets.AZURE_" in text, job == "sign-windows")
+        self.assertTrue("    environment: archestra-cli-release\n" in sign)
+        self.assertTrue("    runs-on: windows-latest\n" in sign)
+        self.assertFalse("cargo" in sign)
+        self.assertTrue("          certificate-profile-name: archestra-cli\n" in sign)
+        self.assertTrue("          endpoint: https://neu.codesigning.azure.net/\n" in sign)
+        self.assertTrue("          timestamp-rfc3161: http://timestamp.acs.microsoft.com\n" in sign)
+        for name in windows:
+            with self.subTest(name=name):
+                self.assertTrue(f"            ${{{{ github.workspace }}}}\\dist\\{name}\n" in sign)
+                self.assertTrue(f"          name: {name}\n          path: dist/{name}\n" in sign)
+        self.assertTrue(",".join(sorted(windows)) in sign)
+        # Signing happens before publish downloads the files and sums them.
+        self.assertTrue(WORKFLOW.index("\n  sign-windows:\n") < WORKFLOW.index("\n  publish:\n"))
 
     def test_matrix_builds_the_six_served_files_from_locked_sources_without_a_cache(self):
         build = JOBS["build"]

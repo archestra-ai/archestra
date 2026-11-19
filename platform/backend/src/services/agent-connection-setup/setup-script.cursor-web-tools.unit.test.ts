@@ -122,6 +122,8 @@ const path = require("path");
 const dir = ${JSON.stringify(fakeCli)};
 // The two account commands the sign-in helper uses.
 if (process.argv[2] === "status") {
+  // An agent that takes its time to answer.
+  if (fs.existsSync(path.join(dir, "status-slow"))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 700);
   // An agent that does not answer, for as long as a test says so.
   if (fs.existsSync(path.join(dir, "status-hangs"))) {
     const pause = new Int32Array(new SharedArrayBuffer(4));
@@ -651,6 +653,22 @@ describe("Cursor web tools", () => {
     expect((await tools.call(CURSOR_WEB_SETUP_TOOL, {})).text).toContain(
       "Web search and fetch are ready.",
     );
+  });
+
+  test("a call's wait does not end on a status check that is still under way", async () => {
+    await install();
+    await installFakeCli([]);
+    await writeFile(path.join(fakeCli, "signed-in"), "");
+    await writeFile(path.join(fakeCli, "status-slow"), "");
+    // The agent answers after the call's own wait is over, and well within
+    // the time a status check may take.
+    const tools = webTools({
+      ARCHESTRA_CURSOR_CLI: path.join(home, ".local", "bin", "cursor-agent"),
+      ARCHESTRA_CURSOR_WEB_SETUP_WAIT_MS: "200",
+    });
+    const answer = await tools.call(CURSOR_WEB_SETUP_TOOL, {});
+    expect(answer.text).toContain("Web search and fetch are ready.");
+    expect(answer.text).not.toContain("Checking whether");
   });
 
   test("an agent that hangs is stopped together with what it started, before it is asked again", async () => {

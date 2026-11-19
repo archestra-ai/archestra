@@ -70,7 +70,7 @@ curl "https://<archestra-host>/v1/unified-model/chat/completions" \
 The request runs on the provider key of the tier the router picks, and the answer appears under **Logs → LLM Proxy** marked **auto→**.
 
 - Native provider routes (`/v1/anthropic`, `/v1/openai`, and others) return `400` for router names. Clients that use a native route, such as Claude Code on Anthropic, cannot call an auto router directly.
-- An agent or chat with an explicit model or model pool is never routed, and Agent Runtime agents are not routed. A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent uses the same router unless the agent asks for the Fast or Smart model.
+- An agent or chat with an explicit model or model pool is never routed, and Agent Runtime agents are not routed. A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent uses the same router when it runs on **Normal**; if it asks for **Fast** or **Smart**, it uses the organization's **Fast model** or **Smart model** under **Settings → Agents**, which are separate from an auto router's tiers.
 - Each tier points to one provider key and model, so it does not fail over to another key the way a model pool does.
 
 ## Daily Budget and Presets
@@ -84,7 +84,7 @@ Pick a preset and Archestra derives the budget from the router's recent traffic,
 - **Balanced:** halfway in cost between the two.
 - **Custom:** a fixed daily target in USD.
 
-Until a router has scored enough sessions for its first plan, every session runs on the normal model regardless of the budget. **Configure** shows what the selected preset costs at today's traffic.
+Until a router has scored enough sessions for its first plan, every session runs on the normal model regardless of the budget. Once a router has history, **Configure** previews the estimated daily spend and fast/normal/smart tier split on today's traffic as you switch presets or edit a custom budget.
 
 ### Decision Model
 
@@ -98,7 +98,7 @@ A router scores, plans, and learns only from its own sessions. A newly created r
 
 A session with an explicit session ID is routed once on its first request and stays on that model until the session ends. Keeping one model per session avoids mid-conversation quality drops and keeps provider prompt caches warm.
 
-- **Sending a session ID:** pass `X-Archestra-Session-Id` from your own apps. Archestra also reads session IDs automatically from `X-Archestra-Meta`, Open WebUI (`X-OpenWebUI-Chat-Id`), Codex (`client_metadata.thread_id`, `session_id`, or `session-id`), OpenCode (`x-session-id`, `x-session-affinity`, `x-opencode-session`, or `session-id`), Pi (`x-pi-session-id`), and Claude (`metadata.user_id`).
+- **Sending a session ID:** pass `X-Archestra-Session-Id` from your own apps. This header is required when continuing a `/v1/unified-model/responses` conversation with `previous_response_id`; omitting it returns `400`. Archestra also reads session IDs automatically from `X-Archestra-Meta`, Open WebUI (`X-OpenWebUI-Chat-Id`), Codex (`client_metadata.thread_id`, `session_id`, or `session-id`), OpenCode (`x-session-id`, `x-session-affinity`, `x-opencode-session`, or `session-id`), Pi (`x-pi-session-id`), and Claude (`metadata.user_id`).
 - **Without a session ID:** Archestra derives identity from the virtual key, the first user message, initial system instructions, and the current tool-name list. Instructions added after the first user message, tool ordering, and cache markers do not change it, but changing the initial instructions or tool list can trigger a new scorer call and model choice.
 - **What the scorer reads:** the opening user message, a bounded excerpt of the system instructions, and the sorted list of tool names. It never receives tool descriptions, parameter schemas, or tool results. If tool names alone exceed 64 KiB, scoring fails instead of silently dropping tools.
 
@@ -138,6 +138,7 @@ Archestra routes a session to the router's normal model whenever it cannot make 
 | **No valid plan** | No plan has been published yet, or the active plan is stale because the tier models or their prices changed. |
 | **Scorer error or timeout** | Jev fails, is unreachable, or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS). |
 | **No user text** | The request has no user text to score, such as Bedrock Converse payloads. |
+| **Incompatible tier model** | In Chat or Archestra agents, a router with a Responses-only model in any tier skips routing and runs on the normal model. |
 | **Router disabled or incomplete** | Auto routing is turned off, a tier is unset, or the organization has no Jev key. Agents and chats on the router run on the normal model without scoring. |
 
 ## Inspect Decisions and Savings

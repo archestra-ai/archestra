@@ -1993,6 +1993,39 @@ describe("ModelModel", () => {
 });
 
 describe("published context pricing", () => {
+  test("keeps the complete published schedule when a conflicting synced tier exists", async () => {
+    const row = await ModelModel.create({
+      provider: "github-copilot",
+      modelId: "gpt-6.1-sol",
+      externalId: "github-copilot/gpt-6.1-sol",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      syncedLongContextPricing: {
+        threshold: 100000,
+        pricePerMillionInput: "99",
+        pricePerMillionOutput: "99",
+        pricePerMillionCacheRead: "99",
+        pricePerMillionCacheWrite: "99",
+      },
+    });
+    expect(ModelModel.getLongContextThreshold(row)).toBe(272000);
+    for (const tokens of [100001, 272000, 272001]) {
+      const price = ModelModel.getEffectivePricing(
+        row,
+        undefined,
+        undefined,
+        tokens,
+      );
+      expect(Number(price.pricePerMillionInput)).toBe(tokens > 272000 ? 4 : 2);
+      expect(Number(price.pricePerMillionOutput)).toBe(
+        tokens > 272000 ? 15 : 10,
+      );
+      expect(price.source).toBe("provider");
+    }
+  });
+
   test("uses coherent prices for stale rows and missing rows at strict boundaries", async () => {
     const row = await ModelModel.create({
       provider: "github-copilot",
@@ -2064,5 +2097,122 @@ describe("published context pricing", () => {
       ModelModel.getEffectivePricing(null, "claude-haiku-5.5", "vllm", 100001)
         .pricePerMillionInput,
     ).toBeNull();
+  });
+});
+
+describe("synced context pricing", () => {
+  const tier = {
+    threshold: 200000,
+    pricePerMillionInput: "2.5",
+    pricePerMillionOutput: "15",
+    pricePerMillionCacheRead: "0.25",
+    pricePerMillionCacheWrite: null,
+  };
+  const data = {
+    provider: "gemini" as const,
+    modelId: "gemini-2.5-pro",
+    externalId: "google/gemini-2.5-pro",
+    inputModalities: ["text" as const],
+    outputModalities: ["text" as const],
+    promptPricePerToken: "0.00000125",
+    completionPricePerToken: "0.00001",
+    cacheReadPricePerToken: "0.000000125",
+    syncedLongContextPricing: tier,
+  };
+
+  test("prices the entire request only above the synced threshold", async () => {
+    const row = await ModelModel.create(data);
+    expect(ModelModel.getLongContextThreshold(row)).toBe(200000);
+    for (const tokens of [199999, 200000, 200001]) {
+      const price = ModelModel.getEffectivePricing(
+        row,
+        undefined,
+        undefined,
+        tokens,
+      );
+      expect(Number(price.pricePerMillionInput)).toBe(
+        tokens > 200000 ? 2.5 : 1.25,
+      );
+      expect(Number(price.pricePerMillionOutput)).toBe(
+        tokens > 200000 ? 15 : 10,
+      );
+      expect(Number(price.pricePerMillionCacheRead)).toBe(
+        tokens > 200000 ? 0.25 : 0.125,
+      );
+      if (tokens > 200000) expect(price.pricePerMillionCacheWrite).toBeNull();
+      expect(price.source).toBe("models_dev");
+    }
+  });
+
+  test("refreshes synced tiers without overwriting explicit overrides and clears removed tiers", async () => {
+    const row = await ModelModel.create({
+      ...data,
+      longContextThreshold: 100000,
+      longContextPricePerMillionInput: "3",
+      longContextPricePerMillionOutput: "17",
+      longContextPricePerMillionCacheRead: "0.3",
+      longContextPricePerMillionCacheWrite: "0",
+    });
+    await ModelModel.bulkUpsert([
+      {
+        ...data,
+        syncedLongContextPricing: { ...tier, pricePerMillionInput: "4" },
+      },
+    ]);
+    let updated = await ModelModel.findById(row.id);
+    expect(updated?.syncedLongContextPricing?.pricePerMillionInput).toBe("4");
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(updated, undefined, undefined, 100001)
+          .pricePerMillionInput,
+      ),
+    ).toBe(3);
+    expect(updated).not.toBeNull();
+    if (!updated) throw new Error("Updated model missing");
+    expect(ModelModel.getLongContextThreshold(updated)).toBe(100000);
+    await ModelModel.upsert({ ...data, syncedLongContextPricing: null });
+    updated = await ModelModel.findById(row.id);
+    expect(updated?.syncedLongContextPricing).toBeNull();
+    expect(updated?.longContextThreshold).toBe(100000);
+  });
+
+  test("custom flat prices and selected instance prices retain priority", async () => {
+    const row = await ModelModel.create({
+      ...data,
+      customPricePerMillionInput: "1",
+      customPricePerMillionOutput: "2",
+      customPricePerMillionCacheRead: "0.1",
+      customPricePerMillionCacheWrite: "0",
+    });
+    expect(
+      ModelModel.getEffectivePricing(row, undefined, undefined, 200001),
+    ).toMatchObject({
+      pricePerMillionInput: "1.00000000",
+      pricePerMillionOutput: "2.00000000",
+      source: "custom",
+    });
+    expect(ModelModel.getLongContextThreshold(row)).toBeNull();
+    const instance = ModelModel.withProviderPricing(
+      {
+        ...row,
+        customPricePerMillionInput: null,
+        customPricePerMillionOutput: null,
+      },
+      [
+        {
+          promptPricePerToken: "0.000005",
+          completionPricePerToken: "0.000006",
+          cacheReadPricePerToken: null,
+          cacheWritePricePerToken: null,
+        },
+      ],
+    );
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(instance, undefined, undefined, 200001)
+          .pricePerMillionInput,
+      ),
+    ).toBe(5);
+    expect(ModelModel.getLongContextThreshold(instance)).toBeNull();
   });
 });

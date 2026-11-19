@@ -18,6 +18,7 @@ import {
   type ModelsDevApiResponse,
   modelsDevClient,
   modelsDevCostToPerToken,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import config from "@/config";
@@ -407,6 +408,7 @@ interface ProviderModelCapabilities {
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
+  syncedLongContextPricing?: ReturnType<typeof modelsDevLongContextPricing>;
 }
 
 export function buildModelsToUpsert(params: {
@@ -536,6 +538,7 @@ export function buildModelsToUpsert(params: {
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
       cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
+      syncedLongContextPricing: capabilities.syncedLongContextPricing ?? null,
       embeddingDimensions: resolveEmbeddingDimensions({
         modelId:
           provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
@@ -985,6 +988,22 @@ export function resolveModelCapabilities(params: {
         crossProviderPrices?.cacheReadPricePerToken ??
         publishedPrices?.cacheReadPricePerToken ??
         null,
+      // Keep the tier with its tariff. Metadata-only registry entries must not
+      // hide the fallback tier; an explicit same-provider price (including zero)
+      // without a tier must not borrow a different provider's long rates.
+      syncedLongContextPricing:
+        fetched?.promptPricePerToken != null ||
+        fetched?.completionPricePerToken != null ||
+        fetched?.cacheReadPricePerToken != null ||
+        fetched?.cacheWritePricePerToken != null
+          ? null
+          : capabilities?.promptPricePerToken != null ||
+              capabilities?.completionPricePerToken != null
+            ? (capabilities.syncedLongContextPricing ?? null)
+            : capabilities?.cacheReadPricePerToken != null ||
+                capabilities?.cacheWritePricePerToken != null
+              ? null
+              : (crossProviderPrices?.syncedLongContextPricing ?? null),
       cacheWritePricePerToken:
         fetched?.cacheWritePricePerToken ??
         capabilities?.cacheWritePricePerToken ??
@@ -1067,6 +1086,7 @@ function buildCapabilitiesMap(
         completionPricePerToken: prices.completionPricePerToken,
         cacheReadPricePerToken: prices.cacheReadPricePerToken,
         cacheWritePricePerToken: prices.cacheWritePricePerToken,
+        syncedLongContextPricing: modelsDevLongContextPricing(model.cost),
       });
     }
   }

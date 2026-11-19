@@ -86,6 +86,8 @@ export type ModelsDevCost = {
   cache_write?: number;
   input_audio?: number;
   output_audio?: number;
+  tiers?: unknown;
+  context_over_200k?: unknown;
 };
 
 /**
@@ -167,6 +169,9 @@ const ModelsDevCostSchema = z
     cache_write: z.number().optional(),
     input_audio: z.number().optional(),
     output_audio: z.number().optional(),
+    // Validate tiers separately so malformed optional metadata cannot discard flat prices.
+    tiers: z.unknown().optional(),
+    context_over_200k: z.unknown().optional(),
   })
   .optional();
 
@@ -243,6 +248,50 @@ export function modelsDevCostToPerToken(cost: ModelsDevCost | undefined): {
     completionPricePerToken: perToken(cost?.output),
     cacheReadPricePerToken: perToken(cost?.cache_read),
     cacheWritePricePerToken: perToken(cost?.cache_write),
+  };
+}
+
+const ContextTierPricesSchema = z.object({
+  input: z.number().finite().nonnegative(),
+  output: z.number().finite().nonnegative(),
+  cache_read: z.number().finite().nonnegative().optional(),
+  cache_write: z.number().finite().nonnegative().optional(),
+});
+const ContextTierSchema = ContextTierPricesSchema.extend({
+  tier: z.object({
+    type: z.literal("context"),
+    size: z.number().int().positive().max(2_147_483_647),
+  }),
+});
+
+/** Keep provider context prices separate from explicit administrator overrides. */
+export function modelsDevLongContextPricing(cost: ModelsDevCost | undefined) {
+  if (!cost) return null;
+  if (cost.tiers !== undefined) {
+    if (!Array.isArray(cost.tiers)) return null;
+    for (const candidate of cost.tiers) {
+      const parsed = ContextTierSchema.safeParse(candidate);
+      if (parsed.success)
+        return contextPrices(parsed.data, parsed.data.tier.size);
+    }
+    return null;
+  }
+  const legacy = ContextTierPricesSchema.safeParse(cost.context_over_200k);
+  return legacy.success ? contextPrices(legacy.data, 200_000) : null;
+}
+
+function contextPrices(
+  prices: z.infer<typeof ContextTierPricesSchema>,
+  threshold: number,
+) {
+  return {
+    threshold,
+    pricePerMillionInput: String(prices.input),
+    pricePerMillionOutput: String(prices.output),
+    pricePerMillionCacheRead:
+      prices.cache_read === undefined ? null : String(prices.cache_read),
+    pricePerMillionCacheWrite:
+      prices.cache_write === undefined ? null : String(prices.cache_write),
   };
 }
 
@@ -398,6 +447,7 @@ export class ModelsDevClient {
       completionPricePerToken: prices.completionPricePerToken,
       cacheReadPricePerToken: prices.cacheReadPricePerToken,
       cacheWritePricePerToken: prices.cacheWritePricePerToken,
+      syncedLongContextPricing: modelsDevLongContextPricing(model.cost),
       lastSyncedAt: new Date(),
     };
   }

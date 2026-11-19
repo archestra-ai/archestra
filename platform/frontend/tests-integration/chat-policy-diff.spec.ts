@@ -116,6 +116,49 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   await expect(previous).toBeDisabled();
 });
 
+test("keeps an unchanged search result visible when the dialog resizes", async ({
+  page,
+  mswControl,
+}) => {
+  const context = Array.from(
+    { length: 150 },
+    (_, i) => `reference_rule_${i} = "keep"`,
+  ).join("\n");
+  const id = await registerNavigationReview(
+    mswControl,
+    `${context}\nsetting = "old"`,
+    `${context}\nsetting = "new"`,
+  );
+  await page.goto(`/chat/${id}`);
+  await page.getByRole("button", { name: "Review full diff" }).click();
+  const dialog = page.getByRole("dialog", { name: "appa.toml" });
+  await expect(dialog.getByLabel("Change position")).toHaveText(
+    "Change 1 of 1",
+  );
+  await dialog
+    .getByRole("button", { name: "Show Unchanged Region", exact: true })
+    .first()
+    .click();
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("ControlOrMeta+f");
+  const find = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await find.fill("reference_rule_60");
+  await find.press("Enter");
+  const match = dialog
+    .locator(".modified-in-monaco-diff-editor")
+    .getByText('reference_rule_60 = "keep"', { exact: true });
+  await expect(match).toBeInViewport();
+  await page.setViewportSize({ width: 850, height: 500 });
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
+  await expect(match).toBeInViewport();
+});
+
 async function expectMarkerCoversLine(marker: Locator, line: Locator) {
   await expect(marker).toBeVisible();
   await expect(line).toBeVisible();
@@ -182,10 +225,49 @@ for (const scenario of [
   });
 }
 
+test("keeps message actions when a diff-only answer repeats the preview", async ({
+  page,
+  mswControl,
+}) => {
+  const diff = "@@ -1 +1 @@\n-old\n+new";
+  const id = await registerNavigationReview(mswControl, "old", "new", diff);
+  await page.goto(`/chat/${id}`);
+  const preview = page.getByRole("region", {
+    name: "Policy diff",
+    exact: true,
+  });
+  const actions = page.locator(".is-assistant").filter({
+    has: page.getByRole("button", { name: "Good response", exact: true }),
+  });
+  await expect(preview).toBeVisible();
+  await expect(
+    actions.getByRole("button", { name: "Copy", exact: true }),
+  ).toBeVisible();
+  await expect(actions).not.toContainText("-old");
+  await expect
+    .poll(async () => {
+      const [card, row] = await Promise.all([
+        page
+          .locator('[data-slot="collapsible"]')
+          .filter({ has: preview })
+          .first()
+          .boundingBox(),
+        actions.boundingBox(),
+      ]);
+      return card && row ? row.y - card.y - card.height : null;
+    })
+    .toBe(16);
+  await actions.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByPlaceholder("Edit this response...")).toHaveValue(
+    `\`\`\`diff\n${diff}\n\`\`\``,
+  );
+});
+
 async function registerNavigationReview(
   mswControl: MswControl,
   before: string,
   after: string,
+  repeatedDiff?: string,
 ) {
   const key = makeLlmProviderApiKey({ provider: "openai" });
   const agent = makeAgent({ llmApiKeyId: key.id });
@@ -217,9 +299,13 @@ async function registerNavigationReview(
               path: "appa.toml",
               before,
               after,
+              diff: repeatedDiff,
             },
           },
         },
+        ...(repeatedDiff
+          ? [{ type: "text", text: `\`\`\`diff\n${repeatedDiff}\n\`\`\`` }]
+          : []),
       ],
     },
   ];

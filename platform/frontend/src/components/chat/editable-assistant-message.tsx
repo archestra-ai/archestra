@@ -119,8 +119,29 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
     );
   }
 
-  if (displayText !== foldedText && !displayText.trim() && !citationParts)
-    return null;
+  const actions = (
+    <MessageActions
+      textToCopy={visibleText}
+      onEditClick={onStartEdit && handleStartEdit}
+      editDisabled={editDisabled}
+      feedback={feedback}
+      onFeedbackChange={
+        onFeedbackChange &&
+        ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
+      }
+      feedbackDisabled={feedbackDisabled}
+    />
+  );
+
+  if (displayText !== foldedText && !displayText.trim() && !citationParts) {
+    // The preview replaces the content, but the original message still needs
+    // copy, edit and feedback actions. Keep them visible without an empty bubble.
+    return showActions ? (
+      <Message from="assistant" className="pl-2">
+        {actions}
+      </Message>
+    ) : null;
+  }
 
   return (
     <Message from="assistant" className="group/message">
@@ -152,17 +173,7 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
         </MessageContent>
         {showActions && (
           <div className="pointer-events-none absolute top-full left-0 z-10 pt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:pt-0 @2xl/chat:pl-2 @2xl/chat:-translate-y-1/2">
-            <MessageActions
-              textToCopy={visibleText}
-              onEditClick={onStartEdit && handleStartEdit}
-              editDisabled={editDisabled}
-              feedback={feedback}
-              onFeedbackChange={
-                onFeedbackChange &&
-                ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
-              }
-              feedbackDisabled={feedbackDisabled}
-            />
+            {actions}
           </div>
         )}
       </div>

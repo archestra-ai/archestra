@@ -147,11 +147,38 @@ describe("EditableAssistantMessage policy previews", () => {
         {...baseProps}
         text={"```diff\n-old\n+new\n```"}
         policyDiffReferences={policyDiffReferences}
-        showActions
         isEditing={false}
         onSave={vi.fn()}
       />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("keeps copy, edit and feedback reachable when the final part repeats a preview", async () => {
+    const user = userEvent.setup();
+    const rawText = "```diff\n-old\n+new\n```";
+    const onStartEdit = vi.fn();
+    const onFeedbackChange = vi.fn();
+    const props = {
+      ...baseProps,
+      text: rawText,
+      policyDiffReferences,
+      showActions: true,
+      onStartEdit,
+      onFeedbackChange,
+      onSave: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditableAssistantMessage {...props} isEditing={false} />,
+    );
+    expect(screen.queryByText(/-old/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(rawText);
+    await user.click(screen.getByRole("button", { name: "Good response" }));
+    expect(onFeedbackChange).toHaveBeenCalledWith("message-1", "up");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onStartEdit).toHaveBeenCalledWith("part-1");
+    rerender(<EditableAssistantMessage {...props} isEditing />);
+    expect(screen.getByRole("textbox")).toHaveValue(rawText);
   });
 });

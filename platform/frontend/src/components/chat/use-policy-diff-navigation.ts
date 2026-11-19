@@ -167,7 +167,6 @@ export function usePolicyDiffNavigation(sideBySide: boolean) {
     });
     const subscriptions = [
       editor.onDidUpdateDiff(updateChanges),
-      modified.onDidLayoutChange(() => changeViewRef.current(() => {})),
       modified.onMouseDown((event) => {
         if (event.target.type === monaco.editor.MouseTargetType.SCROLLBAR)
           startScrolling();

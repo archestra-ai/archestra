@@ -380,6 +380,28 @@ describe("trimMessagesToTokenLimit", () => {
     expect(toolCallIds(result)).toEqual(["call_2", "call_2"]);
   });
 
+  test.for([
+    { request: "task", kept: true },
+    { request: "t".repeat(3800), kept: false },
+  ])("shrinks the round's results to keep its request unless the request crowds them out ($request.length chars)", ({
+    request,
+    kept,
+  }) => {
+    const task = msg("user", request);
+    const messages = [
+      task,
+      toolCall("call_1", "look"),
+      toolResultMessage("call_1", "r".repeat(10_000)),
+    ];
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 1000 });
+
+    expect(result.includes(task)).toBe(kept);
+    expect(toolCallIds(result)).toEqual(["call_1", "call_1"]);
+    expect(
+      result.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0),
+    ).toBeLessThanOrEqual(1000 * 4);
+  });
+
   test("marks a truncated failed tool result as an error", () => {
     const failed = {
       role: "tool",

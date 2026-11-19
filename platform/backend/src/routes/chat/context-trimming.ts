@@ -126,8 +126,9 @@ export function parseContextLengthError(
 
 /**
  * Trim messages to fit within a token limit.
- * Drop order: middle exchanges (oldest first, the newest user request last)
- * → system → the newest exchange's oversized content. A message goes together with the tool results
+ * Drop order: middle exchanges (oldest first) → system → the user request
+ * the newest tool round serves, unless shrinking that round makes room for
+ * it → the newest exchange's oversized content. A message goes together with the tool results
  * after it, so a trimmed history never splits a tool call from its results,
  * and it still opens with a user turn.
  *
@@ -179,7 +180,7 @@ export function trimMessagesToTokenLimit(params: {
   const after = nonSystem.slice(requestIndex + 1, tailStart);
 
   // 1. Drop middle exchanges from oldest
-  for (const exchanges of [before, after, request]) {
+  for (const exchanges of [before, after]) {
     while (total > trimBudget && exchanges.length > 0) {
       do {
         const dropped = exchanges.shift();
@@ -194,11 +195,25 @@ export function trimMessagesToTokenLimit(params: {
     if (dropped) total -= chars(dropped);
   }
 
-  // 3. The newest exchange is still over budget: shrink its tool results, or
+  // 3. Drop the request only when shrinking the round it serves cannot make
+  // room for it.
+  const tailChars = tail.reduce((s, m) => s + chars(m), 0);
+  const [requestMessage] = request;
+  if (
+    total > trimBudget &&
+    requestMessage &&
+    (tail.length === 1 ||
+      perResultAllowance(tail, trimBudget - (total - tailChars)) <
+        MIN_SHRUNK_TOOL_RESULT_CHARS)
+  ) {
+    request.length = 0;
+    total -= chars(requestMessage);
+  }
+
+  // 4. The newest exchange is still over budget: shrink its tool results, or
   // cut a lone message down to its text.
   if (total > trimBudget) {
-    const charsForTail =
-      trimBudget - (total - tail.reduce((s, m) => s + chars(m), 0));
+    const charsForTail = trimBudget - (total - tailChars);
     tail =
       tail.length > 1
         ? shrinkToolResults(tail, charsForTail)
@@ -331,6 +346,14 @@ function shrinkToolResults(
   tail: ModelMessage[],
   maxChars: number,
 ): ModelMessage[] {
+  return capToolResultOutputs(
+    tail,
+    Math.max(perResultAllowance(tail, maxChars), 0),
+  );
+}
+
+/** Characters each of the round's tool results may keep within `maxChars`. */
+function perResultAllowance(tail: ModelMessage[], maxChars: number): number {
   const results = tail.flatMap((m) =>
     m.role === "tool" && Array.isArray(m.content)
       ? m.content.filter((part) => part.type === "tool-result")
@@ -339,10 +362,10 @@ function shrinkToolResults(
   const otherChars = tail
     .filter((m) => m.role !== "tool")
     .reduce((s, m) => s + estimateModelMessageChars(m), 0);
-  const perResult =
+  return Math.floor(
     (maxChars - otherChars) / Math.max(results.length, 1) -
-    TOOL_RESULT_ENVELOPE_CHARS;
-  return capToolResultOutputs(tail, Math.max(Math.floor(perResult), 0));
+      TOOL_RESULT_ENVELOPE_CHARS,
+  );
 }
 
 /**
@@ -412,3 +435,5 @@ const TRIM_NOTICE =
 
 // What a tool-result part adds around its output text when serialized.
 const TOOL_RESULT_ENVELOPE_CHARS = 200;
+/** Below this, a shrunk result says too little to be worth its request. */
+const MIN_SHRUNK_TOOL_RESULT_CHARS = 500;

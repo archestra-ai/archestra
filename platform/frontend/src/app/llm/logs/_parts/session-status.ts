@@ -10,11 +10,11 @@ type StatusCounts = Pick<LogSession, "failedRequestCount" | "chatErrorCount">;
  */
 export function describeSessionStatus(counts: StatusCounts): {
   failed: boolean;
-  /** "2 chat errors · 1 failed request", or null when nothing failed. */
+  /** "2 failed turns · 1 failed request", or null when nothing failed. */
   detail: string | null;
 } {
   const parts = [
-    plural(counts.chatErrorCount, "chat error"),
+    plural(counts.chatErrorCount, "failed turn"),
     plural(counts.failedRequestCount, "failed request"),
   ].filter((part): part is string => part !== null);
   return {

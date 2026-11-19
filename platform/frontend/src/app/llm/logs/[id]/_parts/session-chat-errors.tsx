@@ -36,7 +36,7 @@ export function SessionChatErrors({
 
   return (
     <section
-      aria-label="Chat errors"
+      aria-label="Failed turns"
       className="overflow-hidden rounded-lg border border-destructive/30 bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)]"
     >
       <header className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2">
@@ -44,11 +44,11 @@ export function SessionChatErrors({
           className="size-4 shrink-0 text-destructive"
           aria-hidden="true"
         />
-        <h2 className="text-sm font-medium">Chat errors</h2>
+        <h2 className="text-sm font-medium">Failed turns</h2>
         <span className="text-xs text-muted-foreground tabular-nums">
           {chatErrors.length === 1
-            ? "1 error shown in the chat"
-            : `${chatErrors.length} errors shown in the chat`}
+            ? "The user saw this error"
+            : `The user saw these ${chatErrors.length} errors`}
         </span>
       </header>
       <ol className="divide-y">
@@ -92,9 +92,11 @@ function ChatErrorRow({
                   dateFormat: "MMM d, HH:mm:ss",
                 })}
               </time>
-              <span className="rounded-sm bg-muted px-1 font-mono text-[11px] leading-4">
-                {error.code}
-              </span>
+              {error.code !== "unknown" ? (
+                <span className="rounded-sm bg-muted px-1 font-mono text-[11px] leading-4">
+                  {error.code}
+                </span>
+              ) : null}
               {error.subagent ? (
                 <span>
                   in sub-agent{" "}

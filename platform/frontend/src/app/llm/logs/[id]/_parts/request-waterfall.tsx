@@ -1151,7 +1151,7 @@ function RequestRow({
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${failed ? ", failed" : ""}${chatErrorCount > 0 ? `, followed by ${chatErrorCount === 1 ? "a chat error" : `${chatErrorCount} chat errors`}` : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${failed ? ", failed" : ""}${chatErrorCount > 0 ? ", then the turn failed" : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
       barClassName={
         failedOver ? FAILED_ATTEMPT_BAR : failed ? FAILED_REQUEST_BAR : undefined
       }
@@ -1186,12 +1186,12 @@ function RequestRow({
           {chatErrorCount > 0 ? (
             <span
               className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 tabular-nums dark:text-red-400"
-              title="The chat showed an error after this request, the last one logged before it. See Chat errors above."
+              title="The turn failed after this request, the last one logged before the error the user saw. See Failed turns above."
             >
               <MessageSquareWarning className="size-2.5" aria-hidden="true" />
               {chatErrorCount === 1
-                ? "Chat error"
-                : `${chatErrorCount} chat errors`}
+                ? "Turn failed"
+                : `${chatErrorCount} turns failed`}
             </span>
           ) : null}
           {retry ? (

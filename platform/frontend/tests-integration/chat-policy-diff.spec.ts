@@ -2,8 +2,193 @@ import { makeAgent } from "../src/mocks/data/agents";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 import { makeConversation } from "./helpers/chat-conversation";
+import type { MswControl } from "./helpers/msw-control";
 
 test.use({ viewport: { width: 1360, height: 900 } });
+
+test("numbers each change, follows manual scrolling, and stops at both ends", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 600 });
+  const before = [
+    'legacy_start = "remove"',
+    ...Array.from({ length: 120 }, (_, i) => `reference_rule_${i} = "keep"`),
+    'legacy_end = "remove"',
+  ];
+  const after = before.slice(1, -1);
+  after[34] = 'customer_exports = "restricted"';
+  after.splice(84, 0, 'production_writes = "trusted"');
+  const id = await registerNavigationReview(
+    mswControl,
+    before.join("\n"),
+    after.join("\n"),
+  );
+  await page.goto(`/chat/${id}`);
+  await page.getByRole("button", { name: "Review full diff" }).click();
+  const dialog = page.getByRole("dialog", { name: "Policy changes" });
+  const position = dialog.getByLabel("Change position");
+  const next = dialog.getByRole("button", { name: "Next change" });
+  const previous = dialog.getByRole("button", { name: "Previous change" });
+  const proposed = dialog.locator(".modified-in-monaco-diff-editor");
+  await expect(position).toHaveText("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+  await expect(
+    proposed.getByText('legacy_start = "remove"', { exact: true }),
+  ).toBeVisible();
+
+  for (let index = 2; index <= 4; index++) {
+    await next.click();
+    await expect(position).toHaveText(`Change ${index} of 4`);
+  }
+  await expect(next).toBeDisabled();
+  await expect(
+    proposed.getByText('legacy_end = "remove"', { exact: true }),
+  ).toBeVisible();
+  await previous.click();
+  await expect(position).toHaveText("Change 3 of 4");
+  await expect(
+    dialog.getByText('production_writes = "trusted"', { exact: true }),
+  ).toBeVisible();
+
+  // Scrolling does not move the cursor. Navigation must follow what is being
+  // read, rather than jumping from the stale cursor near the end of the file.
+  await proposed.hover();
+  await expect
+    .poll(async () => {
+      // Monaco caps a wheel event's distance; scroll until the first change.
+      await page.mouse.wheel(0, -600);
+      return position.textContent();
+    })
+    .toBe("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(position).toHaveText("Change 2 of 4");
+  await expect(
+    dialog.getByText('customer_exports = "restricted"', { exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("switch", { name: "Side by side view" }).check();
+  await expect(position).toHaveText("Change 2 of 4");
+  await previous.click();
+  await expect(position).toHaveText("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+});
+
+for (const scenario of [
+  {
+    name: "empty policies",
+    before: "",
+    after: "",
+    status: "No changes",
+  },
+  {
+    name: "a single insertion",
+    before: "",
+    after: "rule = true",
+    status: "Change 1 of 1",
+  },
+  {
+    name: "a single deletion",
+    before: "rule = true",
+    after: "",
+    status: "Change 1 of 1",
+  },
+]) {
+  test(`disables navigation for ${scenario.name}`, async ({
+    page,
+    mswControl,
+  }) => {
+    const id = await registerNavigationReview(
+      mswControl,
+      scenario.before,
+      scenario.after,
+    );
+    await page.goto(`/chat/${id}`);
+    await page.getByRole("button", { name: "Review full diff" }).click();
+    const dialog = page.getByRole("dialog", { name: "Policy changes" });
+    await expect(dialog.getByLabel("Change position")).toHaveText(
+      scenario.status,
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Previous change" }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByRole("button", { name: "Next change" }),
+    ).toBeDisabled();
+  });
+}
+
+async function registerNavigationReview(
+  mswControl: MswControl,
+  before: string,
+  after: string,
+) {
+  const key = makeLlmProviderApiKey({ provider: "openai" });
+  const agent = makeAgent({ llmApiKeyId: key.id });
+  const conversation = makeConversation({
+    id: "20000000-0000-4000-8000-0000000000f2",
+    agentId: agent.id,
+    title: "Policy navigation",
+    messageCount: 2,
+  });
+  const messages = [
+    {
+      id: "request",
+      role: "user",
+      parts: [{ type: "text", text: "Review these policy changes." }],
+    },
+    {
+      id: "preview",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-archestra__preview_guardrails_policy_change",
+          toolCallId: "preview-call",
+          state: "output-available",
+          input: {},
+          output: {
+            structuredContent: {
+              stage: "preview",
+              delivery: "revision",
+              path: "appa.toml",
+              before,
+              after,
+            },
+          },
+        },
+      ],
+    },
+  ];
+  await mswControl.registerMany([
+    { method: "get", url: "/api/agents/chat-roster", body: [agent] },
+    { method: "get", url: `/api/agents/${agent.id}`, body: agent },
+    { method: "get", url: "/api/agents/credential-readiness", body: [] },
+    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
+    { method: "get", url: "/api/llm-provider-api-keys/available", body: [key] },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: null, chatApiKeyId: null },
+    },
+    { method: "get", url: "/api/chat/conversations", body: [conversation] },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}`,
+      body: { ...conversation, messages },
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/files`,
+      body: [],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/share`,
+      body: null,
+    },
+  ]);
+  return conversation.id;
+}
 
 test("reviews a large policy without expanding the chat, and keeps the review usable on a phone", async ({
   page,
@@ -135,6 +320,11 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await review.click();
   const dialog = page.getByRole("dialog", { name: "Policy changes" });
   await expect(dialog).toBeVisible();
+  const position = dialog.getByLabel("Change position");
+  await expect(position).toHaveText("Change 1 of 2", { timeout: 60_000 });
+  await expect(
+    dialog.getByRole("button", { name: "Previous change" }),
+  ).toBeDisabled();
   await expect(dialog.getByRole("button", { name: "Next change" })).toBeEnabled(
     {
       timeout: 60_000,
@@ -152,10 +342,17 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await proposedEditor.hover();
   await expect(verticalTracks).toHaveCount(1);
   await dialog.getByRole("button", { name: "Next change" }).click();
+  await expect(position).toHaveText("Change 2 of 2");
+  await expect(
+    dialog.getByRole("button", { name: "Next change" }),
+  ).toBeDisabled();
+  await expect(dialog.getByText("Last change", { exact: true })).toBeVisible();
   await expect(
     dialog.getByText('final_review = "updated"', { exact: true }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Previous change" }).click();
+  await expect(position).toHaveText("Change 1 of 2");
+  await expect(dialog.getByText("1 change below")).toBeVisible();
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
@@ -165,6 +362,7 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await split.focus();
   await split.press("Space");
   await expect(split).toBeChecked();
+  await expect(position).toHaveText("Change 1 of 2");
   await proposedEditor.hover();
   await expect(verticalTracks).toHaveCount(1);
   await dialog
@@ -202,13 +400,17 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByText('final_review = "updated"', { exact: true }),
   ).toBeVisible();
+  await expect(position).toHaveText("Change 2 of 2");
   await find.press("Escape");
   await expect(find).toBeHidden();
+  await expect(position).toHaveText("Change 2 of 2");
   await expect(split).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 720 });
+  await expect(position).toHaveText("Change 2 of 2");
   await split.uncheck();
   await expect(split).not.toBeChecked();
+  await expect(position).toHaveText("Change 2 of 2");
   await proposedEditor.hover();
   await expect(verticalTracks).toHaveCount(1);
   await expect(split).toBeInViewport();
@@ -232,6 +434,7 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   expect((await card.boundingBox())?.height).toBeLessThan(450);
   // Closing and reopening gets a live, readable editor with fresh text models.
   await review.click();
+  await expect(position).toHaveText("Change 1 of 2", { timeout: 60_000 });
   await expect(
     dialog.getByRole("button", { name: "Next change" }),
   ).toBeEnabled();

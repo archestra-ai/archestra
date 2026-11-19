@@ -1,8 +1,7 @@
 "use client";
 
-import type { DiffOnMount } from "@monaco-editor/react";
 import { ArrowDown, ArrowUp, Columns2 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
 import styles from "./policy-diff-review.module.css";
+import { usePolicyDiffNavigation } from "./use-policy-diff-navigation";
 
 /** Monaco renders only visible lines and keeps navigation within the review. */
 export function PolicyDiffReview({
@@ -26,34 +26,9 @@ export function PolicyDiffReview({
   path: string;
 }) {
   const controlId = useId();
-  const editorRef = useRef<Parameters<DiffOnMount>[0] | null>(null);
-  const [ready, setReady] = useState(false);
   const [sideBySide, setSideBySide] = useState(false);
-  const revealFrame = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (revealFrame.current !== null)
-        cancelAnimationFrame(revealFrame.current);
-      editorRef.current = null;
-    },
-    [],
-  );
-
-  function updateView(update: () => void) {
-    const line = editorRef.current
-      ?.getModifiedEditor()
-      .getVisibleRanges()[0]?.startLineNumber;
-    update();
-    if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
-    // Layout changes affect scroll offsets. Keep the visible policy
-    // line in view after Monaco applies the new layout.
-    if (line !== undefined) {
-      revealFrame.current = requestAnimationFrame(() => {
-        editorRef.current?.getModifiedEditor().revealLineNearTop(line);
-      });
-    }
-  }
+  const navigation = usePolicyDiffNavigation();
+  const below = navigation.total - navigation.current;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -62,31 +37,59 @@ export function PolicyDiffReview({
           id={`${controlId}-side-by-side`}
           checked={sideBySide}
           onCheckedChange={(checked) =>
-            updateView(() => setSideBySide(checked))
+            navigation.changeView(() => setSideBySide(checked))
           }
         />
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label="Previous change"
-            title="Previous change"
-            disabled={!ready}
-            onClick={() => editorRef.current?.goToDiff("previous")}
-          >
-            <ArrowUp />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label="Next change"
-            title="Next change"
-            disabled={!ready}
-            onClick={() => editorRef.current?.goToDiff("next")}
-          >
-            <ArrowDown />
-          </Button>
-        </div>
+        <nav
+          aria-label="Change navigation"
+          className="ml-auto flex w-full items-center justify-end gap-3 sm:w-auto"
+        >
+          <div className="mr-auto text-sm tabular-nums sm:mr-0">
+            <output
+              aria-label="Change position"
+              aria-live="polite"
+              aria-atomic="true"
+              className="block font-medium"
+            >
+              {navigation.ready
+                ? navigation.total
+                  ? `Change ${navigation.current} of ${navigation.total}`
+                  : "No changes"
+                : "Calculating changes…"}
+            </output>
+            {navigation.total > 0 && (
+              <span className="block text-xs text-muted-foreground">
+                {below > 0
+                  ? `${below} ${below === 1 ? "change" : "changes"} below`
+                  : "Last change"}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label="Previous change"
+              title="Previous change"
+              disabled={!navigation.ready || navigation.current <= 1}
+              onClick={() => navigation.move(-1)}
+            >
+              <ArrowUp />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label="Next change"
+              title="Next change"
+              disabled={
+                !navigation.ready || navigation.current >= navigation.total
+              }
+              onClick={() => navigation.move(1)}
+            >
+              <ArrowDown />
+            </Button>
+          </div>
+        </nav>
       </div>
       <div className="grid shrink-0 grid-cols-2 border-b bg-muted/30 py-2 text-xs text-muted-foreground">
         <span className="px-4">
@@ -105,14 +108,12 @@ export function PolicyDiffReview({
               Loading full diff…
             </output>
           }
-          onMount={(editor) => {
-            editorRef.current = editor;
+          onMount={(editor, monaco) => {
             // Both panes scroll together; only the proposed pane needs a track.
             editor.getOriginalEditor().updateOptions({
               scrollbar: { vertical: "hidden", verticalScrollbarSize: 0 },
             });
-            setReady(true);
-            editor.revealFirstDiff();
+            navigation.onMount(editor, monaco);
           }}
           options={{
             automaticLayout: true,

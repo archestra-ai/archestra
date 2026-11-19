@@ -66,10 +66,12 @@ The scorer assesses the opening user message with a bounded excerpt of the reque
 
 Only the `auto` router that existed before an organization could have several learns from past traffic; routers you create start cold. For that router, past traffic can supply the sessions a plan needs instead of waiting for `auto` traffic.
 
-1. **Find past sessions.** Runs on its own when you first enable auto routing. Before the router has a plan, its page shows what was found; afterwards, open **⋯ → Score past sessions** in the page header, which counts again when the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
+The router's **Overview** always has a **Past sessions** card. Its table lists each count and scoring run, newest first, with what it found or scored and what it cost. The button beside it reads **Score** when there are sessions to score, **Stop** while a run is going, and **Up to date** when nothing is left.
 
-Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the router's page shows a notice offering to score the same sessions again, and a scoring run in progress shows there with a way to cancel it.
+1. **Find past sessions.** Runs on its own when you first enable auto routing, and again when you click **Score** and the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
+2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
+
+Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. Changing the decision model restarts routing: sessions scored by the old model stop counting, so the router uses its normal model until enough are scored again. **Configure** warns about this before you save, and afterwards the **Past sessions** card says the sessions need scoring again. **Stop** ends a run early; the sessions it already scored still count.
 
 ## When It Falls Back to the Normal Model
 

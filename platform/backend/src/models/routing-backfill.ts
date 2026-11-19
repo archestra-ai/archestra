@@ -458,6 +458,32 @@ class RoutingBackfillModel {
       .returning();
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
+
+  /**
+   * The organization's newest backfills with who started them, newest first.
+   * A scan retired by a newer one before anyone scored it is left out.
+   */
+  static async findHistory(
+    organizationId: string,
+    limit: number,
+  ): Promise<(RoutingBackfill & { startedByName: string | null })[]> {
+    const rows = await db
+      .select({ backfill: t, startedByName: schema.usersTable.name })
+      .from(t)
+      .leftJoin(schema.usersTable, eq(schema.usersTable.id, t.startedBy))
+      .where(
+        and(
+          eq(t.organizationId, organizationId),
+          sql`not (${t.phase} = 'scan' and ${t.status} = 'superseded')`,
+        ),
+      )
+      .orderBy(desc(t.createdAt), desc(t.id))
+      .limit(limit);
+    return rows.map((row) => ({
+      ...SelectRoutingBackfillSchema.parse(row.backfill),
+      startedByName: row.startedByName,
+    }));
+  }
 }
 
 export default RoutingBackfillModel;

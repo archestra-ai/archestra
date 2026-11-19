@@ -135226,11 +135226,92 @@
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "scanned",
+                              "done",
+                              "failed",
+                              "cancelled",
+                              "superseded"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "scan",
+                              "score"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedByName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foundSessions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scoredSessions": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "spentCostUsd": {
+                            "type": "number"
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "phase",
+                          "createdAt",
+                          "completedAt",
+                          "startedByName",
+                          "foundSessions",
+                          "scoredSessions",
+                          "spentCostUsd",
+                          "maxCostUsd",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "backfill",
-                    "scoreOffer"
+                    "scoreOffer",
+                    "history"
                   ],
                   "additionalProperties": false
                 }
@@ -135709,11 +135790,92 @@
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "scanned",
+                              "done",
+                              "failed",
+                              "cancelled",
+                              "superseded"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "scan",
+                              "score"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedByName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foundSessions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scoredSessions": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "spentCostUsd": {
+                            "type": "number"
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "phase",
+                          "createdAt",
+                          "completedAt",
+                          "startedByName",
+                          "foundSessions",
+                          "scoredSessions",
+                          "spentCostUsd",
+                          "maxCostUsd",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "backfill",
-                    "scoreOffer"
+                    "scoreOffer",
+                    "history"
                   ],
                   "additionalProperties": false
                 }
@@ -136194,11 +136356,92 @@
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "scanned",
+                              "done",
+                              "failed",
+                              "cancelled",
+                              "superseded"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "scan",
+                              "score"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedByName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foundSessions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scoredSessions": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "spentCostUsd": {
+                            "type": "number"
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "phase",
+                          "createdAt",
+                          "completedAt",
+                          "startedByName",
+                          "foundSessions",
+                          "scoredSessions",
+                          "spentCostUsd",
+                          "maxCostUsd",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "backfill",
-                    "scoreOffer"
+                    "scoreOffer",
+                    "history"
                   ],
                   "additionalProperties": false
                 }
@@ -136720,11 +136963,92 @@
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "scanned",
+                              "done",
+                              "failed",
+                              "cancelled",
+                              "superseded"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "scan",
+                              "score"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedByName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foundSessions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scoredSessions": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "spentCostUsd": {
+                            "type": "number"
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "phase",
+                          "createdAt",
+                          "completedAt",
+                          "startedByName",
+                          "foundSessions",
+                          "scoredSessions",
+                          "spentCostUsd",
+                          "maxCostUsd",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "backfill",
-                    "scoreOffer"
+                    "scoreOffer",
+                    "history"
                   ],
                   "additionalProperties": false
                 }

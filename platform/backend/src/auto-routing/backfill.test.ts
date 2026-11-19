@@ -623,6 +623,97 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("the history lists each job newest first, with what it scored; a scan replaced before scoring is left out", async () => {
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await turn("late", "One more task", {
+      createdAt: new Date(Date.now() - 2 * DAY_MS),
+    });
+    await scan();
+    await scan();
+
+    const { history } = await describeBackfill(organizationId);
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        phase: "scan",
+        status: "scanned",
+        foundSessions: 5,
+        scoredSessions: null,
+        startedByName: expect.any(String),
+      }),
+      expect.objectContaining({
+        phase: "score",
+        status: "done",
+        foundSessions: 4,
+        scoredSessions: 4,
+        spentCostUsd: expect.any(Number),
+      }),
+    ]);
+  });
+
+  test("a session left pending by a stopped job counts for the job that scores it", async () => {
+    await sessions(1);
+    await scan();
+    const scorerVersionId = (await activeSourceVersion()).id;
+    const [session] = await RoutingHistoryModel.nextToScore({
+      organizationId,
+      windowStart: new Date(0),
+      cutoff: new Date(),
+      maxSessions: 1,
+      scorerVersionId,
+      limit: 1,
+    });
+    const key = { historySessionId: session.id, scorerVersionId };
+    const now = Date.now();
+    // The stopped job reserved the call an hour ago; a later job settles it.
+    await db.transaction((tx) => RoutingHistoryModel.takeAttempt(key, tx));
+    await db
+      .update(schema.routingHistoryScoresTable)
+      .set({ createdAt: new Date(now - 60 * 60 * 1000) })
+      .where(eq(schema.routingHistoryScoresTable.historySessionId, session.id));
+    await db.transaction((tx) =>
+      RoutingHistoryModel.recordScore(
+        {
+          ...key,
+          status: "scored",
+          features: {
+            signals: {
+              "jev-session": {
+                version: scorerVersionId,
+                tier_needed: [0.2, 0.5, 0.3],
+                p_long: 0.1,
+              },
+            },
+            client: "claude-code",
+          },
+          scorerCost: null,
+        },
+        tx,
+      ),
+    );
+
+    const stopped = randomUUID();
+    const later = randomUUID();
+    const scored = await RoutingHistoryModel.scoredByJob(organizationId, [
+      {
+        id: stopped,
+        scorerVersionId,
+        startedAt: new Date(now - 2 * 60 * 60 * 1000),
+        endedAt: new Date(now - 30 * 60 * 1000),
+      },
+      {
+        id: later,
+        scorerVersionId,
+        startedAt: new Date(now - 10 * 60 * 1000),
+        endedAt: null,
+      },
+    ]);
+
+    expect(scored.get(stopped) ?? 0).toBe(0);
+    expect(scored.get(later)).toBe(1);
+  });
+
   test("oversized tool names fail terminally without spending the scorer budget", async () => {
     await turn("oversized", "Review this oversized agent", {
       request: {

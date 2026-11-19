@@ -19,7 +19,7 @@
      stack as plain processes:
      `scripts/dev-lite.sh up` (PostgreSQL 18, backend :9000, frontend :3000;
      `status`, `logs <component>`, `up --e2e` then `e2e` for the Playwright
-     lite projects, `down`). Inside an Agent Runtime both servers run builds,
+     lite projects, `down`). Inside an Agent Runtime or an Amp orb both servers run builds,
      not dev servers: nothing watches files, so after a change and before you
      run tests against the stack or share a preview, run
      `scripts/dev-lite.sh reload backend` (about 15 s) or

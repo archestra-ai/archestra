@@ -114,8 +114,9 @@ check "e2e at two CPUs runs two workers with timeouts x3" grep -q "E2E_WORKERS=2
 # --- modes -------------------------------------------------------------------
 # Each case runs in a subshell with its own environment: a test run inside an
 # Agent Runtime must not see the pod's variables.
-outside() { (unset ARCHESTRA_AGENT_RUNTIME_TASK_ID ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS; "$@"); }
-inside() { (unset ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS; export ARCHESTRA_AGENT_RUNTIME_TASK_ID=task; "$@"); }
+outside() { (unset ARCHESTRA_AGENT_RUNTIME_TASK_ID AMP_ORB ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS ARCHESTRA_DEV_BACKEND_WATCH; "$@"); }
+inside() { (unset AMP_ORB ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS ARCHESTRA_DEV_BACKEND_WATCH; export ARCHESTRA_AGENT_RUNTIME_TASK_ID=task; "$@"); }
+in_orb() { (unset ARCHESTRA_AGENT_RUNTIME_TASK_ID ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS ARCHESTRA_DEV_BACKEND_WATCH; export AMP_ORB=1; "$@"); }
 gives() { local want="$1" got; shift; got="$("$@" 2>/dev/null)" || return 1; [ "$got" = "$want" ]; }
 with_frontend() { local value="$1"; shift; ARCHESTRA_DEV_LITE_FRONTEND="$value" "$@"; }
 with_maps() { local value="$1"; shift; ARCHESTRA_DEV_LITE_SOURCE_MAPS="$value" "$@"; }
@@ -133,6 +134,33 @@ check "outside one the frontend build keeps them" gives "" outside frontend_buil
 check "ARCHESTRA_DEV_LITE_SOURCE_MAPS chooses the frontend build's too" gives "" inside with_maps true frontend_build_env
 check "and turns them off outside an Agent Runtime" gives "ARCHESTRA_DEV_LITE_SOURCE_MAPS=false " outside with_maps false frontend_build_env
 check "an unknown source-maps value stops the frontend build" fails inside with_maps yes frontend_build_env
+# An Amp orb's snapshot drops what .agents/setup exports, so the script itself
+# gives an orb the Agent Runtime's defaults.
+check "in an Amp orb the frontend is a production build" gives build in_orb default_frontend_mode
+check "and the backend runs without source maps" gives "" in_orb backend_node_flags
+check "and without the watcher" fails in_orb backend_watch
+check "outside both the backend keeps the watcher" outside backend_watch
+with_amp_orb() { local value="$1"; shift; AMP_ORB="$value" "$@"; }
+check "AMP_ORB other than 1 is not an orb" gives dev outside with_amp_orb 0 default_frontend_mode
+
+# --e2e without ARCHESTRA_DEV_LITE_WIREMOCK_JAR looks where .agents/setup
+# installs the jar (see its wiremock_jar), named for the version the lite
+# image pins. Prints the jar WireMock would start with.
+pinned_wiremock="$(sed -n 's/^ARG WIREMOCK_VERSION=//p' "$PLATFORM_DIR/dev/lite-runtime/Dockerfile")"
+wiremock_jar_used() {
+  (
+    unset ARCHESTRA_DEV_LITE_WIREMOCK_JAR
+    HOME="$ARCHESTRA_DEV_LITE_STATE_DIR/home"
+    rm -rf "$HOME" && mkdir -p "$HOME/.local/share/archestra-lite"
+    touch "$HOME/.local/share/archestra-lite/wiremock-standalone-$1.jar"
+    STATE_DIR="$ARCHESTRA_DEV_LITE_STATE_DIR/e2e-deps"
+    command() { return 0; } # java
+    start_session() { if [ "$1" = wiremock ]; then grep -o 'wiremock-standalone-[^ ]*\.jar' <<<"$3"; fi; }
+    start_e2e_deps
+  ) 2>&1
+}
+check "--e2e finds the jar .agents/setup installs" test "$(wiremock_jar_used "$pinned_wiremock")" = "wiremock-standalone-$pinned_wiremock.jar"
+check "but not a jar of another version" grep -q "needs a WireMock standalone jar at .*/wiremock-standalone-$pinned_wiremock.jar" <<<"$(wiremock_jar_used 0.0.1)"
 
 # start_frontend builds for every mode but dev, and records the mode, which
 # `reload frontend` starts again.

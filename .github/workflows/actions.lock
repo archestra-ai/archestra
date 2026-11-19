@@ -5,32 +5,32 @@ version: 'v0.0.3'
 workflows:
     '.github/workflows/backport.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
     '.github/workflows/build-agent-catalog-images.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/setup-buildx-action@v4.4.1'
+        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/build-base-mcp-server-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'astral-sh/setup-uv@v9.0.0'
+        - 'astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9'
     '.github/workflows/build-m-files-vaf-add-on.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.1'
         - 'actions/upload-artifact@v7.0.1'
     '.github/workflows/build-native-multi-arch-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/upload-artifact@v7.0.0'
-        - 'docker/login-action@v4.6.0'
-        - 'docker/setup-buildx-action@v4.4.1'
-        - 'google-github-actions/auth@v3.0.0'
-        - 'google-github-actions/setup-gcloud@v3.0.1'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
+        - 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f'
+        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/build-p4-shim-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/setup-buildx-action@v4.4.1'
+        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/build-platform-release-image.yml': []
     '.github/workflows/build-sandbox-base-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'astral-sh/setup-uv@v9.0.0'
+        - 'astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9'
     '.github/workflows/clear-github-actions-cache.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/github-script@v9.0.0'
@@ -38,25 +38,25 @@ workflows:
         - 'actions/github-script@v9.0.0'
     '.github/workflows/deploy-dev-platform-images.yml':
         - 'actions/checkout@v7.0.1'
-        - 'google-github-actions/auth@v3.0.0'
-        - 'google-github-actions/setup-gcloud@v3.0.1'
+        - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/deploy-platform-environment.yml':
         - 'actions/checkout@v7.0.1'
-        - 'google-github-actions/auth@v3.0.0'
+        - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         - 'google-github-actions/setup-gcloud@v3.0.1'
     '.github/workflows/docker-image-scanning.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/upload-artifact@v7.0.0'
-        - 'docker/login-action@v4.6.0'
-        - 'docker/setup-buildx-action@v4.4.1'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
+        - 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f'
+        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/docs.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
-        - 'actions/setup-node@v6.3.0'
-        - 'actions/upload-artifact@v7.0.1'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
+        - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
         - 'actions/upload-artifact@v7.0.2'
-        - 'pnpm/action-setup@v5.0.0'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
     '.github/workflows/llm-proxy-benchmark.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@v7.0.0'
@@ -64,42 +64,43 @@ workflows:
         - 'pnpm/action-setup@v6.1.0'
     '.github/workflows/nightly-platform-image-byte-scan.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/login-action@v4.6.0'
+        - 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f'
     '.github/workflows/on-commits-to-main.yml':
-        - 'actions/cache@v6.1.0'
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@v6.3.0'
-        - 'pnpm/action-setup@v5.0.0'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
+        - 'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
     '.github/workflows/on-pull-requests-dagger-sdk.yml':
         - 'actions/checkout@v7.0.1'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
     '.github/workflows/on-pull-requests.yml':
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
         - 'actions/dependency-review-action@v5.0.0'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/setup-node@v6.3.0'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
         - 'actions/setup-node@v7.0.0'
-        - 'actions/upload-artifact@v7.0.0'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         - 'archestra-ai/.github@v1.0.1'
-        - 'astral-sh/setup-uv@v9.0.0'
-        - 'pnpm/action-setup@v5.0.0'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
+        - 'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         - 'taiki-e/install-action@v2.87.20'
     '.github/workflows/platform-e2e-tests.yml':
-        - 'actions/cache@v6.1.0'
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/setup-node@v6.3.0'
-        - 'actions/upload-artifact@v7.0.0'
-        - 'actions/upload-artifact@v7.0.1'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
+        - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         - 'daun/playwright-report-summary@v4.1.0'
-        - 'docker/login-action@v4.6.0'
-        - 'docker/setup-buildx-action@v4.4.1'
-        - 'helm/kind-action@v1.13.0'
-        - 'pnpm/action-setup@v5.0.0'
+        - 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f'
+        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
     '.github/workflows/pr-title-linter.yml':
         - 'archestra-ai/.github@v1.24.0'
     '.github/workflows/previous-release-published.yml':
@@ -107,8 +108,8 @@ workflows:
     '.github/workflows/publish-docs-on-main.yml': []
     '.github/workflows/publish-platform-helm-chart.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/upload-artifact@v7.0.0'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
     '.github/workflows/random-issue-pr-assignee.yml':
         - 'actions/github-script@v9.0.0'
     '.github/workflows/release-finalize.yml':
@@ -116,36 +117,41 @@ workflows:
         - 'archestra-ai/.github@v1.31.1'
     '.github/workflows/release-please.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
-        - 'actions/download-artifact@v8.0.1'
-        - 'actions/upload-artifact@v7.0.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
+        - 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         - 'archestra-ai/.github@v1.13.0'
         - 'googleapis/release-please-action@v5.0.0'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
     '.github/workflows/trigger-website-deploy.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
     '.github/workflows/update-client-versions.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
-        - 'actions/setup-node@v6.3.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
         - 'archestra-ai/.github@v1.1.0'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
-        - 'pnpm/action-setup@v5.0.0'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
     '.github/workflows/update-openappa-template.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
-        - 'actions/setup-node@v6.3.0'
-        - 'pnpm/action-setup@v5.0.0'
+        - 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1'
+        - 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f'
+        - 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
     '.github/workflows/warm-rust-check-caches.yml':
         - 'actions/checkout@v7.0.1'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
 dependencies:
+    'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':
+        ref: 'v6.1.0'
+        commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        owner_id: 44036562
+        repo_id: 215566462
     'actions/cache@v6.1.0':
         ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
@@ -161,7 +167,7 @@ dependencies:
         commit: 'sha1-64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
         owner_id: 44036562
         repo_id: 642580244
-    'actions/create-github-app-token@v3.2.0':
+    'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1':
         ref: 'v3.2.0'
         commit: 'sha1-bcd2ba49218906704ab6c1aa796996da409d3eb1'
         owner_id: 44036562
@@ -171,6 +177,11 @@ dependencies:
         commit: 'sha1-a1d282b36b6f3519aa1f3fc636f609c47dddb294'
         owner_id: 44036562
         repo_id: 476372928
+    'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c':
+        ref: 'v8.0.1'
+        commit: 'sha1-3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        owner_id: 44036562
+        repo_id: 192626254
     'actions/download-artifact@v8.0.1':
         ref: 'v8.0.1'
         commit: 'sha1-3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
@@ -181,7 +192,7 @@ dependencies:
         commit: 'sha1-3a2844b7e9c422d3c10d287c895573f7108da1b3'
         owner_id: 44036562
         repo_id: 205262760
-    'actions/setup-node@v6.3.0':
+    'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f':
         ref: 'v6.3.0'
         commit: 'sha1-53b83947a5a98c8d113130e565377fae1a50d02f'
         owner_id: 44036562
@@ -191,7 +202,12 @@ dependencies:
         commit: 'sha1-820762786026740c76f36085b0efc47a31fe5020'
         owner_id: 44036562
         repo_id: 189476904
-    'actions/upload-artifact@v7.0.0':
+    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a':
+        ref: 'v7.0.1'
+        commit: 'sha1-043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+        owner_id: 44036562
+        repo_id: 192625955
+    'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f':
         ref: 'v7.0.0'
         commit: 'sha1-bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         owner_id: 44036562
@@ -243,7 +259,7 @@ dependencies:
         commit: 'sha1-0bd6a54bf206174fd0cebc3222def111651e91bb'
         owner_id: 216022683
         repo_id: 1192166927
-    'astral-sh/setup-uv@v9.0.0':
+    'astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9':
         ref: 'v9.0.0'
         commit: 'sha1-c771a70e6277c0a99b617c7a806ffedaca235ff9'
         owner_id: 115962839
@@ -253,22 +269,17 @@ dependencies:
         commit: 'sha1-31ed947ec7a623d18a66cfd20ef546dc66ef8063'
         owner_id: 22225348
         repo_id: 688555811
-    'docker/login-action@v4.6.0':
+    'docker/login-action@dbcb813823bdd20940b903addbd779551569679f':
         ref: 'v4.6.0'
         commit: 'sha1-dbcb813823bdd20940b903addbd779551569679f'
         owner_id: 5429470
         repo_id: 287743349
-    'docker/setup-buildx-action@v4.4.1':
+    'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069':
         ref: 'v4.4.1'
         commit: 'sha1-f87e5991a6d7451dcb8d9637bfbc97413f497069'
         owner_id: 5429470
         repo_id: 288485773
     'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093':
-        ref: 'v3.0.0'
-        commit: 'sha1-7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
-        owner_id: 71461757
-        repo_id: 407242578
-    'google-github-actions/auth@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         owner_id: 71461757
@@ -300,7 +311,7 @@ dependencies:
         repo_id: 682297649
         uses:
             - 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
-    'helm/kind-action@v1.13.0':
+    'helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab':
         ref: 'v1.13.0'
         commit: 'sha1-92086f6be054225fa813e0a4b13787fc9088faab'
         owner_id: 15859888
@@ -310,7 +321,7 @@ dependencies:
         commit: 'sha1-0c5077e51419868618aeaa5fe8019c62421857d6'
         owner_id: 108928776
         repo_id: 512644635
-    'pnpm/action-setup@v5.0.0':
+    'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320':
         ref: 'v5.0.0'
         commit: 'sha1-fc06bc1257f339d1d5d8b3a19a8cae5388b55320'
         owner_id: 21320719
@@ -320,7 +331,7 @@ dependencies:
         commit: 'sha1-ea17c68df8912ef543352723c149a84f56e3d413'
         owner_id: 21320719
         repo_id: 262289747
-    'swatinem/rust-cache@v2.9.2':
+    'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6':
         ref: 'v2.9.2'
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492

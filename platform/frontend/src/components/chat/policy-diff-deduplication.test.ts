@@ -2,8 +2,8 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
-  collectPolicyDiffReferences,
   omitRepeatedPolicyDiffs,
+  PolicyDiffReferenceCollector,
 } from "./policy-diff-deduplication";
 
 const change = {
@@ -42,6 +42,12 @@ const answer: UIMessage = {
   role: "assistant",
   parts: [{ type: "text", text: repeated }],
 };
+function collectPolicyDiffReferences(
+  messages: UIMessage[],
+  getToolShortName: typeof shortName,
+) {
+  return new PolicyDiffReferenceCollector().collect(messages, getToolShortName);
+}
 function references(output?: unknown) {
   return collectPolicyDiffReferences([preview(output), answer], shortName)
     .get("answer")
@@ -49,6 +55,74 @@ function references(output?: unknown) {
 }
 
 describe("policy diff duplication", () => {
+  it("reuses completed previews while text streams, but invalidates changed output", () => {
+    const collector = new PolicyDiffReferenceCollector();
+    let reads = 0;
+    const output = {
+      get structuredContent() {
+        reads++;
+        return change;
+      },
+    };
+    const first = collector
+      .collect([preview(output), answer], shortName)
+      .get("answer")
+      ?.get(0);
+    const next = collector
+      .collect(
+        [
+          preview(output),
+          {
+            ...answer,
+            parts: [{ type: "text", text: `${repeated} More text.` }],
+          },
+        ],
+        shortName,
+      )
+      .get("answer")
+      ?.get(0);
+    expect(reads).toBe(1);
+    expect(next).toBe(first);
+    const replaced = collector
+      .collect(
+        [
+          preview({
+            structuredContent: { ...change, after: "another policy" },
+          }),
+          answer,
+        ],
+        shortName,
+      )
+      .get("answer")
+      ?.get(0);
+    expect(replaced).not.toBe(first);
+    expect(omitRepeatedPolicyDiffs(repeated, replaced)).toBe(repeated);
+    collector.collect([], shortName);
+    collector.collect([preview(output), answer], shortName);
+    expect(reads).toBe(2);
+  });
+
+  it("matches thousands of separate hunks without blocking chat", () => {
+    const lines = Array.from({ length: 31_000 }, (_, i) => `rule_${i} = "old"`);
+    const before = lines.join("\n");
+    const hunks: string[] = [];
+    for (let i = 0; i < lines.length; i += 3) {
+      const old = lines[i];
+      lines[i] = `rule_${i} = "new"`;
+      hunks.push(`@@ -${i + 1} +${i + 1} @@\n-${old}\n+${lines[i]}`);
+    }
+    const diff = hunks.join("\n");
+    const refs = references({
+      structuredContent: { ...change, before, after: lines.join("\n"), diff },
+    });
+    const start = performance.now();
+    expect(omitRepeatedPolicyDiffs(`\`\`\`diff\n${diff}\n\`\`\``, refs)).toBe(
+      "",
+    );
+    // Deliberately generous: the repeated whole-policy scans took seconds.
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+
   it.each([
     { structuredContent: change },
     { content: [{ type: "text", text: JSON.stringify(change) }] },

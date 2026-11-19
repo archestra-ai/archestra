@@ -10,67 +10,104 @@ export type PolicyDiffReference = {
   changes: string;
 };
 
-/** Only preceding previews in this assistant turn can replace a text diff. */
-export function collectPolicyDiffReferences(
-  messages: UIMessage[],
-  getToolShortName: (name: string) => ArchestraToolShortName | null,
-) {
-  const result = new Map<string, Map<number, readonly PolicyDiffReference[]>>();
-  let references: PolicyDiffReference[] = [];
-  const targets = new Map<string, string>();
-  for (const message of messages) {
-    if (message.role !== "assistant") {
-      references = [];
-      targets.clear();
-      continue;
+const NO_REFERENCES: readonly PolicyDiffReference[] = [];
+type CachedPreview = {
+  output: unknown;
+  reference: PolicyDiffReference | null;
+  preceding: readonly PolicyDiffReference[];
+  references: readonly PolicyDiffReference[];
+};
+
+/** Reuse completed previews while text streams; retain only the current transcript. */
+export class PolicyDiffReferenceCollector {
+  private previews = new Map<string, CachedPreview>();
+
+  collect(
+    messages: UIMessage[],
+    getToolShortName: (name: string) => ArchestraToolShortName | null,
+  ) {
+    const result = new Map<
+      string,
+      Map<number, readonly PolicyDiffReference[]>
+    >();
+    const previews = new Map<string, CachedPreview>();
+    let references = NO_REFERENCES;
+    const targets = new Map<string, string>();
+    for (const message of messages) {
+      if (message.role !== "assistant") {
+        references = NO_REFERENCES;
+        targets.clear();
+        continue;
+      }
+      const byPart = new Map<number, readonly PolicyDiffReference[]>();
+      result.set(message.id, byPart);
+      for (const [index, part] of (message.parts ?? []).entries()) {
+        if (part.type === "text") {
+          if (references.length) byPart.set(index, references);
+          continue;
+        }
+        if (!("toolCallId" in part)) continue;
+        let name =
+          part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
+        if (getToolShortName(name) === "run_tool") {
+          const input = part.input as { tool_name?: unknown } | undefined;
+          if (typeof input?.tool_name === "string") name = input.tool_name;
+          else name = targets.get(part.toolCallId) ?? name;
+        }
+        targets.set(part.toolCallId, name);
+        if (
+          getToolShortName(name) !== "preview_guardrails_policy_change" ||
+          part.state !== "output-available"
+        )
+          continue;
+        const key = `${message.id}:${index}`;
+        const cached = this.previews.get(key);
+        const reference =
+          cached && cached.output === part.output
+            ? cached.reference
+            : createReference(part.output);
+        const next =
+          cached?.reference === reference && cached.preceding === references
+            ? cached.references
+            : reference
+              ? [...references, reference]
+              : references;
+        previews.set(key, {
+          output: part.output,
+          reference,
+          preceding: references,
+          references: next,
+        });
+        references = next;
+      }
     }
-    const byPart = new Map<number, readonly PolicyDiffReference[]>();
-    result.set(message.id, byPart);
-    for (const [index, part] of (message.parts ?? []).entries()) {
-      if (part.type === "text") {
-        if (references.length) byPart.set(index, references);
-        continue;
-      }
-      if (!("toolCallId" in part)) continue;
-      let name =
-        part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
-      if (getToolShortName(name) === "run_tool") {
-        const input = part.input as { tool_name?: unknown } | undefined;
-        if (typeof input?.tool_name === "string") name = input.tool_name;
-        else name = targets.get(part.toolCallId) ?? name;
-      }
-      targets.set(part.toolCallId, name);
-      if (
-        getToolShortName(name) !== "preview_guardrails_policy_change" ||
-        part.state !== "output-available"
-      )
-        continue;
-      const change = parsePolicyChange(part.output);
-      if (!change || typeof change.diff !== "string") continue;
-      const before = change.before.replace(/\r\n/g, "\n");
-      const after = change.after.replace(/\r\n/g, "\n");
-      const changes = getPolicyDiffRows({
+    this.previews = previews;
+    return result;
+  }
+}
+
+function createReference(output: unknown): PolicyDiffReference | null {
+  const change = parsePolicyChange(output);
+  if (!change || typeof change.diff !== "string") return null;
+  const before = change.before.replace(/\r\n/g, "\n");
+  const after = change.after.replace(/\r\n/g, "\n");
+  const changes = getPolicyDiffRows({
+    before,
+    after,
+    diff: change.diff.replace(/\r\n/g, "\n"),
+  }).flatMap((row) =>
+    row.kind === "add" || row.kind === "remove"
+      ? [`${row.kind === "add" ? "+" : "-"}${row.text}`]
+      : [],
+  );
+  return changes.length
+    ? {
         before,
         after,
-        diff: change.diff.replace(/\r\n/g, "\n"),
-      }).flatMap((row) =>
-        row.kind === "add" || row.kind === "remove"
-          ? [`${row.kind === "add" ? "+" : "-"}${row.text}`]
-          : [],
-      );
-      if (!changes.length) continue;
-      references = [
-        ...references,
-        {
-          before,
-          after,
-          path: change.path ?? "organization.appa.toml",
-          changes: JSON.stringify(changes),
-        },
-      ];
-    }
-  }
-  return result;
+        path: change.path ?? "organization.appa.toml",
+        changes: JSON.stringify(changes),
+      }
+    : null;
 }
 
 /**
@@ -151,9 +188,13 @@ function matchesPreview(
     if (line.startsWith("+") || line.startsWith("-")) changes.push(line);
   }
   if (JSON.stringify(changes) !== reference.changes) return false;
+  const original = `\n${reference.before}\n`;
+  const modified = `\n${reference.after}\n`;
   // Models may omit the unified diff's leading space on context lines.
-  return [true, false].some((stripContextPrefix) =>
-    chunks.every((chunk) => {
+  return [true, false].some((stripContextPrefix) => {
+    let originalOffset = 0;
+    let modifiedOffset = 0;
+    return chunks.every((chunk) => {
       const before: string[] = [];
       const after: string[] = [];
       for (const line of chunk) {
@@ -166,16 +207,25 @@ function matchesPreview(
           after.push(context);
         }
       }
-      return (
-        containsLines(reference.before, before) &&
-        containsLines(reference.after, after)
-      );
-    }),
-  );
-}
-
-function containsLines(content: string, lines: string[]): boolean {
-  return (
-    lines.length === 0 || `\n${content}\n`.includes(`\n${lines.join("\n")}\n`)
-  );
+      // Hunks follow document order. Resume each search at the previous
+      // match, allowing overlapping context without rescanning the prefix.
+      if (before.length) {
+        const index = original.indexOf(
+          `\n${before.join("\n")}\n`,
+          originalOffset,
+        );
+        if (index < 0) return false;
+        originalOffset = index + 1;
+      }
+      if (after.length) {
+        const index = modified.indexOf(
+          `\n${after.join("\n")}\n`,
+          modifiedOffset,
+        );
+        if (index < 0) return false;
+        modifiedOffset = index + 1;
+      }
+      return true;
+    });
+  });
 }

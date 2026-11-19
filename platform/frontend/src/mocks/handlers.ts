@@ -494,6 +494,10 @@ export const handlers: HttpHandler[] = [
   ...postJson("/api/onboarding/survey", { ok: true }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
+  ...getJson("/api/connected-clients/disconnect-reference", {
+    reference: "cdr1_sample_0123456789abcdefghijkl",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
   // Connect reads the gateway's served tool list and initial context cost.
   ...getJson("/api/agents/:id/mcp-tool-preview", {

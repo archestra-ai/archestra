@@ -97,6 +97,7 @@ import {
   PREVIOUS_HITL_CARD_LABELS,
   previousHitlCardAnswer,
 } from "@/openappa/hitl-review-overview";
+import { NO_REMEDY_PLAN_HINT } from "@/openappa/no-remedy-plan-hint";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
   PEER_PROOF_ARGUMENT,
@@ -3300,9 +3301,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       : call;
   }
 }
-
-const NO_REMEDY_PLAN_HINT =
-  "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
 
 /**
  * Why a refused call got no remedy, and what the person does about it. The

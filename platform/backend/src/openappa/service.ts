@@ -1167,7 +1167,8 @@ function truncated(text: string, limit: number): string {
 }
 
 /** The runtime's code for a result that matches no released call. */
-const UNRELEASED_CALL_CODE = "unreleased_call";
+/** The runtime holds no released call that a reported result could answer. */
+export const UNRELEASED_CALL_CODE = "unreleased_call";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
 
 function isOutputDecision(

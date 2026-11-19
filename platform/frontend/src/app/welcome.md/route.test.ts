@@ -51,6 +51,10 @@ describe("Welcome agent instructions", () => {
       "Call only tools that search_tools returned",
     );
     expect(instructions).toContain("Each must work with the tools in step 1.");
+    // An agent with Cursor's web tools finishes their setup from the chat.
+    expect(instructions).toContain(
+      "Only if your tools include cursor_web_setup: call it once.",
+    );
   });
 
   it("names the gateway's server from the link", async () => {

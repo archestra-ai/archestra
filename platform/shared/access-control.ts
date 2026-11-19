@@ -656,6 +656,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // A signed-in member lists and disconnects only their own connected clients.
   [RouteId.GetConnectedClients]: {},
   [RouteId.DisconnectConnectedClient]: {},
+  // A reference for the member's own cleanup prompt; the handler takes a
+  // browser session only.
+  [RouteId.GetDisconnectReference]: {},
   // Who connected which agent is per-employee activity, so the org-wide log
   // of it takes org-wide log visibility (admin tier) plus reading members.
   [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
@@ -671,6 +674,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RenderStartupGuard]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
+  [RouteId.ReportCursorHookEvent]: {},
   [RouteId.GetConnectionRuntime]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers

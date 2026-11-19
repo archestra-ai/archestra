@@ -9,6 +9,11 @@ import { requestOrigin } from "@/lib/request-origin";
  * registered the gateway under when the page knows it. The tour stays on the
  * gateway: agents otherwise try every MCP server they have. Other server and
  * product names stay out: the agent reads them from its own tools.
+ *
+ * One step names a client: Cursor's web search and fetch tools run through
+ * Cursor's command-line agent. The connection command installs it and signs
+ * it in, and this step has the agent finish or repeat that from the chat
+ * with the tools' own setup tool. Only an agent that has that tool does it.
  */
 export function GET(request: Request) {
   const origin = requestOrigin(request);
@@ -44,7 +49,14 @@ and do not run commands that check all of your MCP servers.
    next. Make them specific to what you saw, not generic.
 5. If one of the gateway's servers needs the user to sign in, say which one
    and how.
-6. End by asking what they want to do first.
+6. Only if your tools include cursor_web_setup: call it once. It gets web
+   search and fetch ready by installing Cursor's command-line agent and
+   signing it in, to Cursor and then to this gateway, and waits about twenty
+   seconds for a step. If it says something is still under way, tell the user
+   what it asks of them, such as approving a browser page, and call it again.
+   Each sign-in is a page of its own and can take the user a minute or two.
+   Stop when it says ready or failed, or after ten calls, and say which.
+7. End by asking what they want to do first.
 `,
     { headers: { "Content-Type": "text/plain; charset=utf-8" } },
   );

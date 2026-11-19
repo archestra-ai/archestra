@@ -914,9 +914,9 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "cursor":
       return [
-        "Reload Cursor.",
+        "Quit Cursor when the terminal asks, and reopen it after setup. It then loads the Guardrails hooks, the shared skills and its changed settings.",
         "Open Customize > MCPs and sign in to the gateway.",
-        "Quit and reopen Cursor to load its model settings.",
+        "Open a folder before you start a chat, and keep the chat on this computer. A Cloud chat runs on Cursor's servers, without the gateway or Guardrails.",
       ];
     case "codex":
       return [
@@ -1048,8 +1048,8 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
- * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * Agents OpenAPPA follows natively (the Claude Code, Codex, Cursor, OpenCode
+ * and Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */
@@ -1064,6 +1064,8 @@ function guardrailsStatus(
   data: ConnectPageData,
   client: ConnectClient,
   routed: boolean,
+  /** Setup connects this agent to the MCP gateway. */
+  gateway: boolean,
 ): {
   tone?: "ok" | "warn" | "block";
   label: string;
@@ -1079,6 +1081,21 @@ function guardrailsStatus(
       label: "Not enforced",
       detail: `Your admin hasn't turned on guardrails, so ${client.label}'s tool calls aren't checked against the policy.`,
     };
+  // Cursor's setup installs hooks that check every chat, so its guardrails
+  // do not depend on where its models run. The hooks come with the MCP
+  // gateway, which approvals also go through: a setup without it adds none.
+  if (client.id === "cursor" && !routed)
+    return gateway
+      ? {
+          tone: "ok",
+          label: "Enforced",
+          detail: `Each of ${client.label}'s tool calls is checked against your organization's policy, through hooks that setup adds to ${client.label}. ${client.label} keeps its own models and your ${client.label} plan.`,
+        }
+      : {
+          tone: "warn",
+          label: "Not enforced",
+          detail: `Guardrails reach ${client.label} through hooks that setup adds together with the MCP gateway, and the gateway is left out, so ${client.label}'s tool calls aren't checked against the policy. Turn it back on in Choose what to include.`,
+        };
   if (!routed)
     return {
       tone: "warn",
@@ -1198,9 +1215,11 @@ function ProfileCard({
     ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
     : client.proxy.kind === "unsupported"
       ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-      : !routed
-        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-        : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+      : !routed && client.id === "cursor"
+        ? `${client.label} keeps its own models and your ${client.label} plan. To use ${data.appName}'s models in ${client.label} instead, turn the LLM proxy on in Choose what to include. ${client.label}'s own models do not run while it uses ${data.appName}'s.`
+        : !routed
+          ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+          : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
     icon: (
@@ -1220,7 +1239,12 @@ function ProfileCard({
           ? "On"
           : "Off",
   });
-  const guard = guardrailsStatus(data, client, routed);
+  const guard = guardrailsStatus(
+    data,
+    client,
+    routed,
+    choices.tools && data.partsFor(client).tools,
+  );
   if (guard)
     status.push({
       id: "guardrails",

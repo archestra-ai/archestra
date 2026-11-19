@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { isWellFormedAppaId } from "@/openappa/service";
 import {
   extractAppaSessionIdentity,
   nativeSpawnParentId,
@@ -884,6 +885,73 @@ describe("client trajectory identity", () => {
             headers: { "user-agent": "claude-cli/2.1.0 (external, cli)" },
           }).sessionId,
         ).toBeUndefined();
+    });
+  });
+
+  describe("Cursor", () => {
+    const cursorHeaders = { "user-agent": "Cursor/2.3" };
+    const opening = { role: "user", content: "Fix the login bug" };
+
+    test("names the chat by its opening, never by a generic body field", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {
+            prompt_cache_key: "cache-1",
+            user: "device-1",
+            messages: [opening],
+          },
+          headers: cursorHeaders,
+        }),
+      ).toEqual({
+        sessionId: expect.stringMatching(/^cursor-chat-/),
+        provenance: "cursor-opening",
+      });
+    });
+
+    test("the opening id is a well-formed OpenAPPA id", () => {
+      const { sessionId } = extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        body: { messages: [{ role: "user", content: "x".repeat(100_000) }] },
+        headers: cursorHeaders,
+      });
+      expect(isWellFormedAppaId(sessionId)).toBe(true);
+    });
+
+    test("binds the fallback root rather than a generic field when there is no opening", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: { prompt_cache_key: "cache-1", metadata: { session_id: "s" } },
+          headers: cursorHeaders,
+        }),
+      ).toEqual({ provenance: "none" });
+    });
+
+    test("an explicit APPA header still wins over a Cursor body", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: { input: [opening] },
+          headers: { ...cursorHeaders, "x-appa-session-id": "explicit" },
+        }),
+      ).toMatchObject({ sessionId: "explicit", provenance: "appa-header" });
+    });
+
+    test("a Cursor User-Agent does not take over another client's session header", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: {},
+          headers: {
+            ...cursorHeaders,
+            "x-claude-code-session-id": CLAUDE_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-code-header",
+      });
     });
   });
 

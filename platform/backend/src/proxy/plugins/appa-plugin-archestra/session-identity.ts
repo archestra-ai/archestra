@@ -7,6 +7,7 @@ import {
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaCursorAdapter } from "./adapters/cursor";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import type {
   AppaChildTrajectory,
@@ -27,6 +28,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     // Before OpenCode: Kilo's setup also sends OpenCode's session header.
     new AppaKiloAdapter(),
     new AppaOpenCodeAdapter(),
+    // Last of the external clients: Cursor's only signal is its User-Agent,
+    // so a client's own session header outranks a copied Cursor UA.
+    new AppaCursorAdapter(),
     new AppaChatAdapter(),
   ],
 );
@@ -36,7 +40,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  *
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
- * 2. Native client signals (Claude Code header, Codex metadata, OpenCode headers).
+ * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
+ *    headers, the opening of a Cursor chat). A client that sets
+ *    `genericSessionFallback: false` skips step 3.
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
@@ -62,7 +68,10 @@ export function extractAppaSessionIdentity(params: {
     headers: params.headers,
     requestBody: params.family ? params.body : undefined,
   });
-  if (!native?.sessionId) return generic;
+  if (!native?.sessionId)
+    return adapter?.genericSessionFallback === false
+      ? { parentId: generic.parentId, provenance: "none" }
+      : generic;
   return {
     ...native,
     parentId: generic.parentId ?? native.parentId,

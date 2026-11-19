@@ -27,7 +27,7 @@ describe("Disconnect agent instructions", () => {
     }
   });
 
-  it("waits for the user's yes and backs up before changing anything", async () => {
+  it("proceeds without asking the user to confirm, and backs up what it edits by hand", async () => {
     for (const client of [
       "claude-code",
       "codex",
@@ -39,11 +39,14 @@ describe("Disconnect agent instructions", () => {
       "generic",
     ]) {
       const instructions = await read(`?client=${client}`);
-      expect(instructions).toContain("## 2. Show the plan and wait");
-      expect(instructions).toContain("wait for the user's explicit yes");
+      expect(instructions).toContain(
+        "Do not show a plan first and do not\nask them to confirm",
+      );
+      expect(instructions).not.toMatch(/wait for the user|explicit yes/);
+      expect(instructions).toContain("## 2. Disconnect");
       expect(instructions).toContain("<file>.before-disconnect");
       expect(instructions).toContain(
-        "go back to http://localhost:3000/connection and press Revoke access",
+        "http://localhost:3000/connection and press Revoke access",
       );
     }
   });
@@ -77,6 +80,58 @@ describe("Disconnect agent instructions", () => {
     expect(instructions).toContain(
       "Only touch entries that point at https://api.example.com;",
     );
+  });
+
+  it("has Cursor's own cleanup helper remove everything its setup added", async () => {
+    const instructions = await read("?client=cursor");
+    // Every part the Cursor setup writes is named, so an agent without the
+    // helper can still find it.
+    for (const part of [
+      "whose URL starts with http://localhost:3000/v1/mcp/",
+      ".cursor/archestra/web-tools.mjs",
+      ".cursor/archestra/guardrails-hook.mjs",
+      "~/.cursor/permissions.json",
+      "~/.cursor/archestra/",
+      "git clone of http://localhost:3000/skills/",
+      "Web Search Tool and Web Fetch Tool",
+      "~/.cursor/projects/FOLDER/mcp-auth.json",
+    ]) {
+      expect(instructions).toContain(part);
+    }
+    expect(instructions).toContain(
+      'then node "$HOME/.cursor/archestra/disconnect.cjs"; else',
+    );
+    expect(instructions).toContain(
+      '{ node "$HOME\\.cursor\\archestra\\disconnect.cjs"; if ($LASTEXITCODE',
+    );
+    // The report leaves the user two things to do, and no checklist.
+    expect(instructions).toContain(
+      "1. Quit and reopen Cursor.\n2. Open http://localhost:3000/connection and press Revoke access in the Disconnect dialog.",
+    );
+    expect(instructions).not.toMatch(
+      /User Rules|Customize > Plugins|Customize > MCPs/,
+    );
+    // The chat's run finishes by itself when Cursor next closes.
+    expect(instructions).not.toContain("--wait");
+    expect(instructions).toContain("they have nothing to run");
+    // Cursor's own apps stay: the user may go on using them.
+    expect(instructions).toContain(
+      "never uninstall it and never run its logout",
+    );
+    expect(instructions).not.toContain("--keep-cli");
+    // What other apps installed is reported, not removed.
+    expect(instructions).toContain("~/.claude/plugins/");
+    expect(instructions).toContain("Leave them as\nthey are.");
+  });
+
+  it("tells every agent not to put an entry back when Guardrails block a step", async () => {
+    for (const client of ["claude-code", "cursor", "generic"]) {
+      const instructions = await read(`?client=${client}`);
+      expect(instructions).toContain(
+        "never put a removed entry back to get\nan approval",
+      );
+      expect(instructions).toContain("Remove the gateway's MCP entry last.");
+    }
   });
 
   it("ignores a base that is not an http URL", async () => {

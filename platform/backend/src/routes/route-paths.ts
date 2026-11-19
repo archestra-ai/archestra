@@ -131,3 +131,6 @@ export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
 
 /** Authenticated read-only instruction refresh for installed connection wrappers. */
 export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";
+
+/** Cursor hooks report each chat step to Guardrails with an installation credential. */
+export const CONNECTION_HOOKS_CURSOR_PATH = "/v1/connection-hooks/cursor";

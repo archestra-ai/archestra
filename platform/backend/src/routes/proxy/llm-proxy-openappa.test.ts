@@ -1610,6 +1610,321 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(providerRequests.length).toBeGreaterThan(0);
   });
 
+  describe("Cursor chats", () => {
+    const READ_TOOL = {
+      type: "function",
+      function: {
+        name: "Read",
+        description: "Read a file",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    };
+    // Cursor's BYOK shape: a per-device `user`, a system prompt rebuilt per
+    // request, its own PascalCase tools and a flat ApplyPatch custom tool.
+    const cursorBody = (messages: unknown[], system = "You are Cursor.") => ({
+      model: "gpt-4o",
+      stream: false,
+      user: "ff9d1da0167751c3",
+      messages: [{ role: "system", content: system }, ...messages],
+      tools: [
+        READ_TOOL,
+        {
+          type: "custom",
+          name: "ApplyPatch",
+          description: "Use this tool to edit files.",
+          format: {
+            type: "grammar",
+            definition: "start: begin_patch hunk end_patch",
+            syntax: "lark",
+          },
+        },
+      ],
+    });
+    let restricted: Set<string>;
+
+    beforeEach(async () => {
+      config.openappa = {
+        ...config.openappa,
+        offerSigningSecret: "test-offer-signing-secret-32chars",
+      };
+      await app.register(openAiProxyRoutes);
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      // A provider gives each call an id of its own.
+      let calls = 0;
+      vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+        () =>
+          createOpenAiTestClient({
+            nonStreamingToolCalls: [
+              {
+                id: `cursor_call_${++calls}`,
+                name: "Read",
+                arguments: JSON.stringify({ path: "README.md" }),
+              },
+            ],
+          }) as never,
+      );
+      // The runtime's restriction: once a session is restricted, its calls
+      // are denied. Other sessions are ruled as before.
+      restricted = new Set();
+      const rule = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (
+          event.event === "tool_call" &&
+          restricted.has(String(event.session_id))
+        ) {
+          events.push(event);
+          return JSON.stringify({
+            decision: "deny_call",
+            feedback:
+              "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+          });
+        }
+        return rule?.(raw);
+      });
+    });
+
+    const send = (body: unknown) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          "user-agent": "Cursor/2.3",
+        },
+        payload: body as Record<string, unknown>,
+      });
+    const lastCallSession = () =>
+      String(
+        events.findLast((event) => event.event === "tool_call")?.session_id,
+      );
+    const releasedCalls = (response: { json: () => unknown }) =>
+      (
+        response.json() as {
+          choices: Array<{
+            message: {
+              tool_calls?: Array<{ id: string; function: { name: string } }>;
+            };
+          }>;
+        }
+      ).choices[0].message.tool_calls ?? [];
+
+    test("two chats on one key get two roots, a retry keeps its root, a stamped turn opens the chat's own branch, and a rewritten opening forks it", async () => {
+      const chat1 = [{ role: "user", content: "Fix the login bug" }];
+      const first = await send(cursorBody(chat1));
+      expect(first.statusCode, first.body).toBe(200);
+      const root1 = lastCallSession();
+      expect(root1).toMatch(new RegExp(`^user:${userId}\\|cursor-chat-`));
+      // Cursor's per-device `user` is never the session.
+      expect(root1).not.toContain("ff9d1da0167751c3");
+      const [call] = releasedCalls(first);
+      expect(call.function.name).toBe("Read");
+      expect(parseTrajectoryStamp(call.id)?.sessionId).toBe(
+        root1.slice(`user:${userId}|`.length),
+      );
+
+      // A retry, with Cursor's system prompt rebuilt, lands on the same root.
+      const retry = await send(cursorBody(chat1, "You are Cursor. 10:02"));
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(lastCallSession()).toBe(root1);
+
+      // The next turn carries the stamped call under the same opening. The
+      // call's id is this chat's alone, so the chat leaves the session its
+      // opening names for a fork of it, and stays there.
+      const afterCall = [
+        ...chat1,
+        { role: "assistant", content: [], tool_calls: [call] },
+        { role: "tool", tool_call_id: call.id, content: "# README" },
+      ];
+      const next = await send(cursorBody(afterCall));
+      expect(next.statusCode, next.body).toBe(200);
+      const branch1 = lastCallSession();
+      expect(branch1).not.toBe(root1);
+      expect(
+        events.find(
+          (event) =>
+            event.event === "session_start" && event.session_id === branch1,
+        )?.fork_of,
+      ).toBe(root1);
+      const [laterCall] = releasedCalls(next);
+      expect(parseTrajectoryStamp(laterCall.id)?.sessionId).toBe(
+        branch1.slice(`user:${userId}|`.length),
+      );
+      const third = await send(
+        cursorBody([
+          ...afterCall,
+          { role: "assistant", content: [], tool_calls: [laterCall] },
+          { role: "tool", tool_call_id: laterCall.id, content: "more" },
+        ]),
+      );
+      expect(third.statusCode, third.body).toBe(200);
+      expect(lastCallSession()).toBe(branch1);
+
+      // A rewritten opening (a summary, an edited first message) with the
+      // stamped call opens a fork of chat 1, which keeps its restrictions.
+      const summarized = await send(
+        cursorBody([
+          { role: "user", content: "Summary: fixing the login bug" },
+          { role: "assistant", content: [], tool_calls: [call] },
+          { role: "tool", tool_call_id: call.id, content: "# README" },
+        ]),
+      );
+      expect(summarized.statusCode, summarized.body).toBe(200);
+      const forked = lastCallSession();
+      expect(forked).not.toBe(root1);
+      expect(
+        events.find(
+          (event) =>
+            event.event === "session_start" && event.session_id === forked,
+        )?.fork_of,
+      ).toBe(root1);
+
+      const second = await send(
+        cursorBody([{ role: "user", content: "Write the release notes" }]),
+      );
+      expect(second.statusCode, second.body).toBe(200);
+      const root2 = lastCallSession();
+      expect(root2).not.toBe(root1);
+      expect(
+        new Set(
+          events
+            .filter((event) => event.event === "session_start")
+            .map((event) => event.session_id),
+        ),
+      ).toEqual(new Set([root1, branch1, forked, root2]));
+      expect(
+        events.find(
+          (event) =>
+            event.event === "session_start" && event.session_id === root2,
+        )?.fork_of,
+      ).toBeUndefined();
+    });
+
+    test("a restriction in one chat does not reach another chat on the same key", async () => {
+      const chat1 = [{ role: "user", content: "Fix the login bug" }];
+      expect((await send(cursorBody(chat1))).statusCode).toBe(200);
+      const root1 = lastCallSession();
+      restricted.add(root1);
+
+      const blocked = await send(cursorBody(chat1));
+      expect(blocked.statusCode, blocked.body).toBe(200);
+      expect(lastCallSession()).toBe(root1);
+      expect(
+        releasedCalls(blocked).some((call) => call.function.name === "Read"),
+      ).toBe(false);
+
+      const other = await send(
+        cursorBody([{ role: "user", content: "Write the release notes" }]),
+      );
+      expect(other.statusCode, other.body).toBe(200);
+      expect(lastCallSession()).not.toBe(root1);
+      expect(
+        releasedCalls(other).some((call) => call.function.name === "Read"),
+      ).toBe(true);
+    });
+
+    test("chats with the same opening share a session only until each makes a tool call", async () => {
+      const opening = [{ role: "user", content: "Fix the login bug" }];
+      const one = await send(cursorBody(opening));
+      const root = lastCallSession();
+      const two = await send(cursorBody(opening));
+      expect(lastCallSession()).toBe(root);
+      const [callOne] = releasedCalls(one);
+      const [callTwo] = releasedCalls(two);
+      expect(callOne.id).not.toBe(callTwo.id);
+      const turn = (call: { id: string }) =>
+        send(
+          cursorBody([
+            ...opening,
+            { role: "assistant", content: [], tool_calls: [call] },
+            { role: "tool", tool_call_id: call.id, content: "# README" },
+          ]),
+        );
+
+      expect((await turn(callOne)).statusCode).toBe(200);
+      const branchOne = lastCallSession();
+      expect((await turn(callTwo)).statusCode).toBe(200);
+      const branchTwo = lastCallSession();
+      expect(new Set([root, branchOne, branchTwo]).size).toBe(3);
+
+      // A restriction one chat earns after its call stays in that chat.
+      restricted.add(branchOne);
+      const blocked = await turn(callOne);
+      expect(lastCallSession()).toBe(branchOne);
+      expect(
+        releasedCalls(blocked).some((call) => call.function.name === "Read"),
+      ).toBe(false);
+      const free = await turn(callTwo);
+      expect(lastCallSession()).toBe(branchTwo);
+      expect(
+        releasedCalls(free).some((call) => call.function.name === "Read"),
+      ).toBe(true);
+    });
+
+    test("a history that mixes two chats' stamps is refused, not moved to a fresh session", async () => {
+      const one = await send(
+        cursorBody([{ role: "user", content: "Fix the login bug" }]),
+      );
+      const two = await send(
+        cursorBody([{ role: "user", content: "Write the release notes" }]),
+      );
+      const [callOne] = releasedCalls(one);
+      const [callTwo] = releasedCalls(two);
+      const startsBefore = events.filter(
+        (event) => event.event === "session_start",
+      ).length;
+      const mixed = await send(
+        cursorBody([
+          { role: "user", content: "Fix the login bug" },
+          { role: "assistant", content: [], tool_calls: [callOne] },
+          { role: "tool", tool_call_id: callOne.id, content: "a" },
+          { role: "assistant", content: [], tool_calls: [callTwo] },
+          { role: "tool", tool_call_id: callTwo.id, content: "b" },
+        ]),
+      );
+      expect(mixed.statusCode).toBe(400);
+      expect(mixed.json().error.message).toContain(
+        "mixes context from unrelated sessions",
+      );
+      expect(
+        events.filter((event) => event.event === "session_start"),
+      ).toHaveLength(startsBefore);
+    });
+
+    test("a foreign stamp is ignored and the opening names the chat", async () => {
+      const first = await send(
+        cursorBody([{ role: "user", content: "Fix the login bug" }]),
+      );
+      const root1 = lastCallSession();
+      const [call] = releasedCalls(first);
+      config.openappa = {
+        ...config.openappa,
+        offerSigningSecret: "another-offer-signing-secret-32ch",
+      };
+      const next = await send(
+        cursorBody([
+          { role: "user", content: "Write the release notes" },
+          { role: "assistant", content: [], tool_calls: [call] },
+          { role: "tool", tool_call_id: call.id, content: "# README" },
+        ]),
+      );
+      expect(next.statusCode, next.body).toBe(200);
+      expect(lastCallSession()).not.toBe(root1);
+      expect(lastCallSession()).toMatch(/\|cursor-chat-/);
+    });
+  });
+
   describe("provider-side threads", () => {
     const create = () => ({
       ...payload(false),

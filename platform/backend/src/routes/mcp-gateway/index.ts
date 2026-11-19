@@ -40,6 +40,7 @@ import {
   encodeCapabilitySession,
   readCapabilitySession,
 } from "./client-capabilities";
+import { isCursorClient } from "./cursor-forms";
 import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
@@ -446,6 +447,7 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      cursorForms: isCursorClient(request.headers["user-agent"]),
       openappaSession,
       currentToolCallId,
       agentId: profileId,

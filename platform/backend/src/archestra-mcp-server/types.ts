@@ -89,6 +89,13 @@ export interface ArchestraContext {
    */
   elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
   /**
+   * The client shows a form's message as one paragraph and cannot be handed
+   * assistant text (Cursor). A guardrail review then asks with a short form
+   * that offers Inspect, and returns the complete review as the asking
+   * tool's result.
+   */
+  inspectableReviewForm?: boolean;
+  /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface. Present only when a chat stream is driving the call;
    * absent in headless executions (no conversation surface to render onto). One

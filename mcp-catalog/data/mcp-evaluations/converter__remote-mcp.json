@@ -1,0 +1,77 @@
+{
+  "name": "converter__remote-mcp",
+  "display_name": "Converter Studio",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiBmaWxsPSIjZjJlZmU4Ii8+PHJlY3QgeD0iNSIgeT0iNSIgd2lkdGg9IjE1IiBoZWlnaHQ9IjE1IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNjE1MGYiIHN0cm9rZS13aWR0aD0iMi4yIi8+PHJlY3QgeD0iMTIiIHk9IjEyIiB3aWR0aD0iMTUiIGhlaWdodD0iMTUiIGZpbGw9IiNmZjU0MTgiLz48L3N2Zz4K",
+  "description": "Hosted file converter for video, audio, images, PDFs, documents, e-books, subtitles, data and archives (67 formats). Give it a link or a file and it returns a download link that is kept for 6 hours. Conversions use credits from the user's Converter Studio account; free accounts get 13 credits a day and most files cost 1 credit.",
+  "author": {
+    "name": "Converter Studio",
+    "url": "https://converter.studio/"
+  },
+  "homepage": "https://converter.studio/",
+  "documentation": "https://converter.studio/developers",
+  "tools": [
+    {
+      "name": "list_formats",
+      "description": "Lists the file formats Converter Studio converts and what each converts to. Give \"from\" (a format id such as \"heic\" or \"mp4\") to see the targets of one format. Needs no account."
+    },
+    {
+      "name": "create_upload",
+      "description": "For a local file bigger than 8 MB: returns a one-time upload URL and a curl command. Run the command in a shell (files over 95 MB need parts, see partBytes), then call convert with the returned uploadId. The slot expires after an hour."
+    },
+    {
+      "name": "convert",
+      "description": "Converts a file to another format and returns a download link (valid 6 hours). The file comes from \"url\" (a direct link or a Google Drive, Dropbox or OneDrive share link), \"uploadId\" (from create_upload) or \"contentBase64\" with \"fileName\" (files up to 8 MB). Uses credits from the user's converter.studio account; goes ahead on its own up to maxCredits. Waits up to 100 seconds; if not done, call get_conversion."
+    },
+    {
+      "name": "get_conversion",
+      "description": "The status of a conversion by id, with its download link once done. Waits up to waitSeconds (at most 100) for it to finish."
+    },
+    {
+      "name": "confirm_conversion",
+      "description": "Starts a conversion that waits for a go-ahead because it costs more than its maxCredits. Spends the shown credits: ask the user first. Waits up to 100 seconds for the result."
+    },
+    {
+      "name": "get_account",
+      "description": "The user's converter.studio plan, credits left and file size limit."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "file-conversion",
+    "converter",
+    "video",
+    "audio",
+    "images",
+    "pdf",
+    "documents",
+    "ebooks",
+    "subtitles",
+    "archives"
+  ],
+  "user_config": {
+    "access_token": {
+      "sensitive": true,
+      "type": "string",
+      "title": "API Key",
+      "description": "A Converter Studio API key (starts with cvs_live_), sent as a Bearer token. Create one at https://converter.studio/account#api-keys",
+      "required": true
+    }
+  },
+  "readme": null,
+  "category": "File Management",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://converter.studio/api/mcp",
+    "docs_url": "https://converter.studio/developers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

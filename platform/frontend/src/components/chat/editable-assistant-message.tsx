@@ -16,6 +16,10 @@ import {
 import type { KnowledgeGraphCitationsProps } from "@/components/chat/knowledge-graph-citations";
 import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
+import {
+  omitRepeatedPolicyDiffs,
+  type PolicyDiffReference,
+} from "./policy-diff-deduplication";
 
 interface EditableAssistantMessageProps {
   messageId: string;
@@ -25,6 +29,7 @@ interface EditableAssistantMessageProps {
   isEditing: boolean;
   showActions: boolean;
   citationParts?: KnowledgeGraphCitationsProps["parts"];
+  policyDiffReferences?: readonly PolicyDiffReference[];
   editDisabled?: boolean;
   isStreaming?: boolean;
   /** Omit for a read-only transcript: hides edit. */
@@ -54,6 +59,7 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
   isEditing,
   showActions,
   citationParts,
+  policyDiffReferences,
   editDisabled = false,
   isStreaming = false,
   onStartEdit,
@@ -79,8 +85,12 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
     () => (citationParts ? foldCitationSources(visibleText) : null),
     [citationParts, visibleText],
   );
-  const displayText =
+  const foldedText =
     folded && folded.entries.length > 0 ? folded.displayText : visibleText;
+  const displayText = useMemo(
+    () => omitRepeatedPolicyDiffs(foldedText, policyDiffReferences),
+    [foldedText, policyDiffReferences],
+  );
 
   const handleStartEdit = () => {
     onStartEdit?.(partKey);
@@ -107,6 +117,30 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
         }
       />
     );
+  }
+
+  const actions = (
+    <MessageActions
+      textToCopy={visibleText}
+      onEditClick={onStartEdit && handleStartEdit}
+      editDisabled={editDisabled}
+      feedback={feedback}
+      onFeedbackChange={
+        onFeedbackChange &&
+        ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
+      }
+      feedbackDisabled={feedbackDisabled}
+    />
+  );
+
+  if (displayText !== foldedText && !displayText.trim() && !citationParts) {
+    // The preview replaces the content, but the original message still needs
+    // copy, edit and feedback actions. Keep them visible without an empty bubble.
+    return showActions ? (
+      <Message from="assistant" className="pl-2">
+        {actions}
+      </Message>
+    ) : null;
   }
 
   return (
@@ -139,17 +173,7 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
         </MessageContent>
         {showActions && (
           <div className="pointer-events-none absolute top-full left-0 z-10 pt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:pt-0 @2xl/chat:pl-2 @2xl/chat:-translate-y-1/2">
-            <MessageActions
-              textToCopy={visibleText}
-              onEditClick={onStartEdit && handleStartEdit}
-              editDisabled={editDisabled}
-              feedback={feedback}
-              onFeedbackChange={
-                onFeedbackChange &&
-                ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
-              }
-              feedbackDisabled={feedbackDisabled}
-            />
+            {actions}
           </div>
         )}
       </div>

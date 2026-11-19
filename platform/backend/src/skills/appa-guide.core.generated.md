@@ -59,8 +59,14 @@ substitute for an audience or trust boundary.
   report that no change is needed. Do not ask for approval, write, or
   reload an unchanged config. Do not call the config updated or tell the
   operator to start a new chat when nothing changed.
-- Make the smallest change that achieves the request. Preserve unrelated
-  entries, comments, reader names, external bindings, and batteries.
+- Make the smallest change that achieves the request. Change only the
+  tools, the side (what a tool returns or what it may receive), and the
+  label (audience or trust) that the request and the operator's answers
+  cover; propose anything else separately. Preserve unrelated entries,
+  comments, reader names, external bindings, and batteries.
+- Say what will behave differently after the change. If nothing will, for
+  example because an Authority already approves that case or an Annotator
+  already gives the same label, say so.
 - Call the runtime's remedy tool only when the immediately previous tool
   result quoted `offer_id: "<hex>"`. Copy that hex string exactly. Never
   invent an offer id. Never use `human-approval`, an authority name, a
@@ -79,41 +85,61 @@ substitute for an audience or trust boundary.
 
 ## Talk to the operator
 
-- Use short sentences. Explain what data stays private, what can leave
-  the session, what needs approval, and what becomes blocked.
+Assume the operator is new to APPA unless they show otherwise, and leave them
+able to predict what APPA does with the agent's next tool call. Teach each
+idea once, when it first matters, with one of their own tools as the example:
+
+1. APPA checks every tool call before it runs. A rule's decision does not
+   depend on the model, so a prompt injection cannot change it.
+2. Reading private data narrows who the session may share with: `self` is
+   the operator, `internal` their organization, `public` anyone.
+3. Reading text strangers can write makes the session `suspicious`, which
+   blocks calls that need `trusted` data. Neither change is undone later in
+   the session.
+4. A battery is a maintained set of rules for one service. A call the rules
+   do not allow is blocked before it runs, with the ways forward the policy
+   configures, such as approving that one call.
+5. A tool no rule covers is refused, unless the policy sends it to an
+   Annotator: a model that judges each call and may ask the operator. Its
+   decision is only as good as its judgment.
+
+When the host's own instructions word an explanation, use their words.
+
+- Talk about outcomes, not config machinery: say "Slack messages need your
+  approval," not "the config needs a HITL authority." Say an agent is
+  "protected with OpenAPPA" or "currently unprotected". Mention TOML,
+  field names, include lists, rule ordering, reader names, or authority
+  wiring only when the operator asks.
+- For each battery and new rule, say what changes in the operator's normal
+  work. When a block has no way forward, say which change would allow it.
+- A question about a proposal is not approval. Answer it, then repeat the
+  pending request in one line.
+- Keep replies short. Say what stays private, what can leave the session,
+  what needs approval, and what is blocked. Do not narrate inspection calls,
+  deployment resources such as releases or pods, config paths, counts, or the
+  complete tool or battery catalog unless one changes the result. Group tools
+  by server and behavior, one short sentence or bullet per outcome, and keep
+  the warnings about unavailable resources and missing support.
 - When asking for approval of a remedy, say in one sentence what the call
   does and ask for approval on the card.
-- Talk about outcomes in plain words, not config machinery: say "Slack
-  messages need your approval," not "the config needs a HITL authority."
-  Say an agent is "protected with OpenAPPA" or "currently unprotected".
-  Mention include lists, rule ordering, TOML fields, reader names, labels,
-  or authority wiring only when the operator asks. Show TOML only when
-  asked.
-- Keep replies short and use everyday words. Explain the practical result and
-  next step; save technical details for when the operator asks. If a host
-  requires an **OpenAPPA pieces** line, use plain words there too.
 - Tools in the config that this session did not detect: "These tools are
   in your config but were not detected in this session: <names>. I'll
   leave them unchanged."
 - Ask one focused question at a time. Do not make the operator classify
   every tool when its name and description already make the answer
   clear.
-- Keep user-facing replies compact. Do not narrate inspection calls,
-  deployment resources such as releases or pods, config paths, counts, or
-  the complete tool or battery catalog unless one changes the result.
-  Group tools by server and behavior. Use one short sentence or bullet per
-  outcome, plus required unavailable-resource and missing-support
-  warnings. Offer technical details only when the operator asks.
 
 ## Propose a battery
 
-When proposing a battery, give it exactly one short sentence that says what it
-covers, what protection it adds, and any important assumption. Keep it under
-20 words. Examples:
+Describe each battery in one or two short sentences from its README: what it
+protects, and what changes in the operator's normal work, including the setup
+it depends on. Examples:
 
-> Slack battery — Keeps Slack data private and asks before publishing it.
+> Slack battery — Text from a channel goes back only to people who can
+> already read it: a summary of #eng can go to #eng, not to #all-hands.
 >
-> GitHub battery — Assumes every repository is public and prevents private data from leaking to GitHub.
+> GitHub battery — Content from a private repository goes only where its
+> collaborators can read it, once APPA can ask GitHub about that repository.
 
 ## Battery support
 
@@ -255,5 +281,4 @@ After a successful publish, give a brief human-readable summary of the
 behavior now in effect: one to three short sentences on what information
 is private or suspicious and where private information can or cannot go.
 Do not lead with rule counts, file paths, TOML, backups, or primitive
-names. If the config changed, tell the operator that sessions keep the
-policy they started with and new ones pick up the new policy.
+names.

@@ -103,6 +103,7 @@ pub async fn execute_remedy_by_offer(
         precheck_refusal: input.precheck_refusal,
         withhold_consult_content: input.withhold_consult_content,
         answered_call_ids: None,
+        declares: None,
     };
     validate(&input)?;
     let response: Value =

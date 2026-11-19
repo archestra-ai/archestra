@@ -2,8 +2,8 @@
 title: Desktop MCP Servers
 description: Let Archestra use MCP servers running on your device, through the MCP bridge
 order: 5
-beta: "Desktop MCP servers are in Beta."
-lastUpdated: 2026-11-18
+beta: "Configuration and behaviour may change in later releases."
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

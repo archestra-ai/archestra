@@ -2942,6 +2942,69 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].lastUserMessagePreview).toBe("Hi from codex cli");
     });
 
+    test.for([
+      "anthropic:messages",
+      "github-copilot:messages",
+    ] as const)("%s session previews use the genuine prompt, not reminders or tool results", async (type, {
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent();
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "claude-native-preview",
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        type,
+        request: {
+          model: "claude-haiku-4.5",
+          max_tokens: 32,
+          messages: [
+            { role: "user", content: "Find the failing test" },
+            {
+              role: "assistant",
+              content: [
+                { type: "tool_use", id: "call_read", name: "read", input: {} },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "call_read",
+                  content: "File contents",
+                },
+                {
+                  type: "text",
+                  text: "<system-reminder>Use the task list.</system-reminder>",
+                },
+              ],
+            },
+          ],
+        } as InsertInteraction["request"],
+        response: {
+          id: "msg_preview",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4.5",
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 1 },
+        } as InsertInteraction["response"],
+      });
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "claude-native-preview" },
+      );
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "Find the failing test",
+      );
+    });
+
     test("shows a Copilot CLI session by the person's prompt, not the notes Copilot adds", async ({
       makeAdmin,
       makeAgent,

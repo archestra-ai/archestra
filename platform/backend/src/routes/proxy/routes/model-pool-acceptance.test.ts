@@ -6,6 +6,7 @@
  * latency routing (AC-Q1, AC-O1, AC-L1, AC-M1, AC-M2) are left out.
  */
 
+import { randomInt } from "node:crypto";
 import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
@@ -25,6 +26,12 @@ import { useMswServer } from "@/test/msw";
 import { drainBackgroundWork } from "@/utils/background-work";
 import modelRouterRoutes from "./model-router";
 import vllmProxyRoutes from "./vllm";
+
+// Control the entropy boundary without replacing pool selection or retry logic.
+vi.mock("node:crypto", async (importOriginal) => {
+  const crypto = await importOriginal<typeof import("node:crypto")>();
+  return { ...crypto, randomInt: vi.fn(crypto.randomInt) };
+});
 
 vi.mock("../model-pool-failover", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../model-pool-failover")>()),
@@ -247,7 +254,7 @@ labTest(
 labTest(
   "group retry budget does not reset when the selected deployment or error changes",
   async ({ lab }) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const random = vi.mocked(randomInt).mockImplementation(() => 0);
     try {
       const [first, second, third] = await lab.deploy(
         [
@@ -283,7 +290,7 @@ labTest(
 labTest.for([undefined, "0"])(
   "zero retries does not sweep same-order siblings, but preserves later-order fallback (header=%s)",
   async (retryHeader, { lab }) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const random = vi.mocked(randomInt).mockImplementation(() => 0);
     try {
       const [first, sibling, fallback] = await lab.deploy(
         [{ priority: 1 }, { priority: 1 }, { priority: 2 }],
@@ -302,7 +309,7 @@ labTest.for([undefined, "0"])(
 labTest(
   "retry selection stays in the lowest healthy order and preserves weighted selection",
   async ({ lab }) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const random = vi.mocked(randomInt).mockImplementation(() => 0);
     try {
       const [first, light, heavy, fallback] = await lab.deploy(
         [
@@ -315,10 +322,11 @@ labTest(
       );
       first.mode = { kind: "status", status: 503 };
       // Initial plan selects the first member. Its network response changes
-      // the next random draw; a fixed precomputed member sweep would pick light.
+      // the next draw to 0.25: weights 1:9 choose heavy, while equal weights
+      // or a fixed precomputed member sweep would pick light.
       server.use(
         http.post(`${first.origin}/chat/completions`, ({ request }) => {
-          random.mockReturnValue(0.5);
+          random.mockImplementation(() => 0x40000000);
           return respond(first, request);
         }),
       );
@@ -336,7 +344,7 @@ labTest(
 labTest(
   "a later-order fallback starts its own budget and cannot return to a healthy earlier order",
   async ({ lab }) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const random = vi.mocked(randomInt).mockImplementation(() => 0);
     try {
       const [first, skipped, fallback, sibling] = await lab.deploy(
         [
@@ -362,7 +370,7 @@ labTest(
 labTest(
   "a retry-selected final plan member still times out while a healthy sibling can answer",
   async ({ lab }) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const random = vi.mocked(randomInt).mockImplementation(() => 0);
     try {
       const [first, healthy, slow] = await lab.deploy(
         [{ priority: 1 }, { priority: 1 }, { priority: 1 }],
@@ -372,7 +380,7 @@ labTest(
       slow.mode = { kind: "black-hole" };
       server.use(
         http.post(`${first.origin}/chat/completions`, ({ request }) => {
-          random.mockReturnValue(0.9);
+          random.mockImplementation(() => Math.floor(0.9 * 0x100000000));
           return respond(first, request);
         }),
       );

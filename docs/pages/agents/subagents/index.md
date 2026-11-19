@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,7 +38,7 @@ The agent picks the model the copy runs on for each task:
 - **Smart**: a stronger model, for hard reasoning or checking a conclusion.
 - **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
 
-To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent and can be on any provider. A Normal copy of an agent on an [auto router](/docs/llm-proxy/auto-routing) is routed by that router. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
+To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent, can be on any provider, and are separate from an [auto router's](/docs/llm-proxy/auto-routing) own fast and smart tiers. A Normal copy of an agent on an auto router is routed by that router. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
 
 What to know:
 

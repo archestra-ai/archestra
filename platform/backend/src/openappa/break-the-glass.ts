@@ -11,6 +11,7 @@ import { type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   HumanApprovalMode,
@@ -233,19 +234,17 @@ export async function recordWaivedCalls(params: {
   const fresh = unrecordedCallIds({ ...scope, toolCallIds: [...byId.keys()] });
   // Reports off: nothing to record a yell in, so nothing turns the session off.
   const superyell = params.superyell && openappaYellEnabled();
-  let recorded: boolean;
+  // The yells the batch recorded, or null when it recorded no call.
+  let recorded: WaiverGroup[] | null;
   try {
     recorded = await withDbTransaction(async (tx) => {
       const inserted = await OpenAppaUnenforcedModel.recordCalls(
         { ...scope, toolCallIds: fresh, reason: "waived" },
         tx,
       );
-      if (inserted.length === 0) return false;
+      if (inserted.length === 0) return null;
       // One yell per tool and kind, counting the calls recorded now.
-      const groups = new Map<
-        string,
-        { tool: string; kind: WaiverKind; calls: number }
-      >();
+      const groups = new Map<string, WaiverGroup>();
       for (const id of inserted) {
         const call = byId.get(id);
         if (!call) continue;
@@ -258,9 +257,11 @@ export async function recordWaivedCalls(params: {
         group.calls += 1;
         groups.set(key, group);
       }
+      const yells: WaiverGroup[] = [];
       for (const group of groups.values())
-        await recordWaiver({ session, ...group, superyell }, tx);
-      return true;
+        if (await recordWaiver({ session, ...group, superyell }, tx))
+          yells.push(group);
+      return yells;
     });
   } catch (err) {
     logger.warn(
@@ -273,6 +274,7 @@ export async function recordWaivedCalls(params: {
   // ids for the resent batch to record.
   rememberRecordedCalls({ ...scope, toolCallIds: fresh });
   if (!recorded) return true;
+  for (const group of recorded) observeOpenappaYell({ ...group, superyell });
   for (const call of params.calls) logWaiver({ session, ...call, superyell });
   return true;
 }
@@ -314,6 +316,10 @@ export async function recordWaivedReview(params: {
       // A refused plan rolls its record back.
       if (!through) throw REFUSED_PLAN;
     });
+    observeOpenappaYell({
+      kind: "approval_waived",
+      superyell: waiver.superyell,
+    });
   } catch (err) {
     if (err === REFUSED_PLAN) return "refused";
     // The runtime's own failure is the caller's to answer, as before.
@@ -330,6 +336,9 @@ export async function recordWaivedReview(params: {
 
 const REFUSED_PLAN = Symbol("the runtime refused the plan");
 
+/** The calls of one tool and kind that a batch merges into one yell. */
+type WaiverGroup = { tool: string; kind: WaiverKind; calls: number };
+
 // ===
 
 async function recordWaiver(
@@ -341,8 +350,8 @@ async function recordWaiver(
     calls: number;
   },
   tx: Transaction,
-): Promise<void> {
-  if (!openappaYellEnabled()) return;
+): Promise<boolean> {
+  if (!openappaYellEnabled()) return false;
   const { session } = params;
   await OpenAppaYellModel.recordWaiver(
     {
@@ -358,6 +367,7 @@ async function recordWaiver(
     tx,
   );
   if (params.superyell) await superyellSession(session, tx);
+  return true;
 }
 
 function logWaiver(params: {

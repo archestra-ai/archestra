@@ -8,7 +8,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type AutoRouter, useAutoRouter } from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { BUDGET_PRESET_LABELS } from "../_parts/budget-presets";
-import { PastSessions, PastSessionsNotice } from "../_parts/past-sessions";
+import { PastSessions } from "../_parts/past-sessions";
 import { describeFitError } from "../_parts/plan-document";
 import { RouterFigures } from "../_parts/router-figures";
 import { isAutoRoutingSetUp, SetupCards } from "../_parts/setup-cards";
@@ -31,15 +31,13 @@ export default function AutoRoutingOverviewPage() {
   const settings = settingsQuery.data;
   if (!settings) return null;
 
-  const hasActivePlan = settings.status.activePlan !== null;
-  const pastSessionsProps = {
-    routingEnabled: settings.enabled,
-    canUpdate,
-    scorer: settings.status.scorer,
-  };
-  // Until a plan is active, past sessions are a setup step; after, a header action.
-  const pastSessions = settings.usesPastSessions && !hasActivePlan && (
-    <PastSessions {...pastSessionsProps} />
+  // The same card in every state, so scoring is always found in one place.
+  const pastSessions = settings.usesPastSessions && (
+    <PastSessions
+      routingEnabled={settings.enabled}
+      canUpdate={canUpdate}
+      scorer={settings.status.scorer}
+    />
   );
 
   if (!isAutoRoutingSetUp(settings)) {
@@ -54,9 +52,6 @@ export default function AutoRoutingOverviewPage() {
   return (
     <div className="space-y-4">
       <StateNotice settings={settings} />
-      {settings.usesPastSessions && hasActivePlan && (
-        <PastSessionsNotice {...pastSessionsProps} />
-      )}
       <RouterDetails settings={settings} />
       <RouterFigures settings={settings} />
       {pastSessions}

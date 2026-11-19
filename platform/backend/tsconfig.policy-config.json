@@ -24,6 +24,8 @@
     "src/openappa/rule-targets.ts",
     "src/openappa/template.generated.ts",
     "src/services/agent-runtime/runtime-credentials.ts",
+    "src/services/cursor-web-setup-tool-name.ts",
+    "src/services/docs-mcp-tool-names.ts",
     "src/services/github-app-manifest-setup.ts",
     "src/services/github-copilot-app-setup.ts",
     "src/services/guardrails-deployment.ts",

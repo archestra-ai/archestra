@@ -29,7 +29,7 @@ vi.mock("google-auth-library", () => {
   }
   return { OAuth2Client: MockOAuth2, GoogleAuth: class {} };
 });
-vi.mock("googleapis/build/src/apis/drive/v3.js", () => ({
+vi.mock("@googleapis/drive", () => ({
   drive_v3: {
     Drive: class {
       about = { get: (...a: unknown[]) => mockAboutGet(...a) };

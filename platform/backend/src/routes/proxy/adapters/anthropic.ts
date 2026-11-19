@@ -4,6 +4,7 @@ import {
   ArchestraInternalErrorCode,
   PROVIDER_BILLING_BLOCK_BODY,
   PROVIDER_BILLING_BLOCK_TITLE,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { get } from "lodash-es";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -91,12 +92,14 @@ type AnthropicToolResultContentBlock =
 class AnthropicRequestAdapter
   implements LLMRequestAdapter<AnthropicRequest, AnthropicMessages>
 {
-  readonly provider = "anthropic" as const;
   private request: AnthropicRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: AnthropicRequest) {
+  constructor(
+    request: AnthropicRequest,
+    readonly provider: SupportedProvider = "anthropic",
+  ) {
     this.request = request;
   }
 
@@ -536,10 +539,12 @@ function convertMcpImageBlocksToAnthropic(
 class AnthropicResponseAdapter
   implements LLMResponseAdapter<AnthropicResponse>
 {
-  readonly provider = "anthropic" as const;
   private response: AnthropicResponse;
 
-  constructor(response: AnthropicResponse) {
+  constructor(
+    response: AnthropicResponse,
+    readonly provider: SupportedProvider = "anthropic",
+  ) {
     this.response = response;
   }
 
@@ -671,7 +676,6 @@ class AnthropicResponseAdapter
 class AnthropicStreamAdapter
   implements LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse>
 {
-  readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
   /** Upstream content-block index → position in `state.toolCalls`. */
   private toolCallByBlockIndex = new Map<number, number>();
@@ -795,7 +799,7 @@ class AnthropicStreamAdapter
     return this.replacedText !== null;
   }
 
-  constructor() {
+  constructor(readonly provider: SupportedProvider = "anthropic") {
     this.state = {
       responseId: "",
       model: "",
@@ -1454,20 +1458,20 @@ export const anthropicAdapterFactory: LLMProvider<
   createRequestAdapter(
     request: AnthropicRequest,
   ): LLMRequestAdapter<AnthropicRequest, AnthropicMessages> {
-    return new AnthropicRequestAdapter(request);
+    return new AnthropicRequestAdapter(request, this.provider);
   },
 
   createResponseAdapter(
     response: AnthropicResponse,
   ): LLMResponseAdapter<AnthropicResponse> {
-    return new AnthropicResponseAdapter(response);
+    return new AnthropicResponseAdapter(response, this.provider);
   },
 
   createStreamAdapter(): LLMStreamAdapter<
     AnthropicStreamChunk,
     AnthropicResponse
   > {
-    return new AnthropicStreamAdapter();
+    return new AnthropicStreamAdapter(this.provider);
   },
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {
@@ -1606,7 +1610,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return withSamplingParamFallback({
       input: request,
       strip: stripAnthropicSamplingParams,
-      logContext: { provider: "anthropic", model: request.model },
+      logContext: { provider: this.provider, model: request.model },
       run: async (req) => {
         const params = {
           ...req,
@@ -1690,7 +1694,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return withSamplingParamFallback({
       input: request,
       strip: stripAnthropicSamplingParams,
-      logContext: { provider: "anthropic", model: request.model },
+      logContext: { provider: this.provider, model: request.model },
       // use the raw create() stream rather than the messages.stream() helper:
       // the helper eagerly partial-parses accumulated input_json_delta fragments
       // and throws (unguarded) when a non-conformant upstream emits deltas that

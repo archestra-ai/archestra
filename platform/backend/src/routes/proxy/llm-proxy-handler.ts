@@ -88,6 +88,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import type { LimitViolationResponse } from "@/models/limit";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import OAuthClientModel from "@/models/oauth-client";
 import ProxyRequestContextModel, {
   type ProxyRequestState,
@@ -129,6 +130,7 @@ import { appaWireFamily } from "@/openappa/wire";
 import {
   admitOpenappaRequest,
   type OpenappaAdmission,
+  resolveDisconnectBypass,
   resolveInstallerSetupBypass,
 } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
@@ -1924,13 +1926,23 @@ async function handleObservedLLMProxy<
     let admission: OpenappaAdmission = { kind: "ungoverned" };
     let governedThread: GovernedThread | undefined;
     let appaReceipts: OpenappaReceipts | undefined;
-    const installerSetupBypass = await resolveInstallerSetupBypass({
-      request,
-      body,
-      agent: resolvedAgent,
-      virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
-      appaActive,
-    });
+    // The conversation that runs a connect installer, or that disconnects
+    // a client, is let through ungoverned.
+    const connectionProcedureBypass =
+      (await resolveInstallerSetupBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+        appaActive,
+      })) ||
+      (await resolveDisconnectBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        authenticatedUserId,
+        appaActive,
+      }));
     if (hasProxyPlugins) {
       admission = await admitOpenappaRequest({
         request,
@@ -1951,10 +1963,15 @@ async function handleObservedLLMProxy<
           unsupportedClientAction,
         },
         chatSource: isInternalChat ? source : undefined,
+        // A summary skips the turn and child-return lifecycle, so only this
+        // process may claim one.
+        summaryRequest:
+          proof.inProcess &&
+          (source === "chat:compaction" || source === "a2a:compaction"),
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,
-        installerSetupBypass,
+        connectionProcedureBypass,
         ingress: appaIngress,
         toolIdentity,
         runtimeSnapshot: requestContext.runtimeSnapshot,
@@ -3685,8 +3702,11 @@ async function handleStreaming<
       throw new ApiError(499, "Client disconnected during inference");
     }
 
-    // Anthropic requires message_stop; its beta usage arrives before that frame.
-    upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
+    // Native Messages streams require message_stop; beta usage can precede it.
+    const requiresMessagesTerminal =
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages";
+    upstreamFinished = !requiresMessagesTerminal || providerTerminalSeen;
     if (!upstreamFinished)
       throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
@@ -4435,7 +4455,9 @@ async function handleNonStreaming<
                 source,
                 billingMode: getBillingMode(),
                 authMethod,
-                tokens: providerName === "anthropic",
+                tokens:
+                  providerName === "anthropic" ||
+                  provider.interactionType === "github-copilot:messages",
               }),
             );
           throw new ObservedProviderUsageError({
@@ -4765,11 +4787,16 @@ async function handleNonStreaming<
             source,
             billingMode,
             authMethod,
-            tokens: providerName === "anthropic",
+            tokens:
+              providerName === "anthropic" ||
+              provider.interactionType === "github-copilot:messages",
           });
           return;
         }
-        if (providerName === "anthropic")
+        if (
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages"
+        )
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -4943,11 +4970,16 @@ async function handleNonStreaming<
         source,
         billingMode,
         authMethod,
-        tokens: providerName === "anthropic",
+        tokens:
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages",
       });
       return;
     }
-    if (providerName === "anthropic")
+    if (
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages"
+    )
       metrics.llm.reportLLMTokens(
         providerName,
         agent,
@@ -5666,6 +5698,28 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
+  if (
+    upstreamAttempt?.trackPoolUsage &&
+    record.modelPoolId &&
+    record.providerApiKeyId &&
+    record.model
+  ) {
+    try {
+      await ModelPoolUsageModel.record({
+        poolId: record.modelPoolId,
+        providerApiKeyId: record.providerApiKeyId,
+        modelId: upstreamAttempt.poolUsageModelId ?? record.model,
+        tokens:
+          (record.inputTokensEstimated ? 0 : (record.inputTokens ?? 0)) +
+          (record.outputTokens ?? 0) +
+          (record.cacheReadTokens ?? 0) +
+          (record.cacheWriteTokens ?? 0),
+      });
+    } catch (error) {
+      // Never turn an already answered inference into a client retry.
+      logger.error({ err: error }, "Unable to record model pool routing usage");
+    }
+  }
   try {
     await throughput?.settleSpend(
       record.cost,

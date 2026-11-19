@@ -97,6 +97,7 @@ import {
   formatPricePerMillion,
 } from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils/format-context-length";
+import { formatThousands } from "@/lib/utils/format-thousands";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
   canFilterFreeModelsForApiKey,
@@ -491,7 +492,26 @@ export default function ModelsPage() {
             ? `$${formatPricePerMillion(pricePerMillionOutput)}`
             : "-";
           return (
-            <span className="text-sm font-mono">{`${input} / ${output}`}</span>
+            <div className="space-y-1">
+              <span className="text-sm font-mono">{`${input} / ${output}`}</span>
+              {(row.original.longContextThreshold ??
+                row.original.syncedLongContextPricing?.threshold) != null && (
+                <div className="text-xs text-muted-foreground">
+                  <span>
+                    {row.original.longContextThreshold != null
+                      ? "Custom"
+                      : "Synced"}{" "}
+                    tier above{" "}
+                    {formatThousands(
+                      row.original.longContextThreshold ??
+                        row.original.syncedLongContextPricing?.threshold ??
+                        0,
+                    )}{" "}
+                    tokens
+                  </span>
+                </div>
+              )}
+            </div>
           );
         },
       },

@@ -70,7 +70,7 @@ vi.mock("google-auth-library", () => {
   return { GoogleAuth: MockGoogleAuth, OAuth2Client: MockOAuth2 };
 });
 
-vi.mock("googleapis/build/src/apis/drive/v3.js", () => ({
+vi.mock("@googleapis/drive", () => ({
   drive_v3: {
     Drive: class {
       files = {
@@ -92,7 +92,7 @@ vi.mock("googleapis/build/src/apis/drive/v3.js", () => ({
   },
 }));
 
-vi.mock("googleapis/build/src/apis/admin/directory_v1.js", () => ({
+vi.mock("@googleapis/admin", () => ({
   admin_directory_v1: {
     Admin: class {
       users = {

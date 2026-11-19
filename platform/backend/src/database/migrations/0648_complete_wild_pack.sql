@@ -1,0 +1,1 @@
+ALTER TABLE "models" ADD COLUMN "synced_long_context_pricing" jsonb;

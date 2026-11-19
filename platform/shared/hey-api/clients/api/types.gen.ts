@@ -36545,6 +36545,19 @@ export type CancelAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36669,6 +36682,19 @@ export type GetAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36793,6 +36819,19 @@ export type ScanAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36925,6 +36964,19 @@ export type ScoreAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -65124,6 +65176,944 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
 
 export type GithubCopilotChatCompletionsWithAgentResponse = GithubCopilotChatCompletionsWithAgentResponses[keyof GithubCopilotChatCompletionsWithAgentResponses];
 
+export type GithubCopilotMessagesWithDefaultAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/github-copilot/v1/messages';
+};
+
+export type GithubCopilotMessagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithDefaultAgentError = GithubCopilotMessagesWithDefaultAgentErrors[keyof GithubCopilotMessagesWithDefaultAgentErrors];
+
+export type GithubCopilotMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithDefaultAgentResponse = GithubCopilotMessagesWithDefaultAgentResponses[keyof GithubCopilotMessagesWithDefaultAgentResponses];
+
+export type GithubCopilotMessagesWithAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/github-copilot/{agentId}/v1/messages';
+};
+
+export type GithubCopilotMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithAgentError = GithubCopilotMessagesWithAgentErrors[keyof GithubCopilotMessagesWithAgentErrors];
+
+export type GithubCopilotMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithAgentResponse = GithubCopilotMessagesWithAgentResponses[keyof GithubCopilotMessagesWithAgentResponses];
+
+export type GithubCopilotCountTokensWithDefaultAgentData = {
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+                [key: string]: unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                    [key: string]: unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                            [key: string]: unknown;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id?: string | null;
+            [key: string]: unknown;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            [key: string]: unknown;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
+        } | {
+            type: 'adaptive';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+            [key: string]: unknown;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+            [key: string]: unknown;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/github-copilot/v1/messages/count_tokens';
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentError = GithubCopilotCountTokensWithDefaultAgentErrors[keyof GithubCopilotCountTokensWithDefaultAgentErrors];
+
+export type GithubCopilotCountTokensWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        input_tokens: number;
+    };
+};
+
+export type GithubCopilotCountTokensWithDefaultAgentResponse = GithubCopilotCountTokensWithDefaultAgentResponses[keyof GithubCopilotCountTokensWithDefaultAgentResponses];
+
+export type GithubCopilotCountTokensWithAgentData = {
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+                [key: string]: unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                    [key: string]: unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                            [key: string]: unknown;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id?: string | null;
+            [key: string]: unknown;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            [key: string]: unknown;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+            [key: string]: unknown;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
+        } | {
+            type: 'adaptive';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+            [key: string]: unknown;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+            [key: string]: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+            [key: string]: unknown;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/github-copilot/{agentId}/v1/messages/count_tokens';
+};
+
+export type GithubCopilotCountTokensWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotCountTokensWithAgentError = GithubCopilotCountTokensWithAgentErrors[keyof GithubCopilotCountTokensWithAgentErrors];
+
+export type GithubCopilotCountTokensWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        input_tokens: number;
+    };
+};
+
+export type GithubCopilotCountTokensWithAgentResponse = GithubCopilotCountTokensWithAgentResponses[keyof GithubCopilotCountTokensWithAgentResponses];
+
 export type GithubCopilotResponsesWithDefaultAgentData = {
     body: {
         model: string;
@@ -68985,7 +69975,7 @@ export type GetLlmProxyLogsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'anthropic:messages';
+            type: 'anthropic:messages' | 'github-copilot:messages';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -79434,7 +80424,7 @@ export type GetLlmProxyLogSummariesResponses = {
                 [key: string]: string;
             } | null;
             failed: boolean;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'github-copilot:messages' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81534,7 +82524,7 @@ export type GetLlmProxyLogResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'anthropic:messages';
+        type: 'anthropic:messages' | 'github-copilot:messages';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -107219,6 +108209,13 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -107805,6 +108802,13 @@ export type UpdateModelResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -114910,6 +115914,7 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -114959,6 +115964,7 @@ export type GetModelPoolsResponse = GetModelPoolsResponses[keyof GetModelPoolsRe
 
 export type CreateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -115074,6 +116080,7 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -115297,6 +116304,7 @@ export type DeleteModelPoolResponse = DeleteModelPoolResponses[keyof DeleteModel
 
 export type UpdateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -115414,6 +116422,7 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;

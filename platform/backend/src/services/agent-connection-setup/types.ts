@@ -148,6 +148,26 @@ export interface SetupScriptContext {
   /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
   managedInstructionsSource?: { url: string; token: string } | null;
+  /**
+   * The deployment's own address, whatever the setup includes. Cursor's
+   * setup tells by it whether a model setting in Cursor points here.
+   */
+  deploymentOrigin?: string;
+  /**
+   * Cursor only: where Cursor's hooks report each chat step to Guardrails, and
+   * the installation's hook credential. Hooks reach chats on Cursor's own
+   * models, which never pass through the LLM proxy.
+   */
+  cursorGuardrailsHook?: {
+    url: string;
+    token: string;
+    /**
+     * Ends setup by installing and signing in Cursor's command-line agent,
+     * which the web tools run through. Only the script a person runs asks for
+     * it: the step downloads an installer and opens a browser page.
+     */
+    finishWebSetup?: boolean;
+  } | null;
   /** Explicit executable-update capability, distinct from data-only instructions. */
   managedRuntimeSource?: {
     url: string;

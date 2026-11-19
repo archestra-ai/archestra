@@ -6,10 +6,16 @@ import {
 } from "./backend-connectivity";
 
 const { mockGetReady } = vi.hoisted(() => ({ mockGetReady: vi.fn() }));
-vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
-  getReady: (...args: unknown[]) => mockGetReady(...args),
-}));
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: {
+      ...actual.archestraApiSdk,
+      getReady: (...args: unknown[]) => mockGetReady(...args),
+    },
+  };
+});
 
 describe("useBackendConnectivity", () => {
   beforeEach(() => {

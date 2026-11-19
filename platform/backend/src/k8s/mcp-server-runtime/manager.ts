@@ -401,10 +401,10 @@ export class McpServerRuntimeManager {
    */
   async start(): Promise<void> {
     if (!this.k8sApi && this.status === "not_initialized") {
-      if (isKubeconfigFilePending()) {
-        await this.waitForKubeconfigFile();
+      if (isKubeconfigFilePending() && !(await this.waitForKubeconfigFile())) {
+        return;
       }
-      if (this.status === "stopped" || !this.loadClients()) return;
+      if (!this.loadClients()) return;
     }
     if (
       !this.k8sApi ||
@@ -4766,20 +4766,22 @@ export class McpServerRuntimeManager {
 
   /**
    * Waits until the configured kubeconfig file exists, at most
-   * KUBECONFIG_WAIT_TIMEOUT_MS, or until the runtime is stopped.
+   * KUBECONFIG_WAIT_TIMEOUT_MS. Returns false when the runtime is stopped
+   * meanwhile.
    */
-  private async waitForKubeconfigFile(): Promise<void> {
+  private async waitForKubeconfigFile(): Promise<boolean> {
     logger.info(
       { kubeconfig: config.orchestrator.kubernetes.kubeconfig },
       "Waiting for the Kubernetes config; the MCP Server Runtime starts when it exists",
     );
     const deadline = Date.now() + KUBECONFIG_WAIT_TIMEOUT_MS;
     while (isKubeconfigFilePending() && Date.now() < deadline) {
-      if (this.status === "stopped") return;
+      if (this.status === "stopped") return false;
       await new Promise((resolve) =>
         setTimeout(resolve, KUBECONFIG_WAIT_POLL_MS),
       );
     }
+    return this.status !== "stopped";
   }
 }
 

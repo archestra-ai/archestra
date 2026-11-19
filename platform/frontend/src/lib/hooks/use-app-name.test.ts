@@ -1,4 +1,6 @@
-import { renderHook } from "@testing-library/react";
+import { render, renderHook, screen, waitFor } from "@testing-library/react";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppearanceSettings } from "@/lib/organization.query";
 
@@ -93,4 +95,26 @@ describe("useAppIconLogo", () => {
 
     expect(result.current).toBe("data:image/png;base64,light");
   });
+
+  it("shows the dark default logo after hydrating a page rendered without a theme", async () => {
+    // The server has no theme; the client reads "dark" from storage at once.
+    mockUseTheme.mockReturnValue({ resolvedTheme: undefined });
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(createElement(IconLogo));
+    document.body.appendChild(container);
+
+    mockUseTheme.mockReturnValue({ resolvedTheme: "dark" });
+    render(createElement(IconLogo), { container, hydrate: true });
+
+    await waitFor(() =>
+      expect(screen.getByRole("img")).toHaveAttribute(
+        "src",
+        "/logo-icon-dark.svg",
+      ),
+    );
+  });
 });
+
+function IconLogo() {
+  return createElement("img", { src: useAppIconLogo(), alt: "Logo" });
+}

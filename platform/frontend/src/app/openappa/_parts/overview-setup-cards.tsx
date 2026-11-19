@@ -1,7 +1,6 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
-import { ExternalDocsLink } from "@/components/external-docs-link";
+import { BookOpen, MessageCircle } from "lucide-react";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
@@ -30,7 +29,7 @@ export function OverviewSetupCards() {
 /**
  * The whole page for an organization that has not saved a policy yet. There is
  * one thing to do here, so the page is that one thing: the mascot, what the
- * guardrail is for, and the button.
+ * guardrail is for, the button, and a way to ask how OpenAPPA works first.
  */
 function PolicyStep() {
   const { data: canEdit } = useHasPermissions({ guardrailsPolicy: ["update"] });
@@ -62,12 +61,13 @@ function PolicyStep() {
             Ask an administrator to turn on the guardrail.
           </p>
         )}
-        <ExternalDocsLink
-          href={openAppaUrl("/how-it-works")}
-          className="text-sm"
-        >
-          How OpenAPPA works
-        </ExternalDocsLink>
+        {/* Explaining asks the Keeper, not the website, so a newcomer meets
+            the same explanation the chat gives before setup, not only after
+            it. The page header still links the website. */}
+        <OpenAppaChatButton variant="outline" promptKey="explainGuardrails">
+          <BookOpen />
+          <span>How OpenAPPA works</span>
+        </OpenAppaChatButton>
       </div>
     </section>
   );

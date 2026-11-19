@@ -157,8 +157,11 @@ test("a fresh instance shows only the policy step", async () => {
     screen.getByText(/frontier deterministic guardrail/),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("link", { name: /How OpenAPPA works/ }),
-  ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
+    screen.getByRole("link", { name: "How OpenAPPA works" }),
+  ).toHaveAttribute(
+    "href",
+    "/chat?agentId=appa-agent&user_prompt=Explain+what+OpenAPPA+guardrails+are.",
+  );
   expect(screen.queryByText("Connect GitHub")).not.toBeInTheDocument();
 });
 
@@ -178,6 +181,7 @@ test("members who cannot edit the policy are told who can", async () => {
   expect(
     screen.queryByRole("link", { name: "Create my policy" }),
   ).not.toBeInTheDocument();
+  expect(screen.getByText("How OpenAPPA works")).toBeInTheDocument();
 });
 
 test("a saved policy with healthy sync shows nothing here", async () => {

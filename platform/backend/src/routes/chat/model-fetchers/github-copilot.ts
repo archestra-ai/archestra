@@ -77,8 +77,13 @@ export async function fetchGithubCopilotModels(
     displayName: model.name || model.id,
     provider: "github-copilot" as const,
     capabilities: {
-      contextLength:
-        model.capabilities?.limits?.max_context_window_tokens ?? null,
+      contextLength: copilotContextLength(model.capabilities?.limits),
+      outputLength: positiveTokenCount(
+        model.capabilities?.limits?.max_output_tokens,
+      ),
+      // Copilot's limits change with its API version and plan, so a re-sync
+      // must replace the window an earlier sync stored.
+      authoritativeContextLength: true,
       supportsToolCalling: model.capabilities?.supports?.tool_calls ?? null,
       supportedEndpoints: servableEndpoints(model),
     },
@@ -249,6 +254,32 @@ function isInvocableModel(model: GithubCopilotModel): boolean {
   return servableEndpoints(model).length > 0;
 }
 
+/**
+ * The context window to store for a Copilot model. Copilot enforces
+ * `max_prompt_tokens` on the prompt, and the rest of the platform reads the
+ * prompt budget as the window minus the output limit. Copilot's limits nearly
+ * always satisfy window = prompt + output, so the window is stored as is; when
+ * the prompt and output limits add up to less, the window is lowered to their
+ * sum so the budget read downstream never exceeds what Copilot accepts. With
+ * no output limit, the prompt limit is the window.
+ */
+function copilotContextLength(
+  limits: GithubCopilotModelLimits | undefined,
+): number | null {
+  const window = positiveTokenCount(limits?.max_context_window_tokens);
+  const prompt = positiveTokenCount(limits?.max_prompt_tokens);
+  if (prompt === null) return window;
+  const promptAndOutput =
+    prompt + (positiveTokenCount(limits?.max_output_tokens) ?? 0);
+  return window === null ? promptAndOutput : Math.min(window, promptAndOutput);
+}
+
+function positiveTokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : null;
+}
+
 function extractErrorMessage(errorText: string): string {
   try {
     const parsed = JSON.parse(errorText) as { error?: { message?: string } };
@@ -270,7 +301,14 @@ interface GithubCopilotModel {
   capabilities?: {
     /** "chat" | "embeddings" | "completion" — only "chat" is usable here. */
     type?: string;
-    limits?: { max_context_window_tokens?: number };
+    limits?: GithubCopilotModelLimits;
     supports?: { tool_calls?: boolean };
   };
+}
+
+interface GithubCopilotModelLimits {
+  max_context_window_tokens?: number;
+  /** The largest prompt Copilot accepts for the model. */
+  max_prompt_tokens?: number;
+  max_output_tokens?: number;
 }

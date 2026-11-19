@@ -422,7 +422,7 @@ function WorkspaceDownloadButton({
       .catch(() => toast.error("Could not download the files"))
       .finally(() => setPending(false));
   };
-  const label = "Download all files (.zip)";
+  const label = "Download as .zip";
   return (
     <IconAction label={label}>
       <Button

@@ -77,14 +77,13 @@ export interface ChatPromptInputToolsProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
-  /**
-   * Whether the next chat will be created encrypted-chat. New-chat composer only —
-   * the toggle renders only while there is no conversation yet.
-   */
+  /** Whether the next chat will be created encrypted-chat. */
   encryptedChat?: boolean;
   /**
-   * Provided only by the new-chat composer; together with the
-   * `encryptedChatEnabled` feature flag it enables the encrypted-chat toggle.
+   * Provided only where a chat can still become encrypted: the new-chat
+   * composer, and an app chat nobody has written in yet (which reopens the
+   * app as a new encrypted chat). Together with the `encryptedChatEnabled`
+   * feature flag it enables the encrypted-chat toggle.
    */
   onEncryptedChatChange?: (encryptedChat: boolean) => void;
   /** The composer launches an isolated Agent run, not a chat turn. */
@@ -287,15 +286,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     organizationSettings: ["update"],
   });
 
-  // EncryptedChat toggle: only on the new-chat composer (no conversation yet —
-  // the same gate InitialAgentSelector uses via its callback prop) and only
-  // when the instance has encrypted chats enabled.
+  // EncryptedChat toggle: only where the caller can still make the chat
+  // encrypted (it passes the callback) and only when the instance has
+  // encrypted chats enabled.
   const encryptedChatFeature = useFeature("encryptedChatEnabled");
   const encryptedChatEnabled = encryptedChatFeature ?? false;
   const { altKey } = usePlatform();
   const appName = useAppName();
-  const encryptedChatComposer =
-    !runtimeMode && !conversationId && !!onEncryptedChatChange;
+  const encryptedChatComposer = !runtimeMode && !!onEncryptedChatChange;
   const showEncryptedChatToggle = encryptedChatComposer && encryptedChatEnabled;
   // When the instance has not enabled encrypted chats, the lock stays in the
   // same spot as a pointer to the feature: it explains what it does and how an

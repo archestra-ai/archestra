@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useSessionToolCallAskers } from "@/lib/interactions/interaction.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
@@ -104,9 +105,13 @@ export function GuardrailsProvider({
       llmSessionId: sessionId,
       enabled: openappaEnabled,
     });
+  // Yells have their own permission, apart from the logs this page needs.
+  const { data: canReadYells } = useHasPermissions({
+    guardrailsYell: ["read"],
+  });
   const { data: yells, isLoading: yellsLoading } = useSessionYells({
     llmSessionId: sessionId,
-    enabled: openappaEnabled,
+    enabled: openappaEnabled && canReadYells,
   });
   // A label change a client-run tool caused, whose asking request sits on
   // another page: found by the call id its response recorded.

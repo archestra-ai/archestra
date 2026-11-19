@@ -255,6 +255,7 @@
     "src/services/agent-runtime/run-access.ts",
     "src/services/agent-runtime/run-handle.ts",
     "src/services/agent-runtime/runtime-tier-settings.ts",
+    "src/services/mcp-runtime-tier-settings.ts",
     "src/services/agent-runtime/title.ts",
     "src/services/agent-runtime/transcript-store.ts",
     "src/services/agent-skill-assignment.ts",

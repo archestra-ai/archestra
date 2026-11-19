@@ -125,7 +125,7 @@ describe("checkToolPermission", () => {
     ).not.toBeNull();
   });
 
-  test("log readers can retrieve yells without policy permissions", async ({
+  test("yell readers can retrieve yells without policy permissions", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -133,7 +133,7 @@ describe("checkToolPermission", () => {
   }) => {
     const org = await makeOrganization();
     const role = await makeCustomRole(org.id, {
-      permission: { log: ["read"] },
+      permission: { guardrailsYell: ["read"] },
     });
     const user = await makeUser();
     await makeMember(user.id, org.id, {

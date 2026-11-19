@@ -2,6 +2,7 @@
 
 import {
   type EnvironmentVariableSchema,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
 import { load } from "js-yaml";
@@ -134,6 +135,49 @@ describe("k8s-yaml-generator", () => {
       expect(yaml).toContain("ephemeral-storage: 256Mi");
       expect(yaml).toContain("ephemeral-storage: 1Gi");
       expect(yaml).toContain("memory: 512Mi");
+    });
+
+    test("includes configured CPU and memory in the generated template", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "resources-id",
+        serverName: "resources",
+        namespace: "default",
+        dockerImage: "test:latest",
+        resources: {
+          cpuRequest: 0.25,
+          cpuLimit: 0.5,
+          memoryRequestMiB: 64,
+          memoryLimitMiB: 1024,
+        },
+      });
+      expect(yaml).toContain("cpu: 250m");
+      expect(yaml).toContain("cpu: 500m");
+      expect(yaml).toContain("memory: 64Mi");
+      expect(yaml).toContain("memory: 1Gi");
+    });
+
+    test("keeps Playwright's larger defaults unless explicitly overridden", () => {
+      const context = {
+        serverId: "playwright",
+        serverName: "browser",
+        namespace: "default",
+        dockerImage: "test:latest",
+        catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      };
+      const defaults = generateDeploymentYamlTemplate(context);
+      expect(defaults).toContain("memory: 512Mi");
+      expect(defaults).toContain("memory: 2Gi");
+      const overridden = generateDeploymentYamlTemplate({
+        ...context,
+        resources: {
+          cpuRequest: 0.1,
+          cpuLimit: null,
+          memoryRequestMiB: 256,
+          memoryLimitMiB: 1024,
+        },
+      });
+      expect(overridden).toContain("memory: 256Mi");
+      expect(overridden).toContain("memory: 1Gi");
     });
 
     test("generates YAML with secret env vars", () => {

@@ -2,11 +2,12 @@ import {
   type EnvironmentVariableSchema,
   type ImagePullPolicy,
   MCP_ORCHESTRATOR_DEFAULTS,
+  type McpServerResources,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
-import config from "@/config";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
@@ -17,6 +18,8 @@ const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
  */
 interface DeploymentYamlContext {
   serverId: string;
+  catalogId?: string;
+  resources?: McpServerResources;
   serverName: string;
   namespace: string;
   dockerImage: string;
@@ -117,21 +120,7 @@ export function generateDeploymentYamlTemplate(
     }),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
-    // Ephemeral-storage governance keeps the scheduler disk-aware and
-    // prevents DiskPressure eviction cascades on over-packed nodes.
-    resources: {
-      requests: {
-        memory: config.orchestrator.mcpServerResources.requests.memory,
-        cpu: config.orchestrator.mcpServerResources.requests.cpu,
-        "ephemeral-storage":
-          config.orchestrator.mcpServerResources.requests.ephemeralStorage,
-      },
-      limits: {
-        memory: config.orchestrator.mcpServerResources.limits.memory,
-        "ephemeral-storage":
-          config.orchestrator.mcpServerResources.limits.ephemeralStorage,
-      },
-    },
+    resources: resolveMcpServerResources(context.resources, context.catalogId),
   };
 
   if (needsHttp) {

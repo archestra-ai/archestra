@@ -263,14 +263,28 @@ export const fixedRoleGroups: FixedRoleGroup[] = [
     role(
       "logs:reader",
       "Log Reader",
-      "View your own LLM, MCP, and Guardrails logs",
-      { log: ["read"] },
+      "View your own LLM, MCP, and Guardrails logs and yells",
+      // Yells left `log` for their own resource; the bundle keeps them so
+      // members already holding it see what they saw before.
+      { log: ["read"], guardrailsYell: ["read"] },
     ),
     role(
       "logs:admin",
       "Log Admin",
-      "View every LLM, MCP, and Guardrails log in the organization",
-      { log: ["read", "admin"] },
+      "View every LLM, MCP, and Guardrails log and yell in the organization",
+      { log: ["read", "admin"], guardrailsYell: ["read", "admin"] },
+    ),
+    role(
+      "yells:reader",
+      "Yell Reader",
+      "View and resolve the Guardrails yells of your own sessions",
+      { guardrailsYell: ["read"] },
+    ),
+    role(
+      "yells:admin",
+      "Yell Admin",
+      "View and resolve every Guardrails yell in the organization",
+      { guardrailsYell: ["read", "admin"] },
     ),
     role(
       "audit-log:reader",

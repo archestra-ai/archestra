@@ -13,23 +13,23 @@ import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
 /**
- * The yells a viewer may read and resolve: with `log:admin`, every yell in the
- * organization; otherwise only the yells of the viewer's own sessions, as for
- * the other logs.
+ * The yells a viewer may read and resolve: with `guardrailsYell:admin`, every
+ * yell in the organization; otherwise only the yells of the viewer's own
+ * sessions, as for the logs.
  */
 export async function openAppaYellScope(params: {
   organizationId: string;
   userId: string;
 }) {
-  const canSeeAllLogs = await userHasPermission(
+  const canSeeAllYells = await userHasPermission(
     params.userId,
     params.organizationId,
-    "log",
+    "guardrailsYell",
     "admin",
   );
   return {
     organizationId: params.organizationId,
-    callerId: canSeeAllLogs ? undefined : `user:${params.userId}`,
+    callerId: canSeeAllYells ? undefined : `user:${params.userId}`,
   };
 }
 

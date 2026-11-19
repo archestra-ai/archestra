@@ -253,10 +253,13 @@ export function usePermissionsRevalidatingOnMount(): boolean {
 /**
  * Resolves the permission map with given keys and results of permission checks as values.
  * Use in cases where multiple useHasPermissions calls are impossible.
+ * A key with an entry in `alternatives` is also permitted by that second set
+ * (e.g. `alternativePagePermissionsMap` for pages).
  * @returns A record with the same keys as the input map and boolean values indicating permission checks, or null if still loading.
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
+  alternatives?: Partial<Record<Key, Permissions>>,
 ): Record<Key, boolean> | null {
   const { isPending: isSessionPending } = useSession();
   const { data: userPermissions, isLoading } = useAllPermissions();
@@ -279,11 +282,16 @@ export function usePermissionMap<Key extends string>(
     Key,
     Permissions,
   ][]) {
-    result[key] = hasPagePermissions({
-      userPermissions,
-      required: requiredPermissions,
-      capabilities: capabilities.data ?? [],
-    });
+    const alternative = alternatives?.[key];
+    result[key] = [requiredPermissions, ...(alternative ? [alternative] : [])]
+      .map((required) =>
+        hasPagePermissions({
+          userPermissions,
+          required,
+          capabilities: capabilities.data ?? [],
+        }),
+      )
+      .some(Boolean);
   }
 
   return result;

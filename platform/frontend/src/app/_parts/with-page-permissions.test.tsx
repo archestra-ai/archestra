@@ -123,6 +123,23 @@ describe("WithPagePermissions", () => {
     else expect(screen.queryByText("Page content")).not.toBeInTheDocument();
   });
 
+  it.each([
+    [{ log: ["read"] }, "/consults/logs", true],
+    [{ guardrailsYell: ["read"] }, "/consults/logs", true],
+    [{ guardrailsYell: ["read"] }, "/consults/logs/yells/yell-1", true],
+    [{ log: ["read", "admin"] }, "/consults/logs/yells/yell-1", false],
+    [{ guardrailsPolicy: ["read"] }, "/consults/logs", false],
+  ] as [
+    Permissions,
+    string,
+    boolean,
+  ][])("opens the Guardrails log with log or yell access (%o at %s: %s)", (permissions, pathname, opens) => {
+    signInAs(permissions);
+    renderAt(pathname);
+    if (opens) expect(screen.getByText("Page content")).toBeVisible();
+    else expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+  });
+
   it("keeps the other chat pages behind the check", () => {
     signInAs(null);
     renderAt("/chat/runs");

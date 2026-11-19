@@ -1,11 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useAgentRuntimeTiers,
+  useDefaultEnvironment,
+  useMcpRuntimeTiers,
+} from "@/lib/organization.query";
 import {
   useAssignableTeams,
   useMyTeams,
@@ -91,6 +98,9 @@ vi.mock("@/components/environment-variables-form-field", () => ({
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useFeature).mockImplementation((feature: string) => {
       if (feature === "mcpServerBaseImage") return "";
       if (feature === "orchestratorK8sRuntime") return true;
@@ -453,5 +463,144 @@ describe("McpCatalogForm enterprise gating", () => {
         "mcp-server-123-regcred-containerregistry-example-com-user",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("selects existing runtime tiers only for permitted generated deployments", async () => {
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+      data: {
+        tiers: [{ name: "Agent only", cpuRequest: 4, memoryRequestMiB: 8192 }],
+      },
+    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue({
+      data: {
+        tiers: [
+          {
+            name: "Small",
+            cpuRequest: 0.25,
+            cpuLimit: null,
+            memoryRequestMiB: 256,
+            memoryLimitMiB: 512,
+          },
+          {
+            name: "Large",
+            cpuRequest: 1,
+            cpuLimit: 2,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useMcpRuntimeTiers>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          resource: "mcpRegistry",
+          action: "configure-deployment-spec",
+          scope: "*",
+        },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    const initialValues = {
+      id: "resource-catalog",
+      name: "Resource server",
+      serverType: "local",
+      localConfig: {
+        dockerImage: "example/server:1",
+        runtimeTier: "small",
+      },
+      deploymentSpecYaml: null,
+      labels: [],
+      teams: [],
+    };
+    const loadedTiers = vi.mocked(useMcpRuntimeTiers)();
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useMcpRuntimeTiers>);
+    const onSubmit = vi.fn();
+    const { container, rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toHaveTextContent("Loading tiers…");
+    expect(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/unavailable/)).not.toBeInTheDocument();
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue(loadedTiers);
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toHaveTextContent("Small: 0.25 CPU, 256 MiB");
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    );
+    expect(
+      screen.queryByRole("option", { name: /Agent only/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /workspace/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("option", { name: "Large: 1 CPU, 1 GiB" }),
+    );
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].localConfig.runtimeTier).toBe("Large");
+
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "Deployment defaults" }),
+    );
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1][0].localConfig.runtimeTier).toBeUndefined();
+
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={
+          { ...initialValues, deploymentSpecYaml: "kind: Deployment" } as never
+        }
+      />,
+    );
+    expect(
+      screen.queryByRole("combobox", { name: "Runtime tier" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Resources are configured in the custom Kubernetes deployment YAML.",
+      ),
+    ).toBeInTheDocument();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(
+      screen.queryByRole("combobox", { name: "Runtime tier" }),
+    ).not.toBeInTheDocument();
   });
 });

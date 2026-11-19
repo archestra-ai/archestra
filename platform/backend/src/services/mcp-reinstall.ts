@@ -900,6 +900,7 @@ type ComparableLocalConfig = Pick<
   | "httpPath"
   | "serviceAccount"
   | "imagePullPolicy"
+  | "runtimeTier"
 >;
 
 /**
@@ -1004,6 +1005,7 @@ function getLocalExecutionConfig(
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",
     imagePullPolicy: catalog.localConfig?.imagePullPolicy,
+    runtimeTier: catalog.localConfig?.runtimeTier,
   };
 }
 

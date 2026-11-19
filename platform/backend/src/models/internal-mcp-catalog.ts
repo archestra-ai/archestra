@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import {
+  ApiError,
   ARCHESTRA_MCP_CATALOG_ID,
+  findMcpRuntimeTier,
+  type McpServerResources,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
+  resolveMcpRuntimeTiers,
 } from "@archestra/shared";
 import {
   and,
@@ -41,6 +45,7 @@ import type {
   InternalMcpCatalog,
   InternalMcpCatalogServerType,
   ListInternalMcpCatalog,
+  LocalConfig,
   ResourceVisibilityScope,
   SecretValue,
   UpdateInternalMcpCatalog,
@@ -54,6 +59,7 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import type { RegistryInstallViewer } from "./mcp-server";
 import McpServerModel from "./mcp-server";
+import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
@@ -161,6 +167,150 @@ class InternalMcpCatalogModel {
     return rows.length === 1;
   }
 
+  /** Resolve only CPU/RAM; agent workspace, scaleup and warm-pool settings do not apply to MCP servers. */
+  static async resolveRuntimeResources(
+    localConfig: LocalConfig,
+    organizationId: string | null | undefined,
+    tx?: Transaction,
+    serverType: InternalMcpCatalogServerType = "local",
+  ): Promise<McpServerResources | undefined> {
+    const tier = await InternalMcpCatalogModel.resolveRuntimeTier(
+      localConfig,
+      organizationId,
+      tx,
+      serverType,
+    );
+    if (!tier) return undefined;
+    return {
+      cpuRequest: tier.cpuRequest,
+      cpuLimit: tier.cpuLimit,
+      memoryRequestMiB: tier.memoryRequestMiB,
+      memoryLimitMiB: tier.memoryLimitMiB,
+    };
+  }
+
+  private static async resolveRuntimeTier(
+    localConfig: LocalConfig,
+    organizationId: string | null | undefined,
+    tx?: Transaction,
+    serverType: InternalMcpCatalogServerType = "local",
+  ) {
+    if (!localConfig.runtimeTier) return undefined;
+    if (serverType !== "local")
+      throw new ApiError(
+        400,
+        "Runtime tiers are only supported for locally hosted MCP servers",
+      );
+    if (!organizationId)
+      throw new ApiError(
+        400,
+        "An organization is required to select an MCP runtime tier",
+      );
+    const organization = await OrganizationModel.getById(organizationId, tx);
+    if (!organization) throw new ApiError(400, "Organization not found");
+    const { tiers } = resolveMcpRuntimeTiers(organization.mcpRuntimeTiers);
+    const tier = findMcpRuntimeTier(tiers, localConfig.runtimeTier);
+    if (!tier)
+      throw new ApiError(
+        400,
+        `The runtime tier ${localConfig.runtimeTier} is not one of the organization's runtime tiers: ${tiers.map((entry) => entry.name).join(", ")}`,
+      );
+    return tier;
+  }
+
+  /** Include hidden variants and deleted entries: restoring one must not lose its tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+    tx?: Transaction;
+  }): Promise<number> {
+    const table = schema.internalMcpCatalogTable;
+    const [row] = await (params.tx ?? db)
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`${table.localConfig}->>'runtimeTier' = ${params.name}`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /** Flag CPU/RAM changes without restarting workloads or applying agent disk/pool settings. */
+  static async markRuntimeTierResizes(params: {
+    organizationId: string;
+    names: readonly string[];
+    tx: Transaction;
+  }): Promise<void> {
+    if (!params.names.length) return;
+    const catalog = schema.internalMcpCatalogTable;
+    const installs = schema.mcpServersTable;
+    const affected = and(
+      eq(catalog.organizationId, params.organizationId),
+      eq(catalog.serverType, "local"),
+      // Empty YAML follows the generated deployment path just like null.
+      or(
+        isNull(catalog.deploymentSpecYaml),
+        eq(catalog.deploymentSpecYaml, ""),
+      ),
+      sql`${catalog.localConfig}->>'runtimeTier' in (${sql.join(
+        params.names.map((name) => sql`${name}`),
+        sql`, `,
+      )})`,
+    );
+    await params.tx
+      .update(installs)
+      .set({
+        reinstallRequired: true,
+        reinstallReason: sql`case when ${installs.reinstallRequired} and ${installs.reinstallReason} = 'new-input' then 'new-input' else 'restart' end`,
+      })
+      .where(
+        inArray(
+          installs.catalogId,
+          params.tx
+            .select({ id: catalog.id })
+            .from(catalog)
+            .where(and(affected, eq(catalog.multitenant, false))),
+        ),
+      );
+    await params.tx
+      .update(catalog)
+      .set({ catalogReinstallRequired: true })
+      .where(and(affected, eq(catalog.multitenant, true)));
+  }
+
+  /** Apply the mapping once per stored name, in the organization's settings transaction. */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.internalMcpCatalogTable;
+    const stored = sql`${table.localConfig}->>'runtimeTier'`;
+    const mapped = sql.join(
+      params.renames.map(
+        (rename) => sql`when ${rename.from} then ${rename.to}`,
+      ),
+      sql` `,
+    );
+    await params.tx
+      .update(table)
+      .set({
+        localConfig: sql`jsonb_set(${table.localConfig}, '{runtimeTier}', to_jsonb((case ${stored} ${mapped} end)::text))`,
+      })
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`${stored} in (${sql.join(
+            params.renames.map((rename) => sql`${rename.from}`),
+            sql`, `,
+          )})`,
+        ),
+      );
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
     context?: {
@@ -196,6 +346,23 @@ class InternalMcpCatalogModel {
     };
 
     let createdItem = await withDbTransaction(async (tx) => {
+      if (dbValues.localConfig) {
+        if (context?.organizationId)
+          await OrganizationModel.lockRowForUpdate(context.organizationId, tx);
+        const tier = await InternalMcpCatalogModel.resolveRuntimeTier(
+          dbValues.localConfig,
+          context?.organizationId,
+          tx,
+          dbValues.serverType,
+        );
+        // Persist the configured spelling so SQL never has to reproduce
+        // JavaScript's Unicode case folding for reference lifecycle checks.
+        if (tier)
+          insertValues.localConfig = {
+            ...dbValues.localConfig,
+            runtimeTier: tier.name,
+          };
+      }
       const [row] = await tx
         .insert(schema.internalMcpCatalogTable)
         .values(
@@ -1453,11 +1620,59 @@ class InternalMcpCatalogModel {
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
     if (Object.keys(setValues).length > 0) {
-      [dbItem] = await db
-        .update(schema.internalMcpCatalogTable)
-        .set(setValues)
-        .where(eq(schema.internalMcpCatalogTable.id, id))
-        .returning();
+      if (
+        dbValues.localConfig !== undefined ||
+        dbValues.deploymentSpecYaml !== undefined ||
+        dbValues.serverType !== undefined
+      ) {
+        const [owner] = await db
+          .select({
+            organizationId: schema.internalMcpCatalogTable.organizationId,
+          })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        dbItem = await withDbTransaction(async (tx) => {
+          // Lock the organization before reading either tiers or the current
+          // reference, in the same order as tier renames/removals.
+          if (owner?.organizationId)
+            await OrganizationModel.lockRowForUpdate(owner.organizationId, tx);
+          const [current] = await tx
+            .select()
+            .from(schema.internalMcpCatalogTable)
+            .where(eq(schema.internalMcpCatalogTable.id, id));
+          if (!current) return undefined;
+          const localConfig =
+            dbValues.localConfig === undefined
+              ? current.localConfig
+              : dbValues.localConfig;
+          // Custom YAML does not excuse an invalid hidden reference.
+          if (localConfig) {
+            const tier = await InternalMcpCatalogModel.resolveRuntimeTier(
+              localConfig,
+              current.organizationId,
+              tx,
+              dbValues.serverType ?? current.serverType,
+            );
+            if (tier)
+              setValues.localConfig = {
+                ...localConfig,
+                runtimeTier: tier.name,
+              };
+          }
+          const [updated] = await tx
+            .update(schema.internalMcpCatalogTable)
+            .set(setValues)
+            .where(eq(schema.internalMcpCatalogTable.id, id))
+            .returning();
+          return updated;
+        });
+      } else {
+        [dbItem] = await db
+          .update(schema.internalMcpCatalogTable)
+          .set(setValues)
+          .where(eq(schema.internalMcpCatalogTable.id, id))
+          .returning();
+      }
     } else {
       [dbItem] = await db
         .select()

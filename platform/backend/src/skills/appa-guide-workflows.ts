@@ -198,7 +198,7 @@ This applies when the skill runs in, or the policy covers, a client connected to
 ## Running the skill from a client
 
 - Credential and battery-token cards open only in Archestra chat. Elsewhere, direct the operator to Settings → Credentials.
-- Without Archestra's result banner, confirm a healthy, enabled local save in at most 60 words: "Your policy is saved and switched on. New conversations will use it; this conversation keeps the policy it started with."
+- Without Archestra's result banner, confirm a healthy, enabled local save in at most 60 words: "Your policy is saved and switched on. Open and new conversations use it from their next tool call."
 
 ## Native tools
 

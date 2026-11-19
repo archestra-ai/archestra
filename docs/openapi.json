@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.39"
+    "version": "v1.5.0-rc.40"
   },
   "components": {
     "schemas": {
@@ -424648,6 +424648,40 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "syncedLongContextPricing": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "threshold": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "pricePerMillionInput": {
+                            "type": "string"
+                          },
+                          "pricePerMillionOutput": {
+                            "type": "string"
+                          },
+                          "pricePerMillionCacheRead": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "pricePerMillionCacheWrite": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "threshold",
+                          "pricePerMillionInput",
+                          "pricePerMillionOutput",
+                          "pricePerMillionCacheRead",
+                          "pricePerMillionCacheWrite"
+                        ],
+                        "additionalProperties": false
+                      },
                       "longContextThreshold": {
                         "nullable": true,
                         "type": "integer",
@@ -425029,6 +425063,7 @@
                       "customPricePerMillionOutput",
                       "customPricePerMillionCacheRead",
                       "customPricePerMillionCacheWrite",
+                      "syncedLongContextPricing",
                       "longContextThreshold",
                       "longContextPricePerMillionInput",
                       "longContextPricePerMillionOutput",
@@ -426916,6 +426951,40 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "syncedLongContextPricing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "threshold": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "pricePerMillionInput": {
+                          "type": "string"
+                        },
+                        "pricePerMillionOutput": {
+                          "type": "string"
+                        },
+                        "pricePerMillionCacheRead": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "pricePerMillionCacheWrite": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "threshold",
+                        "pricePerMillionInput",
+                        "pricePerMillionOutput",
+                        "pricePerMillionCacheRead",
+                        "pricePerMillionCacheWrite"
+                      ],
+                      "additionalProperties": false
+                    },
                     "longContextThreshold": {
                       "nullable": true,
                       "type": "integer",
@@ -427065,6 +427134,7 @@
                     "customPricePerMillionOutput",
                     "customPricePerMillionCacheRead",
                     "customPricePerMillionCacheWrite",
+                    "syncedLongContextPricing",
                     "longContextThreshold",
                     "longContextPricePerMillionInput",
                     "longContextPricePerMillionOutput",

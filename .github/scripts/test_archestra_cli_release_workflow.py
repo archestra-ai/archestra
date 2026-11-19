@@ -431,27 +431,36 @@ class WorkflowPolicyTests(unittest.TestCase):
     def test_jobs(self):
         self.assertEqual(list(JOBS), ["version", "build", "release-state", "sign-windows", "publish", "lock"])
 
-    def test_every_action_is_pinned_by_commit_or_is_this_repository_s_own(self):
+    def test_every_action_is_locked_or_is_this_repository_s_own(self):
         uses = re.findall(r"^\s+(?:- )?uses: (\S+)", WORKFLOW, re.M)
         self.assertTrue(uses)
+        locked = locked_dependencies(".github/workflows/build-archestra-cli.yml")
         for action in uses:
             with self.subTest(action=action):
-                self.assertRegex(action, r"^(\$/\.github/actions/[a-z-]+|[\w.-]+/[\w./-]+@[0-9a-f]{40})$")
+                if action.startswith("$/"):
+                    self.assertRegex(action, r"^\$/\.github/actions/[a-z-]+$")
+                else:
+                    # The lockfile keys an action by repository and ref, without its path.
+                    name, ref = action.lower().split("@", 1)
+                    key = "/".join(name.split("/")[:2]) + "@" + ref
+                    self.assertIn(key, locked)
+                    self.assertRegex(locked[key], r"^sha1-[0-9a-f]{40}$")
 
-    def test_pinned_actions_are_ones_other_workflows_already_use(self):
+    def test_remote_actions_are_ones_other_workflows_already_use(self):
         others = "".join(
             path.read_text() for path in (ROOT / ".github/workflows").glob("*.yml")
             if path.name != "build-archestra-cli.yml"
         )
         # Microsoft's actions for Windows signing, reviewed for this workflow
-        # and used by no other one. Named without a pin, so version bumps pass.
+        # and used by no other one, only in sign-windows.
         signing = {"azure/login", "azure/artifact-signing-action"}
-        pinned = re.findall(r"^\s+(?:- )?uses: (\S+@[0-9a-f]{40} # \S+)$", WORKFLOW, re.M)
-        only_here = {line for line in pinned if line not in others}
-        self.assertEqual({line.split("@", 1)[0] for line in only_here}, signing)
-        for line in only_here:
-            with self.subTest(action=line):
-                self.assertTrue(line in JOBS["sign-windows"])
+        only_here = set()
+        for action in re.findall(r"^\s+(?:- )?uses: ([^$\s]\S*@\S+)$", WORKFLOW, re.M):
+            with self.subTest(action=action):
+                if f"uses: {action}\n" not in others:
+                    only_here.add(action.split("@", 1)[0])
+                    self.assertTrue(f"uses: {action}\n" in JOBS["sign-windows"])
+        self.assertEqual(only_here, signing)
 
     def test_permissions_are_minimal_and_credentials_never_persist(self):
         self.assertTrue("\npermissions: {}\n" in WORKFLOW)
@@ -555,6 +564,15 @@ class WorkflowPolicyTests(unittest.TestCase):
                     check=True, capture_output=True, env=os.environ | {"TARGET": target, "FILE": name},
                 )
                 self.assertEqual((Path(directory) / "target/served" / name).read_bytes(), content(name))
+
+def locked_dependencies(workflow):
+    """Map each action the lockfile lists for a workflow to its locked commit."""
+    text = (ROOT / ".github/workflows/actions.lock").read_text()
+    section = text.split(f"    '{workflow}':\n", 1)[1]
+    listed = re.findall(r"^        - '([^']+)'$", section.split("\n    '", 1)[0], re.M)
+    dependencies = text.split("\ndependencies:\n", 1)[1]
+    commits = dict(re.findall(r"^    '([^']+)':\n(?:        .*\n)*?        commit: '([^']+)'$", dependencies, re.M))
+    return {action: commits[action] for action in listed}
 
 
 if __name__ == "__main__":

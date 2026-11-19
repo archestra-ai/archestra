@@ -75,7 +75,7 @@ jobs:
       version: ${{ steps.build.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -133,7 +133,7 @@ jobs:
           Write-Host "v$($env:VERSION) is unreleased; version guard passed."
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: m-files-vaf-add-on
           # The versioned and stable-named files are byte-identical, so the
@@ -155,7 +155,7 @@ jobs:
       attestations: write # store the attestation
     steps:
       - name: Download build artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: m-files-vaf-add-on
 
@@ -176,7 +176,7 @@ jobs:
       # The versioned file is a copy, so the same attestation covers it.
       - name: Attest the package
         if: steps.existing.outputs.published == 'false'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: archestra-m-files-vaf-add-on.mfappx
 

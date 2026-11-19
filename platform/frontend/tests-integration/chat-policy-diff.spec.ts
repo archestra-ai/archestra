@@ -116,12 +116,13 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   await expect(previous).toBeDisabled();
 });
 
-test("keeps an unchanged search result visible when the dialog resizes", async ({
+test("keeps an unchanged search result visible when resizing and switching views", async ({
   page,
   mswControl,
 }) => {
+  await page.setViewportSize({ width: 850, height: 500 });
   const context = Array.from(
-    { length: 150 },
+    { length: 1000 },
     (_, i) => `reference_rule_${i} = "keep"`,
   ).join("\n");
   const id = await registerNavigationReview(
@@ -143,21 +144,44 @@ test("keeps an unchanged search result visible when the dialog resizes", async (
     .getByRole("textbox", { name: /Proposed policy/ })
     .press("ControlOrMeta+f");
   const find = dialog.getByRole("textbox", { name: "Find", exact: true });
-  await find.fill("reference_rule_60");
+  await find.fill('reference_rule_60 = "keep"');
   await find.press("Enter");
-  const match = dialog
-    .locator(".modified-in-monaco-diff-editor")
+  const editor = dialog.locator(".modified-in-monaco-diff-editor");
+  const match = editor
+    .locator(".view-lines")
     .getByText('reference_rule_60 = "keep"', { exact: true });
-  await expect(match).toBeInViewport();
-  await page.setViewportSize({ width: 850, height: 500 });
+  await expectLineInEditor(match, editor);
+  await page.setViewportSize({ width: 1100, height: 600 });
   await page.evaluate(
     () =>
       new Promise((resolve) => {
         requestAnimationFrame(() => requestAnimationFrame(resolve));
       }),
   );
-  await expect(match).toBeInViewport();
+  await expectLineInEditor(match, editor);
+  await dialog.getByRole("button", { name: "Split view", exact: true }).click();
+  await expectLineInEditor(match, editor);
+  await dialog.getByRole("button", { name: "Split view", exact: true }).click();
+  await expectLineInEditor(match, editor);
 });
+
+async function expectLineInEditor(line: Locator, editor: Locator) {
+  await expect(line).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const [text, viewport] = await Promise.all([
+        line.boundingBox(),
+        editor.boundingBox(),
+      ]);
+      return (
+        text !== null &&
+        viewport !== null &&
+        text.y >= viewport.y &&
+        text.y + text.height <= viewport.y + viewport.height
+      );
+    })
+    .toBe(true);
+}
 
 async function expectMarkerCoversLine(marker: Locator, line: Locator) {
   await expect(marker).toBeVisible();

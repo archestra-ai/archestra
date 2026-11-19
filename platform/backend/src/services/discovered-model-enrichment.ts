@@ -66,6 +66,9 @@ export async function enrichDiscoveredModel(params: {
     cacheWritePricePerToken: selfHosted
       ? null
       : (prices?.cacheWritePricePerToken ?? null),
+    syncedLongContextPricing: selfHosted
+      ? null
+      : (prices?.syncedLongContextPricing ?? null),
     contextLength: selfHosted ? null : (metadata?.contextLength ?? null),
     outputLength: selfHosted ? null : (metadata?.outputLength ?? null),
     supportsToolCalling: metadata?.supportsToolCalling ?? null,

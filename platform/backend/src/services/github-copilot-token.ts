@@ -44,8 +44,17 @@ const GITHUB_COPILOT_HEADERS: Record<string, string> = {
   "editor-version": `vscode/${GITHUB_COPILOT_VSCODE_VERSION}`,
   "editor-plugin-version": `copilot-chat/${GITHUB_COPILOT_CHAT_VERSION}`,
   "user-agent": `GitHubCopilotChat/${GITHUB_COPILOT_CHAT_VERSION}`,
-  "x-github-api-version": "2025-04-01",
 };
+
+/**
+ * API versions, split the way the VS Code Copilot Chat extension splits them.
+ * The token exchange keeps the older version. Requests to the Copilot API
+ * (models, chat completions, responses) send the current one: with an older
+ * version, or none, `/models` reports only each model's default context tier
+ * (e.g. 200K for a model Copilot serves with a 1M window).
+ */
+const GITHUB_COPILOT_TOKEN_EXCHANGE_API_VERSION = "2025-04-01";
+const GITHUB_COPILOT_API_VERSION = "2026-08-01";
 
 // Not in the internal-helpers section: consts are not hoisted, and this one is
 // read by a field initializer when the singleton is constructed at module eval.
@@ -108,6 +117,7 @@ class GithubCopilotTokenManager {
       {
         headers: {
           ...GITHUB_COPILOT_HEADERS,
+          "x-github-api-version": GITHUB_COPILOT_TOKEN_EXCHANGE_API_VERSION,
           accept: "application/json",
           // The exchange endpoint expects the "token" scheme, not "Bearer".
           authorization: `token ${githubToken}`,
@@ -244,6 +254,7 @@ export function createGithubCopilotFetch(params: {
       for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
         headers.set(name, value);
       }
+      headers.set("x-github-api-version", GITHUB_COPILOT_API_VERSION);
       headers.set("authorization", `Bearer ${credentials.bearer}`);
       return baseFetch(
         resolveCopilotRequestUrl(input, credentials.apiEndpoint),
@@ -403,6 +414,7 @@ async function githubAppCopilotFetch(params: {
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
     headers.set("copilot-integration-id", COPILOT_APP_INTEGRATION_ID);
+    headers.set("x-github-api-version", GITHUB_COPILOT_API_VERSION);
     headers.set("authorization", `Bearer ${token}`);
     return baseFetch(input, { ...init, headers });
   };

@@ -29,6 +29,9 @@ import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
+// The walkthrough videos are served from the CDN in archestra-ai/infra
+// (gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
+import { setupVideoUrl } from "@/lib/setup-videos";
 
 type ConnectionMode = NonNullable<
   NonNullable<
@@ -295,7 +298,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
         </ol>
       </StepCard>
       <video
-        src="/slack/slack-display-settings.mp4"
+        src={setupVideoUrl("slack/slack-display-settings.mp4")}
         controls
         muted
         autoPlay
@@ -365,7 +368,7 @@ function StepInstall({
         </ol>
       </StepCard>
       <video
-        src="/slack/add-slack-app.mp4"
+        src={setupVideoUrl("slack/add-slack-app.mp4")}
         controls
         muted
         autoPlay
@@ -446,7 +449,7 @@ function StepAppLevelToken({
         </ol>
       </StepCard>
       <video
-        src="/slack/slack-app-level-token.mp4"
+        src={setupVideoUrl("slack/slack-app-level-token.mp4")}
         controls
         muted
         autoPlay

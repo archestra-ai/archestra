@@ -18,7 +18,7 @@ catalog:
   # Keep core/OAuth contexts aligned; SSO retains its OAuth-only patch below.
   better-auth: 1.7.7
   "@better-auth/core": 1.7.7
-  "@better-auth/oauth-provider": 1.7.0
+  "@better-auth/oauth-provider": 1.7.7
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1.
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
@@ -32,7 +32,6 @@ overrides:
   # endpoint context. The older plugin's exact peer otherwise installs a
   # second, incompatible better-call/core context.
   '@better-auth/sso@1.6.22>better-call': 1.4.0
-  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
   # Run their validators on patched Zod 4; the package patches below adapt
   # their record/function/error APIs while preserving current SDK interfaces.

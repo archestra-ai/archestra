@@ -30,10 +30,17 @@ describe.each([
   "gpt-6.1-sol",
   "gpt-6-luna",
 ])("OpenAI %s over Responses", (modelName) => {
-  test("resends encrypted reasoning on the tool step that follows", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
+  test.for([
+    {
+      // What agent chat sends for a Responses-routed OpenAI model.
+      caller: "agent chat",
+      providerOptions: { openai: { store: false, reasoningSummary: "auto" } },
+    },
+    // A compaction summary sends no options of its own.
+    { caller: "a compaction summary", providerOptions: undefined },
+  ])("resends encrypted reasoning on the tool step that follows ($caller)", async ({
+    providerOptions,
+  }, { makeOrganization, makeAgent }) => {
     const organization = await makeOrganization();
     const agent = await makeAgent({ organizationId: organization.id });
     config.llmProxy.plugins = [];
@@ -118,10 +125,7 @@ describe.each([
         }),
       },
       temperature: 0.2,
-      // What agent chat sends for a Responses-routed OpenAI model.
-      providerOptions: {
-        openai: { store: false, reasoningSummary: "auto" },
-      },
+      ...(providerOptions && { providerOptions }),
       stopWhen: stepCountIs(2),
       maxRetries: 0,
     });
@@ -135,7 +139,7 @@ describe.each([
       model: modelName,
       store: false,
       include: expect.arrayContaining(["reasoning.encrypted_content"]),
-      reasoning: { summary: "auto" },
+      ...(providerOptions && { reasoning: { summary: "auto" } }),
     });
     // Reasoning models reject sampling parameters.
     expect(bodies[0]).not.toHaveProperty("temperature");

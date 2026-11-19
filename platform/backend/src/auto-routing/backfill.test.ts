@@ -623,6 +623,35 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("the history lists each job newest first, with what it scored; a scan replaced before scoring is left out", async () => {
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await turn("late", "One more task", {
+      createdAt: new Date(Date.now() - 2 * DAY_MS),
+    });
+    await scan();
+    await scan();
+
+    const { history } = await describeBackfill(organizationId);
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        phase: "scan",
+        status: "scanned",
+        foundSessions: 5,
+        scoredSessions: null,
+        startedByName: expect.any(String),
+      }),
+      expect.objectContaining({
+        phase: "score",
+        status: "done",
+        foundSessions: 4,
+        scoredSessions: 4,
+        spentCostUsd: expect.any(Number),
+      }),
+    ]);
+  });
+
   test("oversized tool names fail terminally without spending the scorer budget", async () => {
     await turn("oversized", "Review this oversized agent", {
       request: {

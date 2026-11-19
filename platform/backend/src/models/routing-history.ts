@@ -304,6 +304,43 @@ class RoutingHistoryModel {
     return rows.map((row) => SelectRoutingHistorySessionSchema.parse(row));
   }
 
+  /**
+   * Sessions each scoring job scored, counted by when its scores were
+   * written: an organization runs one job at a time, so a job's window
+   * holds only its own scores.
+   */
+  static async scoredByJob(
+    organizationId: string,
+    jobs: {
+      id: string;
+      scorerVersionId: string;
+      startedAt: Date;
+      endedAt: Date | null;
+    }[],
+  ): Promise<Map<string, number>> {
+    if (jobs.length === 0) return new Map();
+    const windows = sql.join(
+      jobs.map(
+        (job) =>
+          sql`(${job.id}::uuid, ${job.scorerVersionId}::uuid, ${job.startedAt.toISOString()}::timestamptz, ${job.endedAt?.toISOString() ?? null}::timestamptz)`,
+      ),
+      sql`, `,
+    );
+    const result = await db.execute<{ id: string; scored: number }>(sql`
+      select j.id, count(*)::int as scored
+      from (values ${windows}) as j(id, scorer_version_id, started_at, ended_at)
+      join routing_history_scores sc
+        on sc.scorer_version_id = j.scorer_version_id
+        and sc.status = 'scored'
+        and sc.created_at >= j.started_at
+        and sc.created_at <= coalesce(j.ended_at, now())
+      join routing_history_sessions s
+        on s.id = sc.history_session_id
+        and s.organization_id = ${organizationId}
+      group by j.id`);
+    return new Map(result.rows.map((row) => [row.id, row.scored]));
+  }
+
   /** How far scoring of the sample got for the scorer version. */
   static async sampleProgress(params: SampleParams): Promise<SampleProgress> {
     const result = await db.execute<{

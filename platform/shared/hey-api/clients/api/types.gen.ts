@@ -36545,6 +36545,19 @@ export type CancelAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36669,6 +36682,19 @@ export type GetAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36793,6 +36819,19 @@ export type ScanAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 
@@ -36925,6 +36964,19 @@ export type ScoreAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
     };
 };
 

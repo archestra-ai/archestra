@@ -51,7 +51,9 @@ const GITHUB_COPILOT_HEADERS: Record<string, string> = {
  * The token exchange keeps the older version. Requests to the Copilot API
  * (models, chat completions, responses) send the current one: with an older
  * version, or none, `/models` reports only each model's default context tier
- * (e.g. 200K for a model Copilot serves with a 1M window).
+ * (e.g. 200K for a model Copilot serves with a 1M window). The hourly
+ * client-version workflow raises the Copilot API version to the one the
+ * Copilot Chat extension in stable VS Code sends.
  */
 const GITHUB_COPILOT_TOKEN_EXCHANGE_API_VERSION = "2025-04-01";
 const GITHUB_COPILOT_API_VERSION = "2026-08-01";

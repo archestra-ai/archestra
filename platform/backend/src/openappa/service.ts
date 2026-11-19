@@ -99,8 +99,6 @@ export const APPA_CHAT_SOURCES = [
   "chat:compaction",
 ] as const;
 export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
-/** The runtime's built-in sanitizer of a schema-attested subagent return. */
-const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
@@ -1616,9 +1614,7 @@ export async function evaluateToolCalls(
       // Denied calls return as notices; other calls in the batch stand.
       return {
         kind: "deny" as const,
-        feedback: unofferedAttestation(decision, declaration)
-          ? `This policy offers no \`${ATTEST_SCHEMA_SANITIZER}\` return for this subagent, so \`return_schema\` cannot be honored. Call it without \`return_schema\`, or ask an administrator to declare the sanitizer.\n\n${decisionMessage(decision)}`
-          : decisionMessage(decision),
+        feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
             ? decision.offers
@@ -2047,36 +2043,6 @@ function spawnReturnDeclares(
         return_schema: normalizeReturnSchemaNode(declaration.schema),
       };
   }
-}
-
-const OfferedReturnSchema = z.union([
-  z.literal("as_spoken"),
-  z.object({ sanitizer: z.string() }),
-]);
-
-/**
- * Whether an attested declaration was refused because the policy offers no
- * attested return here. The runtime offers return plans on a declaring spawn's
- * block only when it did not apply the declaration, so a block whose return
- * plans include none through `attest-schema` cannot honor the schema.
- */
-function unofferedAttestation(
-  decision: NativeDecision,
-  declaration: SpawnReturnDeclaration | undefined,
-): boolean {
-  if (declaration?.kind !== "attested" || decision.decision !== "deny_call")
-    return false;
-  const routes = (decision.offers ?? []).flatMap((offer) => {
-    const route = OfferedReturnSchema.safeParse(offer.returns);
-    return route.success ? [route.data] : [];
-  });
-  return (
-    routes.length > 0 &&
-    !routes.some(
-      (route) =>
-        route !== "as_spoken" && route.sanitizer === ATTEST_SCHEMA_SANITIZER,
-    )
-  );
 }
 
 function normalizeReturnSchemaNode(node: unknown): unknown {

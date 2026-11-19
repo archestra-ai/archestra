@@ -73,7 +73,7 @@ use appa_runtime::{
 };
 use appa_runtime_api::{
     Actor, DeclaredArguments, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
-    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
+    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -1229,8 +1229,18 @@ impl State {
         .await;
         let decision = outcome.decision;
         if cancelled && !matches!(decision, HookDecision::Ack) {
-            let answered =
-                serde_json::to_string(&WireDecision::of(&decision)).map_err(invariant)?;
+            // Only the runtime's own refusal text is named: any other answer carries output.
+            let answered = match &decision {
+                HookDecision::Block { reason } => format!("a block: {reason}"),
+                HookDecision::Refuse { class, detail } => {
+                    format!("a refusal ({class:?}): {detail}")
+                }
+                other => wire(other)?
+                    .get("decision")
+                    .and_then(Value::as_str)
+                    .unwrap_or("an unnamed decision")
+                    .to_owned(),
+            };
             let withheld = if call.spawn { "spawn" } else { "call" };
             return Err(invariant(format!(
                 "OpenAPPA could not settle a withheld tool call: the runtime answered the cancelled {withheld} with {answered}"

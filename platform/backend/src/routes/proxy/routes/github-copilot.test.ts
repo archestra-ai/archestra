@@ -13,11 +13,12 @@
  *     models.id UUID — plus the exchanged bearer and integration headers)
  *   - how the upstream rejection surfaces to the proxy caller
  */
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, jsonSchema, streamText, tool } from "ai";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -25,13 +26,19 @@ import {
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialConnectionModel,
+  RuntimeCredentialDefinitionModel,
   VirtualApiKeyModel,
 } from "@/models";
 import InteractionModel from "@/models/interaction";
 import InteractionBillingModel from "@/models/interaction-billing";
 import LimitModel from "@/models/limit";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { appendSessionReceipt } from "@/openappa/session-token";
+import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { modelSyncService } from "@/services/model-sync";
 import captured from "@/services/vendor-published-pricing.test-data.json";
 import {
@@ -1616,5 +1623,738 @@ describe("GitHub Copilot long-context accounting", () => {
       (await LimitModel.getModelUsageBreakdowns([c.cap.id])).get(c.cap.id)?.[0]
         .cost,
     ).toBeCloseTo(0.099596, 10);
+  });
+});
+
+describe("GitHub Copilot native Messages", () => {
+  setupTestCacheManager();
+  test.for([
+    "passthrough",
+    "virtual",
+  ])("preserves signed history and Copilot usage with %s credentials without a pool", async (credential, {
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({
+      name: "Native Messages",
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId, { role: "member" });
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const model = "claude-sonnet-4.5";
+    const storedModel = await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await ModelModel.update(storedModel.id, {
+      customPricePerMillionInput: "3",
+      customPricePerMillionOutput: "15",
+      customPricePerMillionCacheRead: "0.3",
+    });
+    const cap = await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    const githubToken = uniqueGithubToken();
+    const secret = await makeSecret({ secret: { apiKey: githubToken } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "github-copilot", userId: owner.id },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      storedModel.id,
+    ]);
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "Native Copilot",
+      authorId: owner.id,
+      ...accessGrants("personal"),
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+    stubTokenExchange();
+    const messages = [
+      { role: "user", content: "Read the file" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "Inspecting",
+            signature: "signed-history",
+          },
+          {
+            type: "tool_use",
+            id: "call_read",
+            name: "read",
+            input: { path: "example.txt" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "call_read", content: "hello" },
+        ],
+      },
+    ];
+    let upstream: Record<string, unknown> | undefined;
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages",
+        async ({ request }) => {
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer copilot-bearer-test",
+          );
+          expect(request.headers.get("x-api-key")).toBeNull();
+          expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+          upstream = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({
+            id: "msg_native",
+            type: "message",
+            role: "assistant",
+            model,
+            content: [
+              {
+                type: "thinking",
+                thinking: "Done",
+                signature: "signed-result",
+              },
+              { type: "text", text: "hello" },
+            ],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: {
+              input_tokens: 12,
+              output_tokens: 3,
+              cache_read_input_tokens: 2,
+            },
+          });
+        },
+      ),
+    );
+    try {
+      const headers = {
+        "x-api-key": credential === "virtual" ? virtualKey : githubToken,
+        "anthropic-version": "2023-06-01",
+        ...(credential === "passthrough"
+          ? { "x-archestra-virtual-key": passthroughKey }
+          : {}),
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers,
+        payload: {
+          model,
+          max_tokens: 128,
+          messages,
+          thinking: { type: "enabled", budget_tokens: 1024 },
+          tools: [
+            {
+              name: "read",
+              input_schema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream?.messages).toEqual(messages);
+      expect(upstream?.thinking).toEqual({
+        type: "enabled",
+        budget_tokens: 1024,
+      });
+      expect(response.json().content[0]).toEqual({
+        type: "thinking",
+        thinking: "Done",
+        signature: "signed-result",
+      });
+      await drainBackgroundWork();
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agent.id));
+      expect(log).toMatchObject({
+        type: "github-copilot:messages",
+        model,
+        inputTokens: 12,
+        outputTokens: 3,
+      });
+      const expectedCost = ((12 * 3 + 3 * 15 + 2 * 0.3) / 1_000_000).toFixed(
+        10,
+      );
+      expect(log.cost).toBe(expectedCost);
+      const [receipt] = await InteractionBillingModel.findMany([log.id]);
+      expect(receipt.usage).toMatchObject({
+        status: "complete",
+        cost: expectedCost,
+      });
+      expect(
+        (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id)?.[0]
+          .cost,
+      ).toBeCloseTo(Number(expectedCost), 10);
+      let countCalls = 0;
+      server.use(
+        http.post(
+          "https://api.githubcopilot.com/v1/messages/count_tokens",
+          async ({ request }) => {
+            countCalls++;
+            expect(request.headers.get("authorization")).toBe(
+              "Bearer copilot-bearer-test",
+            );
+            expect(request.headers.get("x-api-key")).toBeNull();
+            expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+            expect(request.headers.get("anthropic-beta")).toBe(
+              "interleaved-thinking-2025-05-14",
+            );
+            expect(await request.json()).toEqual({ model, messages });
+            return HttpResponse.json({ input_tokens: 42 });
+          },
+        ),
+      );
+      // Token counting stays available even when generation has no budget left.
+      await LimitModel.patch(cap.id, { limitValue: 0 });
+      for (const url of [
+        `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        "/v1/github-copilot/v1/messages/count_tokens",
+      ]) {
+        const count = await app.inject({
+          method: "POST",
+          url,
+          headers: {
+            ...headers,
+            "anthropic-beta": "interleaved-thinking-2025-05-14",
+          },
+          payload: { model, messages },
+        });
+        expect(count.statusCode, count.body).toBe(200);
+        expect(count.json()).toEqual({ input_tokens: 42 });
+      }
+      expect(countCalls).toBe(2);
+      await drainBackgroundWork();
+      expect(
+        await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.profileId, agent.id)),
+      ).toHaveLength(1);
+      expect(
+        (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id)?.[0]
+          .cost,
+      ).toBeCloseTo(Number(expectedCost), 10);
+      // Hidden models and invalid platform credentials are rejected before HTTP.
+      await ModelModel.update(storedModel.id, { ignored: true });
+      const denied = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload: { model, messages },
+      });
+      expect(denied.statusCode).toBe(403);
+      const invalid = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          "x-api-key": "archestra_invalid_count_key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: { model, messages },
+      });
+      expect(invalid.statusCode, invalid.body).toBe(401);
+      expect(countCalls).toBe(2);
+      await ModelModel.update(storedModel.id, { ignored: false });
+      const policyKey = {
+        organizationId: agent.organizationId,
+        resource: "llmModel" as const,
+        scope: storedModel.id,
+      };
+      const existingPolicy =
+        await ResourcePermissionPolicyModel.find(policyKey);
+      const restrictedPolicy = await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: existingPolicy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: randomUUID() },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+      for (const restrictedModel of [model, `${model}[1m]`]) {
+        const restricted = await app.inject({
+          method: "POST",
+          url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+          headers,
+          payload: { model: restrictedModel, messages },
+        });
+        expect(restricted.statusCode, restricted.body).toBe(403);
+      }
+      expect(countCalls).toBe(2);
+      if (!restrictedPolicy) throw new Error("Failed to restrict model access");
+      await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: restrictedPolicy.revision,
+        grants: [
+          { subject: { type: "user", id: owner.id }, actions: ["read", "use"] },
+        ],
+      });
+      const suffixed = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          ...headers,
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+        },
+        payload: { model: `${model}[1m]`, messages },
+      });
+      expect(suffixed.statusCode, suffixed.body).toBe(200);
+      expect(suffixed.json()).toEqual({ input_tokens: 42 });
+      expect(countCalls).toBe(3);
+
+      server.use(
+        http.post(
+          "https://api.githubcopilot.com/v1/messages/count_tokens",
+          () =>
+            HttpResponse.json(
+              {
+                error: {
+                  type: "invalid_request_error",
+                  message: "Counting unsupported for this model",
+                },
+              },
+              { status: 400 },
+            ),
+        ),
+      );
+      const failure = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload: { model, messages },
+      });
+      expect(failure.statusCode).toBe(400);
+      expect(failure.json()).toEqual({
+        error: {
+          type: "invalid_request_error",
+          message: "Counting unsupported for this model",
+        },
+      });
+      expect(failure.body).not.toContain(githubToken);
+      expect(failure.body).not.toContain(virtualKey);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot Messages terminal accounting", () => {
+  // The SDK cancels its reader after message_stop. Drain MSW's response tee
+  // so cancellation can finish, just as for the Copilot accounting tests above.
+  const drainResponse = ({ response }: { response: Response }) => {
+    void response.arrayBuffer();
+  };
+  beforeEach(() => server.events.on("response:mocked", drainResponse));
+  afterEach(() =>
+    server.events.removeListener("response:mocked", drainResponse),
+  );
+  test.for([
+    false,
+    true,
+  ])("requires message_stop before finalizing usage (terminal present: %s)", async (terminalPresent, {
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Messages terminal" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const model = "claude-sonnet-4.5";
+    await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    stubTokenExchange();
+    const events = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_terminal",
+          type: "message",
+          role: "assistant",
+          model,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 3 },
+      },
+      ...(terminalPresent ? [{ type: "message_stop" }] : []),
+    ];
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages",
+        () =>
+          new HttpResponse(
+            events
+              .map(
+                (event) =>
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              )
+              .join(""),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers: {
+          "x-api-key": uniqueGithubToken(),
+          "x-archestra-virtual-key": passthroughKey,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model,
+          max_tokens: 128,
+          stream: true,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      if (terminalPresent) {
+        expect(result.body).toContain("event: message_stop");
+        expect(result.body).not.toContain("event: error");
+      } else {
+        expect(result.body).toContain(
+          "Provider stream ended before final usage was confirmed",
+        );
+        expect(result.body).not.toContain("event: message_stop");
+      }
+      await drainBackgroundWork();
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agent.id));
+      expect(log).toMatchObject({
+        type: "github-copilot:messages",
+        inputTokens: 12,
+        outputTokens: 3,
+      });
+      const [receipt] = await db
+        .select()
+        .from(schema.interactionBillingTable)
+        .where(eq(schema.interactionBillingTable.interactionId, log.id));
+      if (terminalPresent) {
+        expect(receipt.usage.issues).not.toContain("partial_stream");
+      } else {
+        expect(receipt.usage.status).toBe("incomplete");
+        expect(receipt.usage.issues).toContain("partial_stream");
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot native Messages with a stored GitHub App", () => {
+  setupTestCacheManager();
+  test("uses installation bearer for count_tokens and generation, never the stored App reference", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "App Messages" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const definition = await RuntimeCredentialDefinitionModel.create({
+      organizationId: agent.organizationId,
+      createdBy: owner.id,
+      definition: {
+        key: "copilot-messages-app",
+        name: "Copilot Messages App",
+        description: "",
+        icon: null,
+        kind: "github_app",
+        appId: "4242",
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId: agent.organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: definition.key,
+      value: privateKey,
+    });
+    const reference = encodeGithubAppReference({
+      ref: {
+        organizationId: agent.organizationId,
+        credentialId: definition.id,
+      },
+      installationId: "902400",
+      organization: "example-org",
+      githubUrl: "https://github.com",
+    });
+    const providerKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: agent.organizationId,
+        name: "Copilot App plan",
+        scope: "personal",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: reference } })).id,
+        userId: owner.id,
+      },
+      {
+        apiKeyValue: reference,
+        initialPermissionGrants: [
+          { subject: { type: "user", id: owner.id }, actions: ["read", "use"] },
+        ],
+      },
+    );
+    const model = "claude-haiku-4.5";
+    const storedModel = await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      storedModel.id,
+    ]);
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "App native Messages",
+      authorId: owner.id,
+      ...accessGrants("personal"),
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+    let mintCalls = 0;
+    let modelCalls = 0;
+    server.use(
+      http.post(
+        "https://api.github.com/app/installations/902400/access_tokens",
+        ({ request }) => {
+          mintCalls++;
+          expect(request.headers.get("authorization")).toMatch(/^Bearer ey/);
+          return HttpResponse.json(
+            {
+              token: "ghs_native_messages_installation",
+              expires_at: new Date(Date.now() + 3600000).toISOString(),
+            },
+            { status: 201 },
+          );
+        },
+      ),
+      ...[
+        "https://api.githubcopilot.com/v1/messages",
+        "https://api.githubcopilot.com/v1/messages/count_tokens",
+      ].map((url) =>
+        http.post(url, ({ request }) => {
+          modelCalls++;
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer ghs_native_messages_installation",
+          );
+          expect(request.headers.get("copilot-integration-id")).toBe(
+            "copilot-developer-cli",
+          );
+          expect(request.headers.get("x-github-api-version")).toBe(
+            "2026-08-01",
+          );
+          expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+          expect(request.headers.get("x-api-key")).toBeNull();
+          if (request.url.endsWith("count_tokens"))
+            return HttpResponse.json({ input_tokens: 11 });
+          return HttpResponse.json({
+            id: "msg_app",
+            type: "message",
+            role: "assistant",
+            model,
+            content: [{ type: "text", text: "OK" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 11, output_tokens: 1 },
+          });
+        }),
+      ),
+    );
+    try {
+      const headers = {
+        "x-api-key": virtualKey,
+        "anthropic-version": "2023-06-01",
+      };
+      const payload = {
+        model,
+        messages: [{ role: "user", content: "Reply OK" }],
+      };
+      const count = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload,
+      });
+      expect(count.statusCode, count.body).toBe(200);
+      expect(count.json()).toEqual({ input_tokens: 11 });
+      const message = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers,
+        payload: { ...payload, max_tokens: 32 },
+      });
+      expect(message.statusCode, message.body).toBe(200);
+      expect(message.json().content).toEqual([{ type: "text", text: "OK" }]);
+      expect(modelCalls).toBe(2);
+      expect(mintCalls).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot token counting provider-bound sanitization", () => {
+  test("strips gateway attestation and OpenAPPA receipts while preserving ordinary content", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent();
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const description = attestToolDescription({
+      organizationId: agent.organizationId,
+      gatewayId: randomUUID(),
+      advertisedName: "files__read",
+      kind: "t",
+      description: "Read the requested file.",
+    });
+    const cleanPayload = {
+      model: "claude-haiku-4.5",
+      system: "Inspect files without changing them.",
+      messages: [
+        { role: "user", content: "Read example.txt" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "I found the file." }],
+        },
+        { role: "user", content: "What does it contain?" },
+      ],
+      tools: [
+        {
+          name: "files__read",
+          description: "Read the requested file.",
+          input_schema: {
+            type: "object",
+            properties: { path: { type: "string", description: "File path" } },
+            required: ["path"],
+          },
+        },
+      ],
+    };
+    const payload = structuredClone(cleanPayload);
+    if (!description) throw new Error("Expected marked tool description");
+    payload.tools[0].description = description;
+    payload.messages[1].content = [
+      {
+        type: "text",
+        text: appendSessionReceipt("I found the file.", "AAA-AAAA"),
+      },
+    ];
+    const original = structuredClone(payload);
+    let upstream: unknown;
+    stubTokenExchange();
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages/count_tokens",
+        async ({ request }) => {
+          upstream = await request.json();
+          return HttpResponse.json({ input_tokens: 31 });
+        },
+      ),
+    );
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          "x-api-key": uniqueGithubToken(),
+          "x-archestra-virtual-key": passthroughKey,
+          "anthropic-version": "2023-06-01",
+        },
+        payload,
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.json()).toEqual({ input_tokens: 31 });
+      expect(upstream).toEqual(cleanPayload);
+      expect(JSON.stringify(upstream)).not.toContain("gwa1");
+      expect(JSON.stringify(upstream)).not.toContain("AAA-AAAA");
+      expect(payload).toEqual(original);
+    } finally {
+      await app.close();
+    }
   });
 });

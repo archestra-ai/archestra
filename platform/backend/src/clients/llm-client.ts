@@ -787,21 +787,8 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       // request encrypted reasoning under store:false, so the next tool step
       // resends reasoning by id alone and OpenAI rejects it. It would also
       // drop reasoningSummary and keep sampling parameters.
-      return wrapLanguageModel({
-        model: client.responses(modelName),
-        middleware: {
-          specificationVersion: "v3",
-          transformParams: async ({ params }) => ({
-            ...params,
-            providerOptions: {
-              ...params.providerOptions,
-              openai: {
-                forceReasoning: true,
-                ...params.providerOptions?.openai,
-              },
-            },
-          }),
-        },
+      return withResponsesDefaults(client.responses(modelName), {
+        forceReasoning: true,
       });
     },
     defaultBaseUrl: config.llm.openai.baseUrl,
@@ -854,12 +841,15 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // `/responses` / `/chat/completions` suffix is the whole path.
     createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
       requiresPerplexityAgentApi(modelName)
-        ? createOpenAI({
-            apiKey,
-            baseURL: direct ? perplexityAgentApiBaseUrl(baseURL) : baseURL,
-            headers,
-            fetch,
-          }).responses(modelName)
+        ? withResponsesDefaults(
+            createOpenAI({
+              apiKey,
+              baseURL: direct ? perplexityAgentApiBaseUrl(baseURL) : baseURL,
+              headers,
+              fetch,
+            }).responses(modelName),
+            {},
+          )
         : // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
           // stream their chain of thought as inline <think>…</think> text in
           // `content` — there is no reasoning_content field — so no provider
@@ -1255,7 +1245,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         headers,
         // The package always emits `think`, defaulting it to false — see
         // createOllamaNativeFetch.
-        fetch: createOllamaNativeFetch(fetch),
+        fetch: createOllamaNativeFetch({ providedFetch: fetch, modelName }),
       }).chat(modelName),
     defaultBaseUrl: config.llm["ollama-native"].baseUrl,
     proxiedPathSuffix: "/api",
@@ -1409,12 +1399,37 @@ function createTracedFetch(): typeof globalThis.fetch {
  * `/v1/ollama-native/…` themselves never pass through here and keep whatever
  * `think` they sent.
  */
-function createOllamaNativeFetch(
-  providedFetch?: typeof globalThis.fetch,
-): typeof globalThis.fetch {
-  const baseFetch = providedFetch ?? globalThis.fetch;
+function createOllamaNativeFetch(params: {
+  providedFetch?: typeof globalThis.fetch;
+  modelName: string;
+}): typeof globalThis.fetch {
+  const baseFetch = params.providedFetch ?? globalThis.fetch;
+  // A request that sets no `num_ctx` (a summary, a title) would run on the
+  // server's default window, which silently cuts a prompt the caller sized to
+  // the admin's. One lookup per model instance.
+  let pinnedNumCtx: Promise<number | undefined> | undefined;
+  const resolvePinnedNumCtx = () => {
+    pinnedNumCtx ??= ModelModel.findByProviderAndModelId(
+      "ollama-native",
+      params.modelName,
+    ).then(
+      (row) =>
+        row?.configuredParameters?.num_ctx === undefined
+          ? undefined
+          : (ModelModel.resolveEffectiveContextLength(row) ??
+            row.configuredParameters.num_ctx),
+      (error) => {
+        logger.warn(
+          { error, model: params.modelName },
+          "[LLM client] could not read the model's configured num_ctx",
+        );
+        return undefined;
+      },
+    );
+    return pinnedNumCtx;
+  };
 
-  return (input, init) => {
+  return async (input, init) => {
     const { hasMarker: hasExplicitThink, headers } = takeMarkerHeader(
       init?.headers,
       OLLAMA_THINK_EXPLICIT_HEADER,
@@ -1442,6 +1457,15 @@ function createOllamaNativeFetch(
       delete body.think;
     }
 
+    const current =
+      typeof body.options === "object" && body.options !== null
+        ? (body.options as Record<string, unknown>)
+        : {};
+    if (current.num_ctx === undefined) {
+      const numCtx = await resolvePinnedNumCtx();
+      if (numCtx !== undefined) body.options = { ...current, num_ctx: numCtx };
+    }
+
     // The package emits an `options` bag even when every key resolved to
     // nothing; an empty object is noise upstream.
     const options = body.options;
@@ -1465,6 +1489,37 @@ function createOllamaNativeFetch(
  * ids on older SDKs, 128k on newer ones, which older models reject), so it
  * gets the safe fallback. Explicit per-call values still win.
  */
+/**
+ * Defaults for a Responses-transport model; explicit per-call values win.
+ * `store: false` because every caller resends the whole history: with the
+ * SDK's default the request names earlier items by id, which the provider
+ * never stored (Perplexity's Agent API stores nothing, and turns run
+ * stateless), so it fails. That holds for one-off requests such as
+ * compaction summaries too, not only for turns that set it.
+ */
+function withResponsesDefaults(
+  model: Parameters<typeof wrapLanguageModel>[0]["model"],
+  defaults: { forceReasoning?: boolean },
+) {
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: "v3",
+      transformParams: async ({ params }) => ({
+        ...params,
+        providerOptions: {
+          ...params.providerOptions,
+          openai: {
+            store: false,
+            ...defaults,
+            ...params.providerOptions?.openai,
+          },
+        },
+      }),
+    },
+  });
+}
+
 function withCatalogOutputBudget(
   model: LLMModel,
   target: {

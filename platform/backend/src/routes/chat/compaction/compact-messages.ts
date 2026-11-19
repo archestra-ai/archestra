@@ -5,10 +5,14 @@ import {
 import type { ToolSet } from "ai";
 import logger from "@/logging";
 import { ConversationCompactionModel, ModelModel } from "@/models";
-import { resolveCompactionLlm } from "@/services/compaction-llm";
+import {
+  compactionTranscriptToolOutput,
+  resolveCompactionLlm,
+} from "@/services/compaction-llm";
 import {
   chooseRecentSuffixStart,
-  summarizeCompactionTranscript,
+  createCompactionSummarizer,
+  summarizeTranscriptEntries,
 } from "@/services/context-compaction";
 import type { ChatMessage } from "@/types";
 import type {
@@ -26,7 +30,7 @@ import {
 } from "./history";
 import { summarizeInContext } from "./in-context";
 import {
-  buildCompactionPrompt,
+  buildCompactionTranscript,
   estimateChatMessagesTokens,
 } from "./message-text";
 import { traceContextCompaction } from "./tracing";
@@ -366,17 +370,23 @@ async function createConversationCompaction(
     throw new Error("LLM provider API key not configured");
   }
 
-  // Last-resort flow: salvage untagged output rather than fail the compaction.
-  const summary = await summarizeCompactionTranscript({
-    model: compactionLlm.model,
-    prompt: await buildCompactionPrompt({
-      previousSummary: params.previousSummary,
-      messages: params.compactableMessages,
-      conversationId: params.conversationId,
+  const transcript = await buildCompactionTranscript({
+    messages: params.compactableMessages,
+    conversationId: params.conversationId,
+  });
+  const summary = await summarizeTranscriptEntries({
+    // Last-resort flow: salvage untagged output rather than fail the compaction.
+    summarize: createCompactionSummarizer({
+      model: compactionLlm.model,
+      systemPrompt: compactionLlm.systemPrompt,
+      abortSignal: params.abortSignal,
+      salvageUntagged: true,
     }),
-    systemPrompt: compactionLlm.systemPrompt,
+    ...transcript,
+    toolOutput: await compactionTranscriptToolOutput(),
+    previousSummary: params.previousSummary,
+    contextLength: compactionLlm.contextLength,
     abortSignal: params.abortSignal,
-    salvageUntagged: true,
   });
   if (!summary) {
     throw new Error("Compaction summary was empty");

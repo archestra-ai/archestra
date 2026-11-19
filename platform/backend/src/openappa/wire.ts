@@ -71,6 +71,7 @@ export type AppaSessionIdentity = {
     | "pi-session-header"
     | "kimi-code-cache-key"
     | "grok-session-header"
+    | "cursor-opening"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -1251,6 +1252,7 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
   Record<SupportedProviderDiscriminator, AppaWireFamily>
 > = {
   "anthropic:messages": "anthropic:messages",
+  "github-copilot:messages": "anthropic:messages",
   "bedrock:invoke": "anthropic:messages",
   "openai:responses": "openai:responses",
   "github-copilot:responses": "openai:responses",

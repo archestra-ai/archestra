@@ -746,6 +746,7 @@ mod runtime_child_tests {
             spawn: spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
+            declares: None,
         }
     }
 

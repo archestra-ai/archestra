@@ -56,6 +56,7 @@ import {
   encodeCapabilitySession,
   readCapabilitySession,
 } from "./client-capabilities";
+import { isCursorClient } from "./cursor-forms";
 import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
@@ -464,6 +465,7 @@ async function handleMcpPostRequest(
       grokToolNames:
         /^grok-cli\//i.test(String(request.headers["user-agent"] ?? "")) ||
         request.headers["x-archestra-agent-id"] === "grok-build",
+      cursorForms: isCursorClient(request.headers["user-agent"]),
       openappaSession,
       currentToolCallId,
       agentId: profileId,

@@ -1,9 +1,9 @@
-import { GoogleAuth, OAuth2Client } from "google-auth-library";
 // One API version per import: the package root loads all 300-odd Google APIs,
 // about 100 MB of memory in the server and 150 MB of declarations in every
 // type check.
-import { admin_directory_v1 } from "googleapis/build/src/apis/admin/directory_v1.js";
-import { drive_v3 } from "googleapis/build/src/apis/drive/v3.js";
+import { admin_directory_v1 } from "@googleapis/admin";
+import { drive_v3 } from "@googleapis/drive";
+import { GoogleAuth, OAuth2Client } from "google-auth-library";
 import type { ConnectorCredentials, GoogleDriveConfig } from "@/types";
 
 /**

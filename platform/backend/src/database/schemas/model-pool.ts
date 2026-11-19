@@ -23,6 +23,11 @@ const modelPoolsTable = pgTable(
     organizationId: text("organization_id").notNull(),
     /** The model name clients request, e.g. `glm-5` or `claude-opus-4-8`. */
     name: text("name").notNull(),
+    /** Selection within an order; existing pools retain weighted affinity. */
+    routingStrategy: text("routing_strategy")
+      .$type<"weighted" | "least-tokens">()
+      .notNull()
+      .default("weighted"),
     /**
      * Seconds a member may take to send a stream's first chunk before the
      * request moves on (LiteLLM's `stream_timeout`). Null keeps the default.

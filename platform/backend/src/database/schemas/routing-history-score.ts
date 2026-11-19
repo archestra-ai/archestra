@@ -21,6 +21,8 @@ import routingScorerVersionsTable from "./routing-scorer-version";
  * A history session's reading by one scorer version; `features` only when
  * scored. `attempts` counts the paid calls taken for it, each committed
  * before its call, so a reading whose commit failed is not paid for unboundedly.
+ * `created_at` is when the reading settled, which credits it to the backfill
+ * job that scored it.
  */
 const routingHistoryScoresTable = pgTable(
   "routing_history_scores",

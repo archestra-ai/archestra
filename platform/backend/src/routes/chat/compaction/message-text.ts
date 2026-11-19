@@ -2,8 +2,6 @@ import type { SupportedProvider } from "@archestra/shared";
 import logger from "@/logging";
 import { ConversationAttachmentModel } from "@/models";
 import {
-  composeCompactionPrompt,
-  renderCompactionTranscript,
   type TranscriptEntry,
   uiMessageTranscriptEntries,
 } from "@/services/context-compaction";
@@ -64,26 +62,24 @@ export function estimateChatMessagesTokens(params: {
 }
 
 /**
- * Builds the runtime user prompt for the configurable context compaction
- * subagent. The editable instructions live in
- * CONTEXT_COMPACTION_SYSTEM_PROMPT / the seeded built-in agent system prompt;
- * this function only assembles the current transcript and previous summary.
+ * The transcript the configurable context compaction subagent summarizes,
+ * plus the recent-user reference that goes with its last chunk. The editable
+ * instructions live in CONTEXT_COMPACTION_SYSTEM_PROMPT / the seeded built-in
+ * agent system prompt.
  */
-export async function buildCompactionPrompt(params: {
-  previousSummary: string | null;
+export async function buildCompactionTranscript(params: {
   messages: ChatMessage[];
   conversationId: string;
-}): Promise<string> {
+}): Promise<{ entries: TranscriptEntry[]; preamble: string }> {
   const entries = await Promise.all(
     params.messages.map((message) =>
       transcriptEntries(message, params.conversationId),
     ),
   );
-  return composeCompactionPrompt({
-    previousSummary: params.previousSummary,
-    transcript: renderCompactionTranscript(entries.flat()),
+  return {
+    entries: entries.flat(),
     preamble: buildRecentUserMessagesReference(params.messages),
-  });
+  };
 }
 
 export function decodeDataUrl(

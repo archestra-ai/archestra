@@ -581,6 +581,155 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
+  describe("a review on a client whose form shows one paragraph", () => {
+    const offerId = "offer-short-form";
+    const filePath = "C:/Users/synthetic/.cursor/archestra/web-tools.mjs";
+    const longContent = `// first line\n${"const value = 1;\n".repeat(400)}`;
+    let session: OpenAppaSession;
+    let forms: Array<{ message: string; choices: string[]; starts?: string }>;
+
+    /** Stages a file write and answers each form in turn. */
+    async function stage(content: string, answers: string[]) {
+      session = reviewSession({
+        sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+      });
+      await stageHitlReview({
+        session,
+        review: {
+          offerId,
+          text: "Approve this call?",
+          scope: [],
+          tool: "Write",
+          // Cursor sends a write's content before its path.
+          arguments: JSON.stringify({ content, file_path: filePath }),
+        },
+      });
+      forms = [];
+      mockContext = {
+        ...mockContext,
+        inspectableReviewForm: true,
+        elicitation: {
+          elicit: async (request) => {
+            const schema = request.requestedSchema as {
+              properties: { choice: { enum: string[]; default?: string } };
+            };
+            forms.push({
+              message: request.message,
+              choices: schema.properties.choice.enum,
+              starts: schema.properties.choice.default,
+            });
+            return {
+              status: "answered" as const,
+              result: {
+                action: "accept" as const,
+                content: { choice: answers[forms.length - 1] },
+              },
+            };
+          },
+        },
+      };
+    }
+
+    const ask = () =>
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+        {
+          question: "Approve it?",
+          options: [{ label: "Yes" }, { label: "No" }],
+          remedy_offer_ids: [offerId],
+          trajectory: trajectory(),
+        },
+        mockContext,
+      );
+    const textOf = (result: Awaited<ReturnType<typeof ask>>) =>
+      (result.content as Array<{ text: string }>)[0].text;
+
+    test("a call that fits is shown whole and can be allowed at once", async () => {
+      await stage("PUBLIC\n", ["Allow"]);
+      const result = await ask();
+      expect(forms).toEqual([
+        {
+          message: `Run Write?  •  file_path: ${filePath}  •  content: "PUBLIC\\n"  •  Allow runs this exact call. Deny keeps it blocked.`,
+          choices: ["Inspect", "Allow", "Deny"],
+          // The whole call is on the form, so it starts on the decision.
+          starts: "Allow",
+        },
+      ]);
+      expect(result.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Allow"],
+      });
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test("a long value is counted, not shown, and Allow waits for Inspect", async () => {
+      await stage(longContent, ["Inspect", "Allow"]);
+      const inspected = await ask();
+      expect(forms[0].message).toBe(
+        `Run Write?  •  file_path: ${filePath}  •  content: (${longContent.length.toLocaleString("en-US")} characters, see Inspect)  •  Allow is offered after Inspect, which shows the complete review in the chat.`,
+      );
+      expect(forms[0].choices).toEqual(["Inspect", "Deny"]);
+      expect(forms[0].starts).toBe("Inspect");
+      // Inspect rules nothing, and hands the agent the complete review.
+      expect(inspected.isError).toBeFalsy();
+      expect(inspected.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Inspect"],
+      });
+      const review = textOf(inspected);
+      expect(review).toContain("The reviewer chose Inspect.");
+      expect(review).toContain("## Approval review");
+      // Each argument is a code block: the file as a file, by its name.
+      expect(review).toContain(
+        "content:\n\n```js\n// first line\nconst value = 1;\nconst value = 1;",
+      );
+      // The label is markdown-escaped; the value is not.
+      expect(review).toContain(
+        `file\\_path:\n\n\`\`\`text\n${filePath}\n\`\`\``,
+      );
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+
+      // The form that follows offers Allow: the reviewer has the whole call.
+      const allowed = await ask();
+      expect(forms[1].choices).toEqual(["Inspect", "Allow", "Deny"]);
+      // Having inspected, the reviewer is not sent to Inspect again.
+      expect(forms[1].starts).toBe("Allow");
+      expect(forms[1].message).toContain(
+        "The complete review is in the chat above. Allow runs this exact call.",
+      );
+      expect(allowed.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Allow"],
+      });
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test("Deny is recorded from the first form", async () => {
+      await stage(longContent, ["Deny"]);
+      const result = await ask();
+      expect(textOf(result)).toContain("The user denied the remedy.");
+      expect(await peekHitlDecision({ session, offerId })).toEqual({
+        ruling: "deny",
+      });
+    });
+
+    test("an Allow the form did not offer rules nothing", async () => {
+      await stage(longContent, ["Allow"]);
+      const result = await ask();
+      expect(result.isError).toBe(true);
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+    });
+
+    test("other clients keep the form that shows the call in full", async () => {
+      await stage(longContent, ["Approve"]);
+      mockContext = { ...mockContext, inspectableReviewForm: false };
+      await ask();
+      expect(forms[0].choices).toEqual(["Approve", "Deny"]);
+      expect(forms[0].starts).toBeUndefined();
+      expect(forms[0].message).toContain("const value = 1;");
+    });
+  });
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

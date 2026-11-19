@@ -1,6 +1,6 @@
 # VEX
 
-`archestra.openvex.json` says which reported vulnerabilities do not affect
+`openvex.json` says which reported vulnerabilities do not affect
 Archestra's images as shipped, and why. It is an
 [OpenVEX](https://github.com/openvex/spec) document: scanners such as Grype and
 Trivy read it and drop the findings it covers, so a security team scanning our
@@ -31,15 +31,23 @@ that affects an image is fixed in a release, or announced as an advisory.
 3. Each release attests every image's statements, pinned to its digest, next to
    its SBOMs (`docs/pages/admin/deployment/verify-releases.md`).
 
-To write one by hand, use the script; it refuses a statement without its reasons:
+To write one by hand, use `vex.py` from archestra-ai/.github
+(`actions/attest-release-image/vex.py`), the same tool the agent, the pull
+request check and each release use. It refuses a statement without its reasons:
 
 ```bash
-python3 .github/scripts/vex.py set --vulnerability CVE-2026-12345 \
+VEX=https://raw.githubusercontent.com/archestra-ai/.github/v1.33.0/actions/attest-release-image/vex.py
+curl -fsSL "$VEX" -o "${TMPDIR:-/tmp}/vex.py"
+python3 -I "${TMPDIR:-/tmp}/vex.py" set --document vex/openvex.json \
+  --vulnerability CVE-2026-12345 \
   --product platform --subcomponent pkg:npm/example@1.2.3 \
   --status not_affected --justification vulnerable_code_not_in_execute_path \
   --impact-statement "Only the build uses example's CLI; the image never runs it."
-python3 .github/scripts/vex.py validate
+python3 -I "${TMPDIR:-/tmp}/vex.py" validate --document vex/openvex.json
 ```
+
+OpenAPPA and terraform-provider-archestra keep their own `vex/openvex.json`
+the same way; the agent triages their releases from the same workflow.
 
 ## Check That a Statement Works
 
@@ -48,7 +56,7 @@ finding must disappear:
 
 ```bash
 IMAGE=docker.io/archestra/platform@$(crane digest --platform linux/amd64 docker.io/archestra/platform:1.4.35)
-python3 .github/scripts/vex.py render --image "$IMAGE" > platform.vex.json
+python3 -I "${TMPDIR:-/tmp}/vex.py" render --document vex/openvex.json --image "$IMAGE" > platform.vex.json
 grype "registry:$IMAGE" --vex platform.vex.json
 trivy image --vex platform.vex.json "$IMAGE"
 ```

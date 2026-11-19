@@ -33,10 +33,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  // "read" shows and resolves the yells of your own sessions; "admin" widens
-  // that to every yell in the organization. Separate from `log`, so seeing
-  // every yell does not also open every member's LLM and MCP logs.
-  guardrailsYell: ["read", "admin"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -67,6 +63,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: ["read", "admin"],
+  // "read" shows and resolves the yells of your own sessions; "admin" widens
+  // that to every yell in the organization. Separate from `log`, so seeing
+  // every yell does not also open every member's LLM and MCP logs.
+  guardrailsYell: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -98,8 +98,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  // Editors see only their own yells, as with their own logs.
-  guardrailsYell: ["read"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -124,9 +122,10 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
-  // Editors see only their own logs; org-wide visibility is log:admin,
-  // reserved for admin-tier roles.
+  // Editors see only their own logs and yells; org-wide visibility is
+  // log:admin and guardrailsYell:admin, reserved for admin-tier roles.
   log: ["read"],
+  guardrailsYell: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -158,7 +157,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Members do not see the Guardrails pages or read the policy. Enforcement,
   // yells, and remedies do not depend on this permission.
   guardrailsPolicy: [],
-  guardrailsYell: [],
 
   // LLM
   llmProxy: ["read"],
@@ -191,6 +189,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: [],
+  guardrailsYell: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -361,10 +360,6 @@ export const permissionDescriptions: Record<string, string> = {
   "guardrailsPolicy:read": "View Guardrails policy, batteries, and coverage",
   "guardrailsPolicy:update":
     "Validate and edit Guardrails policy and manage batteries",
-  "guardrailsYell:read":
-    "View and resolve the Guardrails yells of your own sessions",
-  "guardrailsYell:admin":
-    "View and resolve every Guardrails yell in your organization (also requires Read)",
 
   // MCP
   "oauthClient:read": "Open OAuth client registrations",
@@ -453,6 +448,10 @@ export const permissionDescriptions: Record<string, string> = {
     "View every audit event in your organization (also requires Read)",
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
+  "guardrailsYell:read":
+    "View and resolve the Guardrails yells of your own sessions",
+  "guardrailsYell:admin":
+    "View and resolve every Guardrails yell in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",

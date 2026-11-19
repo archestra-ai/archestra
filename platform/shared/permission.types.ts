@@ -175,14 +175,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: [
-    "agent",
-    "skill",
-    "plugin",
-    "app",
-    "guardrailsPolicy",
-    "guardrailsYell",
-  ],
+  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",
@@ -193,7 +186,10 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmCost",
     "costExport",
   ],
-  Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
+  Other: ["chat", "project", "knowledgeSource"],
+  // Who can see what happened: each is `read` for your own records and
+  // `admin` for everyone's.
+  Logs: ["log", "guardrailsYell", "auditLog"],
   Administration: [
     "accessPolicies",
     "member",

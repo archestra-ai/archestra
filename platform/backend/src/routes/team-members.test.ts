@@ -1577,6 +1577,7 @@ describe("team routes", () => {
       expect(vi.mocked(hasPermission)).toHaveBeenCalledWith(
         { team: ["update"] },
         expect.any(Object),
+        undefined,
       );
       expect(vi.mocked(hasPermission)).not.toHaveBeenCalledWith(
         { team: ["admin"] },

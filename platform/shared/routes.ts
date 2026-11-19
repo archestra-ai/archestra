@@ -292,6 +292,7 @@ export const RouteId = {
   GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
   GetLlmProxyLogSessions: "getLlmProxyLogSessions",
   GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionChatErrors: "getLlmProxyLogSessionChatErrors",
   GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
   GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
   GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",

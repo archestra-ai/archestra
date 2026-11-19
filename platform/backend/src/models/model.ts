@@ -878,6 +878,54 @@ class ModelModel {
     });
   }
 
+  /**
+   * Replace the stored context window of models whose provider reports its
+   * current window (see `authoritativeContextLength` on fetched capabilities).
+   * The ordinary sync only fills an empty window, which pins one an earlier
+   * sync stored. `customContextLength`, the administrator's override, is left
+   * alone.
+   */
+  static async applyAuthoritativeContextLengths(
+    rows: {
+      provider: SupportedProvider;
+      modelId: string;
+      contextLength: number;
+    }[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+
+    const BATCH_SIZE = 50;
+    await withDbTransaction(async (tx) => {
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const values = sql.join(
+          rows
+            .slice(i, i + BATCH_SIZE)
+            .map(
+              (row) =>
+                sql`(${row.provider}::text, ${row.modelId}::text, ${row.contextLength}::integer)`,
+            ),
+          sql`, `,
+        );
+        await tx
+          .update(schema.modelsTable)
+          .set({
+            contextLength: sql`fresh.context_length`,
+            updatedAt: sql`NOW()`,
+          })
+          .from(
+            sql`(VALUES ${values}) AS fresh(provider, model_id, context_length)`,
+          )
+          .where(
+            and(
+              eq(schema.modelsTable.provider, sql`fresh.provider`),
+              eq(schema.modelsTable.modelId, sql`fresh.model_id`),
+              sql`${schema.modelsTable.contextLength} IS DISTINCT FROM fresh.context_length`,
+            ),
+          );
+      }
+    });
+  }
+
   /** Remove an unconfigured proxy-discovered entry, retaining request history. */
   static async deleteUnused(id: string) {
     return withDbTransaction(async (tx) => {

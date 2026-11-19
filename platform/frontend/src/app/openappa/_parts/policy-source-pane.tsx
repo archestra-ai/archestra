@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Editor } from "@/components/editor";
+import { WorkspaceEditor } from "@/components/file-workspace/workspace-editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
@@ -167,34 +167,28 @@ export function PolicyPaneEditor({
   }, [mounted]);
 
   return (
-    // Monaco measures its parent, so the editor sits in a box of its own
-    // that takes the pane's size without growing it.
-    <div className={cn("relative min-h-60", className)}>
-      <div className="absolute inset-0">
-        <Editor
-          height="100%"
-          language={POLICY_LANGUAGE}
-          path={path}
-          value={content}
-          onMount={(nextEditor, monaco) =>
-            setMounted({ editor: nextEditor, monaco })
-          }
-          options={{
-            ...POLICY_EDITOR_OPTIONS,
-            // These files run to thousands of lines.
-            minimap: { enabled: true },
-            fontSize: 13,
-            padding: { top: 8, bottom: 8 },
-            readOnly: true,
-            readOnlyMessage: readOnlyMessage
-              ? { value: readOnlyMessage }
-              : undefined,
-            ariaLabel,
-            glyphMargin: declarations !== null,
-          }}
-        />
-      </div>
-    </div>
+    <WorkspaceEditor
+      className={className}
+      language={POLICY_LANGUAGE}
+      path={path}
+      value={content}
+      onMount={(nextEditor, monaco) =>
+        setMounted({ editor: nextEditor, monaco })
+      }
+      options={{
+        ...POLICY_EDITOR_OPTIONS,
+        // These files run to thousands of lines.
+        minimap: { enabled: true },
+        fontSize: 13,
+        padding: { top: 8, bottom: 8 },
+        readOnly: true,
+        readOnlyMessage: readOnlyMessage
+          ? { value: readOnlyMessage }
+          : undefined,
+        ariaLabel,
+        glyphMargin: declarations !== null,
+      }}
+    />
   );
 }
 

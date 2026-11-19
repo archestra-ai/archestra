@@ -245,6 +245,43 @@ describe("site notification routes", () => {
     });
   });
 
+  test("notifications are dismissible unless created or updated otherwise", async () => {
+    const defaultResponse = await app.inject({
+      method: "POST",
+      url: "/api/site-notification",
+      payload: { content: "Dismiss me if you like" },
+    });
+    expect(defaultResponse.json()).toMatchObject({ dismissible: true });
+
+    const pinnedResponse = await app.inject({
+      method: "POST",
+      url: "/api/site-notification",
+      payload: { content: "Mandatory security notice", dismissible: false },
+    });
+    expect(pinnedResponse.statusCode).toBe(200);
+    const pinnedId = pinnedResponse.json().id;
+
+    const activeResponse = await app.inject({
+      method: "GET",
+      url: "/api/site-notification",
+    });
+    expect(activeResponse.json()).toMatchObject({
+      id: pinnedId,
+      dismissible: false,
+    });
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/site-notification/${pinnedId}`,
+      payload: { dismissible: true },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json()).toMatchObject({
+      content: "Mandatory security notice",
+      dismissible: true,
+    });
+  });
+
   test("uses the standard error response when updating a missing notification", async () => {
     const response = await app.inject({
       method: "PUT",

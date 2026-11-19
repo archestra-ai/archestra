@@ -35,7 +35,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DesktopMcpTargetField } from "@/components/desktop-mcp-target-field";
 import {
@@ -2979,7 +2979,7 @@ function HostingChoice({
       description: "Connect to a server running elsewhere.",
       icon: Globe,
       disabled: false,
-      alpha: false,
+      beta: false,
     },
     {
       value: "local" as const,
@@ -2989,7 +2989,7 @@ function HostingChoice({
         : LOCAL_MCP_DISABLED_MESSAGE,
       icon: Server,
       disabled: !localEnabled,
-      alpha: false,
+      beta: false,
     },
     {
       value: "desktop_mcp" as const,
@@ -2997,7 +2997,7 @@ function HostingChoice({
       description: "Runs an MCP server installed on a user's device.",
       icon: Laptop,
       disabled: false,
-      alpha: true,
+      beta: true,
     },
   ];
   return (
@@ -3038,7 +3038,7 @@ function HostingChoice({
               <span className="min-w-0 space-y-0.5">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <span>{option.title}</span>
-                  {option.alpha && <AlphaBadge />}
+                  {option.beta && <BetaBadge />}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {option.description}

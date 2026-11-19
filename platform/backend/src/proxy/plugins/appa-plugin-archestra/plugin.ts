@@ -285,6 +285,11 @@ type AppaPluginBinding = {
   sideRequest: ClaudeSideRequest | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  /**
+   * A compaction request: a client's own, or the platform's summary request.
+   * It never opens or ends a turn, never returns a child's result, and makes
+   * no tool calls.
+   */
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** No person is there to answer this request's approvals. */
@@ -412,7 +417,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
     if (enforcement !== "active") {
-      await this.observe(context, trustedContext);
+      // A summary is no turn or child run of the session.
+      if (!isSummaryRequest(trustedContext))
+        await this.observe(context, trustedContext);
       return;
     }
     const chat = trustedContext.chatSource !== undefined;
@@ -453,7 +460,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           })
         : undefined,
       chat,
-      compaction: trustedContext.compaction === true,
+      compaction:
+        trustedContext.compaction === true || isSummaryRequest(trustedContext),
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       unattended:
@@ -2749,6 +2757,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -2786,6 +2795,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onHostedToolCalls(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    rejectSummaryToolCalls(context.resources, context.hostedToolCalls.length);
     return this.withSoftBlockWaiver(
       context,
       "onHostedToolCalls",
@@ -2824,6 +2834,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    // Preparation runs before the finalizer, so the summary check runs here
+    // first, outside the waiver.
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -6077,6 +6090,28 @@ function isCompactionOnlyResponse(value: unknown): boolean {
           item && typeof item === "object" && item.type === "compaction",
       ))
   );
+}
+
+/** The platform's own summary request: its tools are read-only context. */
+function isSummaryRequest(trusted: AppaTrustedContext): boolean {
+  return trusted.summaryRequest === true;
+}
+
+/**
+ * Refuses a summary's calls before any hook can waive them as a soft block
+ * (which would release them and exempt the session) or an observer can
+ * record them. Not retryable: the same summary would only be paid for again.
+ */
+function rejectSummaryToolCalls(
+  resources: ReadonlyMap<PropertyKey, unknown>,
+  callCount: number,
+): void {
+  const trusted = getTrustedContext(resources);
+  if (trusted && isSummaryRequest(trusted) && callCount > 0)
+    throw new ApiError(
+      422,
+      "OpenAPPA rejected tool calls from a compaction response",
+    );
 }
 
 function getTrustedContext(

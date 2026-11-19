@@ -52,14 +52,20 @@ local_resource(
 #       ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=archestra
 load('ext://helm_resource', 'helm_resource')
 
+# The stack's namespace, as for PostgreSQL (Tiltfile.database): a parallel
+# stack (scripts/dev-stack.sh) keeps Vault and the in-cluster Archestra in its
+# own namespace instead of writing into another stack's.
+integrations_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
+
 helm_resource(
   'vault-k8s',
   '../helm/e2e-tests',
-  namespace='archestra-dev',
+  namespace=integrations_namespace,
   flags=[
     '--set', 'vault.enabled=true',
     '--set', 'vault.service.type=ClusterIP',
     '--set', 'vault.k8sAuth.enabled=true',
+    '--set', 'vault.k8sAuth.boundServiceAccountNamespace=' + integrations_namespace,
     '--set', 'wiremock.enabled=false',
     '--set', 'keycloak.enabled=false',
     '--set', 'mcpExampleOAuth.enabled=false',
@@ -104,7 +110,9 @@ if os.name != 'nt':
     ]
   )
 
-  k8s_yaml(read_file('./archestra-k8s.yaml'))
+  # The file names the default namespace; it is also in the PostgreSQL and
+  # Vault addresses, which live in the same namespace.
+  k8s_yaml(blob(str(read_file('./archestra-k8s.yaml')).replace('archestra-dev', integrations_namespace)))
 
   k8s_resource(
     'archestra-platform',

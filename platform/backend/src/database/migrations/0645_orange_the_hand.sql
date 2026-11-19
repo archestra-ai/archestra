@@ -1,0 +1,1 @@
+ALTER TABLE "site_notification" ADD COLUMN "dismissible" boolean DEFAULT true NOT NULL;

@@ -741,36 +741,21 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
     const child = { ...session, session_id: `${session.session_id}:agent:s1`, parent_id: session.session_id };
     const spawnCall = (id) => ({
       ...session, event: 'tool_call', operation_id: `call:${id}`, tool: 'agent__worker',
-      arguments: { message: 'count the days' }, spawn: true,
+      arguments: { message: 'count the days' }, spawn: true, declares: { label: {} },
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: true },
     });
-    // A spawn runs only once its return is declared through the probe's remedy.
-    const probe = await run(spawnCall('s1:declare'));
-    assert.equal(probe.decision, 'deny_call', JSON.stringify(probe));
-    const asSpoken = (probe.offers ?? []).find((offer) => offer.returns === 'as_spoken');
-    assert.ok(asSpoken, 'the held spawn offers an as-spoken return');
-    const declared = await remedy(session, {
-      tool_call_id: 's1:return',
-      arguments: { offer_id: asSpoken.offer_id, label: {} },
-      presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: true },
-    });
-    assert.notEqual(declared.result?.isError, true, JSON.stringify(declared));
 
-    // The real spawn is interrupted after its fork and binding committed.
+    // The spawn, which declares its return, is interrupted after its fork and binding committed.
     await failCompletion('openappa_operations', 'operation_id', 'call:s1', async () => {
       const failed = await run(spawnCall('s1'));
       assert.match(failed.error ?? JSON.stringify(failed), /PostgreSQL|database|db error/);
     });
-    assert.deepEqual(await receipts(session), [
-      'call:s1=pending', 'call:s1:declare=complete', 'remedy:s1:return=complete',
-    ]);
+    assert.deepEqual(await receipts(session), ['call:s1=pending']);
 
     const recovered = await run(spawnCall('s1'));
     assert.equal(recovered.decision, 'allow_call', JSON.stringify(recovered));
     assert.ok(recovered.spawn_binding, 'the replayed spawn carries its fork binding');
-    assert.deepEqual(await receipts(session), [
-      'call:s1=complete', 'call:s1:declare=complete', 'remedy:s1:return=complete',
-    ]);
+    assert.deepEqual(await receipts(session), ['call:s1=complete']);
 
     // The child starts against the replayed binding and returns as spoken.
     const started = await run({ ...child, event: 'session_start', spawn_call_id: 's1' });
@@ -784,11 +769,11 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
       const failed = await run(spawnResult);
       assert.match(failed.error ?? JSON.stringify(failed), /PostgreSQL|database|db error/);
     });
-    assert.deepEqual(await resultReceipts(session), ['s1=pending', 's1:return=complete']);
+    assert.deepEqual(await resultReceipts(session), ['s1=pending']);
     const recoveredResult = await run(spawnResult);
     assert.equal(recoveredResult.decision, 'ack', JSON.stringify(recoveredResult));
     assert.equal(recoveredResult.approved_output, 'worker done');
-    assert.deepEqual(await resultReceipts(session), ['s1=complete', 's1:return=complete']);
+    assert.deepEqual(await resultReceipts(session), ['s1=complete']);
     assert.deepEqual(await run(spawnResult), recoveredResult, 'the spawn result replays byte-identically');
   });
 

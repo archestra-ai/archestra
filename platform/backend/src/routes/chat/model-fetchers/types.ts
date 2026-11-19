@@ -57,6 +57,14 @@ export interface FetchedModelCapabilities {
    * older build would otherwise stay one.
    */
   authoritative?: boolean;
+  /**
+   * The fetcher's `contextLength` is the provider's current limit for this
+   * model, so sync replaces the stored window instead of only filling an empty
+   * one. GitHub Copilot sets it: its windows grow with the API version and plan,
+   * and a window from an older sync would otherwise stay forever. An
+   * administrator's custom context window is a separate column and stays.
+   */
+  authoritativeContextLength?: boolean;
   promptPricePerToken?: string | null;
   completionPricePerToken?: string | null;
   /** Per-token cache-read price (USD), when the provider reports one. */

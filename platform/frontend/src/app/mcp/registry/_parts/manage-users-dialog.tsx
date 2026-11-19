@@ -10,6 +10,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
+  withSharedMultitenantStatuses,
 } from "@archestra/shared";
 import { format } from "date-fns/format";
 import {
@@ -201,7 +202,7 @@ export function ManageUsersContent({
   onAddPersonalConnection,
   onAddSharedConnection,
   onAddOrgConnection,
-  deploymentStatuses = {},
+  deploymentStatuses: reportedDeploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
   bodyTestId,
@@ -249,6 +250,14 @@ export function ManageUsersContent({
 
   // The catalog item for connection labels and add-connection behavior.
   const catalogItem = catalogItemById ?? undefined;
+  // Every install on a multitenant item shares one pod, so an install the
+  // runtime has no entry for shows the shared pod rather than none.
+  const deploymentStatuses = catalogItem?.multitenant
+    ? withSharedMultitenantStatuses({
+        serverIds: allServers.map((server) => server.id),
+        deploymentStatuses: reportedDeploymentStatuses,
+      })
+    : reportedDeploymentStatuses;
 
   const canReauthenticate = useCanReauthenticate();
 

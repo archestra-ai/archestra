@@ -665,6 +665,7 @@ const layerTable = [
     // Business operations that do not invoke MCP execution or route handlers.
     name: "services-support",
     files: [
+      "src/openappa/runtime-tool-proof.ts",
       "src/plugins/delivery-budget.ts",
       "src/routes/mcp-gateway/protocol.ts",
       "src/routes/mcp-gateway/tasks.ts",
@@ -923,6 +924,7 @@ const layerTable = [
           "src/server/error-handler.ts",
           "src/server/llm-proxy-drain.ts",
           "src/server/llm-proxy-timing.ts",
+          "src/server/request-logging.ts",
           "src/server/source-maps.ts",
           "src/websocket.ts",
         ],

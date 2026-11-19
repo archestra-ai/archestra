@@ -2,23 +2,38 @@
 
 import { DocsPage, isSpecCompliantSkillName } from "@archestra/shared";
 import {
-  ChevronDown,
-  ChevronRight,
+  File,
+  FileBraces,
+  FileCode2,
+  FilePlus,
+  FileTerminal,
   FileText,
   Folder,
-  FolderOpen,
-  Lock,
-  Plus,
+  FolderPlus,
+  LockKeyhole,
   RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Editor } from "@/components/editor";
+import { type ReactNode, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { Button } from "@/components/ui/button";
+import {
+  FILE_ROW_ACTION_CLASS,
+  FILE_ROW_CLASS,
+  FileExplorer,
+  type FileExplorerSection,
+  fileRowIndent,
+} from "@/components/file-workspace/file-explorer";
+import type { WorkspaceFile } from "@/components/file-workspace/file-tree";
+import {
+  FileKindChip,
+  FilePathLabel,
+  FileWorkspace,
+  FileWorkspaceNotice,
+  IconBadge,
+} from "@/components/file-workspace/file-workspace";
+import { WorkspaceEditor } from "@/components/file-workspace/workspace-editor";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Tooltip,
   TooltipContent,
@@ -31,43 +46,18 @@ import { formatBytes } from "@/lib/utils/format-bytes";
 import { cn } from "@/lib/utils/tailwind";
 import type { ResourceFile } from "./skill-draft";
 
-interface FolderEntry {
-  file: ResourceFile;
-  index: number;
-}
-
-interface TrashedFile {
-  id: string;
-  file: ResourceFile;
-}
-
-let trashIdCounter = 0;
-const nextTrashId = () => `trash-${++trashIdCounter}`;
-
-const MANIFEST_PLACEHOLDER = `---
-name: my-skill
-description: One line on when an agent should use this skill.
----
-
-# My Skill
-
-Step-by-step instructions for the agent...`;
-
-const ROOT_ADD_KEY = "";
-
-/** Reading viewport below the detail header and collapsed Overview. */
-export const SKILL_DETAIL_EDITOR_CLASS =
-  "h-[calc(100vh-30rem)] min-h-[24rem] max-h-[42rem] flex-none";
-
 /** Editing viewport with room left for wizard navigation and actions. */
 export const SKILL_WIZARD_EDITOR_CLASS =
   "h-[calc(100vh-22rem)] min-h-[28rem] max-h-[64rem] flex-none";
 
 /**
- * A manifest and resource files as a file tree beside a text editor. Passing a
- * null manifest renders a payload-only tree for read-only Plugin surfaces.
- * Controlled — content lives in the caller's draft; only view state (open
- * file, collapsed folders, the session trash bin) is kept here.
+ * A manifest and resource files in the file workspace the Guardrails policy
+ * is read in: an explorer of the files' folders beside an editor, one bar on
+ * top naming the open file, and Cmd/Ctrl+P to jump to any file. Passing a
+ * null manifest lists only the files, for a plugin's payload.
+ *
+ * Controlled — content lives in the caller's draft; only view state (the open
+ * file, a name being typed, empty folders, the session trash bin) is kept here.
  */
 export function SkillContentEditor({
   manifest,
@@ -85,704 +75,534 @@ export function SkillContentEditor({
   /** Locks the manifest and files (a preview, or a GitHub-synced skill). */
   readOnly?: boolean;
   /**
-   * Whether a locked editor says so beside the file name. Off where the host
-   * already does — a preview of a skill not yet imported, the skill's own
-   * read-only page — so the marker does not repeat it.
+   * Whether a locked editor says so in its bar. Off where the host already
+   * does — a preview of a skill not yet imported, the skill's own read-only
+   * page — so the marker does not repeat it.
    */
   readOnlyMarker?: boolean;
   className?: string;
 }) {
-  const [openFileIndex, setOpenFileIndex] = useState<number | null>(() =>
-    manifest === null && files.length > 0 ? 0 : null,
+  const [openKey, setOpenKey] = useState<string | null>(() =>
+    manifest !== null ? MANIFEST_KEY : files[0] ? fileKey(files[0].path) : null,
   );
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
-    new Set(),
+  // The folder a new file is being named in (null: the top); undefined while
+  // no file is being named.
+  const [addingFileIn, setAddingFileIn] = useState<string | null | undefined>(
+    undefined,
   );
-  // null = not adding; "" = adding at root; otherwise the folder name.
-  const [addingIn, setAddingIn] = useState<string | null>(null);
-  const [newFileName, setNewFileName] = useState("");
-  // empty folders that exist only in this session — they only persist once a file is dropped in.
+  const [addingFolder, setAddingFolder] = useState(false);
+  // Empty folders that exist only in this session: they persist once a file
+  // is put in one.
   const [pendingFolders, setPendingFolders] = useState<string[]>([]);
-  const [addingNewFolder, setAddingNewFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  // soft-deleted files held in a trash bin for as long as this pane is open;
-  // restorable until then.
+  // Files moved to the trash, restorable for as long as this editor is open.
   const [trash, setTrash] = useState<TrashedFile[]>([]);
-  const [trashExpanded, setTrashExpanded] = useState(true);
 
   const parsed = useMemo(() => parseManifestFields(manifest ?? ""), [manifest]);
 
-  const tree = useMemo(
-    () => buildTree(files, pendingFolders),
-    [files, pendingFolders],
+  const items = useMemo<ContentItem[]>(
+    () => [
+      ...(manifest !== null
+        ? [
+            {
+              key: MANIFEST_KEY,
+              path: MANIFEST_PATH,
+              name: MANIFEST_PATH,
+              kind: "manifest" as const,
+            },
+          ]
+        : []),
+      ...files.map((file) => ({
+        key: fileKey(file.path),
+        path: file.path,
+        name: file.path.slice(file.path.lastIndexOf("/") + 1),
+        kind: "file" as const,
+        file,
+      })),
+    ],
+    [manifest, files],
   );
+  const openItem =
+    items.find((item) => item.key === openKey) ??
+    (manifest !== null ? items[0] : undefined);
+  const openFile = openItem?.kind === "file" ? openItem.file : null;
+  const manifestOpen = openItem?.kind === "manifest";
 
-  const commitNewFile = (folder: string | null) => {
-    const name = newFileName.trim();
-    if (!name) return;
-    const path = folder ? `${folder}/${name}` : name;
-    if (files.some((f) => f.path === path)) return;
-    onFilesChange((prev) => [...prev, { path, content: "", encoding: "utf8" }]);
-    setOpenFileIndex(files.length);
-    setNewFileName("");
-    setAddingIn(null);
+  const removeFiles = (paths: Set<string>) => {
+    const removed = files.filter((file) => paths.has(file.path));
+    if (removed.length === 0) return;
+    setTrash((current) => [
+      ...current,
+      ...removed.map((file) => ({ id: nextTrashId(), file })),
+    ]);
+    onFilesChange((current) => current.filter((file) => !paths.has(file.path)));
   };
-
-  const cancelAdding = () => {
-    setAddingIn(null);
-    setNewFileName("");
-  };
-
-  const commitNewFolder = () => {
-    const name = newFolderName.trim().replace(/\/+$/, "");
-    if (!name || name.includes("/")) return;
-    const fileFolderNames = new Set(
-      files
-        .map((f) => f.path.slice(0, f.path.indexOf("/")))
-        .filter((f) => f.length > 0),
-    );
-    if (!fileFolderNames.has(name) && !pendingFolders.includes(name)) {
-      setPendingFolders((prev) => [...prev, name]);
-    }
-    setAddingNewFolder(false);
-    setNewFolderName("");
-    setAddingIn(name);
-    setNewFileName("");
-  };
-
-  const cancelAddingFolder = () => {
-    setAddingNewFolder(false);
-    setNewFolderName("");
-  };
-
-  const removeFile = (index: number) => {
-    const removed = files[index];
-    if (removed) {
-      setTrash((prev) => [...prev, { id: nextTrashId(), file: removed }]);
-      setTrashExpanded(true);
-    }
-    onFilesChange((prev) => prev.filter((_, i) => i !== index));
-    setOpenFileIndex((current) => {
-      if (current === index) return null;
-      if (current !== null && current > index) return current - 1;
-      return current;
-    });
-  };
-
   const removeFolder = (folder: string) => {
     const prefix = `${folder}/`;
-    let openWasInFolder = false;
-    if (openFileIndex !== null) {
-      const openPath = files[openFileIndex]?.path;
-      if (openPath?.startsWith(prefix)) openWasInFolder = true;
-    }
-    const removed = files.filter((f) => f.path.startsWith(prefix));
-    if (removed.length > 0) {
-      setTrash((prev) => [
-        ...prev,
-        ...removed.map((file) => ({ id: nextTrashId(), file })),
-      ]);
-      setTrashExpanded(true);
-    }
-    onFilesChange((prev) => prev.filter((f) => !f.path.startsWith(prefix)));
-    setPendingFolders((prev) => prev.filter((f) => f !== folder));
-    if (openWasInFolder) setOpenFileIndex(null);
+    removeFiles(
+      new Set(
+        files.flatMap((file) =>
+          file.path.startsWith(prefix) ? [file.path] : [],
+        ),
+      ),
+    );
+    setPendingFolders((current) =>
+      current.filter((path) => path !== folder && !path.startsWith(prefix)),
+    );
   };
-
-  const restoreFile = (id: string) => {
-    const item = trash.find((t) => t.id === id);
+  const restore = (id: string) => {
+    const item = trash.find((entry) => entry.id === id);
     if (!item) return;
-    setTrash((prev) => prev.filter((t) => t.id !== id));
-    if (files.some((f) => f.path === item.file.path)) return;
-    onFilesChange((prev) => [...prev, item.file]);
+    setTrash((current) => current.filter((entry) => entry.id !== id));
+    if (files.some((file) => file.path === item.file.path)) return;
+    onFilesChange((current) => [...current, item.file]);
   };
-
-  const permanentRemoveFile = (id: string) => {
-    setTrash((prev) => prev.filter((t) => t.id !== id));
+  const commitNewFile = (folder: string | null, name: string) => {
+    const path = folder ? `${folder}/${name}` : name;
+    if (files.some((file) => file.path === path)) return;
+    onFilesChange((current) => [
+      ...current,
+      { path, content: "", encoding: "utf8" },
+    ]);
+    setOpenKey(fileKey(path));
+    setAddingFileIn(undefined);
   };
-
-  const toggleFolder = (folder: string) => {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(folder)) {
-        next.delete(folder);
-      } else {
-        next.add(folder);
-      }
-      return next;
-    });
+  const commitNewFolder = (name: string) => {
+    if (name.includes("/")) return;
+    if (!pendingFolders.includes(name)) {
+      setPendingFolders((current) => [...current, name]);
+    }
+    setAddingFolder(false);
+    // A folder exists once it holds a file: name its first one now.
+    setAddingFileIn(name);
   };
-
-  const beginAddingInFolder = (folder: string) => {
-    setCollapsedFolders((prev) => {
-      if (!prev.has(folder)) return prev;
-      const next = new Set(prev);
-      next.delete(folder);
-      return next;
-    });
-    setAddingIn(folder);
-    setNewFileName("");
-  };
-
-  const openFile = openFileIndex === null ? null : files[openFileIndex];
-  const editorValue = openFile ? openFile.content : (manifest ?? "");
   const setEditorValue = (value: string) => {
-    if (openFileIndex === null) {
-      if (manifest !== null) onManifestChange(value);
-    } else {
-      onFilesChange((prev) =>
-        prev.map((file, i) =>
-          i === openFileIndex ? { ...file, content: value } : file,
+    if (manifestOpen) onManifestChange(value);
+    else if (openFile)
+      onFilesChange((current) =>
+        current.map((file) =>
+          file.path === openFile.path ? { ...file, content: value } : file,
         ),
       );
-    }
   };
 
-  return (
-    <div
-      className={cn(
-        "grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(8rem,auto)_minmax(20rem,1fr)] gap-3 overflow-y-auto md:grid-cols-[240px_1fr] md:grid-rows-1 md:overflow-hidden",
-        className,
-      )}
-    >
-      <div className="flex max-h-48 min-h-0 flex-col rounded-md border md:max-h-none">
-        <div className="flex-1 overflow-y-auto p-2">
-          <ul className="space-y-0.5">
-            {manifest !== null && (
-              <ManifestRow
-                isOpen={openFileIndex === null}
-                onOpen={() => setOpenFileIndex(null)}
-              />
-            )}
-
-            {tree.folderNames.map((folder) => {
-              const isCollapsed = collapsedFolders.has(folder);
-              const entries = tree.folders[folder];
-              return (
-                <li key={folder}>
-                  <FolderRow
-                    folder={folder}
-                    fileCount={entries.length}
-                    isCollapsed={isCollapsed}
-                    readOnly={readOnly}
-                    onToggle={() => toggleFolder(folder)}
-                    onAddFile={() => beginAddingInFolder(folder)}
-                    onRemoveFolder={() => removeFolder(folder)}
-                  />
-                  {!isCollapsed && (
-                    <ul className="ml-5 space-y-0.5 border-l pl-2">
-                      {entries.map(({ file, index }) => (
-                        <FileRow
-                          key={file.path}
-                          label={file.path.slice(folder.length + 1)}
-                          isOpen={openFileIndex === index}
-                          readOnly={readOnly}
-                          onOpen={() => setOpenFileIndex(index)}
-                          onRemove={() => removeFile(index)}
-                        />
-                      ))}
-                      {addingIn === folder && (
-                        <NewFileRow
-                          placeholder="filename.md"
-                          value={newFileName}
-                          onChange={setNewFileName}
-                          onCommit={() => commitNewFile(folder)}
-                          onCancel={cancelAdding}
-                        />
-                      )}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-
-            {tree.rootFiles.map(({ file, index }) => (
-              <FileRow
-                key={file.path}
-                label={file.path}
-                isOpen={openFileIndex === index}
-                readOnly={readOnly}
-                onOpen={() => setOpenFileIndex(index)}
-                onRemove={() => removeFile(index)}
-              />
-            ))}
-
-            {addingIn === ROOT_ADD_KEY && (
-              <NewFileRow
-                placeholder="new-file.md or folder/new-file.md"
-                value={newFileName}
-                onChange={setNewFileName}
-                onCommit={() => commitNewFile(null)}
-                onCancel={cancelAdding}
-              />
-            )}
-          </ul>
-        </div>
-
-        {!readOnly && trash.length > 0 && (
-          <div className="border-t">
-            <UnstyledButton
-              type="button"
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setTrashExpanded((v) => !v)}
-            >
-              {trashExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-              )}
-              <Trash2 className="h-3.5 w-3.5 shrink-0" />
-              <span>Trash ({trash.length})</span>
-            </UnstyledButton>
-            {trashExpanded && (
-              <ul className="space-y-0.5 px-2 pb-2">
-                {trash.map(({ id, file }) => (
-                  <TrashRow
-                    key={id}
-                    path={file.path}
-                    onRestore={() => restoreFile(id)}
-                    onPurge={() => permanentRemoveFile(id)}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {!readOnly && addingNewFolder && (
-          <div className="border-t p-2">
-            <NewFolderRow
-              value={newFolderName}
-              onChange={setNewFolderName}
-              onCommit={commitNewFolder}
-              onCancel={cancelAddingFolder}
-            />
-          </div>
-        )}
-
-        {!readOnly && addingIn === null && !addingNewFolder && (
-          <div className="flex items-center gap-3 border-t p-2">
-            <UnstyledButton
-              type="button"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setAddingIn(ROOT_ADD_KEY);
-                setNewFileName("");
-              }}
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span>New file</span>
-            </UnstyledButton>
-            <UnstyledButton
-              type="button"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setAddingNewFolder(true);
-                setNewFolderName("");
-              }}
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span>New folder</span>
-            </UnstyledButton>
-          </div>
-        )}
-      </div>
-
-      <div className="flex min-h-0 flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Label className="font-mono text-xs">
-              {openFile ? openFile.path : "SKILL.md"}
-            </Label>
-            {readOnly && readOnlyMarker && (
-              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium text-muted-foreground">
-                <Lock className="size-3" />
-                Read-only
-              </span>
-            )}
-          </div>
-          {manifest !== null && !openFile && !readOnly && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-help text-xs text-muted-foreground">
-                  frontmatter: name <Marker ok={parsed.hasName} /> · description{" "}
-                  <Marker ok={parsed.hasDescription} />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <code className="font-mono">name</code> and{" "}
-                <code className="font-mono">description</code> must be set in
-                the YAML frontmatter block (between the{" "}
-                <code className="font-mono">---</code> fences) at the top of{" "}
-                <code className="font-mono">SKILL.md</code>. Agents read these
-                to decide when to use the skill.
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        {manifest !== null &&
-          !openFile &&
-          parsed.name !== null &&
-          !isSpecCompliantSkillName(parsed.name) && (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
-              This name cannot be published over MCP: the Agent Skills
-              specification allows only lowercase letters, digits, and single
-              hyphens (max 64 characters). The skill still works everywhere
-              else.
-            </p>
-          )}
-        {openFile && openFile.encoding === "base64" ? (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Binary asset</span>
-            <span className="text-xs">
-              {formatBytes(approxBase64Bytes(openFile.content))} · base64
-              encoded
-            </span>
-            <span className="max-w-xs text-xs">
-              Stored verbatim for redistribution. Not editable here.
-            </span>
-          </div>
-        ) : (
-          // The same embedded editor the MCP server's deployment YAML uses:
-          // language by file name, so SKILL.md gets Markdown and a bundled
-          // script its own highlighting.
-          <div
-            className={cn(
-              "min-h-0 flex-1 overflow-hidden rounded-md border",
-              readOnly && "bg-muted/40",
-            )}
-          >
-            <Editor
-              height="100%"
-              // Keyed by the open file, so Monaco swaps models instead of
-              // carrying one file's undo stack and language into the next.
-              key={openFile ? openFile.path : "SKILL.md"}
-              language={editorLanguage(openFile ? openFile.path : "SKILL.md")}
-              value={editorValue}
-              onChange={(value) => setEditorValue(value ?? "")}
-              loading={
-                <div className="flex h-full w-full items-center justify-center bg-muted/50">
-                  <p className="text-sm text-muted-foreground">
-                    Loading editor...
-                  </p>
-                </div>
-              }
-              options={{
-                ariaLabel: "File contents",
-                placeholder: openFile
-                  ? "File contents..."
-                  : MANIFEST_PLACEHOLDER,
-                readOnly,
-                minimap: { enabled: false },
-                lineNumbers: "on",
-                folding: true,
-                scrollBeyondLastLine: false,
-                wordWrap: "on",
-                fontSize: 13,
-                fontFamily: "monospace",
-                tabSize: 2,
-                padding: { top: 8, bottom: 8 },
-                renderLineHighlight: "line",
-                scrollbar: {
-                  vertical: "auto",
-                  horizontal: "auto",
-                  verticalScrollbarSize: 10,
-                  // The pane sits in a page that scrolls: a wheel that
-                  // reaches the editor's edge keeps scrolling the page.
-                  alwaysConsumeMouseWheel: false,
-                },
-              }}
-            />
-          </div>
-        )}
-        {manifest !== null && !openFile && parsed.templated && (
-          <TemplatedManifestHint />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ManifestRow({
-  isOpen,
-  onOpen,
-}: {
-  isOpen: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <li
-      className={cn(
-        "flex items-center gap-2 rounded px-2 py-1",
-        isOpen ? "bg-muted" : "hover:bg-muted/50",
-      )}
-    >
-      <FileText className="h-4 w-4 shrink-0 text-foreground" />
-      <UnstyledButton
-        type="button"
-        className="flex-1 truncate text-left font-mono text-xs font-medium"
-        onClick={onOpen}
-      >
-        SKILL.md
-      </UnstyledButton>
-      <span className="text-xs text-muted-foreground">manifest</span>
-    </li>
-  );
-}
-
-function FolderRow({
-  folder,
-  fileCount,
-  isCollapsed,
-  readOnly,
-  onToggle,
-  onAddFile,
-  onRemoveFolder,
-}: {
-  folder: string;
-  fileCount: number;
-  isCollapsed: boolean;
-  readOnly: boolean;
-  onToggle: () => void;
-  onAddFile: () => void;
-  onRemoveFolder: () => void;
-}) {
-  return (
-    <div className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-muted/50">
-      <UnstyledButton
-        type="button"
-        className="flex flex-1 items-center gap-1.5 text-left"
-        onClick={onToggle}
-      >
-        {isCollapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        )}
-        {isCollapsed ? (
-          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-        )}
-        <span className="text-sm font-medium">{folder}/</span>
-        {isCollapsed && (
-          <span className="text-xs text-muted-foreground">({fileCount})</span>
-        )}
-      </UnstyledButton>
-      {!readOnly && (
+  const sections: FileExplorerSection<ExplorerItem>[] = [
+    {
+      id: "files",
+      title: "Files",
+      count: items.length,
+      files: items,
+      folders: pendingFolders,
+      empty: <p>No files yet.</p>,
+      actions: readOnly ? undefined : (
         <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-            onClick={onAddFile}
-            title={`Add file in ${folder}/`}
+          <RowAction
+            label="New file"
+            onClick={() => {
+              setAddingFolder(false);
+              setAddingFileIn(null);
+            }}
           >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-            onClick={onRemoveFolder}
-            title={`Move folder ${folder}/ to trash`}
+            <FilePlus className="size-3" aria-hidden />
+          </RowAction>
+          <RowAction
+            label="New folder"
+            onClick={() => {
+              setAddingFileIn(undefined);
+              setAddingFolder(true);
+            }}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+            <FolderPlus className="size-3" aria-hidden />
+          </RowAction>
         </>
+      ),
+      insertRow: (folder, depth) => (
+        <>
+          {folder === null && addingFolder && (
+            <NewNameRow
+              kind="folder"
+              depth={depth}
+              onCommit={commitNewFolder}
+              onCancel={() => setAddingFolder(false)}
+            />
+          )}
+          {addingFileIn !== undefined && addingFileIn === folder && (
+            <NewNameRow
+              kind="file"
+              depth={depth}
+              onCommit={(name) => commitNewFile(folder, name)}
+              onCancel={() => setAddingFileIn(undefined)}
+            />
+          )}
+        </>
+      ),
+    },
+    ...(!readOnly && trash.length > 0
+      ? [
+          {
+            id: "trash",
+            title: "Trash",
+            count: trash.length,
+            flat: true,
+            files: trash.map(
+              (entry): ExplorerItem => ({
+                key: `trash:${entry.id}`,
+                path: entry.file.path,
+                name: entry.file.path,
+                kind: "trash",
+                trashId: entry.id,
+                disabled: true,
+              }),
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const explorer = (overlay: boolean) => (
+    <FileExplorer
+      label="Files"
+      overlay={overlay}
+      sections={sections}
+      activeKey={openItem?.key ?? null}
+      onOpen={(item) => setOpenKey(item.key)}
+      fileIcon={(item) => <ContentFileIcon item={item} />}
+      fileActions={
+        readOnly
+          ? undefined
+          : (item) =>
+              item.kind === "file" ? (
+                <RowAction
+                  label={`Move ${item.path} to trash`}
+                  onClick={() => removeFiles(new Set([item.path]))}
+                >
+                  <Trash2 className="size-3" aria-hidden />
+                </RowAction>
+              ) : item.kind === "trash" ? (
+                <>
+                  <RowAction
+                    label={`Restore ${item.path}`}
+                    onClick={() => restore(item.trashId)}
+                  >
+                    <RotateCcw className="size-3" aria-hidden />
+                  </RowAction>
+                  <RowAction
+                    label={`Delete ${item.path} permanently`}
+                    onClick={() =>
+                      setTrash((current) =>
+                        current.filter((entry) => entry.id !== item.trashId),
+                      )
+                    }
+                  >
+                    <X className="size-3" aria-hidden />
+                  </RowAction>
+                </>
+              ) : null
+      }
+      folderActions={
+        readOnly
+          ? undefined
+          : (folder) => (
+              <>
+                <RowAction
+                  label={`New file in ${folder}`}
+                  onClick={() => {
+                    setAddingFolder(false);
+                    setAddingFileIn(folder);
+                  }}
+                >
+                  <FilePlus className="size-3" aria-hidden />
+                </RowAction>
+                <RowAction
+                  label={`Move ${folder} to trash`}
+                  onClick={() => removeFolder(folder)}
+                >
+                  <Trash2 className="size-3" aria-hidden />
+                </RowAction>
+              </>
+            )
+      }
+    />
+  );
+
+  const nameNotPublishable =
+    manifestOpen &&
+    parsed.name !== null &&
+    !isSpecCompliantSkillName(parsed.name);
+
+  return (
+    <FileWorkspace
+      className={cn("min-h-0 flex-1", className)}
+      notice={
+        nameNotPublishable && (
+          <FileWorkspaceNotice title="Not publishable over MCP">
+            Agent Skills names allow only lowercase letters, digits and single
+            hyphens, up to 64 characters. The skill still works everywhere else.
+          </FileWorkspaceNotice>
+        )
+      }
+      explorer={explorer}
+      explorerStorageKey="file-workspace-explorer-open"
+      activeKey={openItem?.key ?? null}
+      quickOpenLabel="Open a file"
+      quickOpen={{
+        title: "Open a file",
+        description: "Search this skill's manifest and files.",
+        groups: [
+          {
+            items: items.map((item) => ({
+              key: item.key,
+              search: item.path,
+              icon: <ContentFileIcon item={item} />,
+              label: item.name,
+              detail: item.path.includes("/") ? item.path : undefined,
+            })),
+          },
+        ],
+        onSelect: setOpenKey,
+      }}
+      title={
+        openItem ? (
+          <>
+            <ContentFileIcon item={openItem} />
+            <FilePathLabel path={openItem.path} />
+            {manifestOpen ? (
+              <FileKindChip className="border-primary/30 bg-primary/10 text-primary">
+                Manifest
+              </FileKindChip>
+            ) : openFile?.encoding === "base64" ? (
+              <FileKindChip className="bg-muted text-muted-foreground">
+                Binary
+              </FileKindChip>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-muted-foreground">No file open</span>
+        )
+      }
+      actions={
+        <>
+          {manifestOpen && !readOnly && (
+            <FrontmatterStatus
+              hasName={parsed.hasName}
+              hasDescription={parsed.hasDescription}
+            />
+          )}
+          {readOnly && readOnlyMarker && (
+            <IconBadge label="Read-only">
+              <LockKeyhole className="size-3.5" aria-hidden />
+            </IconBadge>
+          )}
+        </>
+      }
+    >
+      {!openItem ? (
+        <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          {items.length === 0 ? "No files yet." : "Choose a file to read."}
+        </p>
+      ) : openFile?.encoding === "base64" ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 bg-muted/30 text-center text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Binary asset</span>
+          <span className="text-xs">
+            {formatBytes(approxBase64Bytes(openFile.content))} · base64 encoded
+          </span>
+          <span className="max-w-xs text-xs">
+            Stored verbatim for redistribution. Not editable here.
+          </span>
+        </div>
+      ) : (
+        <WorkspaceEditor
+          className="min-h-0 flex-1"
+          // Keyed by the open file, so Monaco swaps models instead of
+          // carrying one file's undo stack and language into the next.
+          key={openItem.key}
+          language={editorLanguage(openItem.path)}
+          value={openFile ? openFile.content : (manifest ?? "")}
+          onChange={(value) => setEditorValue(value ?? "")}
+          loading={
+            <div className="flex h-full w-full items-center justify-center bg-muted/50">
+              <p className="text-sm text-muted-foreground">Loading editor...</p>
+            </div>
+          }
+          options={{
+            ariaLabel: "File contents",
+            placeholder: openFile ? "File contents..." : MANIFEST_PLACEHOLDER,
+            readOnly,
+            folding: true,
+            tabSize: 2,
+            renderLineHighlight: "line",
+          }}
+        />
       )}
-    </div>
+      {manifestOpen && parsed.templated && <TemplatedManifestHint />}
+    </FileWorkspace>
   );
 }
 
-function FileRow({
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+interface TrashedFile {
+  id: string;
+  file: ResourceFile;
+}
+
+type ContentItem = WorkspaceFile &
+  ({ kind: "manifest" } | { kind: "file"; file: ResourceFile });
+
+type ExplorerItem =
+  | ContentItem
+  | (WorkspaceFile & { kind: "trash"; trashId: string });
+
+let trashIdCounter = 0;
+const nextTrashId = () => `trash-${++trashIdCounter}`;
+
+const MANIFEST_KEY = "manifest";
+const MANIFEST_PATH = "SKILL.md";
+
+function fileKey(path: string): string {
+  return `file:${path}`;
+}
+
+const MANIFEST_PLACEHOLDER = `---
+name: my-skill
+description: One line on when an agent should use this skill.
+---
+
+# My Skill
+
+Step-by-step instructions for the agent...`;
+
+function ContentFileIcon({ item }: { item: ExplorerItem }) {
+  if (item.kind === "manifest")
+    return <FileText className="size-3.5 shrink-0 text-primary" aria-hidden />;
+  const Icon =
+    item.kind === "file" && item.file.encoding === "base64"
+      ? File
+      : fileIconFor(item.path);
+  return (
+    <Icon
+      className={cn(
+        "size-3.5 shrink-0",
+        item.kind === "trash"
+          ? "text-muted-foreground/60"
+          : "text-muted-foreground",
+      )}
+      aria-hidden
+    />
+  );
+}
+
+function fileIconFor(path: string) {
+  const language = editorLanguage(path);
+  if (language === "markdown" || language === "plaintext") return FileText;
+  if (language === "shell" || language === "powershell") return FileTerminal;
+  if (language === "json" || language === "yaml" || language === "ini")
+    return FileBraces;
+  return FileCode2;
+}
+
+/** A small icon button beside an explorer row or in a section header. */
+function RowAction({
   label,
-  isOpen,
-  readOnly,
-  onOpen,
-  onRemove,
+  onClick,
+  children,
 }: {
   label: string;
-  isOpen: boolean;
-  readOnly: boolean;
-  onOpen: () => void;
-  onRemove: () => void;
+  onClick: () => void;
+  children: ReactNode;
 }) {
   return (
-    <li
-      className={cn(
-        "group flex items-center gap-2 rounded px-2 py-1",
-        isOpen ? "bg-muted" : "hover:bg-muted/50",
-      )}
-    >
-      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <UnstyledButton
-        type="button"
-        className="flex-1 truncate text-left font-mono text-xs"
-        onClick={onOpen}
-      >
-        {label}
-      </UnstyledButton>
-      {!readOnly && (
-        <Button
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
           type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-          onClick={onRemove}
-          title="Move to trash"
+          aria-label={label}
+          onClick={onClick}
+          className={FILE_ROW_ACTION_CLASS}
         >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      )}
-    </li>
+          {children}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
-function NewFileRow({
-  placeholder,
-  value,
-  onChange,
+/** A file or folder name being typed into the explorer. */
+function NewNameRow({
+  kind,
+  depth,
   onCommit,
   onCancel,
 }: {
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  onCommit: () => void;
+  kind: "file" | "folder";
+  depth: number;
+  onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
+  const [value, setValue] = useState("");
+  const Icon = kind === "file" ? FileText : Folder;
+  const commit = () => {
+    const name = value.trim().replace(/\/+$/, "");
+    if (name) onCommit(name);
+  };
   return (
-    <li className="flex items-center gap-2 px-2 py-1">
-      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <div
+      className={cn(FILE_ROW_CLASS, "gap-1.5 hover:bg-transparent")}
+      style={{ paddingLeft: fileRowIndent(depth) }}
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <Input
         autoFocus
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onCommit();
-          } else if (e.key === "Escape") {
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
             onCancel();
           }
         }}
-        placeholder={placeholder}
-        className="h-7 flex-1 font-mono text-xs"
-        aria-label="File name"
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        onClick={onCommit}
-        disabled={!value.trim()}
-      >
-        Add
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        onClick={onCancel}
-        aria-label="Cancel"
-      >
-        <X className="h-3.5 w-3.5" />
-      </Button>
-    </li>
-  );
-}
-
-function TrashRow({
-  path,
-  onRestore,
-  onPurge,
-}: {
-  path: string;
-  onRestore: () => void;
-  onPurge: () => void;
-}) {
-  return (
-    <li className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-muted/50">
-      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="flex-1 truncate font-mono text-xs text-muted-foreground line-through">
-        {path}
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-        onClick={onRestore}
-        title="Restore"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-        onClick={onPurge}
-        title="Delete permanently"
-      >
-        <X className="h-3.5 w-3.5" />
-      </Button>
-    </li>
-  );
-}
-
-function NewFolderRow({
-  value,
-  onChange,
-  onCommit,
-  onCancel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onCommit: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-1">
-      <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <Input
-        autoFocus
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onCommit();
-          } else if (e.key === "Escape") {
-            onCancel();
-          }
+        onBlur={() => {
+          if (!value.trim()) onCancel();
         }}
-        placeholder="folder name"
-        className="h-7 flex-1 font-mono text-xs"
-        aria-label="Folder name"
+        placeholder={kind === "file" ? "filename.md" : "folder name"}
+        aria-label={kind === "file" ? "File name" : "Folder name"}
+        className="h-5 min-w-0 flex-1 rounded-sm px-1 font-mono text-[12px] md:text-[12px]"
       />
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        onClick={onCommit}
-        disabled={!value.trim() || value.includes("/")}
-      >
-        Add
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        onClick={onCancel}
-        aria-label="Cancel"
-      >
-        <X className="h-3.5 w-3.5" />
-      </Button>
     </div>
+  );
+}
+
+/** Whether SKILL.md's frontmatter names the skill and says what it does. */
+function FrontmatterStatus({
+  hasName,
+  hasDescription,
+}: {
+  hasName: boolean;
+  hasDescription: boolean;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="mr-1 hidden cursor-help items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+          <span>name</span>
+          <Marker ok={hasName} />
+          <span>· description</span>
+          <Marker ok={hasDescription} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="end" className="max-w-xs">
+        <code className="font-mono">name</code> and{" "}
+        <code className="font-mono">description</code> must be set in the YAML
+        frontmatter block (between the <code className="font-mono">---</code>{" "}
+        fences) at the top of <code className="font-mono">SKILL.md</code>.
+        Agents read these to decide when to use the skill.
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -799,32 +619,6 @@ function approxBase64Bytes(content: string): number {
   return Math.floor((content.length * 3) / 4);
 }
 
-function buildTree(
-  files: ResourceFile[],
-  pendingFolders: string[],
-): {
-  folders: Record<string, FolderEntry[]>;
-  folderNames: string[];
-  rootFiles: FolderEntry[];
-} {
-  const folders: Record<string, FolderEntry[]> = {};
-  for (const folder of pendingFolders) {
-    folders[folder] = [];
-  }
-  const rootFiles: FolderEntry[] = [];
-  files.forEach((file, index) => {
-    const slashIdx = file.path.indexOf("/");
-    if (slashIdx === -1) {
-      rootFiles.push({ file, index });
-    } else {
-      const folder = file.path.slice(0, slashIdx);
-      if (!folders[folder]) folders[folder] = [];
-      folders[folder].push({ file, index });
-    }
-  });
-  return { folders, folderNames: Object.keys(folders).sort(), rootFiles };
-}
-
 /** Shown when the manifest declares `templated: true`, mirroring the agent
  * system-prompt hint: the body is rendered with Handlebars at activation. */
 function TemplatedManifestHint() {
@@ -833,7 +627,7 @@ function TemplatedManifestHint() {
     "prompt-templates",
   );
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="shrink-0 border-t px-3 py-1 text-[11px] text-muted-foreground">
       Templated skill — the body is rendered with{" "}
       <a
         href="https://handlebarsjs.com/"

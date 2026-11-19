@@ -20,6 +20,7 @@ const config: KnipConfig = {
     "scripts/update-agent-runtime-clis.mjs!",
     "scripts/update-playwright-mcp.mjs!",
     "scripts/update-codex-models-client-version.mjs!",
+    "scripts/update-copilot-api-version.mjs!",
     "scripts/update-copilot-chat-client-version.mjs!",
     "scripts/update-grok-client-version.mjs!",
     "scripts/update-vscode-client-version.mjs!",

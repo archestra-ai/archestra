@@ -10,6 +10,7 @@ import {
   LogIn,
   MoreHorizontal,
   Pencil,
+  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { typeRole } from "@/lib/design/type-scale";
+import { useRefreshInternalMcpCatalogImage } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useRestoreMcpServerAlerts } from "@/lib/mcp/mcp-server.query";
 import {
   bucketOf,
@@ -79,6 +81,7 @@ type Action = {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  disabled?: boolean;
   testId?: string;
   variant?: TableRowAction["variant"];
 };
@@ -129,6 +132,7 @@ export function McpServerIssueNotice({
     item.id,
   );
   const restoreMutation = useRestoreMcpServerAlerts();
+  const restartPodsMutation = useRefreshInternalMcpCatalogImage();
 
   const liveIssues = issues.filter((i) => !i.muted);
   const viewerBucket = bucketOf(liveIssues);
@@ -204,6 +208,13 @@ export function McpServerIssueNotice({
       ? humanizeOAuthErrorCode(issue.detail)
       : (issue.detail ?? null);
   const disclosedDetail = primary ? rawDetailFor(primary) : null;
+  // Restarting pods takes edit access to the server, which owning the
+  // install does not give; without it the reader learns who can.
+  const fixFor = (
+    issue: McpServerIssue,
+    guidance: ReturnType<typeof describeMcpServerIssue>,
+  ) =>
+    issue.noDeployment && !canEditCatalog ? guidance.whoActs : guidance.fix;
 
   // Keep one remediation visible and preserve every other issue-specific
   // action in overflow. Multi-status rows must not hide a valid fix merely
@@ -243,8 +254,27 @@ export function McpServerIssueNotice({
           },
           secondary: canEditCatalog ? editConfig : undefined,
         };
-      case "failed-to-start":
       case "not-running":
+        // With no pod there are no logs to read: the fix is recreating it,
+        // which takes edit access to the server.
+        if (issue.noDeployment) {
+          return {
+            primary: canEditCatalog
+              ? {
+                  actionId: "restart-pods",
+                  icon: <RefreshCw className="h-4 w-4" />,
+                  label: "Restart pods",
+                  disabled: restartPodsMutation.isPending,
+                  onClick: () => restartPodsMutation.mutate(item.id),
+                }
+              : undefined,
+          };
+        }
+        return {
+          primary: viewLogs,
+          secondary: canEditCatalog ? editConfig : undefined,
+        };
+      case "failed-to-start":
         return {
           primary: viewLogs,
           secondary: canEditCatalog ? editConfig : undefined,
@@ -412,7 +442,7 @@ export function McpServerIssueNotice({
                     <span>{guidance.what}</span>{" "}
                     <span className="text-muted-foreground">
                       {issue.audience === "you" && !issue.muted
-                        ? guidance.fix
+                        ? fixFor(issue, guidance)
                         : issue.muted
                           ? dismissedSentence(issue.mutedReason)
                           : actionOwner.sentence}
@@ -501,12 +531,17 @@ export function McpServerIssueNotice({
   const signInAction = actions.primary?.actionId.startsWith("reauthenticate:")
     ? actions.primary
     : undefined;
+  const restartPodsAction =
+    actions.primary?.actionId === "restart-pods" ? actions.primary : undefined;
 
   return (
     <>
       <InlineNotice
         variant={noticeVariant}
-        className={className}
+        // Sized by the notice, not the viewport: a server page column can be
+        // narrow on a wide screen, and buttons beside the text then squeeze
+        // it into a sliver.
+        className={cn("@container", className)}
         data-testid={`mcp-registry-attention-row-${item.name}`}
       >
         <CircleAlert aria-hidden />
@@ -538,7 +573,7 @@ export function McpServerIssueNotice({
                 {guidance.what}
                 {since && ` Failing since ${since}.`}{" "}
                 {issue.audience === "you" && !issue.muted
-                  ? guidance.fix
+                  ? fixFor(issue, guidance)
                   : issue.muted
                     ? dismissedSentence(issue.mutedReason)
                     : actionOwner.sentence}
@@ -548,7 +583,7 @@ export function McpServerIssueNotice({
         </InlineNoticeText>
         <div
           data-slot="inline-notice-action"
-          className="ml-auto flex flex-wrap items-center gap-1.5"
+          className="ml-auto flex flex-wrap items-center gap-1.5 @max-2xl:basis-full @max-2xl:ml-0"
         >
           {panelActions === "dismiss-only" ? (
             // Your own rejected token has one fix, signing in again; it
@@ -563,18 +598,31 @@ export function McpServerIssueNotice({
                 Sign in
               </Button>
             ) : (
-              dismissTargets.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={compactButton}
-                  aria-label={`Dismiss alert for ${item.name}`}
-                  onClick={() => setDismissOpen(true)}
-                >
-                  <BellOff className="size-3" />
-                  Dismiss
-                </Button>
-              )
+              <>
+                {restartPodsAction && (
+                  <Button
+                    size="sm"
+                    className={compactButton}
+                    disabled={restartPodsAction.disabled}
+                    onClick={restartPodsAction.onClick}
+                  >
+                    <RefreshCw className="size-3" />
+                    {restartPodsAction.label}
+                  </Button>
+                )}
+                {dismissTargets.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={compactButton}
+                    aria-label={`Dismiss alert for ${item.name}`}
+                    onClick={() => setDismissOpen(true)}
+                  >
+                    <BellOff className="size-3" />
+                    Dismiss
+                  </Button>
+                )}
+              </>
             )
           ) : (
             <>
@@ -594,6 +642,7 @@ export function McpServerIssueNotice({
                   size="sm"
                   className={compactButton}
                   data-testid={actions.primary.testId}
+                  disabled={actions.primary.disabled}
                   onClick={actions.primary.onClick}
                 >
                   {actions.primary.label}

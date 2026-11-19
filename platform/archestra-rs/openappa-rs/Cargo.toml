@@ -63,11 +63,15 @@ crate-type = ["cdylib"]
 # names left idle instead of refused (#909), opencode background subagents
 # (#731), the archestra battery ruling `list_openappa_operations` and
 # `propose_tuner_suggestion` (#926), and stops held while a call they did not
-# answer still runs (#936).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939" }
+# answer still runs (#936); then v0.44.0, shared policy publication (#938),
+# reused SQLite snapshots (#939), and shell annotations inspecting every
+# pipeline stage, chained command and substitution, with separate result and
+# send labels (#940); then a spawn's tool call carrying the return it
+# declares (#947, #948).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a722b9ec774e6e9c8c97d1c0ae06bda4a7e4614a" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

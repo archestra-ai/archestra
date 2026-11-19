@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 8
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,6 +28,8 @@ Open an **LLM Proxy** session to see every request and the MCP tool calls it tri
 When your coding agent [hands a task to a Remote Agent](/docs/agents/runtime/handoff) and brings it back, the run's requests join the session's timeline. **Ran on** shows when the work was in your client and when it was in Agent Runtime. Click an Agent Runtime stretch to open the run.
 
 If a model response stream ends cleanly before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
+
+A session's **Status** shows **Failed** when a request failed or a Chat turn ended in an error, even if every request row looks healthy. The session page lists those errors under **Failed turns**, as the user saw them, and marks the last request before each one **Turn failed**. **Export JSON** includes them.
 
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 

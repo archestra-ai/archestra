@@ -145,7 +145,7 @@ class StatisticsModel {
           ? sql`${a.name}`
           : params.groupBy === "client"
             ? sql`${f.externalAgentId}`
-            : sql`COALESCE(${k.name}, ${p.name}, ${f.authenticatedAppName}, ${credential}, ${f.authMethod})`;
+            : sql`COALESCE(${k.name}, ${p.name}, CASE WHEN ${f.authMethod} IN ('oauth_client_credentials', 'oauth_user') THEN ${f.authenticatedAppName} END, ${credential}, ${f.authMethod})`;
     const scope = and(
       interactionBelongsToOrganization(params.organizationId, f),
       eq(m.model, params.model),

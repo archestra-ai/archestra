@@ -44,8 +44,9 @@ get() {
 step "apt packages"
 # cmake/clang/libssl-dev/pkg-config: native parts of the Rust crates
 # (aws-lc-sys, openssl-sys). lsof: Tilt's MCP port-forward loop. socat: the
-# kind bridge below.
-packages="build-essential pkg-config cmake clang libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat"
+# kind bridge below. lld/llvm: the macOS build of the archestra program for
+# the Mac (dev/build-archestra-cli-dev.sh).
+packages="build-essential pkg-config cmake clang lld llvm libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat"
 # shellcheck disable=SC2086
 if ! dpkg -s $packages >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
@@ -107,7 +108,7 @@ if ! tilt version 2>/dev/null | grep -qF "v${TILT_VERSION},"; then
   install -m 0755 tilt /usr/local/bin/tilt
 fi
 
-step "rustup (toolchain comes from platform/rust-toolchain.toml)"
+step "rustup (dev-vm.sh create then installs the toolchain platform/rust-toolchain.toml names)"
 if ! sudo -iu "$user" sh -c 'command -v rustup' >/dev/null 2>&1; then
   url="https://static.rust-lang.org/rustup/dist/${rust_triple}/rustup-init"
   get "$url" "$url.sha256"
@@ -115,7 +116,7 @@ if ! sudo -iu "$user" sh -c 'command -v rustup' >/dev/null 2>&1; then
   sudo -iu "$user" /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain none
   rm -f /tmp/rustup-init
 fi
-# Login shells (dev-vm.sh shell, editor terminals) get cargo, and the Rust
+# Login shells (dev-vm-sync.py run) get cargo, and the Rust
 # build folder Tilt uses (platform/Tiltfile), so a cargo run by hand shares it.
 cat > /etc/profile.d/archestra-dev.sh <<'EOF'
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
@@ -123,14 +124,16 @@ export CARGO_TARGET_DIR="$HOME/.cache/archestra-rs-target"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 EOF
 
-step "bridge from kind to the backend (Agent Runtime)"
-# The dev backend listens on 127.0.0.1:9000 in the VM. Agent Runtime pods in
+step "bridge from kind to the backends (Agent Runtime)"
+# Each stack's backend listens on 127.0.0.1 in the VM: 9000 for the first,
+# 19001 to 19004 for the others (archestra-dev.yaml). Agent Runtime pods in
 # kind call it back (LLM proxy, MCP gateway), so this forwards the kind
-# network's gateway, port 9000, to it. On Docker Desktop, host.docker.internal
-# plays this part. setup-checkout.sh starts it once the kind network exists and
-# reads the gateway from it for ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL.
+# network's gateway, on each of those ports, to it. On Docker Desktop,
+# host.docker.internal plays this part. dev-vm.sh create starts it once the kind network exists;
+# dev-vm-sync.py reads the gateway from it for
+# ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL.
 cat > /usr/local/sbin/archestra-kind-backend-bridge <<'EOF'
-#!/bin/sh
+#!/bin/bash
 # archestra-kind-backend-bridge [gateway]: forwards, or only prints the gateway.
 set -eu
 gw="$(docker network inspect kind -f '{{range .IPAM.Config}}{{println .Gateway}}{{end}}' 2>/dev/null | grep -E '^[0-9.]+$' | head -n 1)"
@@ -142,12 +145,17 @@ if [ "${1:-}" = gateway ]; then
   echo "$gw"
   exit 0
 fi
-exec socat TCP-LISTEN:9000,bind="$gw",reuseaddr,fork TCP:127.0.0.1:9000
+for port in 9000 19001 19002 19003 19004; do
+  socat TCP-LISTEN:"$port",bind="$gw",reuseaddr,fork TCP:127.0.0.1:"$port" &
+done
+# If one stops, exit, so systemd restarts them all.
+wait -n
+exit 1
 EOF
 chmod 0755 /usr/local/sbin/archestra-kind-backend-bridge
 cat > /etc/systemd/system/archestra-kind-backend-bridge.service <<'EOF'
 [Unit]
-Description=Forward the kind network's gateway:9000 to the dev backend on 127.0.0.1:9000
+Description=Forward the kind network's gateway to the dev backends on 127.0.0.1 (9000, 19001-19004)
 After=docker.service
 Requires=docker.service
 

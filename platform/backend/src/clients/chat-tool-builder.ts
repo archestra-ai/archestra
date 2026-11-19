@@ -653,6 +653,7 @@ async function persistLaunchedRuntimeToolCall(params: {
       llmToolCallId: toolCallId ?? null,
       authMethod: null,
       oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+      serviceAccountId: ctx.mcpGwToken?.serviceAccountId ?? null,
       source: "chat",
     });
   } catch (dbError) {

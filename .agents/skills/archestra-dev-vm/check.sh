@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks the dev VM setup from the Mac: the VM's isolation settings, SSH
-# access, the "vm" git remote of the repo you run it in, and what the VM
+# access, the Mutagen sync of the checkout you run it in, and what the VM
 # holds. Read-only; prints a fix for each failed check and exits non-zero if
 # any check failed or could not run.
 # Usage: check.sh  (env ARCHESTRA_DEV_VM, default archestra-dev)
@@ -31,12 +31,12 @@ case "$config" in
   *) bad "the VM can reach the Mac's localhost" "limactl stop $vm && limactl edit --tty=false $vm --set '.networkOpts.hostLoopback = false' && limactl start $vm" ;;
 esac
 
-# What your own ssh would do for the VM's name (git fetch vm, editors).
+# What your own ssh would do for the VM's name (Mutagen uses it).
 ssh_settings="$(ssh -G "$host" 2>/dev/null)"
 if echo "$ssh_settings" | grep -qx 'hostname 127.0.0.1'; then
   ok "ssh knows $host"
 else
-  bad "ssh doesn't know $host" "add the lines from '$dev_vm ssh-config' to the top of ~/.ssh/config"
+  bad "ssh doesn't know $host" "$dev_vm create (adds it to ~/.ssh/config)"
 fi
 if echo "$ssh_settings" | grep -qx 'forwardagent yes'; then
   bad "ssh would forward your agent to $host" "remove ForwardAgent yes for this host (or Host *) in ~/.ssh/config"
@@ -45,14 +45,14 @@ if echo "$ssh_settings" | grep -q '^remoteforward '; then
   bad "ssh would forward Mac ports into the VM (RemoteForward)" "remove RemoteForward for this host (or Host *) in ~/.ssh/config"
 fi
 
-if top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-  if [ "$(git -C "$top" remote get-url vm 2>/dev/null)" = "$host:archestra" ]; then
-    ok "git remote vm in $top"
-  else
-    bad "no git remote vm -> $host:archestra in $top" "$dev_vm remote"
-  fi
+if ! command -v mutagen >/dev/null; then
+  bad "Mutagen is not installed" "brew install mutagen-io/mutagen/mutagen"
+elif ! top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  bad "not inside a git repo" "run this from the Mac checkout you work in"
+elif mutagen sync list "$(basename "$top")" >/dev/null 2>&1; then
+  ok "$top is synced into the VM"
 else
-  bad "not inside a git repo" "run this from the Mac checkout you push from"
+  bad "$top is not synced into the VM" "platform/scripts/dev-vm-sync.py start"
 fi
 
 case "$config" in
@@ -64,8 +64,6 @@ esac
 in_vm="$(ssh -F "$HOME/.lima/$vm/ssh.config" -o BatchMode=yes "$host" '
   echo "secrets=$(ls -d ~/.git-credentials ~/.netrc ~/.config/gh/hosts.yml ~/.docker/config.json ~/.ssh/id_* ~/.aws ~/.config/gcloud 2>/dev/null | tr "\n" " ")"
   echo "helper=$(git config --global credential.helper)"
-  echo "repo=$(test -d ~/archestra/.git && echo yes)"
-  echo "remotes=$(git -C ~/archestra remote 2>/dev/null | tr "\n" " ")"
   echo "shares=$(mount | grep -cE " type (virtiofs|9p|fuse.sshfs) ")"
   echo "agent=${SSH_AUTH_SOCK:+yes}"
 ' </dev/null 2>/dev/null)" || { bad "can't reach the VM over ssh" "limactl stop $vm && limactl start $vm"; exit 1; }
@@ -74,19 +72,12 @@ value() { echo "$in_vm" | sed -n "s/^$1=//p"; }
 if [ -z "$(value secrets)$(value helper)" ]; then
   ok "none of the checked credential places exist in the VM (git, gh, netrc, docker, SSH keys, aws, gcloud)"
 else
-  bad "credentials in the VM: $(value secrets)$(value helper)" "delete them in the VM; push from the Mac instead"
+  bad "credentials in the VM: $(value secrets)$(value helper)" "delete them in the VM; git and GitHub stay on the Mac"
 fi
 if [ "$(value shares)" = 0 ] && [ -z "$(value agent)" ]; then
   ok "inside the VM: no shared folder mounted, no SSH agent"
 else
   bad "inside the VM: $(value shares) shared folder mount(s), SSH agent: $(value agent)" "recreate the VM with $dev_vm create"
-fi
-if [ "$(value repo)" != yes ]; then
-  bad "no repo at ~/archestra in the VM" "$dev_vm create"
-elif [ -n "$(value remotes)" ]; then
-  bad "the VM's repo has remotes: $(value remotes)" "git -C ~/archestra remote remove <name> in the VM; use $dev_vm push"
-else
-  ok "the VM's repo has no remotes (code comes only from the Mac)"
 fi
 
 exit "$failed"

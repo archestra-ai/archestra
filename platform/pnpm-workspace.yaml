@@ -81,7 +81,8 @@ overrides:
   # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6; CVE-2026-94483 (HIGH, SSRF)
   # fixed in 16.3.8; GHSA-673q-mjm6-r5xr and GHSA-2464-fhr4-w9xw (CRITICAL)
   # fixed in 16.4.1.
-  next: 16.4.1
+  # 16.4.5 also fixes cache isolation, response forwarding, and image validation.
+  next: 16.4.5
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'

@@ -41092,6 +41092,18 @@ export type BedrockConverseWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -41454,6 +41466,18 @@ export type BedrockConverseWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -41818,6 +41842,18 @@ export type BedrockConverseStreamWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -42035,6 +42071,18 @@ export type BedrockConverseStreamWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -42254,6 +42302,18 @@ export type BedrockConverseWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -42619,6 +42679,18 @@ export type BedrockConverseStreamWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -67801,6 +67873,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -67921,6 +67994,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68189,6 +68263,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68330,6 +68405,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68471,6 +68547,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68612,6 +68689,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68753,6 +68831,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68877,6 +68956,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -68997,6 +69077,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -69179,6 +69260,18 @@ export type GetLlmProxyLogsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -69372,6 +69465,18 @@ export type GetLlmProxyLogsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -69572,6 +69677,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70232,6 +70338,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70352,6 +70459,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70472,6 +70580,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70592,6 +70701,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70712,6 +70822,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70832,6 +70943,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -70952,6 +71064,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71072,6 +71185,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71192,6 +71306,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71312,6 +71427,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71432,6 +71548,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71552,6 +71669,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -71672,6 +71790,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -72790,6 +72909,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -73908,6 +74028,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -75026,6 +75147,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -76144,6 +76266,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -76264,6 +76387,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -76452,6 +76576,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -77570,6 +77695,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -77737,6 +77863,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -77904,6 +78031,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -78069,6 +78197,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -78296,6 +78425,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -78523,6 +78653,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -78750,6 +78881,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -78869,6 +79001,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -79021,6 +79154,7 @@ export type GetLlmProxyLogsResponses = {
             attempt: number | null;
             attemptOutcome: string | null;
             failureReason: string | null;
+            failed: boolean | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -79299,6 +79433,7 @@ export type GetLlmProxyLogSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
+            failed: boolean;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
@@ -79453,6 +79588,14 @@ export type GetLlmProxyLogSessionsResponses = {
              * Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.
              */
             failedOverCount: number;
+            /**
+             * Requests that failed, including streams that failed after usage came back. Failed-over pool attempts are counted in failedOverCount instead. Rows logged before failures were tracked count as succeeded.
+             */
+            failedRequestCount: number;
+            /**
+             * Errors the chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors.
+             */
+            chatErrorCount: number;
             totalInputTokens: number;
             totalOutputTokens: number;
             totalCacheReadTokens: number;
@@ -79602,6 +79745,123 @@ export type GetLlmProxyLogSessionLineageResponses = {
 };
 
 export type GetLlmProxyLogSessionLineageResponse = GetLlmProxyLogSessionLineageResponses[keyof GetLlmProxyLogSessionLineageResponses];
+
+export type GetLlmProxyLogSessionChatErrorsData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/chat-errors';
+};
+
+export type GetLlmProxyLogSessionChatErrorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogSessionChatErrorsError = GetLlmProxyLogSessionChatErrorsErrors[keyof GetLlmProxyLogSessionChatErrorsErrors];
+
+export type GetLlmProxyLogSessionChatErrorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetLlmProxyLogSessionChatErrorsResponse = GetLlmProxyLogSessionChatErrorsResponses[keyof GetLlmProxyLogSessionChatErrorsResponses];
 
 export type GetLlmProxyLogSessionHandoffsData = {
     body?: never;
@@ -80162,6 +80422,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -80282,6 +80543,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -80550,6 +80812,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -80691,6 +80954,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -80832,6 +81096,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -80973,6 +81238,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81114,6 +81380,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81238,6 +81505,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81358,6 +81626,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81540,6 +81809,18 @@ export type GetLlmProxyLogResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;
@@ -81733,6 +82014,18 @@ export type GetLlmProxyLogResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;
@@ -81933,6 +82226,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -82593,6 +82887,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -82713,6 +83008,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -82833,6 +83129,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -82953,6 +83250,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83073,6 +83371,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83193,6 +83492,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83313,6 +83613,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83433,6 +83734,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83553,6 +83855,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83673,6 +83976,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83793,6 +84097,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -83913,6 +84218,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -84033,6 +84339,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -85151,6 +85458,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -86269,6 +86577,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -87387,6 +87696,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -88505,6 +88815,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -88625,6 +88936,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -88813,6 +89125,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -89931,6 +90244,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -90098,6 +90412,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -90265,6 +90580,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -90430,6 +90746,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -90657,6 +90974,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -90884,6 +91202,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -91111,6 +91430,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -91230,6 +91550,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -91382,6 +91703,7 @@ export type GetLlmProxyLogResponses = {
         attempt: number | null;
         attemptOutcome: string | null;
         failureReason: string | null;
+        failed: boolean | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -111797,6 +112119,7 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
+            serviceAccountId: string | null;
             runId: string | null;
             sessionId: string | null;
             llmToolCallId: string | null;
@@ -111924,6 +112247,7 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
+        serviceAccountId: string | null;
         runId: string | null;
         sessionId: string | null;
         llmToolCallId: string | null;
@@ -142987,6 +143311,7 @@ export type GetSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -142997,6 +143322,7 @@ export type CreateSiteNotificationData = {
         content: string;
         expiresAt?: string;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path?: never;
     query?: never;
@@ -143081,6 +143407,7 @@ export type CreateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 
@@ -143171,6 +143498,7 @@ export type GetSiteNotificationSettingsResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -143269,6 +143597,7 @@ export type UpdateSiteNotificationData = {
         content?: string;
         expiresAt?: string | null;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path: {
         id: string;
@@ -143355,6 +143684,7 @@ export type UpdateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 

@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { McpElicitationDialog } from "./mcp-elicitation-dialog";
 import { isChoiceElicitationRequest } from "./mcp-elicitation-fields";
 
+vi.mock("@/lib/hooks/use-app-name");
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

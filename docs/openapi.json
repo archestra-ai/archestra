@@ -305182,7 +305182,7 @@
                           },
                           "chatErrorCount": {
                             "type": "number",
-                            "description": "Errors Archestra Chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors."
+                            "description": "Errors the chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors."
                           },
                           "totalInputTokens": {
                             "type": "number"
@@ -306021,7 +306021,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get the errors Archestra Chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
         "parameters": [
           {
             "schema": {

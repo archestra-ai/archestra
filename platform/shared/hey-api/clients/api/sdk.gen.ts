@@ -6633,7 +6633,7 @@ export const getLlmProxyLogSessions = <ThrowOnError extends boolean = false>(opt
 export const getLlmProxyLogSessionLineage = <ThrowOnError extends boolean = false>(options: Options<GetLlmProxyLogSessionLineageData, ThrowOnError>) => (options.client ?? client).get<GetLlmProxyLogSessionLineageResponses, GetLlmProxyLogSessionLineageErrors, ThrowOnError>({ url: '/api/llm-proxy-logs/sessions/{sessionId}/lineage', ...options });
 
 /**
- * Get the errors Archestra Chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.
+ * Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.
  *
  * Authentication:
  *

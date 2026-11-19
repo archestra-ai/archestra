@@ -41,8 +41,6 @@ IMAGES = [
     "ghcr.io/archestra-ai/agent-kimi",
     "ghcr.io/archestra-ai/agent-openclaw",
     "ghcr.io/archestra-ai/agent-opencode",
-    # Published to Artifact Registry only.
-    "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra",
 ]
 
 

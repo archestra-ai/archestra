@@ -9,7 +9,7 @@
 #
 # Debian (glibc) base — not Alpine like the platform's other images — because
 # the official `p4` binary is glibc-linked and does not run on musl.
-FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
+FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends apt libapt-pkg6.0 tini libpcre2-8-0 perl-base \

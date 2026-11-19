@@ -27,7 +27,7 @@ export function PolicyDiffReview({
 }) {
   const controlId = useId();
   const [sideBySide, setSideBySide] = useState(false);
-  const navigation = usePolicyDiffNavigation();
+  const navigation = usePolicyDiffNavigation(sideBySide);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

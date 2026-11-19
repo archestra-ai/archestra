@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { makeAgent } from "../src/mocks/data/agents";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
@@ -31,20 +32,48 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   const next = dialog.getByRole("button", { name: "Next change" });
   const previous = dialog.getByRole("button", { name: "Previous change" });
   const proposed = dialog.locator(".modified-in-monaco-diff-editor");
+  const removedMarker = proposed.locator(
+    '[widgetid="policy-diff-current-deletion"]',
+  );
+  const addedMarker = proposed.locator(
+    '.margin-view-overlays [class*="activeChange"]',
+  );
   await expect(position).toHaveText("Change 1 of 4");
   await expect(previous).toBeDisabled();
   await expect(
     proposed.getByText('legacy_start = "remove"', { exact: true }),
   ).toBeVisible();
+  await expectMarkerCoversLine(
+    removedMarker,
+    proposed.getByText('legacy_start = "remove"', { exact: true }),
+  );
+  await expect(addedMarker).toHaveCount(0);
 
   for (let index = 2; index <= 4; index++) {
     await next.click();
     await expect(position).toHaveText(`Change ${index} of 4`);
+    if (index === 2) {
+      await expectMarkerCoversLine(
+        removedMarker,
+        proposed.getByText('reference_rule_34 = "keep"', { exact: true }),
+      );
+      await expectMarkerCoversLine(
+        addedMarker,
+        proposed.getByText('customer_exports = "restricted"', { exact: true }),
+      );
+    } else if (index === 3) {
+      await expect(removedMarker).toBeHidden();
+    }
   }
   await expect(next).toBeDisabled();
   await expect(
     proposed.getByText('legacy_end = "remove"', { exact: true }),
   ).toBeVisible();
+  await expectMarkerCoversLine(
+    removedMarker,
+    proposed.getByText('legacy_end = "remove"', { exact: true }),
+  );
+  await expect(addedMarker).toHaveCount(0);
   await previous.click();
   await expect(position).toHaveText("Change 3 of 4");
   await expect(
@@ -69,10 +98,42 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   ).toBeVisible();
   await dialog.getByRole("switch", { name: "Side by side view" }).check();
   await expect(position).toHaveText("Change 2 of 4");
+  await expect(removedMarker).toBeHidden();
+  const original = dialog.locator(".original-in-monaco-diff-editor");
+  await expectMarkerCoversLine(
+    original.locator('.margin-view-overlays [class*="activeChange"]'),
+    original.getByText('reference_rule_34 = "keep"', { exact: true }),
+  );
+  await expectMarkerCoversLine(
+    addedMarker,
+    proposed.getByText('customer_exports = "restricted"', { exact: true }),
+  );
   await previous.click();
   await expect(position).toHaveText("Change 1 of 4");
   await expect(previous).toBeDisabled();
 });
+
+async function expectMarkerCoversLine(marker: Locator, line: Locator) {
+  await expect(marker).toBeVisible();
+  await expect(line).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        const [mark, text] = await Promise.all([
+          marker.boundingBox(),
+          line.boundingBox(),
+        ]);
+        return (
+          mark !== null &&
+          text !== null &&
+          mark.y <= text.y + 1 &&
+          mark.y + mark.height >= text.y + text.height - 1
+        );
+      },
+      { message: "The current-change marker covers the changed line" },
+    )
+    .toBe(true);
+}
 
 for (const scenario of [
   {

@@ -24,3 +24,10 @@
   border-left: 2px solid var(--primary);
   margin-left: 3px;
 }
+
+.activeDeletedChange {
+  position: absolute;
+  width: 2px;
+  background-color: var(--primary);
+  pointer-events: none;
+}

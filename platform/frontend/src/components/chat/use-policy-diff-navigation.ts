@@ -2,14 +2,14 @@
 
 import type { DiffOnMount } from "@monaco-editor/react";
 import { useEffect, useRef, useState } from "react";
-import styles from "./policy-diff-review.module.css";
+import { createPolicyDiffHighlight } from "./policy-diff-highlight";
 
 type DiffEditor = Parameters<DiffOnMount>[0];
 type LineChange = NonNullable<ReturnType<DiffEditor["getLineChanges"]>>[number];
 type Pane = "original" | "modified";
 
 /** Track the change being read, independently of Monaco's editor cursor. */
-export function usePolicyDiffNavigation() {
+export function usePolicyDiffNavigation(sideBySide: boolean) {
   const [mounted, setMounted] = useState<Parameters<DiffOnMount> | null>(null);
   const [position, setPosition] = useState({
     ready: false,
@@ -20,16 +20,22 @@ export function usePolicyDiffNavigation() {
   const changeViewRef = useRef<(update: () => void) => void>((update) =>
     update(),
   );
+  const sideBySideRef = useRef(sideBySide);
+
+  useEffect(() => {
+    sideBySideRef.current = sideBySide;
+  }, [sideBySide]);
 
   useEffect(() => {
     if (!mounted) return;
     const [editor, monaco] = mounted;
     const original = editor.getOriginalEditor();
     const modified = editor.getModifiedEditor();
-    const markers = {
-      original: original.createDecorationsCollection(),
-      modified: modified.createDecorationsCollection(),
-    };
+    const highlight = createPolicyDiffHighlight(
+      editor,
+      monaco,
+      () => sideBySideRef.current,
+    );
     let changes: LineChange[] = [];
     let current = -1;
     let navigating = false;
@@ -60,24 +66,7 @@ export function usePolicyDiffNavigation() {
     function select(index: number) {
       current = index;
       setPosition({ ready: true, current: index + 1, total: changes.length });
-      for (const pane of ["original", "modified"] as const) {
-        const change = changes[index];
-        if (!change) {
-          markers[pane].clear();
-          continue;
-        }
-        const { start, end } = range(change, pane);
-        markers[pane].set([
-          {
-            range: new monaco.Range(start, 1, end, 1),
-            options: {
-              isWholeLine: true,
-              linesDecorationsClassName: styles.activeChange,
-              linesDecorationsTooltip: `Change ${index + 1} of ${changes.length}`,
-            },
-          },
-        ]);
-      }
+      highlight.select(changes[index], index, changes.length);
     }
 
     function reveal(index: number, line?: number) {
@@ -226,8 +215,7 @@ export function usePolicyDiffNavigation() {
       container.removeEventListener("wheel", startScrolling, true);
       container.removeEventListener("touchmove", startScrolling, true);
       for (const subscription of subscriptions) subscription.dispose();
-      markers.original.clear();
-      markers.modified.clear();
+      highlight.dispose();
     };
   }, [mounted]);
 

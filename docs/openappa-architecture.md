@@ -884,7 +884,6 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
-| `ARCHESTRA_OPENAPPA_DEFERRED_RETURN` | `false` | In-process delegations declare a deferred return. Enable only after every replica runs a version with this setting. |
 | `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting. |
 | `ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED` | `false` | Explicit opt-in to upstream yell forwarding, independent of analytics. |
 | `ARCHESTRA_ANALYTICS` | Environment-dependent | Unset enables analytics in production/prod. `disabled` turns analytics off independently of yell forwarding. |

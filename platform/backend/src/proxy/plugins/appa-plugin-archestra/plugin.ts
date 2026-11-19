@@ -1823,14 +1823,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         [...runtimeCalls].filter(([, call]) => call.spawn).map(([id]) => id),
       ),
       declareSpawnReturn: (call: { id: string }) =>
-        delegationReturnDeclaration(
-          runtimeCalls.get(call.id),
-          // The session decides through its control call; a subagent's own
-          // delegations stay as spoken.
-          config.openappa.deferredReturn === true &&
-            binding.request.tools?.control !== undefined &&
-            !session.parent_id,
-        ),
+        delegationReturnDeclaration(runtimeCalls.get(call.id)),
       ...this.resolution(binding),
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
@@ -3668,8 +3661,6 @@ type RuntimeCall = {
   wrapper?: Record<string, unknown>;
   stringArgs?: boolean;
   spawn: boolean;
-  /** A spawn this process runs to its end before the call returns. */
-  foreground: boolean;
 };
 
 const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
@@ -3763,7 +3754,6 @@ async function resolveRuntimeCalls(params: {
       args,
       ...(gatewayId ? { gatewayId } : {}),
       spawn: false,
-      foreground: false,
       ...(wrapper
         ? { wrapper, stringArgs: typeof wrapper.tool_args === "string" }
         : {}),
@@ -3825,9 +3815,6 @@ async function resolveRuntimeCalls(params: {
         }
       } else {
         call.spawn = names.has(call.action);
-        // A runtime or a load-balanced pool takes the delegation to the
-        // background; every other target of the organization runs here.
-        call.foreground = call.spawn && !runtimeNames.has(call.action);
       }
     }
   }
@@ -3906,22 +3893,14 @@ async function loadDeferredReturns(params: {
  * An Archestra delegation call declares its own child's return: as spoken by
  * default, schema-attested when it names a `return_schema`. A runtime launch
  * through `start_agent_run` keeps the explicit declaration flow.
- *
- * `decides` says the proposing session can decide on an answer once its
- * subagent has stopped. Then a delegation that runs to its end in this
- * process declares a deferred return in place of an as-spoken one: the
- * subagent reads under the session's own limits, and an answer that would
- * narrow the session waits for its decision instead of being refused.
  */
 function delegationReturnDeclaration(
   call: RuntimeCall | undefined,
-  decides: boolean,
 ): SpawnReturnDeclaration | undefined {
   if (!call?.spawn || !isAgentTool(call.action)) return undefined;
   const schema = call.args.return_schema;
-  if (isRecord(schema)) return { kind: "attested", schema };
-  return decides && call.foreground
-    ? { kind: "deferred" }
+  return isRecord(schema)
+    ? { kind: "attested", schema }
     : { kind: "as_spoken" };
 }
 

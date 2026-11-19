@@ -1617,11 +1617,6 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: `refuse`, `allow`. Other values stop startup.
   - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
 
-- **`ARCHESTRA_OPENAPPA_DEFERRED_RETURN`** - Lets a subagent that runs inside the backend read what the agent that delegated to it may read. An answer that would lower that agent's trust or narrow its audience then waits for the agent's own decision instead of being refused inside the subagent.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Set `true` only after every backend replica runs a version that has this setting. An older replica cannot continue a session that recorded a deferred return.
-
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`

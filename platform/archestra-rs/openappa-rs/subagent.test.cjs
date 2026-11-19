@@ -149,7 +149,8 @@ test('a spawn that also narrows releases once, on the call proposed again after 
   assert.ok(call.spawn_binding, 'the call proposed again carries the prepared fork');
 
   const child = { ...run.parent, session_id: `${run.parent.session_id}:agent:s2`, parent_id: run.parent.session_id };
-  assert.equal((await run.hook(child, { event: 'session_start', spawn_call_id: 's2' })).decision, 'context');
+  const start = await run.hook(child, { event: 'session_start', spawn_call_id: 's2' });
+  assert.equal(start.decision, 'ack', 'a return as spoken gives the child no contract to hear');
   const returned = await run.hook(child, { event: 'child_return', operation_id: 'runtime-return:s2:r1', output: 'nothing unusual' });
   assert.equal(returned.decision, 'ack');
   const [record] = await native.loadChildReturns(run.organization, run.parent.session_id, {

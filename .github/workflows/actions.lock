@@ -8,7 +8,7 @@ workflows:
         - 'actions/create-github-app-token@v3.3.0'
     '.github/workflows/benchmark.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
@@ -20,7 +20,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'azure/artifact-signing-action@v2.0.0'
         - 'azure/login@v3.1.0'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
@@ -37,7 +37,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/build-p4-shim-docker-image.yml':
@@ -56,10 +56,10 @@ workflows:
         - 'actions/github-script@v9.0.0'
     '.github/workflows/deploy-dev-platform-images.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/deploy-platform-environment.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/docker-image-scanning.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
@@ -71,7 +71,7 @@ workflows:
         - 'actions/github-script@v9.0.0'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
     '.github/workflows/frontend-dev-cache.yml':
         - 'actions/checkout@v7.0.1'
@@ -94,7 +94,7 @@ workflows:
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
     '.github/workflows/nightly-release-image-scan.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
@@ -115,11 +115,11 @@ workflows:
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
-        - 'taiki-e/install-action@v2.90.2'
+        - 'taiki-e/install-action@v2.90.3'
     '.github/workflows/platform-e2e-tests.yml':
         - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/checkout@v7.0.1'
@@ -132,7 +132,7 @@ workflows:
         - 'helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
     '.github/workflows/pr-title-linter.yml':
-        - 'archestra-ai/.github@v1.24.0'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/previous-release-published.yml':
         - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/publish-docs-on-main.yml': []
@@ -149,36 +149,36 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/release-pr-generation.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
         - 'actions/github-script@v9.0.0'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@ec618a434b933bcd826401c4c615210f2f56d2a0'
+        - 'archestra-ai/.github@322ad980dd4f3b530a192df546bf3bb703dcb003'
     '.github/workflows/trigger-website-deploy.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/update-client-versions.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
     '.github/workflows/update-openappa-template.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'archestra-ai/.github@v1.16.0'
+        - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
@@ -269,34 +269,23 @@ dependencies:
         commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         owner_id: 44036562
         repo_id: 192625955
-    'archestra-ai/.github@ec618a434b933bcd826401c4c615210f2f56d2a0':
-        ref: 'v1.16.0'
-        commit: 'sha1-ec618a434b933bcd826401c4c615210f2f56d2a0'
+    'archestra-ai/.github@322ad980dd4f3b530a192df546bf3bb703dcb003':
+        ref: 'v1.25.2'
+        commit: 'sha1-322ad980dd4f3b530a192df546bf3bb703dcb003'
         owner_id: 216022683
         repo_id: 1192166927
         uses:
             - 'actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
-    'archestra-ai/.github@v1.16.0':
-        ref: 'v1.16.0'
-        commit: 'sha1-ec618a434b933bcd826401c4c615210f2f56d2a0'
+    'archestra-ai/.github@v1.25.2':
+        ref: 'v1.25.2'
+        commit: 'sha1-322ad980dd4f3b530a192df546bf3bb703dcb003'
         owner_id: 216022683
         repo_id: 1192166927
         uses:
             - 'actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
             - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
             - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
-    'archestra-ai/.github@v1.24.0':
-        ref: 'v1.24.0'
-        commit: 'sha1-dbb529ba77ba07dd8f71f16ccb1b2317f4587312'
-        owner_id: 216022683
-        repo_id: 1192166927
-        uses:
             - 'grafana/shared-workflows@70c40e5b6522c854a55334124545261cae3d4c73'
-    'archestra-ai/.github@v1.25.2':
-        ref: 'v1.25.2'
-        commit: 'sha1-322ad980dd4f3b530a192df546bf3bb703dcb003'
-        owner_id: 216022683
-        repo_id: 1192166927
     'archestra-ai/.github@v1.31.1':
         ref: 'v1.31.1'
         commit: 'sha1-0bd6a54bf206174fd0cebc3222def111651e91bb'
@@ -350,7 +339,7 @@ dependencies:
         owner_id: 71461757
         repo_id: 219865964
     'grafana/shared-workflows@70c40e5b6522c854a55334124545261cae3d4c73':
-        ref: 'lint-pr-title/v1'
+        ref: 'main'
         commit: 'sha1-70c40e5b6522c854a55334124545261cae3d4c73'
         owner_id: 7195757
         repo_id: 682297649
@@ -381,8 +370,8 @@ dependencies:
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.90.2':
-        ref: 'v2.90.2'
-        commit: 'sha1-3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2'
+    'taiki-e/install-action@v2.90.3':
+        ref: 'v2.90.3'
+        commit: 'sha1-cfdb7ed4ccc7c7dce37759eae89dc5674b469b39'
         owner_id: 43724913
         repo_id: 442947557

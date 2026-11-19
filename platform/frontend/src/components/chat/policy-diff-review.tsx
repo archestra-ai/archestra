@@ -75,16 +75,6 @@ export function PolicyDiffReview({
               <Button
                 size="icon-xs"
                 variant="outline"
-                aria-label="Previous change"
-                title="Previous change"
-                disabled={!navigation.ready || navigation.current <= 1}
-                onClick={() => navigation.move(-1)}
-              >
-                <ArrowUp />
-              </Button>
-              <Button
-                size="icon-xs"
-                variant="outline"
                 aria-label="Next change"
                 title="Next change"
                 disabled={
@@ -93,6 +83,16 @@ export function PolicyDiffReview({
                 onClick={() => navigation.move(1)}
               >
                 <ArrowDown />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="outline"
+                aria-label="Previous change"
+                title="Previous change"
+                disabled={!navigation.ready || navigation.current <= 1}
+                onClick={() => navigation.move(-1)}
+              >
+                <ArrowUp />
               </Button>
             </div>
           </nav>

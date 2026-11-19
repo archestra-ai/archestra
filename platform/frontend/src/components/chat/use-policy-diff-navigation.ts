@@ -69,11 +69,11 @@ export function usePolicyDiffNavigation(sideBySide: boolean) {
       highlight.select(changes[index], index, changes.length);
     }
 
-    function reveal(index: number, line?: number) {
+    function reveal(index: number) {
       if (index < 0 || index >= changes.length) return;
       pauseScrollTracking();
       select(index);
-      const start = line ?? range(changes[index], "modified").start;
+      const start = range(changes[index], "modified").start;
       modified.setPosition({ lineNumber: start, column: 1 });
       modified.revealLineNearTop(start, monaco.editor.ScrollType.Immediate);
     }
@@ -130,25 +130,19 @@ export function usePolicyDiffNavigation(sideBySide: boolean) {
     moveRef.current = (offset) => reveal(current + offset);
     changeViewRef.current = (update) => {
       const selected = current;
-      const top = modified.getVisibleRanges()[0]?.startLineNumber;
-      const active = changes[selected]
-        ? range(changes[selected], "modified")
-        : null;
-      const anchor =
-        active && top !== undefined && top >= active.start && top <= active.end
-          ? top
-          : undefined;
+      const viewState = editor.saveViewState();
       navigating = true;
       userScrolling = false;
       if (navigationFrame !== null) cancelAnimationFrame(navigationFrame);
       update();
       if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
-      // A view-mode switch recalculates scroll offsets. Keep the selected
-      // change instead of treating that layout scroll as user navigation.
+      // Restore Monaco's line-relative viewport, cursor and expanded regions.
+      // Revealing the selected change would discard unchanged reading context.
       layoutFrame = requestAnimationFrame(() => {
         layoutFrame = null;
-        reveal(selected, anchor);
-        if (selected < 0) navigating = false;
+        pauseScrollTracking();
+        editor.restoreViewState(viewState);
+        if (selected >= 0) select(selected);
       });
     };
     const container = editor.getContainerDomNode();

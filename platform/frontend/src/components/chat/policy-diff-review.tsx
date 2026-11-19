@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Columns2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
 import styles from "./policy-diff-review.module.css";
+import { PolicyDiffViewIcon } from "./policy-diff-view-icon";
 import { usePolicyDiffNavigation } from "./use-policy-diff-navigation";
 
 /** Monaco renders only visible lines and keeps navigation within the review. */
@@ -189,7 +190,7 @@ function SideBySideButton({
               : "text-muted-foreground hover:border-foreground hover:bg-foreground hover:text-background dark:hover:bg-foreground",
           )}
         >
-          <Columns2 aria-hidden="true" />
+          <PolicyDiffViewIcon />
           <span>Side by side view</span>
         </Button>
       </TooltipTrigger>

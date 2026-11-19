@@ -1,0 +1,61 @@
+{
+  "name": "embarko__remote-mcp",
+  "display_name": "Embarko",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQ1IiBoZWlnaHQ9IjI0NSIgdmlld0JveD0iMCAwIDI0NSAyNDUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xNjAuODE0IDEwLjIxNjFDMTcwLjY1NCA5Ljg0MDkgMTgxLjk1MyAxMC4wNjk5IDE5MS44NTggMTAuMDYyMkMyMDYuMjM5IDEwLjAwOTIgMjIwLjYxOSAxMC4wNDUzIDIzNSAxMC4xNzAyQzIzMy44ODEgMTIuNDMzNSAyMzIuNTc0IDE2LjE2MjMgMjMxLjUgMTguNjI0MkMyMjguMzk3IDI1LjcyMjIgMjI1LjUxNiAzMS42ODgzIDIyMS4zOTIgMzguMjIyQzIwNy43OTcgNTkuNzYwMiAxODguODcxIDczLjA1MjggMTYzLjg0NyA3Ny41NDJDMTU4LjIzMiA3OC41NDkzIDE1Mi41NjkgNzkuMTAzNyAxNDYuODg3IDc5LjkyMjFDMTQwLjU0NSA4MC44OTQ4IDEzNC4yNDIgODIuMTE0NCAxMjcuOTkzIDgzLjU3ODFDMTEwLjQ0MiA4Ny43NzYyIDk2Ljg3MzggOTQuMDM5NiA4MS4yMTk3IDEwMi41NDJDNjcuOTc4NCAxMTAuNjY3IDU1Ljg1MzcgMTE5LjU0MyA0NS4yNjQ5IDEzMS4wOEM0My4zODgyIDEzMy4xMjUgNDEuOTI2OSAxMzUuNDgyIDQwLjI1MzkgMTM3LjY4OUM0My45NjY1IDEyNS4xMDggNDcuNjgwNiAxMTEuODk5IDUxLjE4NzcgOTkuMjE0MkM1Ny40OTggNzYuMzg5NiA2Mi4zMDg4IDU0LjQyOTggNzkuMjQ5OCAzNi41ODE1QzEwMi4wODkgMTIuNTE4OCAxMjkuODg0IDEwLjc4MDMgMTYwLjgxNCAxMC4yMTYxWiIgZmlsbD0iIzE3MUExRSIvPgo8cGF0aCBkPSJNMjAuMjc0IDIwNC4zN0MyMy4xMjQ4IDE5Mi45MjQgMjcuNzAzOCAxODEuNTg1IDMwLjY1OTQgMTcwLjE1OEMzMi45ODA5IDE2MS4xODEgMzcuMzcxOSAxNTUuNzQ1IDQyLjcyNTYgMTQ4LjQ3MUM2My4yNTYzIDEyMC41NzkgOTUuNDI2MiAxMDQuNDg1IDEyOS42OTggMTAzLjE1NUMxMzYuNzA5IDEwMi44ODUgMTQzLjg5MiAxMDIuOTgzIDE1MC45OCAxMDIuOTg3QzE2MS45ODYgMTAyLjk0NCAxNzIuOTkgMTAyLjk2IDE4My45OTUgMTAzLjAzNkMxOTAuNzE1IDEwMy4wNzcgMTk4LjY5MyAxMDMuMzIgMjA1LjI5MyAxMDMuMDc1QzIwMi45OTcgMTA4Ljc3MiAyMDAuMDc0IDExNi41MiAxOTcuMDMyIDEyMS44MTlDMTg4LjU5OCAxMzYuNTA0IDE3NS45MTEgMTUwLjQ4NiAxNjAuMzA0IDE1Ny4zMTZDMTQ0LjcyNiAxNjQuMTM0IDEzMi45NjcgMTYzLjQ1NSAxMTYuNzY0IDE2My4zNUM4OC44NjkgMTYzLjE2OSA2Mi4yOTI2IDE3MS40OTcgNDAuMTQ0IDE4OC43MDFDMzMuNDU5MyAxOTMuODkzIDI4LjA2ODQgMTk5LjUxOSAyMi4wOTQzIDIwNS40NzhDMjEuMTg2IDIwNi43NzEgMTkuNjMwNSAyMDguNTE5IDE4LjU3NDcgMjA5Ljc3MUMxOC45NDA2IDIwOC4yMjcgMTkuNzU5OSAyMDUuOTM3IDIwLjI3NCAyMDQuMzdaIiBmaWxsPSIjMTcxQTFFIi8+CjxwYXRoIGQ9Ik05Mi4yODU3IDE4NC4wMzdDMTAzLjExNCAxODMuMTkyIDExNy42NzYgMTg0LjU0NiAxMjguNzgyIDE4NC43MDVDMTQ0LjQxOCAxODQuOTI5IDE1OS45NCAxODQuOTIyIDE3NS41NzcgMTg0LjkzMkwxODkuODQyIDE4NC45MDhDMTkyLjY2OCAxODQuODk3IDE5Ni4wOTUgMTg0Ljk3OSAxOTguODY4IDE4NC42NDdDMTk0Ljg4OSAxOTAuOTUyIDE5MS41MTMgMTk2LjU0NCAxODYuNjM0IDIwMi4zMjhDMTc1LjAzOCAyMTYuMDc5IDE1OC45MTEgMjI1Ljg1MyAxNDEuNzI1IDIzMC42NjlDMTMzLjUzNiAyMzIuOTY0IDEyNS4zMTMgMjMzLjkzOCAxMTYuOTEzIDIzNC42NTRDMTAxLjAyOCAyMzQuOTYgODUuMTM4NSAyMzUuMDYyIDY5LjI1MDMgMjM0Ljk2NEwxMCAyMzQuOTI5QzExLjgzOTkgMjMxLjc3NyAxNi45ODk0IDIyNC42ODUgMTkuMzI1IDIyMS45NjlDMzkuNjk0NiAxOTguMjc3IDYxLjMzMTggMTg2LjQ4NSA5Mi4yODU3IDE4NC4wMzdaIiBmaWxsPSIjMTcxQTFFIi8+Cjwvc3ZnPgo=",
+  "description": "Official remote MCP server for Embarko. Lets AI agents deploy and host AI-built apps and websites to a live URL without DevOps setup, and read status, logs, deployments, env vars, domains and analytics for deployed apps.",
+  "oauth_config": {
+    "name": "Embarko MCP",
+    "server_url": "https://mcp.embarko.ai/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [],
+    "description": "Embarko MCP Server (dynamic registration)",
+    "default_scopes": [],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "deploy_app",
+      "description": "Deploy or update an app from its files (appName, files, optional appType and version) and get a live URL."
+    },
+    {
+      "name": "read_app",
+      "description": "Read an app's status, logs, deployments, environment variables, domains and analytics."
+    },
+    {
+      "name": "update_app",
+      "description": "Update an app: set environment variables, add and verify a custom domain, roll back a deployment, or send feedback."
+    },
+    {
+      "name": "app_danger_zone",
+      "description": "Destructive app operations: delete an environment variable or domain, rename an app, or delete an app."
+    }
+  ],
+  "prompts": [],
+  "keywords": ["embarko", "deploy", "hosting", "deployment", "web apps", "websites", "devops", "cloud"],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "author": {
+    "name": "Walkover",
+    "url": "https://walkover.in/"
+  },
+  "homepage": "https://embarko.ai",
+  "documentation": "https://embarko.ai/docs/quickstart",
+  "support": "https://embarko.ai/support",
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.embarko.ai/mcp",
+    "docs_url": "https://embarko.ai/docs/quickstart"
+  },
+  "github_info": null,
+  "programming_language": null
+}

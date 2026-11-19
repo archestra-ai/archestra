@@ -136,6 +136,31 @@ describe("callGeminiEmbedding", () => {
     });
   });
 
+  test("rejects a malformed Vertex vector when retrying only one input", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    mockCreateGoogleGenAIClient.mockReturnValue({
+      models: {
+        embedContent: vi
+          .fn()
+          .mockResolvedValue({ embeddings: [{ values: [0.1] }] }),
+      },
+    } as never);
+
+    await expect(
+      callGeminiEmbedding({
+        inputs: ["retry"],
+        model: "gemini-embedding-2",
+        apiKey: "unused",
+        dimensions: 2,
+      }),
+    ).rejects.toMatchObject({
+      name: GeminiEmbeddingError.name,
+      status: 500,
+      message:
+        "Gemini embedding response did not include one valid vector for the input",
+    });
+  });
+
   test("embeds all texts in a single SDK call", async () => {
     mockIsVertexAiEnabled.mockReturnValue(false);
 

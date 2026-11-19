@@ -91,7 +91,7 @@ export async function callGeminiEmbedding(params: {
   if (
     isVertexAiEnabled() &&
     modelId.split("/").at(-1) === "gemini-embedding-2" &&
-    contents.length > 1
+    contents.length > 0
   ) {
     // Vertex embedContent treats an array of parts as one content and returns
     // one vector. KB indexing needs one independently addressable vector per

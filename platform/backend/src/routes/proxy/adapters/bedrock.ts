@@ -68,6 +68,12 @@ type BedrockCommandContext = {
      */
     additionalModelRequestFields: Record<string, unknown> | undefined;
     outputConfig: BedrockRequest["outputConfig"];
+    guardrailConfig: BedrockRequest["guardrailConfig"];
+    additionalModelResponseFieldPaths: BedrockRequest["additionalModelResponseFieldPaths"];
+    promptVariables: BedrockRequest["promptVariables"];
+    performanceConfig: BedrockRequest["performanceConfig"];
+    requestMetadata: BedrockRequest["requestMetadata"];
+    serviceTier: BedrockRequest["serviceTier"];
     toolConfig:
       | {
           tools:
@@ -1777,6 +1783,15 @@ function buildBedrockCommandContext(
       inferenceConfig: request.inferenceConfig,
       additionalModelRequestFields: request.additionalModelRequestFields,
       outputConfig: request.outputConfig,
+      // These options are native to Converse and must still reach AWS when a
+      // pool keeps a request on Bedrock because cross-wire routing is unsafe.
+      guardrailConfig: request.guardrailConfig,
+      additionalModelResponseFieldPaths:
+        request.additionalModelResponseFieldPaths,
+      promptVariables: request.promptVariables,
+      performanceConfig: request.performanceConfig,
+      requestMetadata: request.requestMetadata,
+      serviceTier: request.serviceTier,
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) =>

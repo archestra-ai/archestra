@@ -1,14 +1,34 @@
 import { RouteId } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { Bedrock, constructResponseSchema, UuidIdSchema } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import {
   bedrockAdapterFactory,
   bedrockInvokeAdapterFactory,
 } from "../adapters";
+import { canTranslateConverseRequest } from "../adapters/openai-bedrock-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+
+// Zod strips unknown keys on known Converse shapes. Detect native-only
+// behavior before that validation, without changing the native request schema.
+const nativeOnlyConverseRequests = new WeakSet<FastifyRequest>();
+async function detectNativeConverse(request: FastifyRequest) {
+  const modelParam = asRecord(request.params)?.modelId;
+  let urlModel = typeof modelParam === "string" ? modelParam : undefined;
+  if (urlModel) {
+    try {
+      urlModel = decodeURIComponent(urlModel);
+    } catch {
+      // Leave invalid URI handling to the existing route.
+    }
+  }
+  if (!canTranslateConverseRequest(request.body, urlModel))
+    nativeOnlyConverseRequests.add(request);
+}
 
 const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const BEDROCK_PREFIX = `${PROXY_API_PREFIX}/bedrock`;
@@ -30,6 +50,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}${CONVERSE_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseWithDefaultAgent,
         description: "Send a message to Amazon Bedrock using the default agent",
@@ -49,6 +70,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );
@@ -63,6 +85,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}/:agentId${CONVERSE_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseWithAgent,
         description: "Send a message to Amazon Bedrock for a specific agent",
@@ -85,6 +108,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );
@@ -99,6 +123,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}${CONVERSE_STREAM_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseStreamWithDefaultAgent,
         description:
@@ -119,6 +144,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );
@@ -133,6 +159,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}/:agentId${CONVERSE_STREAM_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseStreamWithAgent,
         description:
@@ -156,6 +183,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );
@@ -176,6 +204,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}/:agentId/model/:modelId${CONVERSE_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseWithAgentAndModel,
         description:
@@ -213,6 +242,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );
@@ -227,6 +257,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${BEDROCK_PREFIX}/:agentId/model/:modelId${CONVERSE_STREAM_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
+      preValidation: detectNativeConverse,
       schema: {
         operationId: RouteId.BedrockConverseStreamWithAgentAndModel,
         description:
@@ -264,6 +295,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
+        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
       );
     },
   );

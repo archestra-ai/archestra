@@ -5,6 +5,7 @@ import { classifyAzureModelCapabilities } from "@/services/azure-model-capabilit
 import { getTokenizer } from "@/tokenizers";
 import { ApiError } from "@/types/api";
 import { asRecord } from "@/utils/as-record";
+import { canTranslateConverseRequest } from "./adapters/openai-bedrock-translator";
 import type { PlannedMember } from "./model-pool-failover";
 import {
   type PoolWire,
@@ -16,6 +17,7 @@ export async function compatiblePoolMembers(params: {
   members: PlannedMember[];
   wire: PoolWire;
   request: unknown;
+  preserveNativeConverse?: boolean;
 }): Promise<PlannedMember[]> {
   if (params.wire === "openai-responses") {
     const body = asRecord(params.request);
@@ -32,9 +34,22 @@ export async function compatiblePoolMembers(params: {
         "Model pools require the complete Responses input history and synchronous execution; stored response, conversation, item, file, prompt, vector-store, container and skill references and background execution are not supported.",
       );
   }
+  let members = params.members;
+  if (
+    params.wire === "bedrock-converse" &&
+    (params.preserveNativeConverse ||
+      !canTranslateConverseRequest(params.request))
+  ) {
+    members = members.filter((member) => member.provider === "bedrock");
+    if (!members.length)
+      throw new ApiError(
+        400,
+        "This Converse request requires a Bedrock model pool member to preserve its native options or content.",
+      );
+  }
   const requirements = requestRequirements(params.request, params.wire);
   const [models, azureRows] = await Promise.all([
-    ModelModel.findByProviderModelIds(params.members),
+    ModelModel.findByProviderModelIds(members),
     LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels([
       ...new Set(
         params.members
@@ -43,7 +58,7 @@ export async function compatiblePoolMembers(params: {
       ),
     ]),
   ]);
-  const compatible = params.members.filter((member) => {
+  const compatible = members.filter((member) => {
     const model = models.get(`${member.provider}:${member.modelId}`);
     let modalities = model?.inputModalities;
     // Azure deployment aliases are resource-scoped. Never borrow another

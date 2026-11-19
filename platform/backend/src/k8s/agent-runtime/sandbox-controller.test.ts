@@ -136,6 +136,41 @@ test("re-checks once a kubeconfig written after boot appears", async () => {
   }
 });
 
+test("polls at startup until the controller of a cluster still being created answers", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  const startedAt = Date.now();
+  const dir = mkdtempSync(join(tmpdir(), "kubeconfig-"));
+  const kubeconfigPath = join(dir, "kubeconfig");
+  const kubernetes = config.orchestrator.kubernetes;
+  const previous = kubernetes.kubeconfig;
+  kubernetes.kubeconfig = kubeconfigPath;
+  const loadFromDefault = vi.mocked(KubeConfig.prototype.loadFromDefault);
+  const loadCluster = loadFromDefault.getMockImplementation();
+  loadFromDefault.mockImplementation(() => {
+    throw new Error("kubeconfig not written yet");
+  });
+  try {
+    agentSandboxApi.checkAtStartup();
+    await vi.waitFor(() => expect(loadFromDefault).toHaveBeenCalled());
+
+    // The cluster answers before its controller is installed.
+    writeFileSync(kubeconfigPath, "");
+    loadFromDefault.mockImplementation(loadCluster ?? (() => {}));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(discoveryRequests).toBeGreaterThan(0);
+
+    // Seconds later, not at the next stale read 30 seconds on.
+    serveController({ installed: true });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.waitFor(() => expect(agentSandboxApi.isInstalled).toBe(true));
+    expect(Date.now() - startedAt).toBeLessThan(30_000);
+  } finally {
+    vi.useRealTimers();
+    kubernetes.kubeconfig = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test.each([
   { dnsSource: "discovered", configuredIps: [], expectedDnsIp: "10.96.0.10" },
   {

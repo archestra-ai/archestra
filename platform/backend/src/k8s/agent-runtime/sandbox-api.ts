@@ -73,6 +73,7 @@ class AgentSandboxApiDetector {
   private clusterUnreachable = false;
   private inFlight: Promise<boolean> | null = null;
   private customObjectsApi: k8s.CustomObjectsApi | null = null;
+  private startupPoll: NodeJS.Timeout | null = null;
 
   get isInstalled(): boolean {
     if (
@@ -94,8 +95,29 @@ class AgentSandboxApiDetector {
     return this.inFlight;
   }
 
+  /**
+   * Inspects the cluster at boot. When the kubeconfig is not written yet (the
+   * Docker quickstart creates its cluster after the backend starts), also
+   * checks every STARTUP_POLL_INTERVAL_MS until the controller answers, for at
+   * most STARTUP_POLL_WINDOW_MS, instead of waiting for a stale read.
+   */
+  checkAtStartup(): void {
+    void this.refresh();
+    if (!isKubeconfigFilePending() || this.startupPoll) return;
+    const deadline = Date.now() + STARTUP_POLL_WINDOW_MS;
+    this.startupPoll = setInterval(() => {
+      if (this.installed || Date.now() >= deadline) {
+        this.stopStartupPoll();
+        return;
+      }
+      void this.refresh();
+    }, STARTUP_POLL_INTERVAL_MS);
+    this.startupPoll.unref();
+  }
+
   /** @internal exported for tests */
   reset(): void {
+    this.stopStartupPoll();
     this.installed = false;
     this.lastCheckedAt = 0;
     this.clusterUnreachable = false;
@@ -128,6 +150,11 @@ class AgentSandboxApiDetector {
     this.installed = installed;
     return installed;
   }
+
+  private stopStartupPoll(): void {
+    if (this.startupPoll) clearInterval(this.startupPoll);
+    this.startupPoll = null;
+  }
 }
 
 export const agentSandboxApi = new AgentSandboxApiDetector();
@@ -135,6 +162,9 @@ export const agentSandboxApi = new AgentSandboxApiDetector();
 // === Internal helpers ===
 
 const RECHECK_INTERVAL_MS = 30_000;
+const STARTUP_POLL_INTERVAL_MS = 2_000;
+// Covers creating the quickstart's cluster and installing the controller.
+const STARTUP_POLL_WINDOW_MS = 10 * 60_000;
 
 const AGENT_SANDBOX_MISSING_MESSAGE =
   "The Agent Sandbox controller is not installed on this cluster, so agents cannot run in dedicated runtimes. Install the controller to enable Agent Runtime.";

@@ -12,12 +12,14 @@ const MANIFEST = "---\nname: release-checklist\ndescription: Ship it.\n---\n";
 /** The editor as a page holds it: content in the caller's state. */
 function Harness({
   files: initial,
+  manifest: initialManifest = MANIFEST,
   onFiles,
 }: {
   files: ResourceFile[];
+  manifest?: string;
   onFiles?: (files: ResourceFile[]) => void;
 }) {
-  const [manifest, setManifest] = useState(MANIFEST);
+  const [manifest, setManifest] = useState(initialManifest);
   const [files, setFiles] = useState(initial);
   return (
     <SkillContentEditor
@@ -60,6 +62,24 @@ describe("SkillContentEditor", () => {
     );
     expect(editor()).toHaveValue("print(1)");
     expect(editor()).toHaveAttribute("data-language", "python");
+  });
+
+  it("warns that a name outside the Agent Skills spec cannot go over MCP", () => {
+    const { rerender } = render(<Harness files={[]} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    rerender(
+      <Harness
+        key="non-compliant"
+        files={[]}
+        manifest={
+          '---\nname: "Release Checklist"\ndescription: Ship it.\n---\n'
+        }
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Not publishable over MCP",
+    );
   });
 
   it("names a new folder's first file and opens it", async () => {

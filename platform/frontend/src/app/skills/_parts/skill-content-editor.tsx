@@ -13,7 +13,6 @@ import {
   LockKeyhole,
   RotateCcw,
   Trash2,
-  TriangleAlert,
   X,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -30,10 +29,10 @@ import {
   FileKindChip,
   FilePathLabel,
   FileWorkspace,
+  FileWorkspaceNotice,
   IconBadge,
 } from "@/components/file-workspace/file-workspace";
 import { WorkspaceEditor } from "@/components/file-workspace/workspace-editor";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Tooltip,
@@ -333,6 +332,14 @@ export function SkillContentEditor({
   return (
     <FileWorkspace
       className={cn("min-h-0 flex-1", className)}
+      notice={
+        nameNotPublishable && (
+          <FileWorkspaceNotice title="Not publishable over MCP">
+            Agent Skills names allow only lowercase letters, digits and single
+            hyphens, up to 64 characters. The skill still works everywhere else.
+          </FileWorkspaceNotice>
+        )
+      }
       explorer={explorer}
       explorerStorageKey="file-workspace-explorer-open"
       activeKey={openItem?.key ?? null}
@@ -388,17 +395,6 @@ export function SkillContentEditor({
         </>
       }
     >
-      {nameNotPublishable && (
-        <InlineNotice className="m-2 mb-0">
-          <TriangleAlert />
-          <span className="font-medium">Not publishable over MCP</span>
-          <InlineNoticeText>
-            The Agent Skills specification allows only lowercase letters,
-            digits, and single hyphens (max 64 characters). The skill still
-            works everywhere else.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
       {!openItem ? (
         <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           {items.length === 0 ? "No files yet." : "Choose a file to read."}

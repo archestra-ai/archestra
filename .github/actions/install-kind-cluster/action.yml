@@ -20,7 +20,7 @@ runs:
   steps:
     - name: Cache Kind node image
       id: cache-kind-node
-      uses: actions/cache@v6.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/kindest-node.tar
         key: kindest-node-v1.34.3-${{ runner.arch }}
@@ -31,7 +31,7 @@ runs:
       run: docker load < /tmp/kindest-node.tar
 
     - name: Install Kind cluster
-      uses: helm/kind-action@v1.13.0
+      uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
       with:
         config: ${{ inputs.config }}
         cluster_name: ${{ inputs.cluster-name }}

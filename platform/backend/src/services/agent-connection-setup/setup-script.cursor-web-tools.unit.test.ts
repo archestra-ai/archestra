@@ -86,7 +86,9 @@ async function install() {
   const step = path.join(root, "hook-step.cjs");
   await writeFile(step, script.slice(start + NODE_STEP_START.length, end));
   await execFileAsync(process.execPath, [step], {
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    // On Linux the server's entry carries XDG_CONFIG_HOME when the shell
+    // sets it, as a CI runner does: a test of its own covers that.
+    env: { ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: "" },
   });
 }
 

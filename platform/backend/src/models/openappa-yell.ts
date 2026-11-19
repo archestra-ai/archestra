@@ -23,6 +23,7 @@ import {
   createCursorPaginatedResult,
   decodeCursor,
 } from "@/database/utils/pagination";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import type {
   InsertOpenAppaYell,
   OpenAppaYellKind,
@@ -53,7 +54,12 @@ export default class OpenAppaYellModel {
       .values(input)
       .onConflictDoNothing()
       .returning(metadataColumns());
-    if (row) return row;
+    if (row) {
+      // Outside a transaction, so the insert has committed. A retried call
+      // finds its earlier row below and is not counted again.
+      observeOpenappaYell({ kind: row.kind, superyell: row.superyell });
+      return row;
+    }
     const [existing] = await db
       .select(metadataColumns())
       .from(table)

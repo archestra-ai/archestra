@@ -13,9 +13,10 @@ export function describeSessionStatus(counts: StatusCounts): {
   /** "2 failed turns · 1 failed request", or null when nothing failed. */
   detail: string | null;
 } {
+  // A partial session (a test double, an older payload) reads as no failures.
   const parts = [
-    plural(counts.chatErrorCount, "failed turn"),
-    plural(counts.failedRequestCount, "failed request"),
+    plural(counts.chatErrorCount ?? 0, "failed turn"),
+    plural(counts.failedRequestCount ?? 0, "failed request"),
   ].filter((part): part is string => part !== null);
   return {
     failed: parts.length > 0,

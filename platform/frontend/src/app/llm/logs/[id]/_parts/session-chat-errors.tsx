@@ -1,7 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ChevronRight, MessageSquareWarning } from "lucide-react";
+import {
+  ChevronRight,
+  CornerDownRight,
+  MessageSquareWarning,
+} from "lucide-react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -78,41 +82,66 @@ function ChatErrorRow({
   const { error } = chatError;
   const original = error.originalError;
   const raw = JSON.stringify(error, null, 2);
+  // One run of text, so it wraps like a sentence on a narrow screen instead
+  // of stacking a line per fact.
+  const facts = [
+    <time
+      key="at"
+      dateTime={String(chatError.createdAt)}
+      className="whitespace-nowrap"
+    >
+      {formatDate({
+        date: String(chatError.createdAt),
+        dateFormat: "MMM d, HH:mm:ss",
+      })}
+    </time>,
+    error.code !== "unknown" ? (
+      <span key="code" className="font-mono text-[11px]">
+        {error.code}
+      </span>
+    ) : null,
+    error.subagent ? (
+      <span key="subagent">
+        in sub-agent{" "}
+        <span className="font-medium text-foreground">
+          {error.subagent.name}
+        </span>
+      </span>
+    ) : null,
+    original?.status ? (
+      <span key="status" className="tabular-nums">
+        HTTP {original.status}
+      </span>
+    ) : null,
+    <span key="retry" className="whitespace-nowrap">
+      {error.isRetryable ? "Retryable" : "Not retryable"}
+    </span>,
+  ].filter((fact) => fact !== null);
 
   return (
     <li className="px-3 py-2.5">
       <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="flex items-start gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-sm font-medium break-words">{error.message}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <time dateTime={String(chatError.createdAt)}>
-                {formatDate({
-                  date: String(chatError.createdAt),
-                  dateFormat: "MMM d, HH:mm:ss",
-                })}
-              </time>
-              {error.code !== "unknown" ? (
-                <span className="rounded-sm bg-muted px-1 font-mono text-[11px] leading-4">
-                  {error.code}
+            <p className="text-xs leading-5 text-muted-foreground">
+              {facts.map((fact, index) => (
+                <span key={fact.key}>
+                  {index > 0 ? (
+                    <span aria-hidden="true" className="px-1.5">
+                      ·
+                    </span>
+                  ) : null}
+                  {fact}
                 </span>
-              ) : null}
-              {error.subagent ? (
-                <span>
-                  in sub-agent{" "}
-                  <span className="font-medium text-foreground">
-                    {error.subagent.name}
-                  </span>
-                </span>
-              ) : null}
-              {original?.status ? (
-                <span className="tabular-nums">HTTP {original.status}</span>
-              ) : null}
-              <span>
-                {error.isRetryable ? "Retryable" : "Not retryable"}
-              </span>
+              ))}
               {error.traceId ? (
-                <span className="inline-flex items-center gap-0.5">
+                <span aria-hidden="true" className="px-1.5">
+                  ·
+                </span>
+              ) : null}
+              {error.traceId ? (
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
                   <span>Trace</span>
                   <span className="font-mono text-[11px]">
                     {error.traceId.slice(0, 12)}
@@ -120,16 +149,17 @@ function ChatErrorRow({
                   <CopyButton text={error.traceId} />
                 </span>
               ) : null}
-            </div>
+            </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="-ml-2 flex shrink-0 items-center gap-1 sm:ml-0">
             {requestId ? (
               <Button
                 size="xs"
-                variant="outline"
+                variant="ghost"
                 onClick={() => onShowRequest(requestId)}
               >
-                <span>Show request</span>
+                <CornerDownRight aria-hidden="true" />
+                <span>Go to last request</span>
               </Button>
             ) : null}
             <CollapsibleTrigger asChild>

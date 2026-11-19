@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { use, useCallback, useMemo, useState } from "react";
+import { use, useCallback, useMemo, useRef, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -393,6 +393,7 @@ export default function SessionDetailPage({
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const requestsSectionRef = useRef<HTMLElement>(null);
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -541,17 +542,26 @@ export default function SessionDetailPage({
           <SessionChatErrors
             chatErrors={chatErrors}
             requestIdByErrorId={requestIdByChatErrorId}
-            onShowRequest={(requestId) =>
-              interactions.some((row) => row.id === requestId)
-                ? setPickedKey(requestSpanKey(requestId))
-                : openRequest(requestId)
-            }
+            onShowRequest={(requestId) => {
+              if (!interactions.some((row) => row.id === requestId)) {
+                openRequest(requestId);
+                return;
+              }
+              // The list keeps its selected row in view; bring the list
+              // itself into the page's view, or the click seems to do nothing.
+              setPickedKey(requestSpanKey(requestId));
+              requestsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
           />
 
           {/* overflow-clip, not hidden, below lg: hidden would make the card
               a scroll container and break the sticky pane headers. isolate
               keeps the list's sticky column header under the page header. */}
           <section
+            ref={requestsSectionRef}
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >

@@ -566,7 +566,10 @@ export function PageLayout({
             } as React.CSSProperties
           }
           className={cn(
-            "w-full flex-1",
+            // Its own stacking context: a sticky or raised element inside the
+            // content (an explorer's section header, an overlay) must never
+            // paint over the sticky banner or page header.
+            "isolate w-full flex-1",
             fillContent && "flex min-h-0 flex-col",
             minWidth && "min-w-0",
             minWidth &&

@@ -295,7 +295,14 @@ function describeHistoryRow(row: HistoryRow): {
 /** A scan this recent is still a fair count; an older one is redone when the dialog opens. */
 const SCAN_FRESH_MS = 24 * 60 * 60 * 1000;
 
+/** True when the dialog should count again: the count is old, or it was stopped or failed. */
 function isScanStale(backfill: Backfill): boolean {
+  if (
+    backfill.phase === "scan" &&
+    (backfill.status === "cancelled" || backfill.status === "failed")
+  ) {
+    return true;
+  }
   return Date.now() - new Date(backfill.cutoff).getTime() > SCAN_FRESH_MS;
 }
 

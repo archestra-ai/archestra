@@ -1158,6 +1158,29 @@ describe("past sessions", () => {
     ).toBeDisabled();
   });
 
+  it.each([
+    "cancelled",
+    "failed",
+  ] as const)("offers Score, and counts again, after a count was %s", async (status) => {
+    serveBackfill({
+      backfill: scanned({ status }),
+      scoreOffer: null,
+      history: [job({ status })],
+    });
+    const scans = serveScan();
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await openScore(user);
+
+    expect(
+      await within(dialog).findByText(
+        "Looking for past sessions in the interaction log…",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(scans.count).toBe(1));
+  });
+
   it("totals sessions per client in the dialog, folding agents and the tail", async () => {
     const chain = `${randomUUID()}:${randomUUID()}`;
     serveBackfill({

@@ -403,9 +403,12 @@ jobs:
   # artifacts, so `publish` downloads the signed files under the same names.
   # Only a run that will publish signs. Like `sign-windows`, this job builds
   # nothing and runs no build output, and it is the only job that sees the
-  # Apple secrets: they are secrets of the `archestra-cli-release` environment (main
-  # only). .github/scripts/archestra-cli-sign-macos.sh does the work; it can be
-  # run on a Mac to test the secrets.
+  # Apple secrets: they are secrets of the `archestra-cli-release` environment,
+  # which allows main only and releases its secrets to a run only after a Core
+  # member other than the person who triggered it approves (infra
+  # github/org/environments.tf); one approval covers both signing jobs.
+  # .github/scripts/archestra-cli-sign-macos.sh does the work; it can be run on
+  # a Mac to test the secrets.
   sign-macos:
     name: Sign and notarize the macOS binaries
     needs: [build, release-state]

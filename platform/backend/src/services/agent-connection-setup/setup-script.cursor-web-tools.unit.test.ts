@@ -651,6 +651,22 @@ describe("Cursor web tools", () => {
     );
   });
 
+  test("an agent that cannot run is a failure the setup tool names, not something to wait for", async () => {
+    await install();
+    await installFakeCli([]);
+    const cli = path.join(home, ".local", "bin", "cursor-agent");
+    await chmod(cli, 0o644);
+    const broken = await webTools({
+      ARCHESTRA_CURSOR_CLI: cli,
+      ARCHESTRA_CURSOR_WEB_SETUP_WAIT_MS: "300",
+    }).call(CURSOR_WEB_SETUP_TOOL, {});
+    expect(broken.text).toContain(
+      "Cursor's command-line agent could not run (EACCES)",
+    );
+    expect(broken.text).not.toContain("keep calling it");
+    expect(existsSync(path.join(fakeCli, "logins"))).toBe(false);
+  });
+
   test("the setup tool says what failed, and a web tool names it when the CLI is missing", async () => {
     await install();
     const tools = webTools({

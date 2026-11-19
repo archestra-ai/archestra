@@ -39,17 +39,16 @@ export function PolicyDiffReview({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left">
-        <DialogTitle className="flex min-h-8 min-w-0 items-center font-mono text-base font-medium">
-          {path}
-        </DialogTitle>
-        <DialogDescription
-          asChild
-          className="col-span-full row-start-2 text-xs md:col-span-1"
-        >
-          {summary}
-        </DialogDescription>
-        <div className="col-span-full row-start-3 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-2">
+      <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-6 text-left">
+        <div className="min-w-0 space-y-2 md:row-span-2">
+          <DialogTitle className="flex min-h-8 min-w-0 items-center font-mono text-base font-medium">
+            {path}
+          </DialogTitle>
+          <DialogDescription asChild className="text-xs">
+            {summary}
+          </DialogDescription>
+        </div>
+        <div className="col-span-full row-start-2 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2">
           <SideBySideSwitch
             id={`${controlId}-side-by-side`}
             checked={sideBySide}
@@ -59,13 +58,13 @@ export function PolicyDiffReview({
           />
           <nav
             aria-label="Change navigation"
-            className="flex items-center gap-3"
+            className="flex items-center gap-2"
           >
             <output
               aria-label="Change position"
               aria-live="polite"
               aria-atomic="true"
-              className="whitespace-nowrap text-sm font-normal text-muted-foreground tabular-nums"
+              className="whitespace-nowrap text-xs font-normal text-muted-foreground tabular-nums"
             >
               {navigation.ready
                 ? navigation.total
@@ -75,7 +74,7 @@ export function PolicyDiffReview({
             </output>
             <div className="flex items-center gap-1">
               <Button
-                size="icon-sm"
+                size="icon-xs"
                 variant="outline"
                 aria-label="Previous change"
                 title="Previous change"
@@ -85,7 +84,7 @@ export function PolicyDiffReview({
                 <ArrowUp />
               </Button>
               <Button
-                size="icon-sm"
+                size="icon-xs"
                 variant="outline"
                 aria-label="Next change"
                 title="Next change"
@@ -99,12 +98,13 @@ export function PolicyDiffReview({
             </div>
           </nav>
         </div>
+        {/* Align the visible X with the controls, keeping its full hit area. */}
         <DialogClose asChild>
           <Button
             size="icon-sm"
             variant="ghost"
             aria-label="Close"
-            className="col-start-2 row-start-1 justify-self-end text-muted-foreground"
+            className="col-start-2 row-start-1 -mr-3 justify-self-end text-muted-foreground"
           >
             <X />
           </Button>
@@ -178,13 +178,13 @@ function SideBySideSwitch({
     <Tooltip delayDuration={350}>
       <div
         className={cn(
-          "flex min-h-8 shrink-0 items-center gap-3 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-accent/50",
+          "flex h-7 shrink-0 items-center gap-2 rounded-md border px-2 transition-colors hover:bg-accent/50",
           checked && "border-ring/40 bg-accent/60",
         )}
       >
         <Label
           htmlFor={id}
-          className="flex flex-1 cursor-pointer items-center gap-2 whitespace-nowrap font-normal"
+          className="flex flex-1 cursor-pointer items-center gap-2 whitespace-nowrap text-xs font-normal"
         >
           <Columns2
             aria-hidden="true"

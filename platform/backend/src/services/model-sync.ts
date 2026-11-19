@@ -161,6 +161,21 @@ class ModelSyncService {
         : await ModelModel.bulkUpsert(modelsToUpsert, {
             fromProviderCatalog: true,
           });
+      if (!forceRefresh)
+        await ModelModel.applyAuthoritativeContextLengths(
+          providerModels.flatMap((model) =>
+            model.capabilities?.authoritativeContextLength &&
+            model.capabilities.contextLength
+              ? [
+                  {
+                    provider,
+                    modelId: model.id,
+                    contextLength: model.capabilities.contextLength,
+                  },
+                ]
+              : [],
+          ),
+        );
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },

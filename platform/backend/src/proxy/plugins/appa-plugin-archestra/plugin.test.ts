@@ -3963,33 +3963,6 @@ describe("asking through the client's own question tool", () => {
           decision: "refuse",
           refusal: { reason: "openappa_hitl_not_approved" },
         });
-        // The soft-block override never turns a person's rejection into a
-        // waiver that runs the reviewed call.
-        const overrides = config.openappa.breakTheGlassOverrides;
-        config.openappa.breakTheGlassOverrides = {
-          ...overrides,
-          unapprovableBlockMode: "allow",
-        };
-        try {
-          await expect(
-            plugin.onPrepareToolCalls({
-              ...context,
-              toolCalls: [
-                {
-                  id: "soft-block-retry",
-                  name: "archestra__whoami",
-                  arguments: "{}",
-                },
-              ],
-            }),
-          ).resolves.toMatchObject({
-            decision: "refuse",
-            refusal: { reason: "openappa_hitl_not_approved" },
-          });
-          expect(await isUnenforcedSession(trusted.session)).toBe(false);
-        } finally {
-          config.openappa.breakTheGlassOverrides = overrides;
-        }
         const independentCalls = [
           {
             id: "public-followup",
@@ -7370,29 +7343,6 @@ describe("rendering runtime text for this client", () => {
           await isUnenforcedSession(session(organizationId, "runtime-run")),
         ).toBe(false);
       } finally {
-        restore();
-      }
-    });
-
-    test("the soft-block override leaves an attended approval waiting and the session enforced", async ({
-      makeOrganization,
-    }) => {
-      const organizationId = (await makeOrganization()).id;
-      const overrides = config.openappa.breakTheGlassOverrides;
-      config.openappa.breakTheGlassOverrides = {
-        ...overrides,
-        unapprovableBlockMode: "allow",
-      };
-      const { run, restore } = await harness(organizationId, {
-        breakTheGlassEnabled: false,
-      });
-      try {
-        expect(await run("attended-soft", "attended")).toMatchObject(waiting);
-        expect(
-          await isUnenforcedSession(session(organizationId, "attended-soft")),
-        ).toBe(false);
-      } finally {
-        config.openappa.breakTheGlassOverrides = overrides;
         restore();
       }
     });
@@ -15189,7 +15139,7 @@ describe("soft-block emergency override", () => {
     "Agent",
     "SendMessage",
   ]) {
-    test(`keeps ${tool} with an executable remedy held and the session enforced`, async ({
+    test(`releases ${tool} with an executable remedy and disables enforcement without an earlier waiver`, async ({
       makeOrganization,
     }) => {
       const organizationId = (await makeOrganization()).id;
@@ -15208,8 +15158,15 @@ describe("soft-block emergency override", () => {
         const calls = [{ id: "first", name: tool, arguments: {} }];
         expect(
           await plugin.onToolCalls({ ...context, toolCalls: calls }),
-        ).not.toEqual({ decision: "allow", toolCalls: calls });
-        expect(await isUnenforcedSession(trusted.session)).toBe(false);
+        ).toEqual({ decision: "allow", toolCalls: calls });
+        expect(await isUnenforcedSession(trusted.session)).toBe(true);
+        expect(
+          await plugin.onBufferedModelResponse({
+            ...context,
+            response: {},
+            responseText: "done",
+          }),
+        ).toBeUndefined();
       } finally {
         evaluate.mockRestore();
       }

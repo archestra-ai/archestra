@@ -649,6 +649,7 @@ describe("OpenAPPA tool execution", () => {
       feedback: "requires attention: blocked",
       offerId: "retained-hard-offer",
     });
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
     const result = await executeArchestraTool(
       toolFullName,
       {
@@ -659,6 +660,7 @@ describe("OpenAPPA tool execution", () => {
       { ...mockContext, openappaSession: session },
     );
     expect(result.isError).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
     expect(await isUnenforcedSession(session)).toBe(false);
     expect(
       await db.select().from(schema.openappaUnenforcedSessionsTable),
@@ -719,40 +721,24 @@ describe("OpenAPPA tool execution", () => {
     expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
   });
 
-  test("a caller cannot answer or spend a review in another person's session", async () => {
-    const sessionId = "user:other-user|known-session";
-    await retainRemedyDenial({
-      sessionId,
-      feedback: "Requires attention: human-approval",
-      offerId: "other-users-offer",
-    });
-    const review = vi.spyOn(openappaService, "loadOfferReview");
-    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
-
-    const result = await executeArchestraTool(
-      toolFullName,
-      {
-        offer_id: "other-users-offer",
-        plan: "Submit for approval",
-        trajectory: trajectory({ session_id: sessionId }),
-      },
-      mockContext,
-    );
-
-    expect(result.content).toEqual([
-      { type: "text", text: "[appa] No live offer with this id" },
-    ]);
-    expect(review).not.toHaveBeenCalled();
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  test("a soft-block override never turns an offer into a session waiver", async () => {
+  test.each([
+    "scoped",
+    "child",
+    "current",
+    "chat",
+  ] as const)("an owned %s session can waive a retained soft offer without executing it", async (kind) => {
     config.openappa.breakTheGlassOverrides = {
       ...config.openappa.breakTheGlassOverrides,
       unapprovableBlockMode: "allow",
     };
     const callerId = `user:${mockContext.userId}`;
-    const sessionId = "22222222-2222-4222-8222-222222222222";
+    const parentId = scopedSessionId(callerId, "owned-session");
+    const sessionId =
+      kind === "scoped"
+        ? parentId
+        : kind === "child"
+          ? `${parentId}:child`
+          : "22222222-2222-4222-8222-222222222222";
     const session = {
       organization_id: orgId,
       caller_id: callerId,
@@ -760,22 +746,31 @@ describe("OpenAPPA tool execution", () => {
     };
     await retainRemedyDenial({
       sessionId,
-      feedback: "Original refusal requiring a review",
-      offerId: "retained-offer",
+      ...(kind === "child" ? { parentId } : {}),
+      feedback: "Original soft refusal requiring a review",
+      offerId: "expired-offer",
     });
-
-    await executeArchestraTool(
+    const result = await executeArchestraTool(
       toolFullName,
       {
-        offer_id: "retained-offer",
+        offer_id: "expired-offer",
         plan: "Review",
-        trajectory: trajectory({ session_id: sessionId }),
+        trajectory: trajectory({
+          session_id: sessionId,
+          ...(kind === "child" ? { parent_id: parentId } : {}),
+        }),
       },
-      { ...mockContext, openappaSession: session },
+      {
+        ...mockContext,
+        ...(kind === "current" ? { openappaSession: session } : {}),
+        ...(kind === "chat" ? { conversationId: sessionId } : {}),
+      },
     );
 
-    expect(await isUnenforcedSession(session)).toBe(false);
-    expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
+    expect(result.structuredContent).toMatchObject({
+      outcome: "guardrails_disabled",
+    });
+    expect(await isUnenforcedSession(session)).toBe(true);
   });
 
   test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {

@@ -51,6 +51,7 @@ import {
   withOpenappaContentEncryption,
 } from "@/openappa/encrypted-chat";
 import {
+  isRemedyRefusal,
   OpenappaRootOnlyError,
   openappaFailure,
   type RuntimeFailureCode,
@@ -82,7 +83,6 @@ import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
-  isAuthorityRuling,
   isHardBlock,
   softBlockReason,
   softBlocksAllowed,
@@ -1567,14 +1567,17 @@ export async function evaluateToolCalls(
       const declaration = spawn
         ? options.declareSpawnReturn?.(call)
         : undefined;
-      if (declaration) {
-        await declareSpawnReturn({
-          session,
-          callId: call.id,
-          declaration,
-          controlToolName: options.control?.name,
-        });
-      }
+      const undeclared = declaration
+        ? await declareSpawnReturn({
+            session,
+            callId: call.id,
+            declaration,
+            controlToolName: options.control?.name,
+          })
+        : undefined;
+      const undeclaredNote = undeclared
+        ? `\n\n[appa] The return of this subagent call was not declared ahead: ${undeclared}`
+        : "";
       let decision: Awaited<ReturnType<typeof dispatchCall>>;
       try {
         decision = await dispatchCall(event);
@@ -1608,8 +1611,7 @@ export async function evaluateToolCalls(
           await dispatchCall({ event: "cancel_call", tool_call_id: call.id });
         return {
           kind: "deny" as const,
-          feedback:
-            "OpenAPPA did not prepare a child fork. Enable policy.deployment.context_control and approve a child return contract before spawning a subagent.",
+          feedback: `OpenAPPA did not prepare a child fork. Enable policy.deployment.context_control and approve a child return contract before spawning a subagent.${undeclaredNote}`,
         };
       }
       if (
@@ -1622,7 +1624,7 @@ export async function evaluateToolCalls(
       // Denied calls return as notices; other calls in the batch stand.
       return {
         kind: "deny" as const,
-        feedback: decisionMessage(decision),
+        feedback: decisionMessage(decision) + undeclaredNote,
         offers:
           decision.decision === "deny_call"
             ? decision.offers
@@ -1709,13 +1711,7 @@ function isJson(text: string): boolean {
 
 type AppaHostedCallDecision =
   | { kind: "release" }
-  | {
-      kind: "hold";
-      feedback: string;
-      diagnostic?: string;
-      /** Held by a call ruling an authority answers; see `isAuthorityRuling`. */
-      authorityRuling?: true;
-    };
+  | { kind: "hold"; feedback: string; diagnostic?: string };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1759,9 +1755,6 @@ export async function evaluateHostedToolCalls(
             kind: "hold",
             feedback: decision.feedback,
             ...(decision.diagnostic ? { diagnostic: decision.diagnostic } : {}),
-            ...(isAuthorityRuling(decision)
-              ? { authorityRuling: true as const }
-              : {}),
           }
         : { kind: "release" },
     );
@@ -2047,14 +2040,15 @@ export type SpawnReturnDeclaration =
  * the runtime rules on: its block, offers and approval belong to the call the
  * client sent. A probe of the call would spend that call's approval. A
  * declaration the runtime refuses, for example without context control, is
- * not a ruling: the spawn is still dispatched and ruled undeclared.
+ * not a ruling: the spawn is still dispatched and ruled undeclared. Returns
+ * the refusal when the runtime wrote it for the model.
  */
 async function declareSpawnReturn(params: {
   session: OpenAppaSession;
   callId: string;
   declaration: SpawnReturnDeclaration;
   controlToolName?: string;
-}): Promise<void> {
+}): Promise<string | undefined> {
   const args = {
     label: {},
     ...(params.declaration.kind === "attested"
@@ -2074,11 +2068,18 @@ async function declareSpawnReturn(params: {
       originalArguments: JSON.stringify(args),
       args,
     });
-    if (declared.result.isError) logUndeclaredReturn(params, declared.result);
+    if (!declared.result.isError) return undefined;
+    logUndeclaredReturn(params, declared.result);
+    const text = declared.result.content
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
+      .join("\n");
+    return text || undefined;
   } catch (error) {
-    const cause = error instanceof ApiError ? error.cause : error;
-    if (runtimeFailureCode(cause) !== "remedy") throw error;
-    logUndeclaredReturn(params, cause);
+    // An outage or a moved policy under the same code still fails the request.
+    if (!isRemedyRefusal(error)) throw error;
+    logUndeclaredReturn(params, error);
+    const failure = openappaFailure(error);
+    return failure.statusCode === 400 ? failure.message : undefined;
   }
 }
 
@@ -2574,6 +2575,37 @@ async function governedReadPeerMessage(params: {
     isError: true,
     content: [{ type: "text", text: decisionMessage(decision) }],
   };
+}
+
+/**
+ * Opens an authenticated session's retained offer refusal, including encrypted
+ * and plaintext-escaped receipts, without executing or consuming the offer.
+ */
+export async function loadRetainedOfferRefusal(
+  params: Parameters<typeof OpenAppaSessionModel.recordedOfferDecisions>[0],
+): Promise<string | null> {
+  const records = await OpenAppaSessionModel.recordedOfferDecisions(params);
+  if (records.length === 0) return null;
+  // This pure decoder needs no runtime initialization or database connection:
+  // the model has already verified the receipt's authenticated session scope.
+  const module = await import("@archestra/openappa-rs");
+  return withOpenappaContentEncryption(
+    params.organizationId,
+    params.sessionId,
+    async (encryption) =>
+      module.retainedOfferRefusal(
+        JSON.stringify({
+          organization_id: params.organizationId,
+          session_id: params.sessionId,
+          offer_id: params.offerId,
+          records: records.map((row) => ({
+            operation_id: row.operationId,
+            decision: row.decision,
+          })),
+        }),
+        encryption,
+      ),
+  );
 }
 
 /**

@@ -142,7 +142,6 @@ import {
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
-  isAuthorityRuling,
   isHardBlock,
   refuseSoftBlock,
   softBlockReason,
@@ -312,8 +311,6 @@ type AppaPluginBinding = {
   returnContract?: string;
   /** Retained across fallback outcomes so a generic reason cannot waive a hard denial. */
   hardBlockSeen?: boolean;
-  /** Retained like `hardBlockSeen`: a soft block never waives an authority's ruling. */
-  authorityRulingSeen?: boolean;
   /**
    * Unscoped client session id for trajectory stamps. Captured before child
    * overlay so stamps never encode a minted parent:child id.
@@ -1350,9 +1347,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }
         });
       });
-      // A person's ruling is an authority's: none of the refusals below may be
-      // waived into running the reviewed call.
-      binding.authorityRulingSeen = true;
       if (rejectedCall) {
         const message =
           "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
@@ -1579,13 +1573,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ]
         : [],
     );
-    binding.authorityRulingSeen ||= decisions.some(
-      (decision) =>
-        decision.kind === "hold" &&
-        "authorityRuling" in decision &&
-        decision.authorityRuling === true,
-    );
-    if (!isUnwaivable(binding)) {
+    if (!binding.hardBlockSeen) {
       await refuseSoftBlock(
         hostedRefusals.join("\n"),
         held.map(({ call }) => call.name),
@@ -1879,7 +1867,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.kind === "deny" &&
         isHardBlock(decision.diagnostic ?? decision.feedback),
     );
-    binding.authorityRulingSeen ||= relayEvaluations.some(isAuthorityRuling);
     const admittedRelayIds = new Set<string>();
     const withheldRelayDecisions = new Map<
       string,
@@ -1929,9 +1916,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.kind === "deny" &&
         isHardBlock(decision.diagnostic ?? decision.feedback),
     );
-    // Latched before any later await can fail into a waiver: a waiver
-    // releases the whole batch, so one ruling an authority answers keeps it.
-    binding.authorityRulingSeen ||= decisions.some(isAuthorityRuling);
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
@@ -1989,7 +1973,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.hardBlockSeen ||= refusals.some(isHardBlock);
     if (
       refusals.length &&
-      !isUnwaivable(binding) &&
+      !binding.hardBlockSeen &&
       !calls.some((call) => isChildContinuationCall(binding.adapter, call))
     )
       await refuseSoftBlock(
@@ -2779,7 +2763,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onToolCalls",
       async () => {
         const result = await this.guardedToolCalls(context);
-        if (isUnwaivable(this.bindings.get(context.resources))) return result;
+        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
         if (result?.decision === "refuse")
           await refuseSoftBlock(result.refusal.refusalMessage, [
             result.refusal.blockedToolName,
@@ -2807,7 +2791,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onHostedToolCalls",
       async () => {
         const result = await this.guardedHostedToolCalls(context);
-        if (isUnwaivable(this.bindings.get(context.resources))) return result;
+        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
         if (
           result?.decision === "hold" &&
           !result.blocked.some((block) => isHardBlock(block.reason))
@@ -2853,7 +2837,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onPrepareToolCalls",
       async () => {
         const result = await this.guardedPrepareToolCalls(context);
-        if (isUnwaivable(this.bindings.get(context.resources))) return result;
         if (result?.decision === "refuse")
           await refuseSoftBlock(result.refusal.refusalMessage, [
             result.refusal.blockedToolName,
@@ -2902,7 +2885,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (
         !(error instanceof Error) ||
         (error instanceof ApiError && error.statusCode === 401) ||
-        isUnwaivable(this.bindings.get(context.resources))
+        this.bindings.get(context.resources)?.hardBlockSeen
       )
         throw error;
       const trusted = getTrustedContext(context.resources);
@@ -9081,11 +9064,6 @@ function answeredCallIds(binding: AppaPluginBinding) {
   return isClaudeCodeFamilyAdapter(binding.adapter?.id)
     ? { answeredCallIds: binding.answeredCallIds }
     : {};
-}
-
-/** Whether this request saw a refusal the soft block must not waive. */
-function isUnwaivable(binding: AppaPluginBinding | undefined): boolean {
-  return Boolean(binding?.hardBlockSeen || binding?.authorityRulingSeen);
 }
 
 function logHeldStop(

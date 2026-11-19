@@ -64,6 +64,18 @@ export function undeclaredToolNotice(error: unknown): string | null {
 }
 
 /**
+ * Whether the runtime refused a remedy for what it was sent. An outage or a
+ * moved policy carries the same code and is not a refusal.
+ */
+export function isRemedyRefusal(error: unknown): boolean {
+  const cause = error instanceof ApiError ? error.cause : error;
+  if (runtimeFailureCode(cause) !== "remedy" || !(cause instanceof Error))
+    return false;
+  const inner = cause.message.replace(MASK_PREFIX, "");
+  return !MASKED_CLASSES.some(([text]) => text.test(inner));
+}
+
+/**
  * The notice that replaces one tool call whose annotator gave no answer, or
  * null for any other failure.
  *

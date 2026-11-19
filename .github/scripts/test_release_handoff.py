@@ -215,6 +215,8 @@ class HandoffFixture(unittest.TestCase):
             root_digest = json.load(archive.extractfile("index.json"))["manifests"][0]["digest"]
         def copy(args, **kwargs):
             self.assertEqual(args[:4], ["skopeo", "copy", "--all", "--preserve-digests"])
+            # A transient registry error retries instead of failing the release run.
+            self.assertEqual(args[args.index("--retry-times") + 1], "3")
             self.assertEqual(args[-1], "docker://" + image + "@" + root_digest)
             self.assertNotIn(":candidate-", " ".join(args))
             Path(args[args.index("--digestfile") + 1]).write_text(root_digest)
@@ -256,8 +258,13 @@ class HandoffFixture(unittest.TestCase):
 class WorkflowHandoffTests(unittest.TestCase):
     def test_fixture_dispatch_guards_every_production_step_and_confines_the_read_only_app_token(self):
         source = (ROOT / ".github/workflows/release-please.yml").read_text()
-        job = source.split("  release-please:\n", 1)[1].split("  build-and-push-mcp-server-docker-image:\n", 1)[0]
+        job = re.split(r"^  [a-z][\w-]*:$", source.split("  release-please:\n", 1)[1], maxsplit=1, flags=re.M)[0]
         blocks = re.split(r"(?=^      - name: )", job, flags=re.M)[1:]
+        # The relay legs run only for a release to publish, which a fixture
+        # dispatch never resolves (its resolve step is skipped).
+        relay = source.split("  relay-release-candidates:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertIn("    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}\n", relay)
+        self.assertIn("steps.resolve-release.outputs.should_publish", job.split("      platform_should_publish: ", 1)[1].splitlines()[0])
         exempt = {"Checkout repository", "Generate a token", "Verify non-publishing cross-run fixture with the existing App",
                   "Relay non-publishing fixture to a tokenless consumer"}
         for block in blocks:
@@ -290,16 +297,24 @@ class WorkflowHandoffTests(unittest.TestCase):
         policy = HANDOFF.load_module("release-image-policy")
         expected = {row["image"] for row in policy.candidate_matrix(ROOT)["include"]} - {"platform-slim"}
         release = (ROOT / ".github/workflows/release-please.yml").read_text()
-        relay = release.split("      - name: Select the exact scanned queue artifacts\n", 1)[1].split("      - name: Create git tag for draft release", 1)[0]
-        images = re.findall(r"^          image_name: ([a-z0-9-]+)$", relay, re.M)
+        relay = re.split(r"^  [a-z][\w-]*:$", release.split("  relay-release-candidates:\n", 1)[1], maxsplit=1, flags=re.M)[0]
+        matrix = relay.split("        image:\n", 1)[1].split("    steps:\n", 1)[0]
+        images = re.findall(r"^          - ([a-z0-9-]+)$", matrix, re.M)
         self.assertEqual(set(images), expected)
         self.assertEqual(len(images), len(set(images)))
+        # Each leg relays its matrix image from the selection release-please
+        # validated, and every image build waits for all the legs.
+        self.assertIn("image_name: ${{ matrix.image }}", relay)
+        self.assertIn("name: release-candidate-selection-${{ github.run_attempt }}", relay)
+        for job in re.findall(r"^  (build-and-push-[\w-]+):$", release, re.M):
+            section = re.split(r"^  [a-z][\w-]*:$", release.split(f"  {job}:\n", 1)[1], maxsplit=1, flags=re.M)[0]
+            self.assertIn("      - relay-release-candidates\n", section, job)
         native = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
         build = native.split("      - name: Build Docker image\n", 1)[1].split("      - name:", 1)[0]
         self.assertIn("!startsWith(inputs.checkout_ref, 'platform-v')", build)
         self.assertLess(native.index("Promote exact scanned bytes without rebuilding"), native.index("Export digest"))
-        self.assertLess(native.index("Scan release amd64 bytes before tagging"), native.index("Create manifest list and push"))
-        self.assertLess(native.index("Scan release arm64 bytes before tagging"), native.index("Create manifest list and push"))
+        self.assertLess(native.index("Promote exact scanned bytes without rebuilding"), native.index("Scan release bytes before tagging"))
+        self.assertLess(native.index("Scan release bytes before tagging"), native.index("Create manifest list and push"))
         relay_action = (ROOT / ".github/actions/relay-release-candidate/action.yml").read_text()
         self.assertEqual(relay_action.count("GH_TOKEN: ${{ inputs.token }}"), 2)
         # Credentials stay in the original release job; native publishers use

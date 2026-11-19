@@ -9,6 +9,7 @@ import {
   PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
   type Resource,
+  resourceCategories,
   resourceLabels,
   roleDescriptions,
 } from "@archestra/shared";
@@ -52,9 +53,9 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds every permission except `log:admin`, " +
-        "`auditLog:admin`, and `member:impersonate`. It " +
+        "`guardrailsYell:admin`, `auditLog:admin`, and `member:impersonate`. It " +
         "manages users, roles, settings, and resources, but sees only its " +
-        "own logs and audit records and cannot sign in as another member. " +
+        "own logs, yells, and audit records and cannot sign in as another member. " +
         "Because of " +
         "[No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), " +
         "it cannot grant a role that holds the withheld permissions.\n";
@@ -128,35 +129,50 @@ function validatePermissionDescriptions(): void {
   }
 }
 
+/**
+ * One table per area, in the order and grouping the roles pages use
+ * (`resourceCategories`), so a reader finds related permissions together.
+ */
 function generateCustomRolesPermissionsTable(): string {
   validatePermissionDescriptions();
 
-  const resources = Object.keys(allAvailableActions) as Resource[];
-
-  let table = "| Permission | Description |\n";
-  table += "|------------|-------------|\n";
-
-  for (const resource of resources
-    .filter((r) => !internalResources.includes(r))
-    .sort()) {
-    const actions = allAvailableActions[resource];
-
-    for (const action of actions) {
-      const key = `${resource}:${action}`;
-      // The span anchors the row, so docs can link to `/docs/reference/permissions#agent:read`.
-      const legacyAnchors =
-        resource === "oauthClient"
-          ? ["mcpOauthClient", "llmOauthClient"]
-              .map((old) => `<span id="${old}:${action}"></span>`)
-              .join("")
-          : resource === "project"
-            ? `<span id="scheduledTask:${action}"></span>`
-            : "";
-      table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
-    }
+  const uncategorized = (Object.keys(allAvailableActions) as Resource[]).filter(
+    (resource) =>
+      !internalResources.includes(resource) &&
+      !Object.values(resourceCategories).some((resources) =>
+        resources.includes(resource),
+      ),
+  );
+  if (uncategorized.length > 0) {
+    throw new Error(
+      `Resources missing from resourceCategories: ${uncategorized.join(", ")}. ` +
+        "Add them to resourceCategories in shared/permission.types.ts",
+    );
   }
 
-  return table;
+  return Object.entries(resourceCategories)
+    .map(([category, resources]) => {
+      let table = `### ${category}\n\n`;
+      table += "| Permission | Description |\n";
+      table += "|------------|-------------|\n";
+      for (const resource of resources) {
+        for (const action of allAvailableActions[resource]) {
+          const key = `${resource}:${action}`;
+          // The span anchors the row, so docs can link to `/docs/reference/permissions#agent:read`.
+          const legacyAnchors =
+            resource === "oauthClient"
+              ? ["mcpOauthClient", "llmOauthClient"]
+                  .map((old) => `<span id="${old}:${action}"></span>`)
+                  .join("")
+              : resource === "project"
+                ? `<span id="scheduledTask:${action}"></span>`
+                : "";
+          table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
+        }
+      }
+      return table;
+    })
+    .join("\n");
 }
 
 /**

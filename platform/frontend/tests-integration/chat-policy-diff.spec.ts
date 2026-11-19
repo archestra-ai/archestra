@@ -96,7 +96,7 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   await expect(
     dialog.getByText('customer_exports = "restricted"', { exact: true }),
   ).toBeVisible();
-  const split = dialog.getByRole("button", { name: "Side by side view" });
+  const split = dialog.getByRole("button", { name: "Split view" });
   await expect(split).toHaveAttribute("aria-pressed", "false");
   await split.click();
   await expect(split).toHaveAttribute("aria-pressed", "true");
@@ -418,7 +418,7 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
-  const split = dialog.getByRole("button", { name: "Side by side view" });
+  const split = dialog.getByRole("button", { name: "Split view" });
   await expect(split).toHaveAttribute("aria-pressed", "false");
   await expect(dialog.getByRole("switch")).toHaveCount(0);
   // Layout remains keyboard accessible; unchanged regions use inline controls.

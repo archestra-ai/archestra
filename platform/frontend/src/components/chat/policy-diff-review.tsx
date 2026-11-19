@@ -191,7 +191,7 @@ function SideBySideButton({
           )}
         >
           <PolicyDiffViewIcon />
-          <span>Side by side view</span>
+          <span>Split view</span>
         </Button>
       </TooltipTrigger>
       <span id={`${id}-description`} className="sr-only">

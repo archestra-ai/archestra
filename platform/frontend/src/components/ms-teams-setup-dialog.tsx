@@ -38,6 +38,9 @@ import {
   parseSharePointSites,
 } from "@/lib/ms-teams/channel-files-request";
 import { buildTeamsManifest } from "@/lib/ms-teams/teams-manifest";
+// The walkthrough videos are served from cdn.archestra.dev (archestra-ai/infra,
+// gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
+import { setupVideoUrl } from "@/lib/setup-videos";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -224,7 +227,7 @@ function buildSteps(appName: string) {
   return [
     {
       title: "Create Azure Bot",
-      video: "/ms-teams/create-azure-bot.mp4",
+      video: setupVideoUrl("ms-teams/create-azure-bot.mp4"),
       instructions: [
         <>
           Go to{" "}
@@ -253,11 +256,11 @@ function buildSteps(appName: string) {
     {
       title: "Configure Bot Settings",
       component: "credentials" as const,
-      video: "/ms-teams/bot-settings.mp4",
+      video: setupVideoUrl("ms-teams/bot-settings.mp4"),
     },
     {
       title: "Add Teams Channel",
-      video: "/ms-teams/team-channel.mp4",
+      video: setupVideoUrl("ms-teams/team-channel.mp4"),
       instructions: [
         <>
           In your Azure Bot resource, go to <strong>Channels</strong>
@@ -282,7 +285,7 @@ function buildSteps(appName: string) {
     {
       title: `Install in MS Teams and connect ${appName}`,
       component: "install-and-connect" as const,
-      video: "/ms-teams/ms-teams-upload-app.mp4",
+      video: setupVideoUrl("ms-teams/ms-teams-upload-app.mp4"),
     },
   ];
 }
@@ -878,7 +881,7 @@ function StepReadFiles({
             What your admin does in Microsoft Entra
           </span>
           <video
-            src="/ms-teams/sites-selected.mp4"
+            src={setupVideoUrl("ms-teams/sites-selected.mp4")}
             controls
             muted
             autoPlay

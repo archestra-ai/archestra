@@ -13,6 +13,16 @@ export function mintReceiptCode(): string {
   return encodeCrockford35(first35Bits(randomBytes(5)));
 }
 
+/** A receipt code that stands for one thing a host can name again, such as a subagent. */
+export function receiptCodeOf(digest: Buffer): string {
+  return encodeCrockford35(first35Bits(digest));
+}
+
+/** A mark as a chat shows it: the crown, then what it marks and its code. */
+export function formatReceiptMark(label: string, code: string): string {
+  return `${MARK_TOP}  ${label} ${code}`;
+}
+
 /**
  * How a receipt is drawn. `inline` is the crown alone on the label's line:
  * Markdown webviews join a second line onto the first, or split the sprite

@@ -152,7 +152,7 @@ jobs:
           path: generation-artifacts
       - name: Generate publication token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

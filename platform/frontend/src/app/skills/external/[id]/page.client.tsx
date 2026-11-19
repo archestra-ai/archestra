@@ -77,6 +77,7 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
         onManifestChange={() => undefined}
         onFilesChange={() => undefined}
         readOnly
+        downloadName={skill.name}
         className="h-[calc(100vh-20rem)] min-h-[32rem]"
       />
     </PageLayout>

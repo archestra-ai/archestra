@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import client from "prom-client";
 import { afterEach, expect, test, vi } from "vitest";
-import { initializeOpenappaMetrics, observeOpenappaDispatch } from "./openappa";
+import {
+  initializeOpenappaMetrics,
+  observeOpenappaDispatch,
+  observeOpenappaYell,
+} from "./openappa";
 
 afterEach(() => {
   client.register.clear();
@@ -93,4 +97,23 @@ test("native collection failure leaves the existing metrics available", async ()
   expect(collectOpenappaEngineMetrics()).toBe("");
   setOpenappaEngineMetricsCollector(undefined);
   expect(collectOpenappaEngineMetrics()).toBe("");
+});
+
+test("yells count by kind and superyell, a waiver by the calls it let through", async () => {
+  observeOpenappaYell({ kind: "agent", superyell: false });
+  initializeOpenappaMetrics();
+  observeOpenappaYell({ kind: "agent", superyell: false });
+  observeOpenappaYell({ kind: "agent", superyell: true });
+  observeOpenappaYell({ kind: "block_waived", superyell: true, calls: 3 });
+  const count = await client.register
+    .getSingleMetric("openappa_yells_total")
+    ?.get();
+  expect(count?.values).toEqual(
+    expect.arrayContaining([
+      { value: 1, labels: { kind: "agent", superyell: "false" } },
+      { value: 1, labels: { kind: "agent", superyell: "true" } },
+      { value: 3, labels: { kind: "block_waived", superyell: "true" } },
+    ]),
+  );
+  expect(count?.values).toHaveLength(3);
 });

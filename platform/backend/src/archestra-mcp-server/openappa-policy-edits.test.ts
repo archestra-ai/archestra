@@ -168,7 +168,7 @@ describe("policy edits", () => {
       ],
       [
         { edits: [{ oldText: "delta = {}", newText: "delta = { }" }] },
-        "edits[0]: oldText matches 7 places. Add surrounding lines to make it unique, or set replaceAll to true.",
+        "edits[0]: oldText matches 22 places. Add surrounding lines to make it unique, or set replaceAll to true.",
       ],
       [
         { edits: [{ oldText: "version = 2", newText: "version = 2" }] },

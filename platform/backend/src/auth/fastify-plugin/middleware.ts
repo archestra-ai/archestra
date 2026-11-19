@@ -19,6 +19,7 @@ import {
   ARCHESTRA_CLI_DOWNLOAD_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
+  CONNECTION_HOOKS_CURSOR_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
@@ -244,6 +245,8 @@ export class Authnz {
       (isGetOrHead && url === AUTH_STATE_PATH) ||
       // Managed instructions authenticate their installation credential in the handler.
       (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
+      // Cursor hooks authenticate their installation credential in the handler.
+      (method === "POST" && url === CONNECTION_HOOKS_CURSOR_PATH) ||
       // Executable updates have a distinct installation capability and live access checks.
       (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
       // Pure public code rendering: accepts no credential and grants no access.

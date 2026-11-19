@@ -9,6 +9,19 @@ import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-ha
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 
 /**
+ * What opening an app needs: an Apps-list row satisfies it, and so does the app
+ * a chat page identifies from its conversation's seeded render.
+ */
+export type OpenAppTarget =
+  | { source: "owned"; id: string }
+  | {
+      source: "external";
+      mcpServerId: string;
+      resourceUri: string;
+      name: string;
+    };
+
+/**
  * Opens an app in a new chat. The backend seeds a conversation with the app
  * already rendered and returns its id, so this navigates straight to it. An
  * external app whose tool needs inputs comes back with an opening prompt
@@ -24,7 +37,7 @@ export function useOpenApp() {
   const openExternalApp = useOpenExternalAppInChat();
   const [openingKey, setOpeningKey] = useState<string | null>(null);
 
-  const open = async (app: AppListItem, { encryptedChat = false } = {}) => {
+  const open = async (app: OpenAppTarget, { encryptedChat = false } = {}) => {
     if (openingKey) return;
     setOpeningKey(getAppRowKey(app));
     let conversationId: string | undefined;
@@ -57,7 +70,7 @@ export function useOpenApp() {
 
 // Several tools of one server can share a widget resource, so the tool-scoped
 // name disambiguates external rows.
-export function getAppRowKey(app: AppListItem): string {
+export function getAppRowKey(app: OpenAppTarget | AppListItem): string {
   return app.source === "owned"
     ? app.id
     : `${app.mcpServerId}:${app.resourceUri}:${app.name}`;

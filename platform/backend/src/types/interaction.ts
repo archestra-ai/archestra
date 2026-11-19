@@ -1136,7 +1136,7 @@ export const SessionSummarySchema = z.object({
   chatErrorCount: z
     .number()
     .describe(
-      "Errors Archestra Chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors.",
+      "Errors the chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors.",
     ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),

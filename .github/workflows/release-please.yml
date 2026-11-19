@@ -105,7 +105,7 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
@@ -431,7 +431,7 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true
@@ -773,7 +773,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       subjects: ${{ needs.release-subjects.outputs.subjects }}
 
@@ -794,7 +794,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -891,7 +891,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       subjects: ${{ needs.publisher-smoke.outputs.subjects }}
 
@@ -903,7 +903,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7cf2603035c4049f674ce8b63bbf9a275c3dfde2 # v1.32.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

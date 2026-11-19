@@ -27,7 +27,7 @@ test("numbers each change, follows manual scrolling, and stops at both ends", as
   );
   await page.goto(`/chat/${id}`);
   await page.getByRole("button", { name: "Review full diff" }).click();
-  const dialog = page.getByRole("dialog", { name: "Policy changes" });
+  const dialog = page.getByRole("dialog", { name: "appa.toml" });
   const position = dialog.getByLabel("Change position");
   const next = dialog.getByRole("button", { name: "Next change" });
   const previous = dialog.getByRole("button", { name: "Previous change" });
@@ -166,7 +166,7 @@ for (const scenario of [
     );
     await page.goto(`/chat/${id}`);
     await page.getByRole("button", { name: "Review full diff" }).click();
-    const dialog = page.getByRole("dialog", { name: "Policy changes" });
+    const dialog = page.getByRole("dialog", { name: "appa.toml" });
     await expect(dialog.getByLabel("Change position")).toHaveText(
       scenario.status,
     );
@@ -379,7 +379,7 @@ test("reviews a large policy without expanding the chat, and keeps the review us
 
   const review = page.getByRole("button", { name: "Review full diff" });
   await review.click();
-  const dialog = page.getByRole("dialog", { name: "Policy changes" });
+  const dialog = page.getByRole("dialog", { name: "organization.appa.toml" });
   await expect(dialog).toBeVisible();
   const position = dialog.getByLabel("Change position");
   await expect(position).toHaveText("Change 1 of 2", { timeout: 60_000 });

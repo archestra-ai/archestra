@@ -40,15 +40,15 @@ export function PolicyDiffReview({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left md:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <DialogTitle className="flex min-h-8 items-center">
-          Policy changes
+        <DialogTitle className="flex min-h-8 min-w-0 items-center font-mono text-base font-medium">
+          {path}
         </DialogTitle>
-        <div className="col-span-full row-start-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <DialogDescription className="wrap-anywhere font-mono text-xs">
-            {path}
-          </DialogDescription>
+        <DialogDescription
+          asChild
+          className="col-span-full row-start-2 text-xs"
+        >
           {summary}
-        </div>
+        </DialogDescription>
         <div className="col-span-full row-start-3 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-1">
           <SideBySideSwitch
             id={`${controlId}-side-by-side`}

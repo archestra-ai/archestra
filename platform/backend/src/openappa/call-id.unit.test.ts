@@ -63,8 +63,17 @@ describe("policyCallId", () => {
   });
 
   test("leaves a policy id as it is", () => {
-    for (const id of [geminiId, "c".repeat(257), `gemsig-YQ.${geminiId}`])
+    for (const id of [
+      geminiId,
+      "c".repeat(257),
+      `gemsig-YQ.${geminiId}`,
+      `gemsig-YQ.${stamped(geminiId)}`,
+    ])
       expect(policyCallId(policyCallId(id))).toBe(policyCallId(id));
+  });
+
+  test("reads through any depth of signatures", () => {
+    expect(policyCallId(`${"gemsig-YQ.".repeat(50_000)}call-1`)).toBe("call-1");
   });
 });
 

@@ -17,6 +17,7 @@ type ToolCall = LlmProxyToolCallsContext["toolCalls"][number];
  */
 export class WireCallIds {
   private readonly wireIds = new Map<string, string>();
+  private readonly resultWireIds = new Map<string, string[]>();
 
   /** Every id here is its own policy id: both sides name each call the same way. */
   get same(): boolean {
@@ -43,7 +44,12 @@ export class WireCallIds {
   toolResult(
     result: LlmProxyToolResultsContext["toolResults"][number],
   ): LlmProxyToolResultsContext["toolResults"][number] {
-    return { ...result, id: this.policyId(result.id) };
+    const id = this.policyId(result.id);
+    this.resultWireIds.set(id, [
+      ...(this.resultWireIds.get(id) ?? []),
+      result.id,
+    ]);
+    return { ...result, id };
   }
 
   toolCallsOutcome(
@@ -111,10 +117,14 @@ export class WireCallIds {
       outcome && {
         ...outcome,
         toolResultUpdates: Object.fromEntries(
-          Object.entries(outcome.toolResultUpdates).map(([id, content]) => [
-            this.wireId(id),
-            content,
-          ]),
+          // A ruling on a policy id goes to every result the request
+          // carries under it: a signed id and its bare one are one call.
+          Object.entries(outcome.toolResultUpdates).flatMap(([id, content]) =>
+            (this.resultWireIds.get(id) ?? [id]).map((wireId) => [
+              wireId,
+              content,
+            ]),
+          ),
         ),
       }
     );

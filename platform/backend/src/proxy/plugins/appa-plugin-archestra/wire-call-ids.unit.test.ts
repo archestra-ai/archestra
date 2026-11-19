@@ -110,6 +110,17 @@ describe("WireCallIds", () => {
     });
   });
 
+  test("gives one ruling to every result under the same policy id", () => {
+    const ids = new WireCallIds();
+    for (const id of [longId, policyId])
+      ids.toolResult({ id, name: "read", content: "text", isError: false });
+    expect(
+      ids.toolResultsOutcome({ toolResultUpdates: { [policyId]: "withheld" } }),
+    ).toEqual({
+      toolResultUpdates: { [longId]: "withheld", [policyId]: "withheld" },
+    });
+  });
+
   test("keys result updates by the ids the request carries", () => {
     const ids = new WireCallIds();
     expect(

@@ -24,11 +24,11 @@ const MAX_POLICY_CALL_ID_BYTES = 256;
  * own policy id.
  */
 export function policyCallId(wireId: string): string {
-  const providerId = withoutTrajectoryStamp(wireId);
-  const callId = withoutSignature(providerId);
+  const unstamped = withoutTrajectoryStamp(wireId);
+  const callId = providerCallId(unstamped);
   if (Buffer.byteLength(callId, "utf8") > MAX_POLICY_CALL_ID_BYTES)
     return digestToolCallId(callId);
-  return callId === providerId ? wireId : callId;
+  return callId === unstamped ? wireId : callId;
 }
 
 /**
@@ -50,9 +50,12 @@ export function recordsCall(recordedId: string, wireId: string): boolean {
   );
 }
 
-function withoutSignature(providerId: string): string {
-  const { id, thoughtSignature } = decodeSignedToolCallId(providerId);
-  return thoughtSignature === undefined || !id
-    ? providerId
-    : withoutSignature(id);
+/** The id with every signature around it off, and any stamp between them. */
+function providerCallId(unstamped: string): string {
+  let callId = unstamped;
+  for (;;) {
+    const { id, thoughtSignature } = decodeSignedToolCallId(callId);
+    if (thoughtSignature === undefined || !id) return callId;
+    callId = withoutTrajectoryStamp(id);
+  }
 }

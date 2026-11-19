@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { KubeConfig, type V1NetworkPolicy } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -103,6 +106,34 @@ test("re-checks a negative answer once it is stale and flips without a restart",
   expect(agentSandboxApi.isInstalled).toBe(true);
   await expect(agentSandboxApi.refresh()).resolves.toBe(true);
   expect(discoveryRequests).toBe(afterInstall);
+});
+
+test("re-checks once a kubeconfig written after boot appears", async () => {
+  // The Docker quickstart writes its kubeconfig once the KinD cluster answers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const dir = mkdtempSync(join(tmpdir(), "kubeconfig-"));
+  const kubeconfigPath = join(dir, "kubeconfig");
+  const kubernetes = config.orchestrator.kubernetes;
+  const previous = kubernetes.kubeconfig;
+  kubernetes.kubeconfig = kubeconfigPath;
+  const loadFromDefault = vi.mocked(KubeConfig.prototype.loadFromDefault);
+  const loadCluster = loadFromDefault.getMockImplementation();
+  loadFromDefault.mockImplementation(() => {
+    throw new Error("kubeconfig not written yet");
+  });
+  serveController({ installed: true });
+  try {
+    await expect(agentSandboxApi.refresh()).resolves.toBe(false);
+
+    writeFileSync(kubeconfigPath, "");
+    loadFromDefault.mockImplementation(loadCluster ?? (() => {}));
+    vi.advanceTimersByTime(30_000);
+    expect(agentSandboxApi.isInstalled).toBe(false);
+    await vi.waitFor(() => expect(agentSandboxApi.isInstalled).toBe(true));
+  } finally {
+    kubernetes.kubeconfig = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test.each([

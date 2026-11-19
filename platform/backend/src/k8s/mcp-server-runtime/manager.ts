@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import {
   type McpDeploymentState,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -12,6 +11,7 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   isK8sNotFoundError,
+  isKubeconfigFilePending,
   loadKubeConfig,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -364,7 +364,7 @@ export class McpServerRuntimeManager {
     // A kubeconfig that another process writes once its cluster answers (the
     // Docker quickstart's embedded KinD cluster) may not exist yet. The runtime
     // stays enabled, and start() waits for the file.
-    if (kubeconfigFilePending()) {
+    if (isKubeconfigFilePending()) {
       return;
     }
     this.loadClients();
@@ -401,7 +401,7 @@ export class McpServerRuntimeManager {
    */
   async start(): Promise<void> {
     if (!this.k8sApi && this.status === "not_initialized") {
-      if (kubeconfigFilePending()) {
+      if (isKubeconfigFilePending()) {
         await this.waitForKubeconfigFile();
       }
       if (this.status === "stopped" || !this.loadClients()) return;
@@ -4774,7 +4774,7 @@ export class McpServerRuntimeManager {
       "Waiting for the Kubernetes config; the MCP Server Runtime starts when it exists",
     );
     const deadline = Date.now() + KUBECONFIG_WAIT_TIMEOUT_MS;
-    while (kubeconfigFilePending() && Date.now() < deadline) {
+    while (isKubeconfigFilePending() && Date.now() < deadline) {
       if (this.status === "stopped") return;
       await new Promise((resolve) =>
         setTimeout(resolve, KUBECONFIG_WAIT_POLL_MS),
@@ -4896,18 +4896,3 @@ const KUBECONFIG_WAIT_TIMEOUT_MS = 10 * 60_000;
 const KUBECONFIG_WAIT_POLL_MS = 500;
 
 export default new McpServerRuntimeManager();
-
-/**
- * True when the orchestrator should read a kubeconfig file that does not
- * exist yet.
- */
-function kubeconfigFilePending(): boolean {
-  const kubernetes = config.orchestrator.kubernetes;
-  const path = kubernetes.kubeconfig?.trim();
-  return (
-    config.orchestrator.enabled !== false &&
-    !kubernetes.loadKubeconfigFromCurrentCluster &&
-    !!path &&
-    !existsSync(path)
-  );
-}

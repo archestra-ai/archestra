@@ -2,6 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
   isK8sNotFoundError,
+  isKubeconfigFilePending,
   loadKubeConfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
@@ -112,7 +113,9 @@ class AgentSandboxApiDetector {
           namespace,
         ).customObjectsApi;
       } catch {
-        this.clusterUnreachable = true;
+        // A kubeconfig written after boot (the Docker quickstart) is checked
+        // again later; any other load failure will not fix itself.
+        this.clusterUnreachable = !isKubeconfigFilePending();
         return false;
       }
     }

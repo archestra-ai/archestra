@@ -665,6 +665,7 @@ const layerTable = [
     // Business operations that do not invoke MCP execution or route handlers.
     name: "services-support",
     files: [
+      "src/hooks/hook-run-parts.ts",
       "src/plugins/delivery-budget.ts",
       "src/routes/mcp-gateway/protocol.ts",
       "src/routes/mcp-gateway/tasks.ts",
@@ -914,7 +915,6 @@ const layerTable = [
           "src/entrypoints/_shared/log-capture.ts",
           "src/fastify-instance.ts",
           "src/hooks/hook-dispatcher-service.ts",
-          "src/hooks/hook-run-parts.ts",
           "src/hooks/hook-runner.ts",
           "src/middleware/audit-log-hook.ts",
           "src/middleware/audit-log-registry.ts",

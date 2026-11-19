@@ -5,6 +5,9 @@ import {
   type PartialUIMessage,
 } from "@archestra/shared";
 import type { UIMessage } from "ai";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import config from "@/config";
+import { stripHookRunParts } from "@/hooks/hook-run-parts";
 import {
   AgentModel,
   ConversationChatErrorModel,
@@ -14,6 +17,7 @@ import {
   ScheduleTriggerRunModel,
 } from "@/models";
 import type {
+  ChatMessage,
   Conversation,
   ScheduleTrigger,
   ScheduleTriggerRun,
@@ -357,8 +361,16 @@ export async function readRunTranscript(params: {
       })
     : null;
   if (conversation?.encryptedChat) return { source: "encrypted", messages: [] };
+  // The same requester-side gate as the chat read: hook-run parts only for an
+  // agent admin while the conversation is in debug mode.
+  const hooksDebugVisible =
+    config.hooks.enabled &&
+    conversation?.hooksDebugEnabled === true &&
+    (await hasAnyAgentTypeAdminPermission({ userId, organizationId }));
   const stored = runExecutionMessages(
-    (conversation?.messages ?? []) as PartialUIMessage[],
+    stripHookRunParts((conversation?.messages ?? []) as ChatMessage[], {
+      visible: hooksDebugVisible,
+    }) as PartialUIMessage[],
   );
   // A project run's chat holds its prompt before execution; until the final
   // turn is written there, the interactions are the more complete record.

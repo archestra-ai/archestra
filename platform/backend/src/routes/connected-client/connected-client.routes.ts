@@ -5,15 +5,18 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { ConnectedClientModel } from "@/models";
 import { lastDays } from "@/models/connected-client";
 import {
   disconnectClient,
   listConnectedClients,
 } from "@/services/connected-client";
+import { issueDisconnectReference } from "@/services/connection-disconnect-reference";
 import {
   AgentAdoptionSchema,
   AgentAdoptionUsageSchema,
+  ApiError,
   ConnectedClientIdSchema,
   ConnectedClientSchema,
   ConnectionEventActionSchema,
@@ -153,6 +156,38 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         window: adoptionWindow(query),
         userId: query.userId,
       }),
+  );
+
+  app.get(
+    "/api/connected-clients/disconnect-reference",
+    {
+      schema: {
+        operationId: RouteId.GetDisconnectReference,
+        description:
+          "A reference for the signed-in user's cleanup prompt. Guardrails leave the first conversation of that user that presents it unchecked until it expires, so the cleanup can remove the gateway and the Guardrails helpers without depending on them. Only a browser session gets one: an API key or a service account cannot exempt a conversation.",
+        tags: ["Connection Setups"],
+        response: constructResponseSchema(
+          z.object({
+            reference: z.string(),
+            expiresAt: z.string().datetime(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, user, authMethod }, reply) => {
+      if (authMethod !== "session")
+        throw new ApiError(
+          403,
+          "A disconnect reference is only issued to a signed-in browser session",
+        );
+      const { reference, expiresAt } = issueDisconnectReference({
+        organizationId,
+        userId: user.id,
+        secret: config.auth.secret,
+      });
+      reply.header("Cache-Control", "no-store");
+      return { reference, expiresAt: new Date(expiresAt).toISOString() };
+    },
   );
 
   app.delete(

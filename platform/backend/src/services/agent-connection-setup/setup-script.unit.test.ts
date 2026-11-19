@@ -3613,6 +3613,454 @@ db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KE
       await rm(home, { recursive: true, force: true });
     }
   });
+
+  test.each([
+    {
+      name: "undoes an earlier setup's model routing",
+      before: {
+        // The setting is this deployment's: its address is the gateway's.
+        openAIBaseUrl: "https://archestra.example.com/v1/unified-model",
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model", "openai:gpt-5.4"],
+        modelOverrideEnabled: ["my-own-model", "openai:gpt-5.4"],
+        modelOverrideDisabled: ["default", "grok-4.6", "claude-sonnet-4-6"],
+        composer: "openai:gpt-5.4",
+        marker: ["openai:gpt-5.4"],
+      },
+      after: {
+        useOpenAIKey: false,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: [],
+        composer: "default",
+        said: true,
+      },
+    },
+    {
+      name: "leaves a Cursor that points its key at another service alone",
+      before: {
+        openAIBaseUrl: "https://llm.example.com/v1",
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: ["claude-sonnet-4-6"],
+        composer: "my-own-model",
+        marker: null,
+      },
+      after: {
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: ["claude-sonnet-4-6"],
+        composer: "my-own-model",
+        said: false,
+      },
+    },
+    {
+      name: "takes its models out of the picker and leaves a key the person has since pointed at another service",
+      before: {
+        openAIBaseUrl: "https://llm.example.com/v1",
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model", "openai:gpt-5.4"],
+        modelOverrideEnabled: ["my-own-model", "openai:gpt-5.4"],
+        modelOverrideDisabled: ["default", "grok-4.6", "claude-sonnet-4-6"],
+        composer: "openai:gpt-5.4",
+        marker: ["openai:gpt-5.4"],
+      },
+      after: {
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: ["default", "grok-4.6", "claude-sonnet-4-6"],
+        composer: "default",
+        said: false,
+      },
+    },
+    {
+      name: "leaves another service alone when its address ends like this deployment's",
+      before: {
+        openAIBaseUrl: "https://llm.example.com/v1/unified-model",
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: ["default", "grok-4.6", "claude-sonnet-4-6"],
+        composer: "my-own-model",
+        marker: null,
+      },
+      after: {
+        useOpenAIKey: true,
+        userAddedModels: ["my-own-model"],
+        modelOverrideEnabled: ["my-own-model"],
+        modelOverrideDisabled: ["default", "grok-4.6", "claude-sonnet-4-6"],
+        composer: "my-own-model",
+        said: false,
+      },
+    },
+  ])("cursor: a setup that keeps Cursor's own models $name", async ({
+    before,
+    after,
+  }) => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-plan-models-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const user = {
+        openAIBaseUrl: before.openAIBaseUrl,
+        useOpenAIKey: before.useOpenAIKey,
+        availableDefaultModels2: [
+          { name: "default" },
+          { name: "grok-4.6" },
+          { name: "claude-sonnet-4-6" },
+        ],
+        aiSettings: {
+          userAddedModels: before.userAddedModels,
+          modelOverrideEnabled: before.modelOverrideEnabled,
+          modelOverrideDisabled: before.modelOverrideDisabled,
+          modelConfig: {
+            composer: {
+              modelName: before.composer,
+              maxMode: false,
+              selectedModels: [{ modelId: before.composer, parameters: [] }],
+            },
+          },
+        },
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify(user))}))${
+          before.marker
+            ? `\ndb.execute("INSERT INTO ItemTable VALUES (?, ?)", ("archestra/cursorModelRouterModels", ${JSON.stringify(JSON.stringify(before.marker))}))`
+            : ""
+        }`,
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("cursor"),
+          proxy: null,
+          skills: null,
+          cursorGuardrailsHook: {
+            url: "http://127.0.0.1:9/v1/connection-hooks/cursor",
+            token: "chk1_test-credential",
+          },
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      const rows = JSON.parse(
+        await sqlite(
+          stateDb,
+          `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+        ),
+      );
+      const stored = JSON.parse(rows[CURSOR_APPLICATION_USER_KEY]);
+
+      expect(stdout.includes("Cursor uses its own models again")).toBe(
+        after.said,
+      );
+      expect(stdout).toContain("Cursor keeps its own models");
+      expect(stored.useOpenAIKey).toBe(after.useOpenAIKey);
+      expect(stored.aiSettings.userAddedModels).toEqual(after.userAddedModels);
+      expect(stored.aiSettings.modelOverrideEnabled).toEqual(
+        after.modelOverrideEnabled,
+      );
+      expect(stored.aiSettings.modelOverrideDisabled).toEqual(
+        after.modelOverrideDisabled,
+      );
+      expect(stored.aiSettings.modelConfig.composer.modelName).toBe(
+        after.composer,
+      );
+      expect("archestra/cursorModelRouterModels" in rows).toBe(false);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cursor: a setup without the LLM proxy and without the gateway still gives Cursor its own models back", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-plan-models-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const user = {
+        openAIBaseUrl: "https://archestra.example.com/v1/unified-model",
+        useOpenAIKey: true,
+        availableDefaultModels2: [{ name: "default" }],
+        aiSettings: {
+          userAddedModels: ["openai:gpt-5.4"],
+          modelOverrideEnabled: ["openai:gpt-5.4"],
+          modelOverrideDisabled: ["default"],
+          modelConfig: {},
+        },
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify(user))}))
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("archestra/cursorModelRouterModels", ${JSON.stringify(JSON.stringify(["openai:gpt-5.4"]))}))`,
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      // No hook and no gateway: the deployment has no Guardrails, or the
+      // person left the gateway out. Only its address says whose setting it is.
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("cursor"),
+          mcp: null,
+          proxy: null,
+          skills: null,
+          cursorGuardrailsHook: null,
+          deploymentOrigin: "https://archestra.example.com",
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      expect(stdout).toContain("Cursor uses its own models again");
+      const rows = JSON.parse(
+        await sqlite(
+          stateDb,
+          `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+        ),
+      );
+      const stored = JSON.parse(rows[CURSOR_APPLICATION_USER_KEY]);
+      expect(stored.useOpenAIKey).toBe(false);
+      expect(stored.aiSettings.userAddedModels).toEqual([]);
+      expect(stored.aiSettings.modelOverrideDisabled).toEqual([]);
+      expect("archestra/cursorModelRouterModels" in rows).toBe(false);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  // Cursor's Web Search and Web Fetch tools call no hook, so Guardrails could
+  // not check them. Setup switches both off and keeps what they were.
+  test("cursor: setup switches off the two web tools that Guardrails cannot check, once", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-web-tools-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const before = {
+        isWebSearchToolEnabled: true,
+        isWebSearchToolEnabled2: false,
+        isWebSearchToolEnabled3: null,
+        isWebFetchToolEnabled: null,
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify({ composerState: { ...before, playwrightProtection: false } }))}))`,
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("cursor"),
+          proxy: null,
+          skills: null,
+          cursorGuardrailsHook: {
+            url: "http://127.0.0.1:9/v1/connection-hooks/cursor",
+            token: "chk1_test-credential",
+          },
+        }),
+      );
+      const run = () =>
+        execFileAsync("bash", [scriptPath], {
+          env: { ...process.env, HOME: home, NO_COLOR: "1" },
+        });
+      const rows = async () =>
+        JSON.parse(
+          await sqlite(
+            stateDb,
+            `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+          ),
+        );
+
+      const first = await run();
+      expect(first.stdout).toContain(
+        "Switched off Cursor's Web Search and Web Fetch tools",
+      );
+      const stored = await rows();
+      expect(
+        JSON.parse(stored[CURSOR_APPLICATION_USER_KEY]).composerState,
+      ).toEqual({
+        isWebSearchToolEnabled: false,
+        isWebSearchToolEnabled2: false,
+        isWebSearchToolEnabled3: false,
+        isWebFetchToolEnabled: false,
+        playwrightProtection: false,
+      });
+      expect(JSON.parse(stored["archestra/cursorWebTools"])).toEqual(before);
+
+      // A second run has nothing to change, and keeps the first run's record.
+      const second = await run();
+      expect(second.stdout).not.toContain("Switched off");
+      expect(JSON.parse((await rows())["archestra/cursorWebTools"])).toEqual(
+        before,
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cursor: setup names the two web tool switches when Cursor has no settings yet", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-web-tools-"));
+    try {
+      const scriptPath = path.join(home, "connect.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("cursor"),
+          proxy: null,
+          skills: null,
+          cursorGuardrailsHook: {
+            url: "http://127.0.0.1:9/v1/connection-hooks/cursor",
+            token: "chk1_test-credential",
+          },
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      expect(stdout).toContain(
+        "Switch off Web Search Tool and Web Fetch Tool in Cursor Settings",
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  // Cursor asks before it runs an MCP tool that is not on its allowlist, and
+  // the allowlist file replaces the list in Cursor's settings once it has one.
+  const CURSOR_GATEWAY_ALLOWLIST = [
+    "search_tools",
+    "run_tool",
+    "get_remedy_plans",
+    "execute_remedy_plan",
+    "list_peer_messages",
+    "read_peer_message",
+    "yell",
+    "ask_user",
+  ]
+    .map((tool) => `prod_gateway:archestra__${tool}`)
+    // The two web tools, whose calls Guardrails rule on like the gateway's.
+    .concat([
+      "prod_gateway-web:cursor_web_setup",
+      "prod_gateway-web:cursor_web_search",
+      "prod_gateway-web:cursor_web_fetch",
+    ]);
+  test.each([
+    {
+      name: "adds the Guardrails tools on a machine where Cursor never ran",
+      inApp: undefined,
+      file: undefined,
+      expected: {
+        mcpAllowlist: CURSOR_GATEWAY_ALLOWLIST,
+      },
+      copied: false,
+    },
+    {
+      name: "carries the tools the person allowed in Cursor's settings into the file",
+      inApp: ["github:create_issue", "linear:*"],
+      file: undefined,
+      expected: {
+        mcpAllowlist: [
+          "github:create_issue",
+          "linear:*",
+          ...CURSOR_GATEWAY_ALLOWLIST,
+        ],
+      },
+      copied: true,
+    },
+    {
+      name: "adds to a list the file already has and keeps its other keys",
+      inApp: ["github:create_issue"],
+      file: JSON.stringify({
+        terminalAllowlist: ["git status"],
+        mcpAllowlist: ["docs:search", "PROD_GATEWAY:archestra__yell"],
+      }),
+      expected: {
+        terminalAllowlist: ["git status"],
+        mcpAllowlist: [
+          "docs:search",
+          "PROD_GATEWAY:archestra__yell",
+          ...CURSOR_GATEWAY_ALLOWLIST.filter(
+            (entry) => entry !== "prod_gateway:archestra__yell",
+          ),
+        ],
+      },
+      copied: false,
+    },
+    {
+      name: "leaves a file with comments alone and names the entries to add by hand",
+      inApp: undefined,
+      file: '{\n  // my rules\n  "terminalAllowlist": ["git status"]\n}\n',
+      expected: undefined,
+      copied: false,
+    },
+  ])("cursor: setup $name", async ({ inApp, file, expected, copied }) => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-allowlist-"));
+    try {
+      if (inApp) {
+        const stateDb = path.join(
+          home,
+          "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+        );
+        await mkdir(path.dirname(stateDb), { recursive: true });
+        await sqlite(
+          stateDb,
+          `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify({ composerState: { mcpAllowedTools: inApp } }))}))`,
+        );
+      }
+      const permissionsPath = path.join(home, ".cursor/permissions.json");
+      await mkdir(path.dirname(permissionsPath), { recursive: true });
+      if (file !== undefined) await writeFile(permissionsPath, file);
+      const scriptPath = path.join(home, "connect.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("cursor"),
+          proxy: null,
+          skills: null,
+          cursorGuardrailsHook: {
+            url: "http://127.0.0.1:9/v1/connection-hooks/cursor",
+            token: "chk1_test-credential",
+          },
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+
+      const written = await readFile(permissionsPath, "utf8");
+      if (expected) {
+        expect(JSON.parse(written)).toEqual(expected);
+      } else {
+        expect(written).toBe(file);
+        expect(stdout).toContain("prod_gateway:archestra__execute_remedy_plan");
+        expect(stdout).toContain("Cursor Settings > MCP allowlist");
+      }
+      expect(stdout.includes("were copied into it")).toBe(copied);
+      if (file !== undefined && expected)
+        expect(
+          await readFile(`${permissionsPath}.archestra-backup`, "utf8"),
+        ).toBe(file);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("renderSetupScript (windows)", () => {

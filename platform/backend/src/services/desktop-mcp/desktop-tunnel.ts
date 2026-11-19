@@ -8,13 +8,13 @@ import {
 } from "@/services/archestra-cli/served-program";
 import type { KeyedNotifier } from "@/services/pg-notify-hub";
 import { sharedNotifyHub } from "@/services/shared-notify-hub";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import {
   ApiError,
   type DesktopDevice,
   type DesktopMcpJsonRpcMessage,
   type DesktopMcpRequest,
 } from "@/types";
-import { softDeletedUsers } from "@/services/soft-deleted-users";
 
 /** A device key is this prefix followed by the sign-in device code. */
 export const DESKTOP_DEVICE_KEY_PREFIX = "archestra_dev_";

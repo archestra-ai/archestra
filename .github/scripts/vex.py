@@ -18,9 +18,11 @@ Products are images by short name, `pkg:oci/<image>` (`pkg:oci/platform`,
   set --vulnerability ID --product IMAGE [--product IMAGE ...] --status STATUS
       [--subcomponent PURL ...] [--justification J] [--impact-statement TEXT]
       [--action-statement TEXT] [--status-notes TEXT] [--document PATH]
-      Records one statement. A product that an earlier statement of the same
-      vulnerability named moves to this one, so each vulnerability and image
-      has one status. Bumps the document's version and timestamp.
+      Records one statement. Each vulnerability has one status per image and
+      package: what an earlier statement of the same vulnerability said about
+      the same image and package moves to this one (a statement without
+      --subcomponent covers every package of its images). Other packages keep
+      their own statements. Bumps the document's version and timestamp.
 
   render --image NAME@sha256:DIGEST [--document PATH]
       Prints the statements about one image, pinned to its digest under that
@@ -106,14 +108,19 @@ def check_document(document):
     statements = document.get("statements")
     if not isinstance(statements, list):
         raise Invalid("the document has no statements list")
+    # (vulnerability, image) => {package URL, or None for every package: statement index}
     seen = {}
     for index, statement in enumerate(statements):
         check_statement(statement, f"statement {index}")
         for product in statement["products"]:
             key = (statement["vulnerability"]["name"], product["@id"])
-            if key in seen:
-                raise Invalid(f"{key[0]} for {key[1]} is in statements {seen[key]} and {index}: keep one status")
-            seen[key] = index
+            covered = seen.setdefault(key, {})
+            for component in [c["@id"] for c in product.get("subcomponents") or []] or [None]:
+                clashes = covered if component is None else {k: v for k, v in covered.items() if k in (component, None)}
+                if clashes:
+                    what = f"{key[0]} for {key[1]}" + (f" {component}" if component else "")
+                    raise Invalid(f"{what} is in statements {next(iter(clashes.values()))} and {index}: keep one status")
+                covered[component] = index
 
 
 def check_statement(statement, where):
@@ -168,13 +175,27 @@ def set_statement(args):
             statement[key] = value.strip()
     check_statement(statement, "the new statement")
 
-    # The products this statement names leave every earlier statement of the
-    # same vulnerability; a statement left with none goes.
+    # What this statement covers (its images, and its packages or all of them)
+    # leaves every earlier statement of the same vulnerability. A product left
+    # with no package, and a statement left with no product, go.
+    components = set(args.subcomponent)
     kept = []
     for existing in document["statements"]:
         if existing["vulnerability"]["name"] == name:
-            existing["products"] = [p for p in existing["products"] if p["@id"] not in product_ids]
-            if not existing["products"]:
+            products = []
+            for product in existing["products"]:
+                if product["@id"] not in product_ids:
+                    products.append(product)
+                    continue
+                old = product.get("subcomponents") or []
+                if not components or not old:
+                    # One side covers every package: the new statement replaces it.
+                    continue
+                rest = [c for c in old if c["@id"] not in components]
+                if rest:
+                    products.append({**product, "subcomponents": rest})
+            existing["products"] = products
+            if not products:
                 continue
         kept.append(existing)
     kept.append(statement)

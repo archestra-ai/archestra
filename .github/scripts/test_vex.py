@@ -60,6 +60,21 @@ class VexTests(unittest.TestCase):
         self.assertEqual(not_affected["products"][0]["subcomponents"], [{"@id": "pkg:npm/tar@6.2.0"}])
         self.assertEqual(not_affected["impact_statement"], "The CLI that parses untrusted input is not shipped.")
 
+    def test_packages_of_one_image_keep_their_own_status_for_the_same_vulnerability(self):
+        # The flaw is in libssl; libcrypto ships none of its code.
+        self.run_main("set", "--vulnerability", "CVE-2026-1005", "--product", "platform",
+                      "--subcomponent", "pkg:apk/alpine/libcrypto3@3.5.9-r0", "--subcomponent", "pkg:apk/alpine/libssl3@3.5.9-r0",
+                      "--status", "fixed")
+        self.run_main("set", "--vulnerability", "CVE-2026-1005", "--product", "platform",
+                      "--subcomponent", "pkg:apk/alpine/libcrypto3@3.5.9-r0", "--status", "not_affected",
+                      "--justification", "vulnerable_code_not_present", "--impact-statement", "The QUIC code is in libssl.")
+        by_package = {c["@id"]: s["status"] for s in self.statements() for p in s["products"] for c in p["subcomponents"]}
+        self.assertEqual(by_package, {"pkg:apk/alpine/libssl3@3.5.9-r0": "fixed",
+                                      "pkg:apk/alpine/libcrypto3@3.5.9-r0": "not_affected"})
+        # A statement about every package of the image replaces both.
+        self.run_main("set", "--vulnerability", "CVE-2026-1005", "--product", "platform", "--status", "fixed")
+        self.assertEqual([(s["status"], s["products"]) for s in self.statements()], [("fixed", [{"@id": "pkg:oci/platform"}])])
+
     def test_a_statement_without_its_reasons_is_refused_and_nothing_is_written(self):
         before = self.document.read_text()
         for argv in [
@@ -74,7 +89,7 @@ class VexTests(unittest.TestCase):
             self.run_main("set", "--vulnerability", "not-a-cve", "--product", "platform", "--status", "fixed")
         self.assertEqual(self.document.read_text(), before)
 
-    def test_a_document_with_two_statuses_for_one_image_is_invalid(self):
+    def test_a_document_with_two_statuses_for_one_image_and_package_is_invalid(self):
         statement = {"vulnerability": {"name": "CVE-2026-1002"}, "products": [{"@id": "pkg:oci/platform"}],
                      "status": "fixed", "timestamp": "2026-11-19T00:00:00Z"}
         self.document.write_text(json.dumps({**EMPTY, "statements": [statement, {**statement, "status": "affected",

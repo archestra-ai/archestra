@@ -160,10 +160,12 @@ curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/prev
 
 Only the original `auto` router that existed before multi-router support can learn from historical proxy traffic; routers you create start cold. For that router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic.
 
-1. **Find past sessions.** Runs automatically when you first enable auto routing. Before a plan exists, the router page shows what was found; afterwards, open **⋯ → Score past sessions** in the header (recounts if the last count is over a day old). It scans the last 35 days of proxy logs by API and client at no cost.
-2. **Score them.** Start scoring with a spending limit. Archestra sends the opening prompt and context of each sampled session's first logged request to Jev, stops at your limit (in-flight calls can take it slightly over), and fits a plan.
+The router's **Overview** always has a **Past sessions** card. Its table lists each count and scoring run, newest first, with what it found or scored and what it cost. The button beside it reads **Score** when there are sessions to score, **Stop** while a run is going, and **Up to date** when nothing is left.
 
-Only sessions with a client-supplied session ID that started inside the 35-day window qualify. Sessions with unlogged or end-to-end encrypted content are skipped. After a scorer change, the router page offers to re-score the same sessions and lets you cancel a run in progress.
+1. **Find past sessions.** Runs on its own when you first enable auto routing, and again when you click **Score** and the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
+2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
+
+Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. Changing the decision model restarts routing: sessions scored by the old model stop counting, so the router uses its normal model until enough are scored again. **Configure** warns about this before you save, and afterwards the **Past sessions** card says the sessions need scoring again. **Stop** ends a run early; the sessions it already scored still count.
 
 ## When It Falls Back to the Normal Model
 

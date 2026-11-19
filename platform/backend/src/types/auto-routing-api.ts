@@ -530,6 +530,25 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       rescore: z.boolean(),
     })
     .nullable(),
+  /** The organization's newest backfills, newest first: what scanning and scoring did. */
+  history: z.array(
+    z.object({
+      id: z.string().uuid(),
+      status: RoutingBackfillStatusSchema,
+      phase: RoutingBackfillPhaseSchema,
+      createdAt: z.date(),
+      completedAt: z.date().nullable(),
+      /** Who started it; null when it started on its own or the user is gone. */
+      startedByName: z.string().nullable(),
+      /** Past sessions the scan found in its window. */
+      foundSessions: z.number().int().nonnegative(),
+      /** Sessions this job scored; null for a scan that was never scored. */
+      scoredSessions: z.number().int().nonnegative().nullable(),
+      spentCostUsd: z.number(),
+      maxCostUsd: z.number().nullable(),
+      error: z.string().nullable(),
+    }),
+  ),
 });
 export type AutoRoutingBackfillResponse = z.infer<
   typeof AutoRoutingBackfillResponseSchema

@@ -7,7 +7,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { AutoRouterIdContext, useAutoRouter } from "@/lib/auto-routing.query";
-import { RouterActions } from "../_parts/router-actions";
+import { ConfigureAutoRoutingButton } from "../_parts/configure-button";
 import { RouterStatus, routerStatus } from "../_parts/router-status";
 
 /** One auto router: its models, budget, plan and what it routed. */
@@ -58,7 +58,7 @@ function AutoRouterPage({ children }: { children: React.ReactNode }) {
       documentTitle={router?.name ?? "Auto router"}
       backLink={backLink}
       status={router ? <RouterStatus label={routerStatus(router)} /> : null}
-      actionButton={<RouterActions />}
+      actionButton={<ConfigureAutoRoutingButton />}
       description={
         <span>
           Requests for the model <code>{router?.name ?? "auto"}</code> go to

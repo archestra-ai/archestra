@@ -491,6 +491,12 @@ export const RouteId = {
 
   // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
   // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotMessagesWithDefaultAgent:
+    "githubCopilotMessagesWithDefaultAgent",
+  GithubCopilotMessagesWithAgent: "githubCopilotMessagesWithAgent",
+  GithubCopilotCountTokensWithDefaultAgent:
+    "githubCopilotCountTokensWithDefaultAgent",
+  GithubCopilotCountTokensWithAgent: "githubCopilotCountTokensWithAgent",
   GithubCopilotResponsesWithDefaultAgent:
     "githubCopilotResponsesWithDefaultAgent",
   GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",

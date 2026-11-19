@@ -492,10 +492,13 @@ class InteractionDeltaManager {
     if (!isClaudeSessionSource(data.sessionSource ?? null)) {
       return false;
     }
-    // bedrock:invoke shares the Anthropic Messages request shape (it is what
-    // Claude Code sends when routed through Bedrock), so delta storage applies
-    // to both.
-    if (data.type !== "anthropic:messages" && data.type !== "bedrock:invoke") {
+    // Claude Code sends the same Messages shape through Anthropic, Bedrock,
+    // and native Copilot, so all three can store growing sessions as deltas.
+    if (
+      data.type !== "anthropic:messages" &&
+      data.type !== "bedrock:invoke" &&
+      data.type !== "github-copilot:messages"
+    ) {
       return false;
     }
     const messages = getMessages(data.request);

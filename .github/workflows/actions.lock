@@ -173,8 +173,8 @@ workflows:
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
         - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@322ad980dd4f3b530a192df546bf3bb703dcb003'
@@ -195,8 +195,8 @@ workflows:
     '.github/workflows/vex-triage.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
         - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -303,14 +303,14 @@ dependencies:
             - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
             - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
             - 'grafana/shared-workflows@70c40e5b6522c854a55334124545261cae3d4c73'
-    'archestra-ai/.github@v1.33.0':
-        ref: 'v1.33.0'
-        commit: 'sha1-1bf4a7d38b15e9a4f48a1d4ad476ad4e4b932e00'
-        owner_id: 216022683
-        repo_id: 1192166927
     'archestra-ai/.github@v1.31.1':
         ref: 'v1.31.1'
         commit: 'sha1-0bd6a54bf206174fd0cebc3222def111651e91bb'
+        owner_id: 216022683
+        repo_id: 1192166927
+    'archestra-ai/.github@v1.33.0':
+        ref: 'v1.33.0'
+        commit: 'sha1-1bf4a7d38b15e9a4f48a1d4ad476ad4e4b932e00'
         owner_id: 216022683
         repo_id: 1192166927
     'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2':
@@ -350,12 +350,12 @@ dependencies:
         commit: 'sha1-7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         owner_id: 71461757
         repo_id: 407242578
-    'google-github-actions/get-secretmanager-secrets@v3.0.0':
+    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757
         repo_id: 308778069
-    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
+    'google-github-actions/get-secretmanager-secrets@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757

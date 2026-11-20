@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
+import { buildPgConnectionConfig } from "./rds-iam.mjs";
 
 const INDEX_NAME = "interactions_statistics_v2_idx";
 const LOCK_KEY = "42816120972513";
@@ -123,11 +124,12 @@ async function main() {
     process.env.ARCHESTRA_DATABASE_URL || process.env.DATABASE_URL;
   if (!databaseUrl)
     throw new Error("Set ARCHESTRA_DATABASE_URL or DATABASE_URL.");
-  const client = new pg.Client({
-    connectionString: databaseUrl,
-    connectionTimeoutMillis: 10_000,
-    application_name: "archestra-statistics-index-maintenance",
-  });
+  const client = new pg.Client(
+    buildPgConnectionConfig(databaseUrl, {
+      connectionTimeoutMillis: 10_000,
+      application_name: "archestra-statistics-index-maintenance",
+    }),
+  );
   await client.connect();
   try {
     const started = performance.now();

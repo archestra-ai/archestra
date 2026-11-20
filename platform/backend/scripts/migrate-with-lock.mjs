@@ -5,6 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
+import { buildPgConnectionConfig } from "./rds-iam.mjs";
 
 dotenv.config({
   path: path.resolve(
@@ -28,10 +29,9 @@ const LEASE_TTL_MS = 60_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const ACQUIRE_RETRY_MS = 1_000;
 const holder = randomUUID();
-const client = new pg.Client({
-  connectionString: databaseUrl,
-  connectionTimeoutMillis: 10_000,
-});
+const client = new pg.Client(
+  buildPgConnectionConfig(databaseUrl, { connectionTimeoutMillis: 10_000 }),
+);
 let leaseAcquired = false;
 
 await client.connect();

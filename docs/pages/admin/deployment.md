@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-11-18
+lastUpdated: 2026-11-20
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -126,6 +126,50 @@ archestra:
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
+
+### Amazon RDS IAM Authentication
+
+Use `archestra.database.iamAuth.enabled: true` with an external RDS or Aurora PostgreSQL URL to sign in through the pod's AWS identity. Put the database user in the URL without a password, grant that user `rds_iam`, and provide the pods and migration Job with AWS credentials through IRSA, EKS Pod Identity, or the chart's projected web identity token option. Archestra signs a new token for each connection and verifies the RDS TLS certificate.
+
+Set `postgresql.enabled: false` and configure `archestra.database.iamAuth.roleArn` when using IRSA. A custom database hostname may need `archestra.database.iamAuth.awsRegion`. After upgrading, check the migration Job and web pod readiness.
+
+### Azure PostgreSQL with Microsoft Entra ID
+
+Use AKS Workload Identity to let Archestra connect to Azure Database for PostgreSQL flexible server without a stored database password. Each connection uses a renewed Entra token, and Archestra verifies the server certificate.
+
+1. Enable Microsoft Entra authentication on the PostgreSQL server, assign an Entra administrator, and make the server reachable privately from AKS. Enable the cluster OIDC issuer and Workload Identity.
+2. Create a user-assigned managed identity and a federated credential for `system:serviceaccount:NAMESPACE:RELEASE-NAME`. If Archestra already uses an Azure identity, grant database access to that identity instead. Give the migration Job's hook ServiceAccount its own federated credential when `archestra.migrationJob.serviceAccount.create` is enabled; its subject ends in `RELEASE-NAME-migrate`.
+3. Connect to the `postgres` database as the Entra administrator and create the database principal:
+
+   ```sql
+   SELECT * FROM pgaadauth_create_principal('archestra-db', false, false);
+   ```
+
+4. In the Archestra database, create `vector` and `pg_trgm` if needed, then grant the principal database and schema permissions:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   GRANT ALL PRIVILEGES ON DATABASE archestra TO "archestra-db";
+   GRANT ALL ON SCHEMA public TO "archestra-db";
+   ```
+
+5. Set the identity's client ID and a passwordless PostgreSQL URL in Helm values:
+
+   ```yaml
+   postgresql:
+     enabled: false
+     external_database_url: "postgresql://archestra-db@SERVER.postgres.database.azure.com:5432/archestra?sslmode=verify-full"
+   archestra:
+     database:
+       entraAuth:
+         enabled: true
+         clientId: CLIENT_ID
+   ```
+
+The chart adds the Workload Identity annotation to the ServiceAccount and opt-in label to web, worker, and migration pods. It preserves explicitly supplied values. The URL's user must match the Entra principal name. After upgrading, check that the migration Job completes and the web pods become ready.
+
+If `DefaultAzureCredential` cannot get a token, check the federated credential subject and the AKS Workload Identity settings. If PostgreSQL reports password authentication failure, check the Entra principal name. For a schema permission error, repeat the grants as the Entra administrator.
 
 ### Cost Statistics Index
 

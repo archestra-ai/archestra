@@ -51,6 +51,120 @@ archestra:
     # true explicitly uses the bulk pool value; false uses chart sizing when
     # connectionBudget is set.
     poolMaxFromEnvFrom: null
+    # Amazon RDS / Aurora IAM database authentication.
+    # Generates a fresh 15-minute IAM token per new connection in the query
+    # pool, cache pool, LISTEN/NOTIFY client, and migration Job, using the pod's
+    # AWS credentials (IRSA, EKS Pod Identity, OIDC token projection, or env/secret
+    # credentials) and verifying the RDS TLS certificate with the bundled cloud
+    # database CA certificates.
+    iamAuth:
+      enabled: false
+      # Optional AWS region for RDS IAM token signing. Derived from the RDS
+      # endpoint hostname or AWS_REGION / AWS_DEFAULT_REGION when left empty.
+      awsRegion: ""
+      # Optional IAM role ARN for RDS IAM authentication.
+      # - On EKS (injectWebIdentityTokenVolume: false): automatically sets
+      #   `eks.amazonaws.com/role-arn` on the platform ServiceAccount (IRSA) unless
+      #   already set in `archestra.orchestrator.kubernetes.serviceAccount.annotations`.
+      # - On non-EKS clusters with OIDC federation (injectWebIdentityTokenVolume: true):
+      #   sets `AWS_ROLE_ARN` on the web, worker, and migration Job pods.
+      roleArn: ""
+      # Mount a projected Kubernetes ServiceAccount token volume (`aws-iam-token`)
+      # and set `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` on web, worker,
+      # and migration Job pods. Enable this on non-EKS Kubernetes clusters (GKE,
+      # AKS, kind, on-prem) federated with an AWS IAM OIDC identity provider.
+      # Leave false on EKS (where the EKS Pod Identity Webhook or Pod Identity
+      # Agent injects credentials automatically).
+      injectWebIdentityTokenVolume: false
+      # Audience for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenAudience: "sts.amazonaws.com"
+      # Expiration (in seconds) for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenExpirationSeconds: 3600
+    # Microsoft Entra ID database authentication for Azure Database for
+    # PostgreSQL flexible server. Each new connection in the query pool, cache
+    # pool, LISTEN/NOTIFY client, and migration Job signs in with an Entra
+    # access token for the pod's Azure identity (AKS Workload Identity, a
+    # managed identity, or AZURE_* variables), with TLS verification.
+    # Put the managed identity's name as the user in ARCHESTRA_DATABASE_URL.
+    # Enable at most one of iamAuth and entraAuth.
+    entraAuth:
+      enabled: false
+      # Optional client ID of the user-assigned managed identity for AKS
+      # Workload Identity. Sets the `azure.workload.identity/client-id`
+      # annotation on the platform ServiceAccount (unless already set in
+      # `archestra.orchestrator.kubernetes.serviceAccount.annotations`) and
+      # the `azure.workload.identity/use: "true"` label on the web, worker,
+      # and migration Job pods.
+      clientId: ""
+    # Google Cloud SQL Auth Proxy, run as a native sidecar (Kubernetes 1.29+)
+    # in the web, worker, and migration Job pods. The proxy opens a TLS
+    # connection to the instance with an ephemeral client certificate and, with
+    # --auto-iam-authn, logs in as the pod's Google service account (Workload
+    # Identity), so no database password is needed anywhere.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # (traffic to 127.0.0.1 never leaves the pod; the proxy encrypts the rest),
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    cloudSqlProxy:
+      enabled: false
+      # project:region:instance
+      instanceConnectionName: ""
+      image:
+        repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+        tag: "2.26.3"
+        digest: "sha256:f333a9c59890c3c67b8505166c5dbdcc0b29fca9173a2e09ca0446ab6997a736"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. Defaults connect over the VPC and log in with IAM.
+      args:
+        - --private-ip
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    # Google AlloyDB Auth Proxy, run the same way as cloudSqlProxy: a native
+    # sidecar in the web, worker, and migration Job pods that connects over
+    # the instance's private IP and, with --auto-iam-authn, logs in as the
+    # pod's Google service account. Enable at most one of the two proxies.
+    # Google publishes this image for linux/amd64 only.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    alloyDbProxy:
+      enabled: false
+      # projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE
+      instanceUri: ""
+      image:
+        repository: gcr.io/alloydb-connectors/alloydb-auth-proxy
+        tag: "1.17.2"
+        digest: "sha256:a6ca5f3f344dd8c8bd5e5d81661bf395e78cdff2265e9dddeaadc8c2ffcd66dd"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. The proxy connects over private IP by default; add --psc
+      # for a Private Service Connect instance.
+      args:
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)
@@ -476,6 +590,9 @@ archestra:
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
+    serviceAccount:
+      # Create a hook-only ServiceAccount with current cloud identity annotations.
+      create: false
     # Whether the migration pod mounts a Kubernetes API token. Migrations
     # never call the Kubernetes API, so null (the default) mounts none unless
     # initContainers.vaultSecrets is enabled, whose Vault Kubernetes login

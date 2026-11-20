@@ -35,6 +35,10 @@ import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
 import AgentModel from "@/models/agent";
+import InternalMcpCatalogModel, {
+  catalogNameAudienceFromGrants,
+  catalogNameAudienceOf,
+} from "@/models/internal-mcp-catalog";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -730,6 +734,36 @@ export class ResourcePermissions {
         throw new ApiError(400, "Personal MCP gateways cannot be shared");
     }
     const effective = await ResourcePermissions.getEffective(params);
+    // Sharing a personal MCP server with a team or the organization can put
+    // its name next to a shared server that already has it in the same
+    // environment. The check runs before the grants change, so a conflict
+    // leaves the server personal.
+    if (params.resource === "mcpRegistry" && params.scope !== "*") {
+      const nextAudience = catalogNameAudienceFromGrants({
+        grants: params.grants,
+        authorId: effective.target?.authorId ?? null,
+      });
+      if (nextAudience.kind === "shared") {
+        const catalog = await InternalMcpCatalogModel.findNameCheckTarget(
+          params.scope,
+        );
+        if (
+          catalog &&
+          catalog.organizationId === params.organizationId &&
+          catalog.serverType !== "app" &&
+          catalog.parentCatalogItemId === null &&
+          (await catalogNameAudienceOf(catalog)).kind === "personal"
+        ) {
+          await InternalMcpCatalogModel.assertRootNameAvailable({
+            name: catalog.name,
+            organizationId: params.organizationId,
+            environmentId: catalog.environmentId,
+            audience: nextAudience,
+            excludeId: catalog.id,
+          });
+        }
+      }
+    }
     await ResourcePermissions.assertNoStaticPinsBroken({
       ...params,
       authorId: effective.target?.authorId ?? null,

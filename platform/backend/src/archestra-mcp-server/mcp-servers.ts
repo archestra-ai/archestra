@@ -34,6 +34,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { catalogNameAudienceFromGrants } from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
@@ -1314,6 +1315,25 @@ async function handleCreateMcpServer(
       existingLocalConfigSecretId: null,
       existingClientSecretId: null,
     });
+    // The same name check the registry create route runs: unique per
+    // environment, personal only against this author's other personal servers.
+    try {
+      await InternalMcpCatalogModel.assertRootNameAvailable({
+        name,
+        organizationId,
+        environmentId: targetEnvironmentId,
+        audience: catalogNameAudienceFromGrants({
+          grants: args.initialGrants,
+          authorId: context.userId,
+        }),
+      });
+    } catch (error) {
+      // A taken name is the caller's to correct. Anything else follows the
+      // handler's own error path.
+      if (error instanceof ApiError && error.statusCode === 409)
+        return errorResult(error.message);
+      throw error;
+    }
     const created = await InternalMcpCatalogModel.create(validatedParams, {
       organizationId,
       authorId: context.userId,

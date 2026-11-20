@@ -222,13 +222,16 @@ describe("AppSettingsDialog", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
-  it("closes on Cancel and remounts a fresh form when reopened", async () => {
+  it("discards on Cancel and remounts a fresh form when reopened", async () => {
     renderControlledDialog();
     const nameInput = await screen.findByRole("textbox", { name: "Name *" });
     fireEvent.change(nameInput, { target: { value: "Unsaved name" } });
     expect(nameInput).toHaveValue("Unsaved name");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discard changes" }),
+    );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );

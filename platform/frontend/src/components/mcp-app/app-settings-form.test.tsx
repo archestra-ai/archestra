@@ -266,6 +266,65 @@ describe("AppSettingsForm save", () => {
     expect(savePermissions).not.toHaveBeenCalled();
   });
 
+  test("closes on Cancel without asking when nothing changed", () => {
+    const { onOpenChange } = renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  test.each([
+    {
+      field: "a renamed app",
+      edit: () =>
+        fireEvent.change(screen.getByLabelText("Name *"), {
+          target: { value: "Budget v2" },
+        }),
+    },
+    {
+      field: "a changed icon",
+      edit: () => fireEvent.click(screen.getByTestId("pick-icon")),
+    },
+    {
+      field: "a staged tool",
+      edit: () => {
+        goToSection("Tools");
+        fireEvent.click(screen.getByTestId("stage-tool-t2"));
+      },
+    },
+  ])("asks before Cancel discards $field", async ({ edit }) => {
+    const { onOpenChange } = renderForm();
+
+    edit();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      await screen.findByText("Discard unsaved changes?"),
+    ).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  test("closes on Cancel without asking when an edit is put back", () => {
+    const { onOpenChange } = renderForm();
+
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Budget v2" },
+    });
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Budget" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
   test("shows labels on General and saves an in-progress label", async () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();

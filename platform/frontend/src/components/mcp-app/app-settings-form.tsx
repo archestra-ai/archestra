@@ -109,11 +109,6 @@ export function AppSettingsForm({
     },
     [],
   );
-  const permissionsGuard = useUnsavedChangesGuard({
-    isDirty: permissionsDirty,
-    onOpenChange,
-  });
-
   const form = useForm<FormValues>({
     defaultValues: {
       name: app.name,
@@ -157,6 +152,19 @@ export function AppSettingsForm({
       setSeededToolIds(new Set(assignedTools.map((t) => t.id)));
     }
   }, [assignedTools, toolsSeeded]);
+
+  // Every staged edit counts, not just access: closing (Cancel, Esc, the X,
+  // outside-click) asks first while any of them would be lost.
+  const isDirty =
+    permissionsDirty ||
+    form.formState.isDirty ||
+    environmentId !== (app.environmentId ?? null) ||
+    enabledStatus !== (app.enabled ? "enabled" : "disabled") ||
+    lockedStatus !== (app.locked ? "locked" : "unlocked") ||
+    openMode !== (app.openInFullscreen ? "fullscreen" : "inline") ||
+    !sameLabels(labels, app.labels) ||
+    (seededToolIds !== null && !sameIds(selectedToolIds, seededToolIds));
+  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
   const enabledOptions = [
     {
@@ -234,7 +242,7 @@ export function AppSettingsForm({
   // resend already-applied mutations.
   const submitInFlight = useRef(false);
 
-  const onBack = () => permissionsGuard.requestClose();
+  const onBack = () => guard.requestClose();
 
   // Leaving General unmounts the labels editor, which holds any not-yet-added
   // label draft in its own state; flush a valid draft into committed labels
@@ -359,7 +367,7 @@ export function AppSettingsForm({
   return (
     <TabbedDialogShell
       open={open}
-      onOpenChange={permissionsGuard.handleOpenChange}
+      onOpenChange={guard.handleOpenChange}
       contentOnly={contentOnly}
       title="App settings"
       description="Manage this app's details, tools, and who can use it."
@@ -653,10 +661,24 @@ export function AppSettingsForm({
         ) : null}
       </div>
       <UnsavedChangesDialog
-        open={permissionsGuard.confirmOpen}
-        onKeepEditing={permissionsGuard.keepEditing}
-        onDiscard={permissionsGuard.discardChanges}
+        open={guard.confirmOpen}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discardChanges}
       />
     </TabbedDialogShell>
   );
+}
+
+function sameLabels(
+  a: Array<{ key: string; value: string }>,
+  b: Array<{ key: string; value: string }>,
+) {
+  return (
+    a.length === b.length &&
+    a.every((label, i) => label.key === b[i].key && label.value === b[i].value)
+  );
+}
+
+function sameIds(a: Set<string>, b: Set<string>) {
+  return a.size === b.size && [...a].every((id) => b.has(id));
 }

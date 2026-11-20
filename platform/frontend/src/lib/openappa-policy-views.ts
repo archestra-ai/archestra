@@ -33,3 +33,23 @@ export function invalidatePolicyViews(client: QueryClient) {
     client.invalidateQueries({ queryKey: remediesQueryKey }),
   ]);
 }
+
+const VALIDATION_ENTRY_PREFIX = "validation:";
+
+/** The Policy page's entry for a validation file, as the URL carries it. */
+export function validationEntry(path: string): string {
+  return `${VALIDATION_ENTRY_PREFIX}${path}`;
+}
+
+/** The validation file an entry names; null for a policy file's entry. */
+export function validationPathOf(entry: string | null): string | null {
+  return entry?.startsWith(VALIDATION_ENTRY_PREFIX)
+    ? entry.slice(VALIDATION_ENTRY_PREFIX.length)
+    : null;
+}
+
+/** The Policy page opened directly to a validation file, or to the Policy root when none is named. */
+export function validationPolicyHref(path?: string | null): string {
+  if (!path) return "/openappa/policy";
+  return `/openappa/policy?${new URLSearchParams({ entry: validationEntry(path) })}`;
+}

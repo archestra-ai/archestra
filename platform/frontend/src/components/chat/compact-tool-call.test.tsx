@@ -576,7 +576,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
-  it("keeps saved validations visible without claiming a run or policy activation", () => {
+  it("keeps saved validations and their run outcomes visible without claiming policy activation", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),
     );
@@ -626,6 +626,35 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
     rerender(show({ content: JSON.stringify(publication) }));
     expect(screen.getByText("Saved validations")).toBeInTheDocument();
+    for (const [status, detail] of [
+      ["passed", "passed"],
+      ["failed", "failed"],
+      ["cannot_run", "could not run"],
+    ] as const) {
+      rerender(
+        show({
+          structuredContent: {
+            ...publication,
+            run: {
+              validation: { valid: true },
+              files: [{ path: "traces/check.appa", status, steps: [] }],
+            },
+          },
+        }),
+      );
+      expect(screen.getByText(`· ${detail} ·`)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "View Validations" }),
+      ).toHaveAttribute(
+        "href",
+        "/openappa/policy?entry=validation%3Atraces%2Fcheck.appa",
+      );
+    }
+    rerender(show({ structuredContent: { ...publication, run: null } }));
+    expect(screen.getByText("· saved ·")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Validations" }),
+    ).toHaveAttribute("href", "/openappa/policy");
     rerender(
       show({
         structuredContent: {

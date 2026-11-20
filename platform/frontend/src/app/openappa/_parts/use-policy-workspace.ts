@@ -8,6 +8,7 @@ import {
   useAppaGithubSync,
   useServerRulesAccess,
 } from "@/lib/openappa-github-sync.query";
+import { validationEntry, validationPathOf } from "@/lib/openappa-policy-views";
 import { appaGitHost } from "./appa-git-host";
 import { batteryDisplayName } from "./battery-display-name";
 import { BATTERY_STATUS } from "./battery-status";
@@ -18,11 +19,7 @@ import {
   useManagedValidationsLink,
 } from "./github-managed-policy-notice";
 import type { PolicyFile } from "./policy-files";
-import {
-  useValidationSuite,
-  validationEntry,
-  validationPathOf,
-} from "./validation-context";
+import { useValidationSuite } from "./validation-context";
 import { validationFileStates, validationName } from "./validation-run-history";
 
 export type PolicyWorkspace = ReturnType<typeof usePolicyWorkspace>;

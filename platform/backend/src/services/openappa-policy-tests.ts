@@ -535,6 +535,8 @@ export async function runOpenAppaPolicyTests(
     userId: string;
     /** Run only these saved files instead of the whole suite. */
     partial?: boolean;
+    /** Reject persistence if the policy or suite moved while replay ran. */
+    requireCurrentPolicy?: boolean;
   },
 ) {
   const collection = await loadPolicyTestCollection(
@@ -568,11 +570,16 @@ export async function runOpenAppaPolicyTests(
     params.userId,
     result,
     snapshots,
+    undefined,
+    undefined,
+    params.requireCurrentPolicy ? { requireCurrentPolicy: true } : undefined,
   );
   if (!saved)
     throw new ApiError(
       409,
-      "The validation source changed before the run was saved",
+      params.requireCurrentPolicy
+        ? "The policy or validation source changed before the run was saved"
+        : "The validation source changed before the run was saved",
     );
   return {
     id: saved.id,

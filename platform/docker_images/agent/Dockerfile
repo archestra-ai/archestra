@@ -412,8 +412,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
- && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.3)" kimi-code.tgz \
+ && echo "403ad8e450362d05d09b785c045edeb9efc02cc7adeca1aadb9bb0cab800214969e6ebe7e21e75e35c58d9449efa6f767ffaabe64ed3e37c07c5f19274b07693  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -423,7 +423,8 @@ RUN apt-get update \
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
- && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py \
+ && python3 /tmp/agent-image-patches/kimi-late-mcp-tools.py
 USER 1000:1000
 
 RUN --network=none \

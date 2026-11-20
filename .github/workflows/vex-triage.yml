@@ -180,18 +180,10 @@ jobs:
     timeout-minutes: 3
     permissions:
       actions: read # List the failed jobs of this run.
-      contents: read # Check out the alert action.
       id-token: write # Read the #alerts webhook from Secret Manager.
     steps:
-      - name: Checkout the alert action
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 1
-          sparse-checkout: .github/actions/post-failure-alert
-          persist-credentials: false
-
       - name: Post to #alerts
-        uses: ./.github/actions/post-failure-alert
+        uses: $/.github/actions/post-failure-alert
         with:
           summary: "VEX Triage did not start for the projects below, so their releases were not triaged this time."
           test: ${{ inputs.test_alert || 'false' }}

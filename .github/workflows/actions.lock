@@ -164,6 +164,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
         - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
+        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@322ad980dd4f3b530a192df546bf3bb703dcb003'
@@ -185,6 +186,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
         - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
+        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -339,6 +341,11 @@ dependencies:
         owner_id: 71461757
         repo_id: 407242578
     'google-github-actions/get-secretmanager-secrets@v3.0.0':
+        ref: 'v3.0.0'
+        commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        owner_id: 71461757
+        repo_id: 308778069
+    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757

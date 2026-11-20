@@ -148,9 +148,28 @@ function sentFile(input: unknown): string | null {
   if (!input || typeof input !== "object") return null;
   const args = input as { content?: unknown; tool_args?: unknown };
   if (typeof args.content === "string") return args.content;
-  return args.tool_args && typeof args.tool_args === "object"
-    ? sentFile(args.tool_args)
-    : null;
+  const wrapped = runToolArguments(args.tool_args);
+  return wrapped ? sentFile(wrapped) : null;
+}
+
+/**
+ * The target's arguments as `run_tool` reads its `tool_args`: an object, or
+ * the JSON text of one, which some models send. Null for anything else.
+ */
+export function runToolArguments(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function parsePolicyOutput(

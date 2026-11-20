@@ -7,6 +7,7 @@ import { OpenAppaPolicyArguments } from "./openappa-policy-change";
 import {
   parsePolicyChange,
   parsePolicyOutput,
+  runToolArguments,
 } from "./openappa-policy-change.utils";
 
 /** A completed preview: its result, and the arguments it was called with. */
@@ -70,7 +71,7 @@ export function collectPreviewedChanges(
           | undefined;
         if (typeof wrapped?.tool_name !== "string") continue;
         name = wrapped.tool_name;
-        args = wrapped.tool_args;
+        args = runToolArguments(wrapped.tool_args);
       }
       // run_tool also takes a built-in tool's bare short name.
       const shortName = getToolShortName(name) ?? name;
@@ -168,5 +169,5 @@ function summaryOf(input: unknown): string | null {
   if (!input || typeof input !== "object") return null;
   const args = input as { summary?: unknown; tool_args?: unknown };
   if (typeof args.summary === "string") return args.summary;
-  return summaryOf(args.tool_args);
+  return summaryOf(runToolArguments(args.tool_args));
 }

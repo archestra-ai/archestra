@@ -87,6 +87,11 @@ export function useStopImpersonating() {
     mutationFn: async () => {
       const result = await authClient.$fetch("/admin/stop-impersonating", {
         method: "POST",
+        // An explicit JSON body. The OAuth client plugin rewrites the body
+        // of every POST sent from a page whose address has a query string;
+        // with none to start from, the rewritten one goes out without a
+        // JSON content type and the server refuses it (415).
+        body: {},
       });
       if (result.error) {
         throw result.error;

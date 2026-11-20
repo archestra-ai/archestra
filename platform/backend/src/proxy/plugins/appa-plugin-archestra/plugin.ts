@@ -7611,12 +7611,10 @@ type InspectableHitlAnswerOutcome =
 
 /**
  * Reads the answer to a card that offered Inspect. Allow and Deny record the
- * ruling; Inspect asks for the complete review as conversation text. An
- * answer to a previous-layout card counts the same, except that its Approve
- * shows the current card again. A known no-answer seals the review as
- * before; an unreadable answer fails closed without the form. A stale
- * answer — a card superseded before its inspection text was delivered, a
- * forged marker — changes nothing.
+ * ruling; Inspect asks for the complete review as conversation text. A known
+ * no-answer seals the review; an unreadable answer fails closed without the
+ * form. A stale answer — a card superseded before its inspection text was
+ * delivered, a forged marker — changes nothing.
  */
 async function recordInspectableHitlAnswer(params: {
   askedQuestion?: string;

@@ -1064,6 +1064,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resource: "mcpRegistry",
       });
 
+      // Same name check as rename, restore, and an environment move: unique
+      // per environment, and a personal server only against its author's
+      // other personal servers. The check-then-write race is accepted, and
+      // there is no database constraint (legacy duplicates must keep working).
+      // It runs before any secret is stored, so a refused name leaves none.
+      await InternalMcpCatalogModel.assertRootNameAvailable({
+        name: restBody.name,
+        organizationId: request.organizationId,
+        environmentId: restBody.environmentId ?? null,
+        audience: catalogNameAudienceFromGrants({
+          grants: initialGrants,
+          authorId: request.user.id,
+        }),
+      });
+
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
 
@@ -1178,20 +1193,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Clone source catalog item not found");
         }
       }
-
-      // Same name check as rename, restore, and an environment move: unique
-      // per environment, and a personal server only against its author's
-      // other personal servers. The check-then-write race is accepted, and
-      // there is no database constraint (legacy duplicates must keep working).
-      await InternalMcpCatalogModel.assertRootNameAvailable({
-        name: restBody.name,
-        organizationId: request.organizationId,
-        environmentId: restBody.environmentId ?? null,
-        audience: catalogNameAudienceFromGrants({
-          grants: initialGrants,
-          authorId: request.user.id,
-        }),
-      });
 
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
         InternalMcpCatalogModel.create(
@@ -1770,6 +1771,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               environmentId: governingEnvironmentId,
               audience: await catalogNameAudienceOf(originalCatalogItemForGate),
               excludeId: id,
+              toolPrefix: originalCatalogItemForGate.toolPrefix,
             });
           }
         }

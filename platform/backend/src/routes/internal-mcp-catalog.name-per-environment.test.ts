@@ -570,6 +570,70 @@ describe("MCP server names are unique per environment", () => {
     expect(blocked.json().error.message).toContain("in this environment");
   });
 
+  test("restore checks the tool prefix the restored server was given", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const long = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+      name: "Acme Planning Board",
+      access: "org",
+    });
+    // Its tools carry `acme`, not the slug of its name.
+    await InternalMcpCatalogModel.applyToolPrefix({
+      catalogIds: [long.id],
+      toolPrefix: "acme",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/internal_mcp_catalog/${long.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await create(remote("Acme", shared))).statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${long.id}/restore`,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+  });
+
+  test("a refused name stores no secret", async () => {
+    expect((await create(remote("Weather", shared))).statusCode).toBe(200);
+    const countSecrets = async () =>
+      (
+        await db
+          .select({ id: schema.secretsTable.id })
+          .from(schema.secretsTable)
+      ).length;
+    const before = await countSecrets();
+
+    const response = await create({
+      name: "Weather",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TOKEN",
+            type: "secret",
+            value: "s3cret",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      ...shared,
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await countSecrets()).toBe(before);
+  });
+
   test("the Keeper create tool refuses a taken name and writes no row", async ({
     makeAgent,
   }) => {

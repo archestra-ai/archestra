@@ -1309,14 +1309,9 @@ async function handleCreateMcpServer(
       });
       // SPDX-SnippetEnd
     }
-    await moveCatalogSecretsToBag({
-      updateData: validatedParams as Record<string, unknown>,
-      catalogName: name,
-      existingLocalConfigSecretId: null,
-      existingClientSecretId: null,
-    });
     // The same name check the registry create route runs: unique per
     // environment, personal only against this author's other personal servers.
+    // It runs before the secrets are stored, so a refused name leaves none.
     try {
       await InternalMcpCatalogModel.assertRootNameAvailable({
         name,
@@ -1334,6 +1329,12 @@ async function handleCreateMcpServer(
         return errorResult(error.message);
       throw error;
     }
+    await moveCatalogSecretsToBag({
+      updateData: validatedParams as Record<string, unknown>,
+      catalogName: name,
+      existingLocalConfigSecretId: null,
+      existingClientSecretId: null,
+    });
     const created = await InternalMcpCatalogModel.create(validatedParams, {
       organizationId,
       authorId: context.userId,

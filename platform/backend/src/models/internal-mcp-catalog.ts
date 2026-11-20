@@ -121,11 +121,14 @@ export type RegistryListFilters = {
 /**
  * Who a name check compares against. `shared` is a server whose grants reach
  * a team, a role, or the organization. A personal server names its author,
- * so only that author's other personal servers conflict with it.
+ * so only that author's other personal servers conflict with it. An app
+ * shares its tool prefix with no one, so every server that carries it
+ * conflicts.
  */
 export type CatalogNameAudience =
   | { kind: "shared" }
-  | { kind: "personal"; authorId: string | null };
+  | { kind: "personal"; authorId: string | null }
+  | { kind: "app" };
 
 export type RegistrySorting = {
   sortBy?: "name" | "createdAt" | "toolCount" | "attention" | "issueAge";
@@ -1098,6 +1101,7 @@ class InternalMcpCatalogModel {
     environmentId: string | null;
     serverType: InternalMcpCatalogServerType;
     parentCatalogItemId: string | null;
+    toolPrefix: string | null;
   } | null> {
     const [row] = await db
       .select({
@@ -1108,6 +1112,7 @@ class InternalMcpCatalogModel {
         environmentId: schema.internalMcpCatalogTable.environmentId,
         serverType: schema.internalMcpCatalogTable.serverType,
         parentCatalogItemId: schema.internalMcpCatalogTable.parentCatalogItemId,
+        toolPrefix: schema.internalMcpCatalogTable.toolPrefix,
       })
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -1386,7 +1391,9 @@ class InternalMcpCatalogModel {
    * shared server never conflict, and neither do personal servers of two
    * authors. An app in the same environment is a conflict for every audience:
    * its prefix is its own, so a personal copy is not exempt from it. App
-   * creation itself is not checked here. `organizationWide` drops the
+   * creation itself is not checked here. For a server that already exists,
+   * `toolPrefix` is its allocated prefix, which must be free as well as its
+   * name slug. `organizationWide` drops the
    * environment and audience limits and still counts apps, for the built-in
    * tools' prefix and the white-label app name.
    */
@@ -1396,11 +1403,22 @@ class InternalMcpCatalogModel {
     environmentId: string | null;
     audience: CatalogNameAudience;
     excludeId?: string;
+    toolPrefix?: string | null;
     organizationWide?: boolean;
   }): Promise<{ id: string; kind: "builtin" | "server" } | null> {
-    if (InternalMcpCatalogModel.takesBuiltInToolPrefix(params.name))
+    // An app's tools carry only its allocated prefix, which is never the
+    // built-in one, so its display name is not compared.
+    const checksApp = params.audience.kind === "app";
+    if (
+      !checksApp &&
+      InternalMcpCatalogModel.takesBuiltInToolPrefix(params.name)
+    )
       return { id: ARCHESTRA_MCP_CATALOG_ID, kind: "builtin" };
-    const targetSlug = ToolModel.sanitizeServerNameForSlug(params.name);
+    const nameSlug = ToolModel.sanitizeServerNameForSlug(params.name);
+    const targetPrefixes = new Set([
+      checksApp ? (params.toolPrefix ?? nameSlug) : nameSlug,
+    ]);
+    if (params.toolPrefix) targetPrefixes.add(params.toolPrefix);
     const rows = await db
       .select({
         id: schema.internalMcpCatalogTable.id,
@@ -1432,12 +1450,19 @@ class InternalMcpCatalogModel {
         row.id !== params.excludeId &&
         // An allocated prefix (a cut long name, or an app's) is the prefix
         // its tools carry, so it is taken just like a slug.
-        (ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug ||
-          row.toolPrefix === targetSlug),
+        (targetPrefixes.has(ToolModel.sanitizeServerNameForSlug(row.name)) ||
+          (row.toolPrefix !== null && targetPrefixes.has(row.toolPrefix))),
     );
     if (candidates.length === 0) return null;
     if (params.organizationWide)
       return { id: candidates[0].id, kind: "server" };
+
+    // An app that moves is compared with servers only: two apps never have
+    // one prefix.
+    if (checksApp) {
+      const server = candidates.find((row) => row.serverType !== "app");
+      return server ? { id: server.id, kind: "server" } : null;
+    }
 
     // An app shares its prefix with nobody, in either audience.
     const app = candidates.find((row) => row.serverType === "app");
@@ -1475,6 +1500,7 @@ class InternalMcpCatalogModel {
     environmentId: string | null;
     audience: CatalogNameAudience;
     excludeId?: string;
+    toolPrefix?: string | null;
   }): Promise<void> {
     const conflict =
       await InternalMcpCatalogModel.findConflictingRootByName(params);
@@ -2148,7 +2174,13 @@ class InternalMcpCatalogModel {
   static async getRestoreConflictMessage(
     catalog: Pick<
       InternalMcpCatalog,
-      "id" | "name" | "organizationId" | "environmentId" | "authorId"
+      | "id"
+      | "name"
+      | "organizationId"
+      | "environmentId"
+      | "authorId"
+      | "toolPrefix"
+      | "serverType"
     >,
   ): Promise<string | null> {
     if (!catalog.organizationId) return null;
@@ -2158,6 +2190,7 @@ class InternalMcpCatalogModel {
       environmentId: catalog.environmentId,
       audience: await catalogNameAudienceOf(catalog),
       excludeId: catalog.id,
+      toolPrefix: catalog.toolPrefix,
     });
     if (conflict?.kind === "builtin") {
       return `Cannot restore because "${catalog.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`;
@@ -3136,7 +3169,9 @@ export async function catalogNameAudienceOf(catalog: {
   id: string;
   organizationId: string | null;
   authorId: string | null;
+  serverType?: InternalMcpCatalogServerType;
 }): Promise<CatalogNameAudience> {
+  if (catalog.serverType === "app") return { kind: "app" };
   if (!catalog.organizationId)
     return { kind: "personal", authorId: catalog.authorId };
   const audiences = await ResourcePermissionPolicyModel.findAudiences({
@@ -3169,6 +3204,7 @@ function catalogNameAudiencesConflict(params: {
   left: CatalogNameAudience;
   right: CatalogNameAudience;
 }): boolean {
+  if (params.left.kind === "app" || params.right.kind === "app") return true;
   if (params.left.kind === "shared" || params.right.kind === "shared")
     return params.left.kind === "shared" && params.right.kind === "shared";
   return (

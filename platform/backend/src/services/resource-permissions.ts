@@ -762,6 +762,7 @@ export class ResourcePermissions {
             environmentId: catalog.environmentId,
             audience: nextAudience,
             excludeId: catalog.id,
+            toolPrefix: catalog.toolPrefix,
           });
         }
       }

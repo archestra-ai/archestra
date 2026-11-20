@@ -9,6 +9,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
+import { createEnvironment } from "@/services/environments/environment";
 import {
   afterEach,
   beforeEach,
@@ -394,6 +395,41 @@ describe("MCP backing for apps", () => {
     // metadata never keeps a stale (or pre-sanitization) app name.
     expect(toolAfter.description).toContain("Renamed Dashboard");
     expect(toolAfter.description).not.toBe(toolBefore.description);
+  });
+
+  test("refuses moving an app into an environment where a server carries its tool prefix", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const appId = await createApp();
+    const created = mustExist(await AppModel.findById(appId));
+    const catalogId = mustExist(
+      await McpServerModel.findById(mustExist(created.mcpServerId)),
+    ).catalogId;
+    const backing = mustExist(
+      await InternalMcpCatalogModel.findNameCheckTarget(catalogId),
+    );
+    const staging = await createEnvironment({
+      organizationId,
+      data: { name: "Staging" },
+    });
+    // Allowed while the two are in different environments.
+    await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+      name: mustExist(backing.toolPrefix),
+      environmentId: staging.id,
+      access: "org",
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${appId}`,
+      payload: { environmentId: staging.id },
+    });
+
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error.internal_code).toBe("catalog_name_conflict");
+    expect((await AppModel.findById(appId))?.environmentId ?? null).toBeNull();
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

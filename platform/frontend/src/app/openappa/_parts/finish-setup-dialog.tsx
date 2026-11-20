@@ -10,7 +10,6 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import {
-  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -35,15 +34,20 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
 import {
+  type AppPermission,
+  appPermissionList,
   GithubAppPermissionsStep,
+  missingAppPermissions,
   SetupChecklist,
+  unaskedAppPermissions,
 } from "./self-service-setup-dialog";
 
 type Status = archestraApiTypes.GetAppaGithubSyncResponses["200"];
 type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;
-type Permission = "workflows" | "checks";
+type Permission = AppPermission;
+type Grants = archestraApiTypes.GetAppaGithubAppGrantsResponses["200"];
 
 /** A pull request setup waits on, by what it carries. */
 export type SetupPull = {
@@ -59,6 +63,11 @@ export type SetupPull = {
  */
 export type FinishSetupPieces = {
   permissions: Permission[];
+  /**
+   * The App's settings already ask for every missing permission: what waits
+   * is the installation accepting them.
+   */
+  permissionsAsked: boolean;
   /** Self-service is on and its ruleset or include is not in place yet. */
   selfService: { directory: string; policyFile: string } | null;
   pulls: SetupPull[];
@@ -72,6 +81,12 @@ export type FinishSetupPieces = {
 export function finishSetupPieces(
   status: Status,
   protection: Protection | null | undefined,
+  /**
+   * What GitHub grants the App now. `pending` while it is being read for
+   * the first time: no permission is named on a guess meanwhile. Undefined
+   * when it could not be read: the last sync's findings stand in.
+   */
+  grants?: Grants | null | "pending",
 ): FinishSetupPieces | null {
   const source = status.source;
   if (!source?.repo || !source.path) return null;
@@ -79,19 +94,33 @@ export function finishSetupPieces(
   const urls = git.urls(source.repo);
   const files = status.templateFiles;
   const permissions: Permission[] = [];
-  // An App grants Workflows; a source read with an access token says what
-  // its token lacks on the card instead.
-  if (
-    source.githubAppConfigId &&
-    (files?.state === "needs_permission" || files?.withheld?.length)
-  )
-    permissions.push("workflows");
-  if (
-    status.check?.state === "refused" ||
-    protection?.branchRules.state === "needs_permission" ||
-    protection?.branchRules.checkRule === "unposted"
-  )
-    permissions.push("checks");
+  const permissionsAsked =
+    !!grants &&
+    grants !== "pending" &&
+    missingAppPermissions(grants).length > 0 &&
+    unaskedAppPermissions(grants).length === 0;
+  if (grants === "pending") {
+    // Named once GitHub answers.
+  } else if (grants) {
+    // GitHub's own answer: every permission the App lacks, and no guess at
+    // which one a refused check or a withheld file was missing.
+    permissions.push(...missingAppPermissions(grants));
+  } else {
+    // Until GitHub answers, what the last sync ran into. An App grants
+    // Workflows; a source read with an access token says what its token
+    // lacks on the card instead.
+    if (
+      source.githubAppConfigId &&
+      (files?.state === "needs_permission" || files?.withheld?.length)
+    )
+      permissions.push("workflows");
+    if (
+      status.check?.state === "refused" ||
+      protection?.branchRules.state === "needs_permission" ||
+      protection?.branchRules.checkRule === "unposted"
+    )
+      permissions.push("checks");
+  }
   const pulls: SetupPull[] = [];
   if (source.setupPullRequestNumber)
     pulls.push({
@@ -121,7 +150,7 @@ export function finishSetupPieces(
       : null;
   if (permissions.length === 0 && !selfService && pulls.length === 0)
     return null;
-  return { permissions, selfService, pulls, includeMissing };
+  return { permissions, permissionsAsked, selfService, pulls, includeMissing };
 }
 
 /**
@@ -133,9 +162,34 @@ export function useFinishSetupPieces(): FinishSetupPieces | null {
   const protection = useAppaRepositoryProtection(
     status?.selfService?.enabled === true,
   );
+  const grants = useSyncedAppGrants(status);
   return status?.source?.interval
-    ? finishSetupPieces(status, protection.data)
+    ? finishSetupPieces(status, protection.data, grants)
     : null;
+}
+
+/**
+ * The App's permissions as GitHub grants them now, for a source that syncs
+ * through an App: read when the page shows, again after every sync (Sync
+ * now and the scheduled ones), so a permission taken away on GitHub shows
+ * with the sync that follows, not when something later fails for it.
+ */
+function useSyncedAppGrants(
+  status: Status | undefined,
+): Grants | "pending" | undefined {
+  const source = status?.source;
+  const viaApp = !!source?.interval && !!source.githubAppConfigId;
+  const grants = useAppaGithubAppGrants(viaApp);
+  const syncedAt = source?.lastSyncedAt ?? null;
+  const readFor = useRef(syncedAt);
+  const { refetch, isFetching } = grants;
+  useEffect(() => {
+    // A read already under way may predate the sync: read again after it.
+    if (readFor.current === syncedAt || isFetching) return;
+    readFor.current = syncedAt;
+    void refetch();
+  }, [syncedAt, isFetching, refetch]);
+  return viaApp && grants.isPending ? "pending" : grants.data;
 }
 
 /**
@@ -221,9 +275,7 @@ export function finishSetupSummary(
   const parts: string[] = [];
   if (pieces.permissions.length)
     parts.push(
-      `grant the App's ${pieces.permissions
-        .map((name) => PERMISSION_LABELS[name])
-        .join(" and ")} permission${pieces.permissions.length > 1 ? "s" : ""}`,
+      `${pieces.permissionsAsked ? "accept" : "grant"} the App's ${appPermissionList(pieces.permissions)} permission${pieces.permissions.length > 1 ? "s" : ""}`,
     );
   if (pieces.selfService) parts.push("finish the self-service protection");
   if (pieces.pulls.length)
@@ -236,10 +288,6 @@ export function finishSetupSummary(
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
-const PERMISSION_LABELS: Record<Permission, string> = {
-  workflows: "Workflows",
-  checks: "Checks",
-};
 const PULL_TITLES: Record<SetupPull["kind"], string> = {
   setup: "Initial policy",
   files: "Repository files update",
@@ -274,19 +322,38 @@ function FinishSetupDialog({
   );
   // What waits now: a sync while the wizard is open can find more, such as
   // a pull request it just opened or a permission taken away.
+  const grants = useAppaGithubAppGrants(
+    !!query.data?.source?.githubAppConfigId,
+  );
   const live = query.data
-    ? finishSetupPieces(query.data, protection.data)
+    ? finishSetupPieces(
+        query.data,
+        protection.data,
+        grants.isPending ? "pending" : grants.data,
+      )
     : initial;
   // Steps join as something new waits, in their place, and never leave, so
   // the stepper does not jump under the person using it.
   const [steps, setSteps] = useState<Step[]>(() => stepsFor(initial));
+  const [current, setCurrent] = useState<Step>(() => steps[0] ?? "finish");
+  // Whether the person has moved between steps themselves.
+  const [moved, setMoved] = useState(false);
+  const goTo = (target: Step) => {
+    setMoved(true);
+    setCurrent(target);
+  };
   const wanted = live ? stepsFor(live) : steps;
-  if (wanted.some((entry) => !steps.includes(entry)))
-    setSteps(
-      STEP_ORDER.filter(
-        (entry) => steps.includes(entry) || wanted.includes(entry),
-      ),
+  if (wanted.some((entry) => !steps.includes(entry))) {
+    const joined = STEP_ORDER.filter(
+      (entry) => steps.includes(entry) || wanted.includes(entry),
     );
+    setSteps(joined);
+    // The App step joining before anything was clicked (GitHub answered on
+    // the permissions after the wizard opened) is where the wizard starts:
+    // the rest waits on it. Any other step joins without moving the reader.
+    if (!moved && !steps.includes("app") && joined.includes("app"))
+      setCurrent("app");
+  }
   // Permissions the App step asks for: those at hand when it opened, and
   // any found missing since.
   const [needed, setNeeded] = useState<Permission[]>(initial.permissions);
@@ -294,13 +361,11 @@ function FinishSetupDialog({
     (name) => !needed.includes(name),
   );
   if (unseen.length > 0) setNeeded([...needed, ...unseen]);
-  const [current, setCurrent] = useState<Step>(() => steps[0] ?? "finish");
   const index = Math.max(steps.indexOf(current), 0);
   const step = steps[index] ?? "finish";
   const last = index >= steps.length - 1;
   // Every pull request merged: the wizard shows what is in place now.
   const toFinish = useCallback(() => setCurrent("finish"), []);
-  const grants = useAppaGithubAppGrants(step === "app");
   const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   // Done syncs at once, so the card shows what was just merged or granted;
@@ -347,20 +412,14 @@ function FinishSetupDialog({
   // Opening, or about to: the pull requests step waits for its row.
   const includePending =
     include.phase === "opening" || (includeNeeded && include.phase === "idle");
-  const ready = needed.every(
-    (name) =>
-      grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
-      true,
-  );
+  // Fine only when GitHub grants everything: the Finish step reads the same.
+  const ready =
+    !!grants.data && missingAppPermissions(grants.data).length === 0;
   const header = headerFor(
     step,
     { ...initial, permissions: needed, pulls: live?.pulls ?? initial.pulls },
     git.changeRequest,
   );
-  // "the Workflows permission", "the Workflows and Checks permissions"
-  const permissions = `the ${needed
-    .map((name) => PERMISSION_LABELS[name])
-    .join(" and ")} permission${needed.length > 1 ? "s" : ""}`;
   return (
     <StandardDialog
       open
@@ -391,7 +450,7 @@ function FinishSetupDialog({
                 (step === "app" && !ready) ||
                 (step === "pulls" && includePending)
               }
-              onClick={() => setCurrent(steps[index + 1] ?? "finish")}
+              onClick={() => goTo(steps[index + 1] ?? "finish")}
             >
               <span>Continue</span>
             </Button>
@@ -403,7 +462,7 @@ function FinishSetupDialog({
         <SetupStepper
           steps={steps.map((entry) => STEP_LABELS[entry])}
           current={index}
-          onSelect={(target) => setCurrent(steps[target] ?? "finish")}
+          onSelect={(target) => goTo(steps[target] ?? "finish")}
         />
       ) : null}
       {step === "app" ? (
@@ -414,10 +473,7 @@ function FinishSetupDialog({
           checking={grants.isFetching}
           ready={ready}
           onCheckAgain={() => void grants.refetch()}
-          needed={needed}
-          title={(name) => `Grant ${permissions} to the ${name} App`}
-          hint={permissionsHint(needed)}
-          readyText={permissions}
+          checkedAt={grants.dataUpdatedAt || undefined}
         />
       ) : null}
       {step === "finish" ? <SetupChecklist /> : null}
@@ -462,7 +518,7 @@ function headerFor(
   if (step === "app")
     return {
       title: "Finish the GitHub App setup",
-      description: `The GitHub App needs ${pieces.permissions.length > 1 ? "two more permissions" : "one more permission"}: ${pieces.permissions.map((name) => permissionPurpose(name, changeRequest)).join("; ")}.`,
+      description: `The GitHub App needs ${MORE_PERMISSIONS[pieces.permissions.length] ?? "more permissions"}: ${pieces.permissions.map((name) => permissionPurpose(name, changeRequest)).join("; ")}.`,
     };
   if (step === "finish")
     return {
@@ -482,30 +538,24 @@ function headerFor(
   };
 }
 
-function permissionPurpose(name: Permission, changeRequest: string): string {
-  return name === "workflows"
-    ? `Workflows writes the validation workflow update through a ${changeRequest}`
-    : `Checks posts the policy check on each ${changeRequest}`;
-}
+const MORE_PERMISSIONS: Record<number, string> = {
+  1: "one more permission",
+  2: "two more permissions",
+  3: "three more permissions",
+  4: "four more permissions",
+};
 
-function permissionsHint(permissions: Permission[]): ReactNode {
-  return (
-    <>
-      <span>
-        Set {permissions.length > 1 ? "both" : "it"} to{" "}
-        <strong>Read and write</strong>.
-      </span>
-      {permissions.includes("workflows") ? (
-        <span> Workflows lets the App write the validation workflow.</span>
-      ) : null}
-      {permissions.includes("checks") ? (
-        <span>
-          {" "}
-          Checks posts the check&apos;s verdict on each pull request.
-        </span>
-      ) : null}
-    </>
-  );
+function permissionPurpose(name: Permission, changeRequest: string): string {
+  switch (name) {
+    case "contents":
+      return "Contents reads the policy and writes its changes";
+    case "pull_requests":
+      return `Pull requests opens a ${changeRequest} for each policy change`;
+    case "workflows":
+      return `Workflows writes the validation workflow update through a ${changeRequest}`;
+    default:
+      return `Checks posts the policy check on each ${changeRequest}`;
+  }
 }
 
 /** How long merged rows show before the wizard moves on to Finish. */
@@ -608,15 +658,6 @@ function PullRequestsStep({
           </span>
           <InlineNoticeText className="flex-1">
             {include.error}
-          </InlineNoticeText>
-        </InlineNotice>
-      ) : null}
-      {query.data?.source?.lastSyncError ? (
-        <InlineNotice variant="error">
-          <AlertTriangle aria-hidden />
-          <span className="font-medium">Could not sync</span>
-          <InlineNoticeText className="flex-1">
-            {query.data.source.lastSyncError}
           </InlineNoticeText>
         </InlineNotice>
       ) : null}

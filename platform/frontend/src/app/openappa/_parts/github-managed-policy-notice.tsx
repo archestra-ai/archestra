@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { appaGitHost } from "./appa-git-host";
+import { appaGitHost, shownFailure } from "./appa-git-host";
 import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
 
 type AppaGithubSyncStatus = NonNullable<
@@ -27,13 +27,15 @@ export function GithubManagedPolicyNotice({
   const pieces = useFinishSetupPieces();
   const git = appaGitHost(data);
   const source = data?.source;
-  const failed = Boolean(source?.lastSyncError);
+  // GitHub refusing the App is not a failure of its own to announce: the
+  // Finish setup notice says what the App lacks.
+  const failed = Boolean(shownFailure(source, source?.lastSyncError));
   const validations = validationDirectory !== undefined;
   const href = managedSourceUrl(data, validationDirectory);
 
   // Setup still waits on something, a pull request to merge among it: the
   // one Finish setup notice, as on the Git sync settings.
-  if (!failed && pieces)
+  if (pieces && (!failed || pieces.permissions.length > 0))
     return healthyOnly ? null : <FinishSetupNotice pieces={pieces} />;
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.

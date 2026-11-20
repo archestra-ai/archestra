@@ -19,6 +19,7 @@ import {
   GitSourceNotice,
   GitSourceSchedule,
 } from "@/components/git/git-source-card";
+import { ClickPath } from "@/components/github-app-setup/click-path";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -48,9 +49,9 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
+  useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
   useAppaRepositoryProtection,
@@ -59,7 +60,7 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { appaGitHost } from "./appa-git-host";
+import { appaGitHost, isAccessRefusal } from "./appa-git-host";
 import {
   FinishSetupHost,
   FinishSetupNotice,
@@ -85,6 +86,7 @@ export function AppaGithubSyncPanel() {
     organizationSettings: ["update"],
   });
   const pieces = useFinishSetupPieces();
+  const showSyncError = useShowSyncError(query.data?.source, pieces);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -262,14 +264,19 @@ export function AppaGithubSyncPanel() {
                     <FinishSetupNotice pieces={pieces} />
                   </GitSourceNotice>
                 ) : null}
-                {source.lastSyncError ? (
+                {source.lastSyncError && showSyncError ? (
                   <GitSourceError
                     title="Could not sync policy"
                     message={source.lastSyncError}
                   />
                 ) : null}
                 {connected &&
-                (query.data.templateFiles?.state === "unavailable" ||
+                // GitHub refusing the App is the Finish setup notice's to say.
+                ((query.data.templateFiles?.state === "unavailable" &&
+                  !(
+                    source.githubAppConfigId &&
+                    isAccessRefusal(query.data.templateFiles.detail)
+                  )) ||
                   // An access token has no App to grant it Workflows: what
                   // it lacks shows here, not as a Finish setup step.
                   (!source.githubAppConfigId &&
@@ -355,13 +362,11 @@ type Protection = NonNullable<
 >;
 
 /**
- * The repository's protection for server rules files: the branch ruleset
- * the administrator imports, which Archestra reads at each sync.
- */
-/**
- * The self-service switch: whether each MCP server's editors change its own
- * rules through pull requests. Locked while the environment variable sets
- * it, and off for a source without a GitHub App, which posts no check.
+ * MCP Guardrails Self-Service as a part of the source's settings: whether
+ * each MCP server's editors change its own rules through pull requests, the
+ * folder their files live in, and whether the GitHub App merges those pull
+ * requests. Off for a source without a GitHub App, which posts no check.
+ * Locked while an environment variable sets it.
  */
 function SelfServiceRow({
   source,
@@ -375,24 +380,54 @@ function SelfServiceRow({
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
   canManage: boolean;
 }) {
-  const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
   const [setup, setSetup] = useState(false);
+  const protection = useAppaRepositoryProtection(selfService.enabled);
+  const data = selfService.enabled ? (protection.data ?? null) : null;
+  const state = setupState(data);
+  const heading = (() => {
+    if (!selfService.enabled)
+      return (
+        <span>
+          MCP Guardrails Self-Service is{" "}
+          <strong className="font-bold">Disabled</strong>
+        </span>
+      );
+    if (state === "unfinished")
+      return <span>MCP Guardrails Self-Service is ready to be Enabled</span>;
+    // The repository's state decides the word; until it is read, none.
+    if (state === "unread") return <span>MCP Guardrails Self-Service</span>;
+    return (
+      <span>
+        MCP Guardrails Self-Service is{" "}
+        <strong className="font-bold">Enabled</strong>
+      </span>
+    );
+  })();
   const description = (
     <>
       {eligible
-        ? "MCP owners can manage MCP Guardrails. The GitHub App checks their pull requests, and a branch ruleset you import makes the check required."
+        ? "Lets MCP owners manage their MCPs' Guardrails."
         : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
       <SelfServiceDocsLink />
     </>
   );
+  const policyPath = source.path ?? "appa.toml";
+  const folderUrl =
+    data?.include.state === "included"
+      ? urls?.tree(
+          source.ref ?? "HEAD",
+          policyFolderOf(policyPath, selfService.directory),
+        )
+      : null;
   return (
     <GitSourceNotice>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {selfService.environment ? (
           <DeploymentSettingRow
             compact
             title="MCP Guardrails Self-Service"
+            heading={heading}
             description={description}
             value={selfService.enabled ? "enabled" : "disabled"}
             disabled
@@ -404,57 +439,73 @@ function SelfServiceRow({
             onChange={() => {}}
           />
         ) : (
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">MCP Guardrails Self-Service</p>
-              <p className="text-xs text-muted-foreground">{description}</p>
+              <h3 className="text-sm font-medium leading-5">{heading}</h3>
+              <p className="text-sm leading-5 text-muted-foreground">
+                {description}
+              </p>
             </div>
             {/* Once on, Edit on the card changes or turns it off. */}
-            {selfService.enabled ? null : (
+            {!selfService.enabled && canManage && eligible ? (
               <Button
-                size="sm"
+                size="xs"
+                variant="outline"
                 type="button"
                 className="shrink-0"
-                disabled={!canManage || !eligible}
                 onClick={() => setSetup(true)}
               >
                 <span>Enable</span>
               </Button>
-            )}
+            ) : null}
           </div>
         )}
-        {selfService.leftoverRule ? (
-          <p className="text-xs text-muted-foreground">
-            A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
-            requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
-            keeps posting it, so pull requests merge once it passes. Remove the
-            rule before you move or stop Git sync.
+        {selfService.enabled ? (
+          <p className="text-sm leading-5 text-muted-foreground">
+            Each MCP server policy file goes to{" "}
+            {folderUrl ? (
+              hostLink(folderUrl, `${selfService.directory}/`)
+            ) : (
+              <strong className="font-medium text-foreground">
+                {selfService.directory}/
+              </strong>
+            )}
+            .
           </p>
         ) : null}
         {selfService.enabled ? (
-          <RepositoryProtection
-            policyPath={source.path ?? "appa.toml"}
-            branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
-            folderUrl={(folder) =>
-              urls?.tree(
-                source.ref ?? "HEAD",
-                policyFolderOf(source.path ?? "appa.toml", folder),
-              ) ?? null
-            }
-          />
+          <AutoMergeStatus autoMerge={selfService.autoMerge} />
         ) : null}
-        {selfService.enabled && selfService.autoMerge?.enabled ? (
-          // The setting lives in the wizard; the card says only what holds.
-          <p className="text-xs text-muted-foreground">
-            Admitted self-service pull requests merge automatically.
+        {selfService.leftoverRule ? (
+          <p className="text-sm leading-5 text-muted-foreground">
+            {hostLink(selfService.leftoverRule.url, "Ruleset")} still requires
+            the{" "}
+            {hostLink(
+              getVisibleDocsUrl(
+                getDocsUrl(
+                  DocsPage.PlatformAiToolGuardrailsGitSync,
+                  "the-check-and-the-ruleset",
+                ),
+              ),
+              "guardrails check",
+            )}
+            .
           </p>
+        ) : null}
+        {data ? (
+          <RepositoryState
+            data={data}
+            state={state}
+            policyPath={policyPath}
+            branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
+          />
         ) : null}
       </div>
       {setup ? (
         <SelfServiceSetupDialog
           open
           onOpenChange={setSetup}
-          policyPath={source.path ?? "appa.toml"}
+          policyPath={policyPath}
           directory={selfService.directory}
           alreadyOn={selfService.enabled}
         />
@@ -462,6 +513,111 @@ function SelfServiceRow({
     </GitSourceNotice>
   );
 }
+
+/**
+ * Whether the GitHub App merges each self-served pull request once its check
+ * passes, in either state. The setting lives in the wizard's Self-service
+ * step; the card says only what holds, and which variable holds it.
+ */
+function AutoMergeStatus({
+  autoMerge,
+}: {
+  autoMerge: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"]["autoMerge"];
+}) {
+  return (
+    <p className="text-sm leading-5 text-muted-foreground">
+      Auto-merge is{" "}
+      <strong className="font-medium text-foreground">
+        {autoMerge.enabled ? "Enabled" : "Disabled"}
+      </strong>
+      .{" "}
+      {autoMerge.enabled
+        ? "Admitted self-service pull requests merge automatically."
+        : "Self-service pull requests have to be merged manually."}
+      {autoMerge.environment ? (
+        <span>
+          {" "}
+          Set with{" "}
+          <code className="font-mono">{autoMerge.environment.variable}</code>.
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * Whether the card shows a failed sync's error. Around the App's
+ * permissions the Finish setup notice is the one notice, so for a source
+ * that syncs through an App a failure shows only once GitHub has said,
+ * after the failure was seen, what the App holds, and only if it holds
+ * everything. The order the two answers arrive in therefore never puts the
+ * error on screen first. The syncs that fail right after a grant are held
+ * back too, since GitHub takes a moment to honour it. A sync that fails
+ * once that moment has passed is a failure of its own, and shows.
+ */
+function useShowSyncError(
+  source: Source | null | undefined,
+  pieces: ReturnType<typeof useFinishSetupPieces>,
+): boolean {
+  const connected = !!source?.interval;
+  const viaApp = connected && !!source?.githubAppConfigId;
+  const grants = useAppaGithubAppGrants(viaApp);
+  const waitsForPermissions = connected && !!pieces?.permissions.length;
+  // When the permissions stopped waiting: failures stay held for a while.
+  const [waited, setWaited] = useState(waitsForPermissions);
+  const [settlesAt, setSettlesAt] = useState(0);
+  if (waited !== waitsForPermissions) {
+    setWaited(waitsForPermissions);
+    if (!waitsForPermissions) setSettlesAt(Date.now() + GRANT_SETTLE_MS);
+  }
+  useEffect(() => {
+    if (!settlesAt) return;
+    const timer = window.setTimeout(
+      () => setSettlesAt(0),
+      Math.max(0, settlesAt - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [settlesAt]);
+  const settling = settlesAt > 0;
+  const failedAt = source?.lastSyncError ? (source.lastSyncedAt ?? "") : null;
+  // When this failure was first seen here.
+  const [seen, setSeen] = useState<{ failedAt: string; at: number } | null>(
+    null,
+  );
+  if (failedAt !== null && seen?.failedAt !== failedAt)
+    setSeen({ failedAt, at: Date.now() });
+  // GitHub's answer on the permissions, read after the failure was seen;
+  // a read that failed counts, since nothing more can be learned.
+  const answeredAt = Math.max(grants.dataUpdatedAt, grants.errorUpdatedAt);
+  const stale = viaApp && failedAt !== null && !!seen && answeredAt < seen.at;
+  const { refetch, isFetching } = grants;
+  useEffect(() => {
+    if (stale && !isFetching) void refetch();
+  }, [stale, isFetching, refetch]);
+  // The failed sync seen while permissions waited or settled, by when it
+  // ran: it stays unshown afterwards, until a later sync reports.
+  const [excused, setExcused] = useState<string | null>(null);
+  if (
+    (waitsForPermissions || settling) &&
+    failedAt !== null &&
+    excused !== failedAt
+  )
+    setExcused(failedAt);
+  // GitHub refusing the App is never shown as an error here, whenever it
+  // arrives: what the App lacks is the Finish setup notice's to say.
+  if (viaApp && isAccessRefusal(source?.lastSyncError)) return false;
+  return (
+    failedAt !== null &&
+    !stale &&
+    !(viaApp && isFetching) &&
+    !waitsForPermissions &&
+    !settling &&
+    excused !== failedAt
+  );
+}
+
+/** How long after a grant GitHub may still refuse the App's calls. */
+const GRANT_SETTLE_MS = 2 * 60_000;
 
 /** How self-service works, on the Git sync docs page; the row says only what it is. */
 function SelfServiceDocsLink() {
@@ -489,55 +645,83 @@ function policyFolderOf(policyPath: string, folder: string): string {
   return slash < 0 ? folder : `${policyPath.slice(0, slash)}/${folder}`;
 }
 
-function RepositoryProtection({
+/**
+ * How far the repository's side of self-service is: `unread` until GitHub
+ * answers, and while it cannot say; `unfinished` while the ruleset, the
+ * App's Checks permission or the include still waits, which the Finish
+ * setup notice lists; `complete` once the ruleset holds and the include is
+ * merged.
+ */
+type SetupState = "unread" | "unfinished" | "complete";
+
+function setupState(data: Protection | null): SetupState {
+  if (!data) return "unread";
+  const { branchRules, include } = data;
+  if (
+    branchRules.state === "unavailable" ||
+    branchRules.state === "error" ||
+    include.state === "unknown"
+  )
+    return "unread";
+  return branchRules.state !== "active" ||
+    branchRules.checkRule === "unposted" ||
+    include.state !== "included"
+    ? "unfinished"
+    : "complete";
+}
+
+/**
+ * The repository's state under the settings. Complete: the ruleset that
+ * holds. Unfinished: only what the heading and Finish setup do not say, a
+ * rule that holds pull requests and the include's pull request. Unread:
+ * what could not be read.
+ */
+function RepositoryState({
+  data,
+  state,
   policyPath,
   branchUrl,
-  folderUrl,
 }: {
+  data: Protection;
+  state: SetupState;
   policyPath: string;
   /** The synced branch on the host, for the ruleset sentence. */
   branchUrl: string | null;
-  /** The servers' folder on the host, for the include sentence. */
-  folderUrl: (folder: string) => string | null;
 }) {
-  const { data } = useAppaRepositoryProtection(true);
-  if (!data) return null;
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  const rules = data.branchRules;
+  const lines = [
+    state === "complete" ||
+    rules.checkRule === "unposted" ||
+    rules.state === "unavailable" ||
+    rules.state === "error"
+      ? protectionSentence(rules, branchUrl, data.app)
+      : null,
+    includeSentence(data.include, policyFile),
+  ].filter((line) => line != null);
+  if (lines.length === 0) return null;
   return (
-    <>
-      <p className="text-xs text-muted-foreground">
-        {protectionSentence({
-          rules: data.branchRules,
-          checkName: data.checkName,
-          branchUrl,
-          app: data.app,
-        })}
-      </p>
-      <p className="text-xs text-muted-foreground">
-        {includeSentence(data.include, policyFile, folderUrl)}
-      </p>
-    </>
+    <div className="space-y-1 text-sm leading-5 text-muted-foreground">
+      {lines.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: two fixed sentences
+        <p key={index}>{line}</p>
+      ))}
+    </div>
   );
 }
 
 /**
- * One sentence on the include that makes the servers' files apply: where
- * they live, or the pull request that adds the line, or that it is missing.
+ * One sentence on the include that makes the servers' files apply: the pull
+ * request that adds the line, or that it could not be read. Included, the
+ * folder sentence already says where the files go; missing, the heading and
+ * Finish setup say so.
  */
 function includeSentence(
   include: Protection["include"],
   policyFile: string,
-  folderUrl: (folder: string) => string | null,
 ): ReactNode {
   const entry = <code>{`${include.folder}/*.toml`}</code>;
   switch (include.state) {
-    case "included":
-      return (
-        <span>
-          MCP servers&apos; policy files go to{" "}
-          {hostLink(folderUrl(include.folder), `${include.folder}/`)}
-        </span>
-      );
     case "pull_open":
       return (
         <span>
@@ -549,7 +733,9 @@ function includeSentence(
           >
             Pull request #{include.pull?.number}
           </a>{" "}
-          adds {entry} to {policyFile}. Merge it and re-sync.
+          adds {entry} to {policyFile}.{" "}
+          <ClickPath steps={appaGitHost(null).mergePath} />, then{" "}
+          <span className="font-medium text-foreground">Sync now</span>.
         </span>
       );
     case "unknown":
@@ -560,19 +746,10 @@ function includeSentence(
         </span>
       );
     default:
-      return (
-        <span>
-          {policyFile} does not include {entry} yet.
-        </span>
-      );
+      return null;
   }
 }
 
-/**
- * One sentence on the ruleset: on, with a link to it, or why not yet. The
- * check the App cannot post comes first, since a rule that requires it holds
- * every pull request.
- */
 /** A link into the repository on its host, or the text alone without one. */
 function hostLink(href: string | null | undefined, text: string): ReactNode {
   return href ? (
@@ -589,64 +766,44 @@ function hostLink(href: string | null | undefined, text: string): ReactNode {
   );
 }
 
-function protectionSentence({
-  rules,
-  checkName,
-  branchUrl,
-  app,
-}: {
-  rules: Protection["branchRules"];
-  checkName: string;
-  branchUrl: string | null;
-  app: Protection["app"];
-}): ReactNode {
-  const ruleset = hostLink(rules.url, "ruleset");
-  // The App by its own name, linked to its page; "GitHub App" before it is known.
-  const githubApp = app ? (
-    <>{hostLink(app.url, app.name)} App</>
-  ) : (
-    <span>GitHub App</span>
-  );
+/**
+ * One sentence on the ruleset: that it holds, that it holds pull requests
+ * until the App can post the check, or that it could not be read. The
+ * heading and Finish setup cover every other state.
+ */
+function protectionSentence(
+  rules: Protection["branchRules"],
+  branchUrl: string | null,
+  app: Protection["app"],
+): ReactNode {
   if (rules.checkRule === "unposted")
     return (
       <>
-        The Self-service branch protection {ruleset} holds pull requests until
-        the {githubApp} can post the check.
+        The Self-service branch protection {hostLink(rules.url, "ruleset")}{" "}
+        holds pull requests until the{" "}
+        {app ? <>{hostLink(app.url, app.name)} App</> : <span>GitHub App</span>}{" "}
+        can post the check.
       </>
     );
-  switch (rules.state) {
-    case "active":
-      return (
-        <>
-          {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
-          {hostLink(branchUrl, "branch")}
-        </>
-      );
-    case "incomplete":
-      return (
-        <>
-          The Self-service branch protection {ruleset} needs a change:{" "}
-          {rules.detail}
-        </>
-      );
-    case "missing":
-      return <>No branch ruleset requires the {checkName} check yet.</>;
-    case "needs_permission":
-      return (
-        <>
-          The Self-service branch protection ruleset waits for the {githubApp}
-          &apos;s Checks permission.
-        </>
-      );
-    default:
-      return (
-        <>
-          The Self-service branch protection ruleset could not be checked
-          {rules.detail ? <span>: {rules.detail}</span> : <span>.</span>}
-        </>
-      );
-  }
+  if (rules.state !== "active")
+    return (
+      <>
+        The Self-service branch protection ruleset could not be checked
+        {rules.detail && !isAccessRefusal(rules.detail) ? (
+          <span>: {rules.detail}</span>
+        ) : (
+          <span>.</span>
+        )}
+      </>
+    );
+  return (
+    <>
+      {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
+      {hostLink(branchUrl, "branch")}
+    </>
+  );
 }
+
 export function OpenAppaSourceForm({
   source,
   onOpenChange,

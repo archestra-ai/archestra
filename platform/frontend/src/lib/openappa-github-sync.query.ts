@@ -29,16 +29,25 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
-/** The GitHub App's permissions against what self-service needs, on demand. */
+/**
+ * The GitHub App's permissions as GitHub grants them now. The Git sync card
+ * and every setup step read this one answer; every Git sync action reads it
+ * again, since it invalidates the queries under the same key. Whoever shows
+ * it shows its error too, so a failed read raises no toast.
+ */
 export function useAppaGithubAppGrants(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
-    enabled,
+    enabled: enabled && canRead === true,
     queryKey: [...appaGithubSyncQueryKey, "app-grants"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
+    staleTime: 60_000,
   });
 }
 

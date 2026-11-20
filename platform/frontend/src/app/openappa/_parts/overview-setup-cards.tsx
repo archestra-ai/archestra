@@ -5,6 +5,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { shownFailure } from "./appa-git-host";
 import { useFinishSetupPieces } from "./finish-setup-dialog";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -23,7 +24,8 @@ export function OverviewSetupCards() {
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   // A failed sync, or a setup that still waits on something.
-  if (!sync.data?.source?.lastSyncError && !pieces) return null;
+  const source = sync.data?.source;
+  if (!shownFailure(source, source?.lastSyncError) && !pieces) return null;
   return <GithubManagedPolicyNotice />;
 }
 

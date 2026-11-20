@@ -316,9 +316,8 @@ function GithubSyncTip() {
 }
 
 /**
- * What saved validations report: an opened pull request, or a local save.
- * Saving runs nothing; the agent runs the saved files separately. Null for a
- * preview or an unreadable result.
+ * What saved validations report: an opened pull request, or a local save and
+ * its recorded run when present. Null for a preview or an unreadable result.
  */
 export function getValidationSaveResult(output: unknown): SaveResult | null {
   const change = parsePolicyOutput(output);
@@ -349,19 +348,64 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
       local: false,
     };
   }
+  const run = validationRunResult(change.run);
   return {
-    tone: "success",
+    tone: run.tone,
     title:
       change.policyChanged === true
         ? "Saved policy and validations"
         : "Saved validations",
-    detail: "not run yet",
+    detail: run.detail,
     action: {
       label: "View Validations",
       href: "/openappa/policy",
       external: false,
     },
     local: true,
+  };
+}
+
+function validationRunResult(
+  run: unknown,
+): Pick<SaveResult, "tone" | "detail"> {
+  if (run === undefined) return { tone: "success", detail: "not run yet" };
+  if (run === null) return { tone: "success", detail: "saved" };
+  if (!run || typeof run !== "object") {
+    return { tone: "warning", detail: "could not run" };
+  }
+  const { files, executionError, validation } = run as {
+    files?: unknown;
+    executionError?: unknown;
+    validation?: { valid?: unknown } | null;
+  };
+  if (
+    executionError ||
+    validation?.valid === false ||
+    !Array.isArray(files) ||
+    files.length === 0
+  ) {
+    return { tone: "warning", detail: "could not run" };
+  }
+  const statuses = files.map((file) =>
+    file && typeof file === "object" && "status" in file ? file.status : null,
+  );
+  const failed = statuses.filter((status) => status === "failed").length;
+  if (failed > 0) {
+    return {
+      tone: "warning",
+      detail:
+        files.length === 1 ? "failed" : `${failed} of ${files.length} failed`,
+    };
+  }
+  if (statuses.some((status) => status !== "passed")) {
+    return { tone: "warning", detail: "could not run" };
+  }
+  return {
+    tone: "success",
+    detail:
+      files.length === 1
+        ? "passed"
+        : `${files.length} of ${files.length} passed`,
   };
 }
 

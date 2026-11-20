@@ -15,8 +15,10 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  getValidationSaveResult,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
+  OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
 
 vi.mock("@/lib/auth/auth.query");
@@ -341,4 +343,113 @@ test.each([
     screen.queryByRole("link", { name: "Set up Git sync" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
+});
+
+const validationPublication = {
+  delivery: "revision",
+  revision: 2,
+  version: "specs-v2",
+  policyChanged: false,
+  validation: { valid: true, errors: [], warnings: [] },
+};
+
+function validationRun(
+  statuses: string[],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    validation: { valid: true },
+    files: statuses.map((status, index) => ({
+      path: `traces/check-${index}.appa`,
+      status,
+      steps: [],
+    })),
+    ...overrides,
+  };
+}
+
+test.each([
+  {
+    name: "one passed file",
+    run: validationRun(["passed"]),
+    tone: "success",
+    detail: "passed",
+  },
+  {
+    name: "several passed files",
+    run: validationRun(["passed", "passed"]),
+    tone: "success",
+    detail: "2 of 2 passed",
+  },
+  {
+    name: "one failed file",
+    run: validationRun(["failed"]),
+    tone: "warning",
+    detail: "failed",
+  },
+  {
+    name: "a failure among mixed results",
+    run: validationRun(["passed", "failed", "cannot_run"]),
+    tone: "warning",
+    detail: "1 of 3 failed",
+  },
+  {
+    name: "a file that cannot run",
+    run: validationRun(["cannot_run"]),
+    tone: "warning",
+    detail: "could not run",
+  },
+  {
+    name: "an execution error",
+    run: validationRun(["passed"], { executionError: "Replay failed" }),
+    tone: "warning",
+    detail: "could not run",
+  },
+  {
+    name: "an invalid policy",
+    run: validationRun(["passed"], { validation: { valid: false } }),
+    tone: "warning",
+    detail: "could not run",
+  },
+  {
+    name: "a deletion-only save",
+    run: null,
+    tone: "success",
+    detail: "saved",
+  },
+  {
+    name: "a legacy save without a run",
+    run: undefined,
+    tone: "success",
+    detail: "not run yet",
+  },
+])("shows $name in the saved-validation result", ({ run, tone, detail }) => {
+  const output = { structuredContent: { ...validationPublication, run } };
+  expect(getValidationSaveResult(output)).toMatchObject({ tone, detail });
+  render(<OpenAppaValidationCompletion output={output} />);
+  expect(screen.getByText("Saved validations")).toBeInTheDocument();
+  expect(screen.getByText(`· ${detail} ·`)).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "View Validations" }),
+  ).toHaveAttribute("href", "/openappa/policy");
+});
+
+test("keeps a validation pull request reviewable in the completion card", () => {
+  const output = {
+    structuredContent: {
+      ...validationPublication,
+      delivery: "pull_request",
+      number: 17,
+      url: "https://github.com/example/policies/pull/17",
+    },
+  };
+  expect(getValidationSaveResult(output)).toMatchObject({
+    tone: "success",
+    detail: "merge it to apply",
+  });
+  render(<OpenAppaValidationCompletion output={output} />);
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+  expect(screen.getByText(/merge it to apply/)).toBeInTheDocument();
 });

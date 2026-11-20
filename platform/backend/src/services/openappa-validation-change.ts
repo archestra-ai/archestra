@@ -6,6 +6,7 @@ import {
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
   replayOpenAppaDraft,
+  runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import { PolicyTestFilesSchema } from "@/types/openappa-policy-tests";
@@ -178,10 +179,26 @@ export async function publishOpenAppaValidationChange(
       409,
       "Policy or validations changed, or Git sync was enabled; read both again",
     );
+  let run: Awaited<ReturnType<typeof runOpenAppaPolicyTests>> | null = null;
+  if (request.changes.upsert.length > 0) {
+    try {
+      run = await runOpenAppaPolicyTests({
+        organizationId,
+        userId,
+        files: request.changes.upsert,
+        sourceVersion: saved.version,
+        directory: proposal.collection.directory,
+        partial: request.changes.upsert.length < proposal.files.length,
+      });
+    } catch (error) {
+      if (!(error instanceof ApiError && error.statusCode === 409)) throw error;
+    }
+  }
   return {
     delivery: "revision" as const,
     revision: proposal.root.revision,
     version: saved.version,
     validation: proposal.validation,
+    run,
   };
 }

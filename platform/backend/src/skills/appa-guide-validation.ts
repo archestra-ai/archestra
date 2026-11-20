@@ -45,11 +45,11 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 ## Save
 
 1. Call \`archestra__update_guardrails_validation\` with the exact patch you previewed and the same \`expectedRevision\` and \`expectedVersion\`. On a conflict, read the policy and suite again, re-apply the file, preview, and ask again if the result changed.
-2. With Git sync, give the pull request URL: the validation takes effect after merge and sync. Locally, give the file path. Do not run it again: the preview already replayed it. The Policy page lists it under Validations as **Not run** until someone runs saved validations.
+2. With Git sync, give the pull request URL: the validation takes effect and runs after merge and sync. Locally, give the file path and report the result from \`run\`: passed, failed with why, or could not run. Saving runs the added or edited files right away and records the run. Do not call \`archestra__run_openappa_policy_tests\` again right after saving. A deletion-only save returns \`run: null\`; report the deletion without claiming a run. If an upsert returns \`run: null\`, say the save succeeded but the run did not complete.
 
 ## Run or explain saved validations
 
-- To run one validation: \`archestra__run_openappa_policy_tests\` with its \`path\`. To run all: call it without \`path\` (after merge and sync for Git). Report the passed, failed, and cannot-run counts. This tool runs saved files and records the result; preview replays a draft without recording it.
+- To run one saved validation outside the save workflow: \`archestra__run_openappa_policy_tests\` with its \`path\`. To run all: call it without \`path\` (after merge and sync for Git). Report the passed, failed, and cannot-run counts. This tool runs saved files and records the result; preview replays a draft without recording it.
 - To explain: read the policy and the suite, then say in plain language which case each validation checks and its latest result. Change nothing.
 `;
 

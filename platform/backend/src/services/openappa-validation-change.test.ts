@@ -5,7 +5,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { PolicyTestChangesSchema } from "@/types/openappa-validation-change";
 import {
@@ -208,6 +208,100 @@ describe("source-aware validation proposals", () => {
     ).rejects.toThrow("does not exist");
   });
 
+  test("a local save runs only the upserted files and records their failed steps", async () => {
+    const saved = await publishOpenAppaValidationChange(publish());
+    const savedVersion = (
+      await OpenAppaPolicyTestsModel.find(ctx.organizationId)
+    )?.version;
+    expect(saved).toMatchObject({
+      delivery: "revision",
+      version: savedVersion,
+      run: {
+        sourceVersion: savedVersion,
+        partial: true,
+        draft: false,
+        files: [
+          {
+            path: added.path,
+            status: "failed",
+            steps: [{ status: "passed" }, { status: "failed", actual: "deny" }],
+          },
+        ],
+      },
+    });
+    const runs = await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].result).toMatchObject({
+      sourceVersion: savedVersion,
+      partial: true,
+      files: [{ path: added.path, status: "failed" }],
+    });
+    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
+      { revision: 1, content: policy },
+    );
+  });
+
+  test("a local save runs the whole resulting suite when every saved file was upserted", async () => {
+    const empty = {
+      path: "traces/empty.appa",
+      content: "# This file has no assertions to replay.\n",
+    };
+    const saved = await publishOpenAppaValidationChange({
+      ...publish(),
+      changes: { upsert: [empty], delete: [existing.path] },
+    });
+    expect(saved).toMatchObject({
+      delivery: "revision",
+      run: {
+        draft: false,
+        files: [
+          {
+            path: empty.path,
+            assertionCount: 0,
+            status: "cannot_run",
+            steps: [],
+          },
+        ],
+      },
+    });
+    expect(saved).not.toHaveProperty("run.partial");
+    const runs = await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].result).toMatchObject({
+      files: [{ path: empty.path, status: "cannot_run" }],
+    });
+    expect(runs[0].result.partial).toBeUndefined();
+  });
+
+  test("a conflict after the local save preserves the files and returns no run", async () => {
+    const validate = guardrailsPolicyService.validate.bind(
+      guardrailsPolicyService,
+    );
+    vi.spyOn(guardrailsPolicyService, "validate").mockImplementationOnce(
+      async (...args) => {
+        await GuardrailsPolicyModel.save({
+          ...caller(),
+          content: proposedPolicy,
+          contentHash: hash(proposedPolicy),
+          updatedBy: ctx.user.id,
+          expectedRevision: 1,
+        });
+        return validate(...args);
+      },
+    );
+    const saved = await publishOpenAppaValidationChange(publish());
+    expect(saved).toMatchObject({ delivery: "revision", run: null });
+    expect(
+      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
+    ).toEqual([existing, added]);
+    expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
+      [],
+    );
+    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
+      { revision: 2, content: proposedPolicy },
+    );
+  });
+
   test("deleting the final validation leaves an empty suite without an execution failure", async () => {
     const saved = await publishOpenAppaValidationChange({
       ...publish(),
@@ -216,6 +310,7 @@ describe("source-aware validation proposals", () => {
     expect(saved).toMatchObject({
       revision: 1,
       validation: { valid: true },
+      run: null,
     });
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,

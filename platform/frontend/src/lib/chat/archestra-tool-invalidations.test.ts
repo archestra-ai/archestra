@@ -47,6 +47,64 @@ describe("collectArchestraToolInvalidations", () => {
     ).toEqual([["guardrails-deployment"]]);
   });
 
+  it("refreshes validations and their run history after a validation save", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          {
+            type: "tool-archestra__update_guardrails_validation",
+            state: "output-available",
+            output: { delivery: "revision", run: null },
+          },
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([["openappa-policy-tests"], ["openappa-policy-test-runs"]]);
+  });
+
+  it("refreshes run history after a direct or dispatched validation run", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          {
+            type: "tool-archestra__run_openappa_policy_tests",
+            state: "output-available",
+            output: { files: [] },
+          },
+          {
+            type: "tool-archestra__run_tool",
+            state: "output-available",
+            input: {
+              tool_name: "archestra__run_openappa_policy_tests",
+              tool_args: {},
+            },
+            output: { files: [] },
+          },
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([["openappa-policy-test-runs"]]);
+  });
+
+  it("refreshes validations after a save dispatched through run_tool", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          {
+            type: "tool-archestra__run_tool",
+            state: "output-available",
+            input: {
+              tool_name: "archestra__update_guardrails_validation",
+              tool_args: {},
+            },
+            output: { delivery: "revision", run: null },
+          },
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([["openappa-policy-tests"], ["openappa-policy-test-runs"]]);
+  });
+
   it("refreshes run sessions when start_agent_run is dispatched through run_tool", () => {
     expect(
       collectArchestraToolInvalidations({

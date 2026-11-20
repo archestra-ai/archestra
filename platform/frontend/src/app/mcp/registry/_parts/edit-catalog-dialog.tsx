@@ -175,7 +175,7 @@ export function EditCatalogContent({
               message:
                 error instanceof Error
                   ? error.message
-                  : "An MCP server with this name already exists in this organization.",
+                  : "An MCP server with this name already exists in this environment. Rename it first.",
             });
           }
         },

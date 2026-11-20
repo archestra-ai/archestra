@@ -4,7 +4,15 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@archestra/shared";
-import { and, count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
@@ -142,11 +150,15 @@ class UserModel {
   }
 
   /**
-   * Total number of user rows. Used by the enterprise-tier service to apply
-   * the small-team free tier (every row counts, banned or not).
+   * Number of users who are not soft-deleted. Used by the enterprise-tier
+   * service to apply the small-team free tier: banned users and users who have
+   * not signed up yet count, users the identity provider removed do not.
    */
-  static async countAll(): Promise<number> {
-    const [row] = await db.select({ count: count() }).from(schema.usersTable);
+  static async countNotSoftDeleted(): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(schema.usersTable)
+      .where(isNull(schema.usersTable.softDeleted));
     return row?.count ?? 0;
   }
 

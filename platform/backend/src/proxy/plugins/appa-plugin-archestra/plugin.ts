@@ -2669,11 +2669,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onSessionInit",
-      async () => {
-        const result = await this.guardedSessionInit(context);
-
-        return result;
-      },
+      () => this.guardedSessionInit(context),
       () => undefined,
     );
   }
@@ -2692,11 +2688,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onToolResults",
-      async () => {
-        const result = await this.guardedToolResults(context);
-
-        return result;
-      },
+      () => this.guardedToolResults(context),
       () => undefined,
     );
   }
@@ -2726,11 +2718,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
-      async () => {
-        const result = await this.guardedBeforeModel(context);
-
-        return result;
-      },
+      () => this.guardedBeforeModel(context),
       () => undefined,
     );
     // A waiver above returns early or restores the request. Insertion is
@@ -2835,11 +2823,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onBufferedModelResponse",
-      async () => {
-        const result = await this.guardedBufferedModelResponse(context);
-
-        return result;
-      },
+      () => this.guardedBufferedModelResponse(context),
       () => ({ decision: "release" }),
     );
   }
@@ -2885,11 +2869,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onModelResponse",
-      async () => {
-        const result = await this.guardedModelResponse(context);
-
-        return result;
-      },
+      () => this.guardedModelResponse(context),
       () => undefined,
     );
   }

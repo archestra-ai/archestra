@@ -84,7 +84,7 @@ Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-vi
 - **`supported_reasoning_efforts`:** the `reasoning_effort` values this API accepts for the model. The provider's own list is used when it publishes one (GitHub Copilot, a ChatGPT subscription, a LiteLLM gateway). Otherwise the list holds the levels Archestra knows are safe, and the provider may accept more. `[]` means send none; `null` means unknown.
 - **`supported_endpoints`:** the endpoints on this page that serve the model. Send a Responses-only model to `/responses`.
 
-Model pools and auto routers carry no `capabilities`, because their members can differ. The same fields, in camel case, are in `capabilities` on `GET /api/llm-models/available`, which any member's API key can read.
+Model pools and auto routers carry no `capabilities`, because their members can differ. The same fields, in camel case, are in `capabilities` on [`GET /api/llm-models/available`](/docs/reference/api/llm-proxy#tag/llm-models/GET/api/llm-models/available), which any member's API key can read.
 
 ## Images and Audio
 

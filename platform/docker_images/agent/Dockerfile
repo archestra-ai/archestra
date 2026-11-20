@@ -256,7 +256,7 @@ RUN python3 -m venv /opt/hermes \
  && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
  && /opt/hermes/bin/pip install --no-cache-dir \
       Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
-      cryptography==50.0.0 mcp==1.28.1 starlette==1.3.1 \
+      cryptography==50.0.0 mcp==1.30.0 starlette==1.3.1 \
       jaraco-context==6.1.0 wheel==0.46.2 \
  && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
  && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \

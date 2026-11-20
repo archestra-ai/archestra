@@ -644,8 +644,7 @@ impl State {
         Err(failure)
     }
 
-    /// The part of a dispatch that claims and completes receipts. It runs under
-    /// the family's lock and lease.
+    /// The part of a dispatch that claims and completes receipts.
     async fn handle_event(
         &self,
         pg: &Sql<'_>,
@@ -1041,7 +1040,7 @@ impl State {
     /// match `parent_id` and is not joined.
     ///
     /// ChildStart names this dispatcher's family root and the stored child actor, not the
-    /// dispatcher's own child trajectory. The dispatch already holds the family lock.
+    /// dispatcher's own child trajectory.
     async fn address_child(
         &self,
         pg: &Sql<'_>,

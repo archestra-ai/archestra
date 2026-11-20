@@ -1341,7 +1341,9 @@ export default class ResourcePermissionPolicyModel {
   /**
    * Give a subject actions on one object, unioned with what it already holds
    * there; every other grant stays as it is. False when the subject held
-   * them already, or when a concurrent edit won the revision.
+   * them already. A concurrent edit of the same policy is read again and the
+   * grant applied on top of it, a few times over; one that still wins every
+   * round is an error, so a grant is never dropped in silence.
    */
   static async addSubjectGrant(
     params: PolicyKey & {
@@ -1350,49 +1352,58 @@ export default class ResourcePermissionPolicyModel {
     },
   ): Promise<boolean> {
     const table = schema.resourcePermissionPoliciesTable;
-    const [policy] = await db
-      .select()
-      .from(table)
-      .where(policyCondition(params));
-    if (!policy) {
-      const [created] = await db
-        .insert(table)
-        .values({
-          organizationId: params.organizationId,
-          resource: params.resource,
-          scope: params.scope,
-          grants: asPresets(
-            [{ subject: params.subject, actions: params.actions }],
-            params.resource,
-          ),
-          legacySharingMigrated: true,
-        })
-        .onConflictDoNothing()
-        .returning({ scope: table.scope });
-      return !!created;
-    }
     const sameSubject = (grant: ResourcePermissionGrant) =>
       grant.subject.type === params.subject.type &&
       grant.subject.id === params.subject.id;
-    const held = policy.grants.find(sameSubject)?.actions ?? [];
-    if (params.actions.every((action) => held.includes(action))) return false;
-    const actions = widenToPreset(
-      [...new Set([...held, ...params.actions])],
-      params.resource,
-    ).sort();
-    const [updated] = await db
-      .update(table)
-      .set({
-        grants: [
-          ...policy.grants.filter((grant) => !sameSubject(grant)),
-          { subject: params.subject, actions },
-        ],
-        revision: policy.revision + 1,
-        updatedAt: new Date(),
-      })
-      .where(and(policyCondition(params), eq(table.revision, policy.revision)))
-      .returning({ scope: table.scope });
-    return !!updated;
+    for (let attempt = 0; attempt < ADD_GRANT_ATTEMPTS; attempt++) {
+      const [policy] = await db
+        .select()
+        .from(table)
+        .where(policyCondition(params));
+      if (!policy) {
+        const [created] = await db
+          .insert(table)
+          .values({
+            organizationId: params.organizationId,
+            resource: params.resource,
+            scope: params.scope,
+            grants: asPresets(
+              [{ subject: params.subject, actions: params.actions }],
+              params.resource,
+            ),
+            legacySharingMigrated: true,
+          })
+          .onConflictDoNothing()
+          .returning({ scope: table.scope });
+        if (created) return true;
+        // Someone created the policy meanwhile: add to theirs.
+        continue;
+      }
+      const held = policy.grants.find(sameSubject)?.actions ?? [];
+      if (params.actions.every((action) => held.includes(action))) return false;
+      const actions = widenToPreset(
+        [...new Set([...held, ...params.actions])],
+        params.resource,
+      ).sort();
+      const [updated] = await db
+        .update(table)
+        .set({
+          grants: [
+            ...policy.grants.filter((grant) => !sameSubject(grant)),
+            { subject: params.subject, actions },
+          ],
+          revision: policy.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(policyCondition(params), eq(table.revision, policy.revision)),
+        )
+        .returning({ scope: table.scope });
+      if (updated) return true;
+    }
+    throw new Error(
+      `The ${params.resource} policy changed ${ADD_GRANT_ATTEMPTS} times while a grant was added to it`,
+    );
   }
 
   private static readonly byApplicableScopes = new PreparedQuery((database) => {
@@ -1455,6 +1466,9 @@ function audienceOf(
     .map((grant) => grant.subject.id);
   return { audience: grantsAudience(readers), teamIds };
 }
+
+/** Rounds a grant is applied on top of a concurrent edit before giving up. */
+const ADD_GRANT_ATTEMPTS = 4;
 
 type PolicyKey = {
   organizationId: string;

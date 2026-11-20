@@ -21,7 +21,6 @@ import {
   hitlInspectionDigest,
   hitlReviewCard,
   hitlReviewCardAnswer,
-  previousHitlCardAnswer,
   renderHitlReviewText,
 } from "./hitl-review-overview";
 import type { ReviewScopeItem } from "./review-scope";
@@ -819,15 +818,6 @@ const PUBLIC: ReviewScopeItem = {
   requirement: { type: "public_audience" },
   text: "the readers must be the public audience",
 };
-
-describe("previousHitlCardAnswer", () => {
-  test("reads Deny and Inspect details, and asks again instead of granting Approve", () => {
-    expect(previousHitlCardAnswer("Deny")).toBe("deny");
-    expect(previousHitlCardAnswer("Inspect details")).toBe("inspect");
-    expect(previousHitlCardAnswer("Approve")).toBe("ask-again");
-    expect(previousHitlCardAnswer("Allow")).toBeUndefined();
-  });
-});
 
 describe("renderHitlReviewText", () => {
   test("shows the tool's full definition text under the tool, escaped", () => {

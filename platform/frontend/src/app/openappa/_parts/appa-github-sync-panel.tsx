@@ -70,6 +70,7 @@ import {
   FinishSetupHost,
   FinishSetupNotice,
   useFinishSetupPieces,
+  useRefusalHold,
 } from "./finish-setup-dialog";
 import {
   DEFAULT_SYNC_INTERVAL,
@@ -585,23 +586,7 @@ function useShownFailures(
   const connected = !!source?.interval;
   const viaApp = connected && !!source?.githubAppConfigId;
   const grants = useAppaGithubAppGrants(viaApp);
-  const waitsForPermissions = connected && !!pieces?.permissions.length;
-  // When the permissions stopped waiting: refusals stay held for a while.
-  const [waited, setWaited] = useState(waitsForPermissions);
-  const [settlesAt, setSettlesAt] = useState(0);
-  if (waited !== waitsForPermissions) {
-    setWaited(waitsForPermissions);
-    if (!waitsForPermissions) setSettlesAt(Date.now() + GRANT_SETTLE_MS);
-  }
-  useEffect(() => {
-    if (!settlesAt) return;
-    const timer = window.setTimeout(
-      () => setSettlesAt(0),
-      Math.max(0, settlesAt - Date.now()),
-    );
-    return () => window.clearTimeout(timer);
-  }, [settlesAt]);
-  const settling = settlesAt > 0;
+  const hold = useRefusalHold(source, pieces);
   const error = source?.lastSyncError ?? null;
   const failedAt = error ? (source?.lastSyncedAt ?? "") : null;
   const refusal = viaApp && isAccessRefusal(error);
@@ -624,17 +609,12 @@ function useShownFailures(
   const [excused, setExcused] = useState<string | null>(null);
   if (
     refusal &&
-    (waitsForPermissions || settling) &&
+    (hold.waits || hold.settling) &&
     failedAt !== null &&
     excused !== failedAt
   )
     setExcused(failedAt);
-  // A permission waits, a grant is settling, or GitHub's answer on the
-  // permissions is not in yet.
-  const refusalHeld =
-    waitsForPermissions ||
-    settling ||
-    (viaApp && (grants.isPending || isFetching));
+  const refusalHeld = hold.held;
   if (failedAt === null) return { syncError: null, refusalHeld };
   if (!refusal) return { syncError: error, refusalHeld };
   return {
@@ -646,9 +626,6 @@ function useShownFailures(
     refusalHeld,
   };
 }
-
-/** How long after a grant GitHub may still refuse the App's calls. */
-const GRANT_SETTLE_MS = 2 * 60_000;
 
 /** How self-service works, on the Git sync docs page; the row says only what it is. */
 function SelfServiceDocsLink() {

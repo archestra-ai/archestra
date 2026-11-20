@@ -454,6 +454,76 @@ test("the pull requests step says why a sync failed while a pull request waits, 
   expect(within(dialog).getByText(closed)).toBeVisible();
 });
 
+test("right after a permission is granted, the pull requests step holds GitHub's refusal as the card does", async () => {
+  state = {
+    ...state,
+    source: {
+      ...source,
+      githubAppConfigId: "app-1",
+      setupPullRequestNumber: 7,
+      lastSyncError: "GitHub returned HTTP 403. Check repository access.",
+    },
+  };
+  let granted = false;
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+    http.get(`${url}/app-permissions`, () =>
+      HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
+        settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
+        installationUrl: "https://github.com/settings/installations/7",
+        permissions: [
+          { name: "contents", granted: true },
+          { name: "pull_requests", granted: true },
+          { name: "checks", granted },
+        ],
+      }),
+    ),
+    // GitHub still refuses the App for a moment after the grant.
+    http.patch(url, () => {
+      syncs++;
+      return HttpResponse.json(state);
+    }),
+  );
+  let syncs = 0;
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Finish setup" }));
+  let dialog = await screen.findByRole("dialog", {
+    name: "Finish the GitHub App setup",
+  });
+  await within(dialog).findByText(/^Missing: Checks · checked /);
+  granted = true;
+  fireEvent.click(within(dialog).getByRole("button", { name: "Check again" }));
+  await waitFor(() =>
+    expect(
+      within(dialog).getByRole("button", { name: "Continue" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  dialog = await screen.findByRole("dialog", {
+    name: "Merge the pull request",
+  });
+  await within(dialog).findByRole("link", { name: /#7/ });
+  // The step's own sync has come back, refused like the one before it.
+  await waitFor(() => expect(syncs).toBeGreaterThan(0));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+  expect(within(dialog).queryByText("Could not sync")).toBeNull();
+  expect(document.body).not.toHaveTextContent(PLAIN_REFUSAL);
+  expect(document.body).not.toHaveTextContent("HTTP 403");
+});
+
 test("opening Finish setup syncs, and what that sync finds joins the wizard: a pull request opened since adds the pull requests step", async () => {
   // Only the ruleset waits: the wizard opens on its Finish step alone.
   state = {

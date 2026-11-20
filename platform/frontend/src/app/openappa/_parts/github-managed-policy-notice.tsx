@@ -4,12 +4,13 @@ import { AlertTriangle, ExternalLink, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import {
-  useAppaGithubAppGrants,
-  useAppaGithubSync,
-} from "@/lib/openappa-github-sync.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { appaGitHost, shownFailure } from "./appa-git-host";
-import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
+import {
+  FinishSetupNotice,
+  useFinishSetupPieces,
+  useRefusalHold,
+} from "./finish-setup-dialog";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -146,16 +147,8 @@ export function GithubManagedPolicyNotice({
  */
 export function useSyncFailureShown(): boolean {
   const source = useAppaGithubSync().data?.source;
-  const pieces = useFinishSetupPieces();
-  const viaApp = !!source?.interval && !!source.githubAppConfigId;
-  const grants = useAppaGithubAppGrants(viaApp);
-  return Boolean(
-    shownFailure(
-      source,
-      source?.lastSyncError,
-      (viaApp && grants.isPending) || !!pieces?.permissions.length,
-    ),
-  );
+  const hold = useRefusalHold(source, useFinishSetupPieces());
+  return Boolean(shownFailure(source, source?.lastSyncError, hold.held));
 }
 
 /** Where the validations (or, without a directory, the policy file) live in the repository. */

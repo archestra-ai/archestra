@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -191,6 +192,63 @@ function useSyncedAppGrants(
     void refetch();
   }, [syncedAt, isFetching, refetch]);
   return viaApp && grants.isPending ? "pending" : grants.data;
+}
+
+/** How long after a grant GitHub may still refuse the App's calls. */
+const GRANT_SETTLE_MS = 2 * 60_000;
+const GRANT_SETTLES_AT_KEY = ["openappa-github-app-grant-settles-at"];
+
+/**
+ * Why GitHub refusing the source's App is held back for now, if it is:
+ * a permission the App lacks waits (`waits`, the Finish setup notice says
+ * it), a grant arrived less than two minutes ago and GitHub can still
+ * refuse (`settling`), or GitHub's answer on the permissions is not in yet
+ * (`loading`).
+ *
+ * The time a grant settles is kept in the query cache. The surface that saw
+ * the permission arrive holds from that very render; one that opens after
+ * it, such as a wizard step, holds for the rest of the same two minutes.
+ */
+export function useRefusalHold(
+  source:
+    | { interval?: string | null; githubAppConfigId?: string | null }
+    | null
+    | undefined,
+  pieces: FinishSetupPieces | null,
+): { waits: boolean; settling: boolean; loading: boolean; held: boolean } {
+  const connected = !!source?.interval;
+  const viaApp = connected && !!source?.githubAppConfigId;
+  const grants = useAppaGithubAppGrants(viaApp);
+  const waits = connected && !!pieces?.permissions.length;
+  // When the permissions stopped waiting, as this surface saw it.
+  const [waited, setWaited] = useState(waits);
+  const [seenSettlesAt, setSeenSettlesAt] = useState(0);
+  if (waited !== waits) {
+    setWaited(waits);
+    if (!waits) setSeenSettlesAt(Date.now() + GRANT_SETTLE_MS);
+  }
+  const client = useQueryClient();
+  useEffect(() => {
+    if (seenSettlesAt) client.setQueryData(GRANT_SETTLES_AT_KEY, seenSettlesAt);
+  }, [seenSettlesAt, client]);
+  const { data: sharedSettlesAt = 0 } = useQuery({
+    queryKey: GRANT_SETTLES_AT_KEY,
+    queryFn: () => client.getQueryData<number>(GRANT_SETTLES_AT_KEY) ?? 0,
+    enabled: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const settlesAt = Math.max(seenSettlesAt, sharedSettlesAt);
+  // Render again when the window ends.
+  const [, setEnded] = useState(0);
+  useEffect(() => {
+    const left = settlesAt - Date.now();
+    if (left <= 0) return;
+    const timer = window.setTimeout(() => setEnded(settlesAt), left);
+    return () => window.clearTimeout(timer);
+  }, [settlesAt]);
+  const settling = settlesAt > Date.now();
+  const loading = viaApp && (grants.isPending || grants.isFetching);
+  return { waits, settling, loading, held: waits || settling || loading };
 }
 
 /**
@@ -587,7 +645,10 @@ function PullRequestsStep({
   const protection = useAppaRepositoryProtection(
     query.data?.selfService?.enabled === true,
   );
-  const missingPermissions = useFinishSetupPieces()?.permissions.length;
+  const refusalHold = useRefusalHold(
+    query.data?.source,
+    useFinishSetupPieces(),
+  );
   const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   const { mutate } = update;
@@ -652,11 +713,12 @@ function PullRequestsStep({
     : null;
   // What holds a pull request can be the sync itself: one closed without a
   // merge, a policy that does not validate. GitHub refusing the App for a
-  // permission it lacks is the App step's to say, not this one's.
+  // permission it lacks is the App step's to say, not this one's, and a
+  // refusal right after a grant is held as on the card.
   const syncFailure = shownFailure(
     query.data?.source,
     query.data?.source?.lastSyncError,
-    !!missingPermissions,
+    refusalHold.held,
   );
   const failures = (
     <>

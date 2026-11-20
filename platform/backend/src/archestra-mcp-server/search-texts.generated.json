@@ -640,8 +640,8 @@
     "searchText": "publish update guardrails policy organization.appa.toml, apply edits or full rewrite, save policy revision, open pull request or GitLab merge request via Git sync, diff changed lines, enable enforcement, AI safety rules configuration, optimistic concurrency expected revision"
   },
   "update_guardrails_validation": {
-    "definitionHash": "2d6b23b5ce076afe6a30f083fdf9e1adf334b2dea26e746ec82cf4d1b11feb5c",
-    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert or delete validation files by path, apply approved previewed changes, revision version conflict check, syntax check, Git sync pull request, save locally, commit guardrail tests"
+    "definitionHash": "41bb8456e1f529b971f6f8d3465c3a20b77a667fd03482c8b749d4bf2c700032",
+    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert delete files by path, apply approved previewed changes, run added edited validations immediately, record pass fail cannot-run results run history, deletion-only save, revision version conflict check, Git sync pull request"
   },
   "update_hook": {
     "definitionHash": "ddace8f7ca9f6310b73316dc3e3ddbd66958b6ac365994e2489531c5462d91dd",

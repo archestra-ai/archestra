@@ -12,7 +12,7 @@ import {
   impersonationEndedNotice,
 } from "@/lib/impersonation-ended-notice";
 
-/** How long after a failed return the app tries again. */
+/** How long after an attempt that did not bring the admin back the app tries again. */
 const RETURN_RETRY_MS = 15 * 1000;
 
 /**
@@ -33,7 +33,7 @@ export function ImpersonationExpiry() {
   const expiresAt = session?.session.impersonatedBy
     ? new Date(session.session.expiresAt).getTime()
     : null;
-  // Set when a return failed while the session may still be valid.
+  // When to try again, once an attempt was made.
   const [retryAt, setRetryAt] = useState<number | null>(null);
 
   useEffect(() => {
@@ -42,14 +42,15 @@ export function ImpersonationExpiry() {
     if (window.self !== window.top) return;
     const due = retryAt ?? expiresAt - IMPERSONATION_RETURN_MARGIN_MS;
     const timer = setTimeout(
-      () =>
-        stopImpersonating("expiring", {
-          // A network error or a server fault leaves the session as it was,
-          // so the return is tried again while there is time. A session
-          // that is really gone is found by the session check the mutation
-          // asks for, which ends this effect.
-          onError: () => setRetryAt(Date.now() + RETURN_RETRY_MS),
-        }),
+      () => {
+        // Whatever becomes of this attempt (a network error, a server fault,
+        // or no answer at all), the next one follows while there is time. A
+        // return that works reloads the page. A session that is really gone
+        // is found by the session check the mutation asks for, which ends
+        // this effect.
+        setRetryAt(Date.now() + RETURN_RETRY_MS);
+        stopImpersonating("expiring");
+      },
       Math.max(due - Date.now(), 0),
     );
     return () => clearTimeout(timer);

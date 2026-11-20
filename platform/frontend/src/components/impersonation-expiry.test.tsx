@@ -135,6 +135,25 @@ test("a return that fails while the session is still valid is tried again", asyn
   expect(impersonationEndedNotice.take()).toBe("returned");
 });
 
+test("a return that gets no answer is followed by another attempt", async () => {
+  serverAnswersSession(viewingAs(3 * MINUTE));
+  // The first request stays pending; the second one is answered.
+  vi.mocked(authClient.$fetch).mockReturnValueOnce(
+    new Promise(() => {}) as never,
+  );
+  returnAnswers("ok");
+  showPage();
+  await waitFor(() => expect(authClient.getSession).toHaveBeenCalled());
+
+  await vi.advanceTimersByTimeAsync(MINUTE + 500);
+  await waitFor(() => expect(authClient.$fetch).toHaveBeenCalledTimes(1));
+  expect(assign).not.toHaveBeenCalled();
+
+  await vi.advanceTimersByTimeAsync(16 * 1000);
+  await waitFor(() => expect(authClient.$fetch).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
+});
+
 test("a session that ran out before the app could return (a tab that slept) is checked again at once, and the reason is kept for the sign-in page", async () => {
   // Past its end already when the tab wakes.
   serverAnswersSession(viewingAs(-1000));

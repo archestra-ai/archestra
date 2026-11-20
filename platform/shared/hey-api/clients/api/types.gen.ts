@@ -119605,6 +119605,7 @@ export type GetOauthClientsResponses = {
                 currentUsage: number;
                 estimatedUsage: boolean;
             } | null;
+            icon: string | null;
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
@@ -119625,6 +119626,10 @@ export type GetOauthClientsResponse = GetOauthClientsResponses[keyof GetOauthCli
 export type CreateOauthClientData = {
     body: {
         name: string;
+        /**
+         * An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.
+         */
+        icon?: string | null;
         serviceAccountId?: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds?: Array<string>;
@@ -119812,6 +119817,7 @@ export type CreateOauthClientResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -120033,6 +120039,7 @@ export type GetOauthClientResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -120044,6 +120051,10 @@ export type GetOauthClientResponse = GetOauthClientResponses[keyof GetOauthClien
 export type UpdateOauthClientData = {
     body: {
         name: string;
+        /**
+         * An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.
+         */
+        icon?: string | null;
         serviceAccountId?: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds?: Array<string>;
@@ -120208,6 +120219,7 @@ export type UpdateOauthClientResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -120340,6 +120352,7 @@ export type RotateOauthClientSecretResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;

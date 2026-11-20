@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { openRowOnPlainClick } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -479,7 +480,9 @@ function OauthClientsList() {
   );
 }
 
+/** The client's own icon, or a mark for how it signs in until it has one. */
 function SignInIcon({ client }: { client: Client }) {
+  if (client.icon) return <AgentIcon icon={client.icon} size={20} />;
   const Icon = client.grantType === "authorization_code" ? Users : Server;
   return (
     <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">

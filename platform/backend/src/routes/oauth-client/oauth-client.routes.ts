@@ -72,9 +72,21 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
  * Who can see and manage the client is its grants, edited on its Permissions
  * tab; they never change what its tokens can reach.
  */
+/** An uploaded image is stored inline as a data URL, as an app's icon is. */
+const OAUTH_CLIENT_ICON_MAX_LENGTH = 1024 * 1024;
+
 const OauthClientFields = z
   .object({
     name: z.string().min(1).max(256),
+    icon: z
+      .string()
+      .max(OAUTH_CLIENT_ICON_MAX_LENGTH)
+      .nullable()
+      .optional()
+      .describe(
+        "An emoji, a logo id or an image data URL shown beside the name. " +
+          "Omit on update to keep it; null clears it.",
+      ),
     serviceAccountId: z.string().uuid().nullable().optional(),
     scopes: z
       .array(OAuthClientScopeSchema)
@@ -367,6 +379,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const created = await ManagedOauthClientModel.create({
         organizationId,
         name: body.name,
+        icon: body.icon,
         serviceAccountId,
         grantType: body.grantType,
         scopes: body.scopes,
@@ -537,6 +550,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         name: body.name,
+        icon: body.icon,
         serviceAccountId,
         scopes: body.scopes,
         allowedGatewayIds: body.allowedGatewayIds,

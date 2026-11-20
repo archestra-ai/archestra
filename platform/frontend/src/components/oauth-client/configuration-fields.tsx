@@ -274,6 +274,7 @@ export function oauthClientFormBody(
   );
   return {
     name: values.name.trim(),
+    icon: values.icon ?? null,
     grantType: values.grantType,
     scopes: values.scopes,
     includeFutureProviders:
@@ -313,6 +314,7 @@ export function newOauthClientFormValues(params?: {
 }): OAuthClientFormValues {
   return {
     name: "",
+    icon: null,
     serviceAccountId: null,
     grantType: "client_credentials",
     scopes: params?.clientType === "llm" ? ["llm:proxy"] : ["mcp", "a2a"],
@@ -334,6 +336,7 @@ export function oauthClientFormValuesFrom(
   return {
     serviceAccountId: client.serviceAccountId ?? null,
     name: client.name,
+    icon: client.icon ?? null,
     includeFutureProviders: client.includeFutureProviders ?? false,
     grantType: client.grantType,
     scopes: client.scopes,

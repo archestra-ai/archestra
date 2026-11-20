@@ -14,6 +14,7 @@ import {
   BudgetFields,
   UsersPayNotice,
 } from "@/components/credential-billing/budget-fields";
+import { IdentityFields } from "@/components/identity-fields";
 import {
   OAuthClientAccessFields,
   type OAuthClientFormValues,
@@ -192,16 +193,26 @@ export function OAuthClientEditPage({
             description={`Signs in ${userMode ? "for its users" : "as itself"}, which is set at creation.`}
           >
             <div className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="edit-oauth-name">Name</Label>
+              <IdentityFields
+                icon={values.icon ?? null}
+                onIconChange={(icon) =>
+                  form.setValue("icon", icon, { shouldDirty: true })
+                }
+                fallbackType="app"
+                label={<Label htmlFor="edit-oauth-name">Name</Label>}
+              >
                 <Input
                   id="edit-oauth-name"
                   autoComplete="off"
                   data-1p-ignore
                   {...form.register("name")}
                 />
-              </div>
+              </IdentityFields>
+              {/* Labels only organize the list, so they wait under Advanced
+                  unless set, as on a service account's form. */}
               <AdvancedLabelsSection
+                collapsible
+                defaultOpen={(values.labels ?? []).length > 0}
                 attributionSource={llm && !userMode ? "credential" : undefined}
                 ref={labelsRef}
                 labels={values.labels ?? []}

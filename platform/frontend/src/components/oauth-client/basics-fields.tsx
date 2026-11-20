@@ -3,6 +3,7 @@
 import { Server, Users } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 import { useWatch } from "react-hook-form";
+import { IdentityFields } from "@/components/identity-fields";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import {
   type OAuthClientFormValues,
@@ -25,10 +26,17 @@ export function OAuthClientBasicsFields({
 }) {
   const scopes = useWatch({ control: form.control, name: "scopes" });
   const grantType = useWatch({ control: form.control, name: "grantType" });
+  const icon = useWatch({ control: form.control, name: "icon" });
   return (
     <div className="space-y-5">
-      <div className="space-y-2">
-        <Label htmlFor="oauth-client-name">Name</Label>
+      <IdentityFields
+        icon={icon ?? null}
+        onIconChange={(next) =>
+          form.setValue("icon", next, { shouldDirty: true })
+        }
+        fallbackType="app"
+        label={<Label htmlFor="oauth-client-name">Name</Label>}
+      >
         <Input
           id="oauth-client-name"
           placeholder="support-assistant-prod"
@@ -37,7 +45,7 @@ export function OAuthClientBasicsFields({
           {...form.register("name")}
           autoFocus
         />
-      </div>
+      </IdentityFields>
       <OAuthClientScopePicker
         value={scopes}
         onChange={scopeChange.change}

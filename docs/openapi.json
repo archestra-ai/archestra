@@ -466353,6 +466353,10 @@
                             ],
                             "additionalProperties": false
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "scopes": {
                             "type": "array",
                             "items": {
@@ -466396,6 +466400,7 @@
                           "updatedAt",
                           "billingTeam",
                           "spendCap",
+                          "icon",
                           "scopes",
                           "allowedGatewayIds",
                           "includeFutureProviders"
@@ -466709,6 +466714,12 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "icon": {
+                    "description": "An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.",
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
                   },
                   "serviceAccountId": {
                     "nullable": true,
@@ -467304,6 +467315,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -467350,6 +467365,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
@@ -467863,6 +467879,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -467906,6 +467926,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders"
@@ -468171,6 +468192,12 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "icon": {
+                    "description": "An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.",
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
                   },
                   "serviceAccountId": {
                     "nullable": true,
@@ -468617,6 +468644,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -468660,6 +468691,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders"
@@ -469446,6 +469478,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -469492,6 +469528,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",

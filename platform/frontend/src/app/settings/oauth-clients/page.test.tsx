@@ -172,7 +172,7 @@ describe("OauthClientsPage", () => {
   it("lists each client's APIs, opens its page on a row click, and its edit page from Edit", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
-        HttpResponse.json(page([client])),
+        HttpResponse.json(page([{ ...client, icon: "🧪" }])),
       ),
     );
     const push = vi.fn();
@@ -185,6 +185,8 @@ describe("OauthClientsPage", () => {
     if (!row) throw new Error("Missing row");
     for (const label of ["MCP Gateway", "A2A", "LLM Proxy", "As itself"])
       expect(within(row).getByText(label)).toBeVisible();
+    // The client's own icon replaces the sign-in mark.
+    expect(within(row).getByText("🧪")).toBeVisible();
 
     await user.click(within(row).getByText("A2A"));
     expect(push).toHaveBeenLastCalledWith("/settings/oauth-clients/client-1");

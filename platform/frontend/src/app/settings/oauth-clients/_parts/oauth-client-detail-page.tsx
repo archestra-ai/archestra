@@ -16,6 +16,7 @@ import {
   useSetSettingsAction,
   useSetSettingsPageHeader,
 } from "@/app/settings/layout";
+import { AgentIcon } from "@/components/agent-icon";
 import { createdByFact } from "@/components/created-by-cell";
 import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -124,6 +125,15 @@ export function OAuthClientDetailPage({
         "OAuth client"
       ),
       documentTitle: client?.name ?? "OAuth client",
+      icon: client ? (
+        client.icon ? (
+          <AgentIcon icon={client.icon} size={24} />
+        ) : client.grantType === "authorization_code" ? (
+          <Users />
+        ) : (
+          <Server />
+        )
+      ) : undefined,
       backLink: (
         <PageBackLink href={LIST_HREF}>Back to OAuth clients</PageBackLink>
       ),

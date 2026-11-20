@@ -507,8 +507,7 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
     return (
       isClaudeDesktopSignal(context) &&
       (context.trustedContext !== undefined ||
-        Boolean(desktopHeaderSession(context)) ||
-        desktopConversationCandidates(context).length > 0 ||
+        this.extractSessionIdentity(context) !== undefined ||
         isToolFreeDesktopRequest(context.requestBody))
     );
   }
@@ -516,7 +515,10 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   override extractSessionIdentity(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
-    const headerSession = desktopHeaderSession(context);
+    const headerSession =
+      readHeader(context.headers, "x-claude-code-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-conversation-id")?.trim();
     if (headerSession) {
       return { sessionId: headerSession, provenance: this.provenance.header };
     }
@@ -529,14 +531,6 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
 
 const CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE =
   /cc_entrypoint=(?:cowork|claude-desktop(?:-3p)?|local[-_]agent|remote[-_](?:cowork(?:_trigger)?|desktop)|claude-coworker(?:-terminal)?)(?=[;\s]|$)/i;
-
-function desktopHeaderSession(context: AppaMatchContext): string | undefined {
-  return (
-    readHeader(context.headers, "x-claude-code-session-id")?.trim() ??
-    readHeader(context.headers, "x-claude-desktop-session-id")?.trim() ??
-    readHeader(context.headers, "x-claude-desktop-conversation-id")?.trim()
-  );
-}
 
 function isClaudeDesktopSignal(context: AppaMatchContext): boolean {
   const userAgent = (
@@ -608,7 +602,18 @@ function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
 function extractDesktopConversationId(
   context: AppaMatchContext,
 ): string | undefined {
-  const candidates = desktopConversationCandidates(context);
+  const body = asRecord(context.requestBody);
+  if (!body) return undefined;
+  const metadata = asRecord(body.metadata);
+  const userMetadata = claudeUserMetadata(context);
+  const candidates = [
+    parseClaudeMetadataSessionId(stringField(metadata?.user_id)) ?? undefined,
+    stringField(userMetadata?.conversation_id)?.trim(),
+    stringField(metadata?.session_id)?.trim(),
+    stringField(metadata?.conversation_id)?.trim(),
+    stringField(body.conversation_id)?.trim(),
+    stringField(body.conversation)?.trim(),
+  ].filter((value): value is string => Boolean(value));
   const [first] = candidates;
   if (!first) return undefined;
   if (candidates.some((candidate) => candidate !== first)) {
@@ -618,22 +623,6 @@ function extractDesktopConversationId(
     );
   }
   return first;
-}
-
-/** Every conversation id a Claude Desktop request body claims, in reading order. */
-function desktopConversationCandidates(context: AppaMatchContext): string[] {
-  const body = asRecord(context.requestBody);
-  if (!body) return [];
-  const metadata = asRecord(body.metadata);
-  const userMetadata = claudeUserMetadata(context);
-  return [
-    parseClaudeMetadataSessionId(stringField(metadata?.user_id)) ?? undefined,
-    stringField(userMetadata?.conversation_id)?.trim(),
-    stringField(metadata?.session_id)?.trim(),
-    stringField(metadata?.conversation_id)?.trim(),
-    stringField(body.conversation_id)?.trim(),
-    stringField(body.conversation)?.trim(),
-  ].filter((value): value is string => Boolean(value));
 }
 
 /**

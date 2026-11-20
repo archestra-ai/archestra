@@ -1,59 +1,91 @@
 ---
-title: User Provisioning (SCIM)
-description: Create users from your identity provider before they sign in, and cut off their access when they leave
+title: User Provisioning from Microsoft Entra ID
+description: Create users from Microsoft Entra ID before they sign in, so Terraform can put them in teams on day one
 order: 3
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Put people in teams before they ever sign in. Add someone to the Archestra group in Microsoft Entra ID, and they appear in Archestra, ready for your Terraform or scripts to add to teams. Remove them from the group, and they lose all access while their chats, agents, and teams stay. Archestra speaks [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard identity providers use to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
+Add people to teams before their first sign-in. Normally a person exists in Archestra only after they sign in once, so nobody can add them to a team ahead of time. With provisioning, Microsoft Entra ID creates them in Archestra as soon as they are assigned to the Archestra app. Archestra uses [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard Entra uses to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
 
-## How It Works
+What happens to a person Entra pushes:
 
-Your identity provider creates, deactivates, and restores Archestra users. Sign-in stays with [Single Sign-On](/docs/admin/identity/sso).
+- **Created:** they appear in **Settings → Users** as **Pending (auto-provisioned)**, with the **Default Roles for New Users** from **Settings → Auth** and no team. You can add them to teams right away.
+- **First sign-in:** their Single Sign-On sign-in opens that same user, so the teams you added are already there.
+- **Removed in Entra:** they can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and teams stay, and **Settings → Users** marks them **Deactivated**. Assigning them again restores them.
 
-```mermaid
-flowchart LR
-  IdP[Identity Provider]:::external -->|SCIM| User[User, not signed in yet]:::accent
-  IaC[Terraform or API] -->|Add to teams| User
-  User -->|First SSO sign-in| Active[Same user, teams kept]:::ok
-```
-
-- **Pushed:** the person becomes a user with the organization's **Default Roles for New Users** from **Settings → Auth**, and no team. They show in **Settings → Users**.
-- **First sign-in:** their SSO sign-in opens that same user, so the teams you added are already there. From then on, the provider's [Role Mapping](/docs/admin/identity/sso#role-mapping) applies as for every SSO sign-in.
-- **Deactivated or deleted** in the identity provider: the user can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their data and teams stay, and **Settings → Users** marks them **Deactivated**. Adding them back to the group restores them. Deactivated users don't count toward the [30-user free tier](/docs/get-started/pricing-model).
-
-Archestra never deletes a user through SCIM. To remove someone for good, use **Remove user** in **Settings → Users**.
-
-## Before You Start
-
-- Single Sign-On with the same identity provider works, and its **Allowed Email Domains** lists every domain your users sign in with. Without that, the first sign-in of a pushed user can fail with **Account Not Linked**.
-- Your identity provider can reach Archestra over HTTPS.
+Archestra never deletes a user through SCIM. To remove someone for good, use **Remove user** in **Settings → Users**. Deactivated users don't count toward the 30-user free tier.
 
 ## Set Up Microsoft Entra ID
 
-1. In Archestra, create a [service account](/docs/reference/api#service-accounts) with the **User Writer** role, which holds [`member:read`](/docs/reference/permissions#member:read), [`member:create`](/docs/reference/permissions#member:create), [`member:update`](/docs/reference/permissions#member:update), and [`member:delete`](/docs/reference/permissions#member:delete). Create a key for it and copy it.
+You turn on provisioning in the same Entra app your people already use to sign in to Archestra. Before you start:
+
+- [Single Sign-On](/docs/admin/identity/sso) with Entra works, and the provider's **Allowed Email Domains** lists every domain your people sign in with. Without that, a pushed user's first sign-in fails with **Account Not Linked**.
+- Entra can reach your Archestra address over HTTPS.
+
+Then:
+
+1. In Archestra, go to **Settings → Service Accounts** and create a service account with a role that holds [`member:read`](/docs/reference/permissions#member:read), [`member:create`](/docs/reference/permissions#member:create), [`member:update`](/docs/reference/permissions#member:update), and [`member:delete`](/docs/reference/permissions#member:delete), such as the predefined **User Writer**. Create a key for it and copy it.
 2. In the Microsoft Entra admin center, go to **Enterprise applications**, open the app you use for Archestra sign-in, and open **Provisioning**. Set **Provisioning Mode** to **Automatic**.
-3. Under **Admin Credentials**, set **Tenant URL** to your Archestra address followed by `/api/scim/v2`, for example `https://archestra.example.com/api/scim/v2`. Paste the service account key from step 1 into **Secret Token**, then click **Test Connection**.
+3. Under **Admin Credentials**, set **Tenant URL** to your Archestra address followed by `/api/scim/v2`, for example `https://archestra.example.com/api/scim/v2`. Paste the service account key into **Secret Token**, then click **Test Connection**.
 4. Under **Mappings**, turn off **Provision Microsoft Entra ID Groups**. Archestra takes only users over SCIM. This setting affects SCIM only, not Single Sign-On: the groups in the sign-in token, set under **Single sign-on → Attributes & Claims**, stay as they are, so [Team Sync](/docs/admin/identity/sso#team-sync) keeps working.
-5. In the user mapping, make sure `userName` gets the email people sign in with. Entra sends `userPrincipalName` by default. If it differs from their email, map `userName` from `mail`.
-6. Under **Settings**, set **Scope** to **Sync only assigned users and groups**, and under **Users and groups**, assign the group. Assigning a group needs Microsoft Entra ID P1 or P2. Without it, assign people one by one.
-7. Use **Provision on demand** for one person, check that they appear in **Settings → Users**, then set **Provisioning Status** to **On**.
+5. In the user mapping, make sure `userName` gets the email people sign in with. Entra sends `userPrincipalName` by default. If that differs from their email, map `userName` from `mail`.
+6. Under **Settings**, set **Scope** to **Sync only assigned users and groups**.
+7. Under **Users and groups**, assign the people or the group who should get Archestra.
+8. Use **Provision on demand** for one person, and check that they appear in **Settings → Users**. Then set **Provisioning Status** to **On**.
 
 Entra pushes everyone assigned on its first cycle, then sends changes on its own schedule.
 
-## Add Pushed Users to Teams
+What to know:
 
-Pushed users are members you can add to teams right away, before they sign in. In Terraform, look the person up by email with the `archestra_user` data source and list them in the `members` of an `archestra_team`.
+- Assigning a group to the app needs an Entra ID P1 or P2 license, which Microsoft 365 E3 and E5 include. Without it, assign people one by one.
+- The email Entra pushes must be the email the person signs in with. If they differ, the first sign-in creates a second, empty user instead of opening the pushed one.
 
-Give the service account from the setup the **Team Writer** role too, for [`team:update`](/docs/reference/permissions#team:update), and use its key. The lookup by email needs [`member:read`](/docs/reference/permissions#member:read), which **User Writer** already holds.
+## Example: One Entra Group, Teams in Terraform
+
+Give everyone access through one Entra group, and keep each team's members in Terraform. Nobody needs a separate Entra group per team.
+
+```mermaid
+flowchart LR
+  Entra[Entra group]:::external -->|SCIM| User[Pushed user]:::accent
+  TF[Terraform] -->|Team members| User
+  User -->|First sign-in| Active[Signed in, teams kept]:::ok
+```
+
+1. In Entra, assign one group, for example **Archestra Users**, to the Archestra app. Everyone in it appears in **Settings → Users**.
+2. Add a role that holds [`team:update`](/docs/reference/permissions#team:update) to the same service account, such as the predefined **Team Writer**, and use its key in Terraform. Looking people up by email uses [`member:read`](/docs/reference/permissions#member:read), which it already has.
+3. Look each person up by email with the `archestra_user` data source, and list them in the team's `members`:
+
+   ```hcl
+   locals {
+     payments = ["alice@example.com", "bob@example.com"]
+   }
+
+   data "archestra_user" "payments" {
+     for_each = toset(local.payments)
+     email    = each.value
+   }
+
+   resource "archestra_team" "payments" {
+     name    = "Payments"
+     members = [for user in data.archestra_user.payments : { user_id = user.id }]
+   }
+   ```
+
+4. Run `terraform apply`. When Alice signs in for the first time, she is already in **Payments**.
+
+What to know:
+
+- Apply after Entra has pushed the person. Until then, `archestra_user` can't find their email and the plan fails.
+- Keep `external_group_ids` off teams that Terraform fills. Each apply removes anyone not in `members`, including people Team Sync added, and their next sign-in adds them back, so every plan shows changes.
+- A sign-in never removes people Terraform added to a team.
 
 ## Troubleshooting
 
 | What you see | Cause and fix |
 | --- | --- |
-| Someone signs in and has none of their teams | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, remove the extra user in **Settings → Users**, then use **Provision on demand** for that person. The pushed user takes the right email, and their next sign-in opens it with their teams. |
+| Someone signs in and has none of their teams | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, remove the extra user in **Settings → Users**, then use **Provision on demand** for that person. Their next sign-in opens the pushed user, with their teams. |
 | **Account Not Linked** at first sign-in | Add their email domain to the provider's **Allowed Email Domains**. |
 | **Account Deactivated** at sign-in | They were removed from the group or the app in Entra. Assign them again. |
-| **Test Connection** fails | Check the tenant URL ends in `/api/scim/v2`, the key is active, and its role holds the `member` permissions. |
+| **Test Connection** fails | Check that the tenant URL ends in `/api/scim/v2`, the key is active, and the service account holds the `member` permissions. |

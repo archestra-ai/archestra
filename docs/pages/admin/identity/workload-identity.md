@@ -46,6 +46,38 @@ Every value matches exactly. There are no wildcards: to trust two branches or tw
 
 A GitHub Actions job that names an `environment:` gets the environment subject, so require the environment instead of the branch when you deploy through one.
 
+## Declare Accounts in the Helm Chart
+
+With the Helm chart, Archestra creates the service account and its federated credential on its first start, so one install can bring up Archestra and the workloads that manage it, such as the [Terraform or Crossplane provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs/guides/authentication), with no API key to mint and hand over.
+
+1. List the accounts under `archestra.bootstrap.serviceAccounts` in your values:
+
+   ```yaml
+   archestra:
+     bootstrap:
+       serviceAccounts:
+         - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
+           name: crossplane
+           roles:
+             - fixed:agents:reader
+             - fixed:skills:writer
+           federatedCredentials:
+             - name: crossplane provider
+               issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE
+               audience: https://archestra.example.com
+               subject: system:serviceaccount:crossplane-system:provider-archestra
+   ```
+
+2. List under `roles` every role the account needs, and no more. Compose access from [granular roles](/docs/reference/permissions#granular-roles) such as `fixed:agents:reader`, or use a predefined role (`member`, `editor`, `admin`) or a custom role's identifier.
+3. Set `id` to a UUID you choose, and configure the workload with it. The workload can then sign in on the first deploy, without looking the ID up.
+4. Install or upgrade the chart. Archestra creates the accounts after its database migrations.
+
+What to know:
+
+- Archestra creates only what is missing, matched by name, on every start. It never changes or deletes an account or credential that exists, so edits in the UI, API, or Terraform stick.
+- An account it cannot create, for an unknown role or a private issuer, is skipped and logged. Archestra still starts.
+- The chart renders the list into [`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP).
+
 ## Exchange a Token in GitHub Actions
 
 The job asks GitHub for an OIDC token, then trades it for an Archestra token at `/api/workload-identity/token` ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693) token exchange). When you add a federated credential, Archestra shows this request with the account's id already filled in.

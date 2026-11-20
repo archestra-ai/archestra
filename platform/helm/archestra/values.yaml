@@ -706,6 +706,35 @@ archestra:
   # release ship none, so the images follow their version tags.
   releaseImageDigests: {}
 
+  # Resources Archestra creates on startup, after database migrations, so an
+  # installation can be automated end to end without first minting an API key.
+  bootstrap:
+    # Service accounts with federated credentials (Enterprise license). A
+    # workload whose OIDC token matches a credential exactly (such as the
+    # Crossplane or Terraform provider with a projected Kubernetes token) can
+    # then sign in as the account. Missing accounts and credentials are created
+    # by name on every start; existing ones are never changed, so later edits
+    # in the UI, API or Terraform stick. Set `id` to a UUID to know the
+    # account's ID before the first install.
+    serviceAccounts: []
+    # - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
+    #   name: crossplane
+    #   description: Crossplane provider
+    #   # Every role the account holds. Compose exactly the access it needs
+    #   # from granular roles (`fixed:<area>:reader` or `fixed:<area>:writer`,
+    #   # see the permissions reference), predefined roles (`member`,
+    #   # `editor`, `admin`) or custom role identifiers.
+    #   roles:
+    #     - fixed:agents:reader
+    #     - fixed:skills:writer
+    #   federatedCredentials:
+    #     - name: crossplane provider
+    #       issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE
+    #       audience: https://archestra.example.com
+    #       subject: system:serviceaccount:crossplane-system:provider-archestra
+    #       # Optional: other top-level claims that must match exactly.
+    #       claimConditions: {}
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Set to false to turn the Kubernetes orchestrator off: the platform loads

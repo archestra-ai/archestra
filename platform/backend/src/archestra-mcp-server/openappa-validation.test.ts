@@ -312,7 +312,7 @@ test("a policy preview replays the saved validations against the proposed policy
   );
   const preview = await executeArchestraTool(
     "archestra__preview_guardrails_policy_change",
-    { content: loosened, expectedRevision: 1 },
+    { content: loosened, expectedRevision: 1, allowUnknownTools: true },
     {
       organizationId: organization.id,
       userId: user.id,
@@ -385,7 +385,7 @@ delta = { audience = ["internal"] }
   const preview = (userId: string) =>
     executeArchestraTool(
       "archestra__preview_guardrails_policy_change",
-      { content: draft, expectedRevision: 0 },
+      { content: draft, expectedRevision: 0, allowUnknownTools: true },
       {
         organizationId: organization.id,
         userId,

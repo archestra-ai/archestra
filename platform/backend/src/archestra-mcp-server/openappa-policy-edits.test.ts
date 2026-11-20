@@ -110,7 +110,11 @@ describe("policy edits", () => {
     const current = withRules(["github__get_issue", "github__list_issues"]);
     await saveRevision(current);
 
-    const previewed = await preview({ edits: INSERT, expectedRevision: 1 });
+    const previewed = await preview({
+      edits: INSERT,
+      expectedRevision: 1,
+      allowUnknownTools: true,
+    });
     const after = (previewed.structuredContent as { after: string }).after;
     expect(after).toBe(current.replace(ANCHOR, `${NEW_RULES}${ANCHOR}`));
     expect((previewed.structuredContent as { before: string }).before).toBe(
@@ -154,7 +158,11 @@ describe("policy edits", () => {
     await saveRevision(current);
     expect(current.length).toBeGreaterThan(50_000);
 
-    const previewed = await preview({ edits: INSERT, expectedRevision: 1 });
+    const previewed = await preview({
+      edits: INSERT,
+      expectedRevision: 1,
+      allowUnknownTools: true,
+    });
     const [block] = previewed.content;
     expect(block?.type === "text" && block.text.length).toBeLessThan(2_000);
   });
@@ -217,6 +225,7 @@ describe("policy edits", () => {
         },
       ],
       expectedRevision: 1,
+      allowUnknownTools: true,
     });
     expect(modelText(previewed).changed).toEqual({ added: 2, removed: 2 });
     expect((previewed.structuredContent as { after: string }).after).toBe(
@@ -229,10 +238,14 @@ describe("policy edits", () => {
     await saveRevision(current);
     const edited = current.replace(ANCHOR, `${NEW_RULES}${ANCHOR}`);
     const fillers: Array<Record<string, unknown>> = [
-      { content: "", edits: INSERT },
-      { content: null, edits: [{ ...INSERT[0], replaceAll: null }] },
-      { content: edited, edits: [] },
-      { content: edited, edits: null },
+      { content: "", edits: INSERT, allowUnknownTools: true },
+      {
+        content: null,
+        edits: [{ ...INSERT[0], replaceAll: null }],
+        allowUnknownTools: true,
+      },
+      { content: edited, edits: [], allowUnknownTools: true },
+      { content: edited, edits: null, allowUnknownTools: true },
     ];
     for (const args of fillers) {
       const previewed = await preview({ ...args, expectedRevision: 1 });
@@ -248,7 +261,11 @@ describe("policy edits", () => {
     const { revision } = await saveRevision(policy);
 
     const change = modelText(
-      await preview({ edits: INSERT, expectedRevision: revision }),
+      await preview({
+        edits: INSERT,
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
     );
     const noChange = modelText(
       await preview({ content: policy, expectedRevision: revision }),
@@ -260,7 +277,11 @@ describe("policy edits", () => {
 
   test("content still replaces the whole policy and returns a diff", async () => {
     const content = withRules(["github__get_issue"]);
-    const previewed = await preview({ content, expectedRevision: 0 });
+    const previewed = await preview({
+      content,
+      expectedRevision: 0,
+      allowUnknownTools: true,
+    });
     const seen = modelText(previewed);
     expect(seen).not.toHaveProperty("after");
     expect(seen.changed).toEqual({ added: 4, removed: 0 });
@@ -380,15 +401,39 @@ describe("rules naming tools", () => {
           closest: [],
         },
       ]);
-      const previewed = modelText(
+      const gated = await preview({
+        content: withRules([ruleName]),
+        expectedRevision: revision,
+      });
+      const seen = modelText(gated);
+      expect(seen).toMatchObject({
+        stage: "confirmation_required",
+        valid: true,
+        unknownTools: [
+          {
+            rule: ruleName,
+            reason: "unknown_server",
+            prefix: ruleName.split("__")[0],
+            closest: [],
+          },
+        ],
+      });
+      expect(gated.structuredContent).not.toHaveProperty("before");
+      expect(gated.structuredContent).not.toHaveProperty("delivery");
+
+      const confirmed = modelText(
         await preview({
           content: withRules([ruleName]),
           expectedRevision: revision,
+          allowUnknownTools: true,
         }),
       );
-      expect(previewed.warnings).toHaveLength(1);
-      expect(previewed.touchedTools).toBeNull();
-      expect(JSON.stringify(previewed.warnings)).not.toContain("did you mean");
+      expect(confirmed).toMatchObject({
+        stage: "preview",
+        valid: true,
+        warnings: [],
+        touchedTools: null,
+      });
     }
     const published = modelText(
       await publish({ content: withRules([name]), expectedRevision: revision }),
@@ -430,14 +475,38 @@ describe("rules naming tools", () => {
     });
     const { revision } = await saveRevision(initialPolicy());
     const content = withRules([name]);
-    const previewed = modelText(
+    const gated = modelText(
       await preview({ content, expectedRevision: revision }),
     );
-    expect(previewed.warnings).toHaveLength(1);
-    expect(previewed.touchedTools).toBeNull();
+    expect(gated).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      unknownTools: [
+        {
+          rule: name,
+          reason: "unknown_server",
+          prefix: "remote",
+          closest: [],
+        },
+      ],
+    });
+    const confirmed = modelText(
+      await preview({
+        content,
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
+    );
+    expect(confirmed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+    });
     expect(
-      modelText(await publish({ content, expectedRevision: revision })),
-    ).toMatchObject({ warnings: previewed.warnings });
+      modelText(await publish({ content, expectedRevision: revision }))
+        .warnings,
+    ).toHaveLength(1);
   });
 
   test("catalog metadata takes precedence over proxy metadata for the same name", async ({
@@ -473,6 +542,7 @@ describe("rules naming tools", () => {
       await preview({ content: withRules([name]), expectedRevision: revision }),
     );
     expect(previewed).toMatchObject({
+      stage: "preview",
       warnings: [],
       touchedTools: {
         tools: [
@@ -508,15 +578,22 @@ describe("rules naming tools", () => {
     });
     await ToolObservationModel.recordObservations({ toolNames: names, userId });
     const { revision } = await saveRevision(initialPolicy());
-    const previewed = modelText(
+    const gated = modelText(
       await preview({ content: withRules(names), expectedRevision: revision }),
     );
-    expect(previewed.warnings).toHaveLength(names.length);
-    expect(previewed.touchedTools).toBeNull();
-    expect(JSON.stringify(previewed.warnings)).not.toContain("did you mean");
+    expect(gated).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      unknownTools: names.map((rule) => ({
+        rule,
+        reason: "unknown_server",
+        prefix: "workbench",
+        closest: [],
+      })),
+    });
   });
 
-  test("a rule for a missing tool warns at preview and publish; an existing tool's metadata reaches the model", async ({
+  test("an unknown tool requires user confirmation before previewing; after confirmation, preview proceeds cleanly without missing-tool warnings", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -541,14 +618,18 @@ describe("rules naming tools", () => {
         expectedRevision: revision,
       }),
     );
-    const missing = modelText(
-      await preview({
-        edits: edits(["github__delete_issue"]),
-        expectedRevision: revision,
-      }),
-    );
+    const missingRaw = await preview({
+      edits: edits(["github__delete_issue"]),
+      expectedRevision: revision,
+      allowUnknownTools: null,
+    });
+    const missing = modelText(missingRaw);
 
-    expect(known).toMatchObject({ valid: true, warnings: [] });
+    expect(known).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+    });
     expect(known.touchedTools).toMatchObject({
       tools: [
         {
@@ -559,10 +640,42 @@ describe("rules naming tools", () => {
       ],
       omitted: 0,
     });
-    expect(missing).toMatchObject({ valid: true });
-    expect(missing.warnings).toHaveLength(1);
-    expect(missing.touchedTools).toBeNull();
-    expect(missing.instruction).not.toBe(known.instruction);
+
+    expect(missing).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      warnings: [],
+      unknownTools: [
+        {
+          rule: "github__delete_issue",
+          reason: "unknown_tool",
+          prefix: "github",
+          closest: ["github__create_issue"],
+        },
+      ],
+    });
+    expect(missingRaw.structuredContent).not.toHaveProperty("before");
+    expect(missingRaw.structuredContent).not.toHaveProperty("after");
+    expect(missingRaw.structuredContent).not.toHaveProperty("delivery");
+    expect(missing.instruction).toContain("ask_user");
+    expect(missing.instruction).toContain("allowUnknownTools");
+
+    const confirmed = modelText(
+      await preview({
+        edits: edits(["github__delete_issue"]),
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
+    );
+    expect(confirmed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+      changed: { added: 4, removed: 0 },
+    });
+    expect(confirmed.diff).toContain('+name = "github__delete_issue"\n');
+    expect(confirmed.instruction).toBe(known.instruction);
 
     const published = modelText(
       await publish({
@@ -570,6 +683,6 @@ describe("rules naming tools", () => {
         expectedRevision: revision,
       }),
     );
-    expect(published.warnings).toEqual(missing.warnings);
+    expect(published.warnings).toHaveLength(1);
   });
 });

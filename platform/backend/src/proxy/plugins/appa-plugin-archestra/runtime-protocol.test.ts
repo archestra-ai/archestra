@@ -1001,7 +1001,7 @@ describe("protected runtime protocol", () => {
       contract: "Only return an approved summary.",
     });
     const returned = vi
-      .spyOn(service, "returnRuntimeValue")
+      .spyOn(service, "returnSubagentValue")
       .mockResolvedValue({ kind: "admitted", value: "Final answer" });
     await plugin.onSessionInit(context);
     const body = {

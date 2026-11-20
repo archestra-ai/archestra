@@ -350,7 +350,10 @@ export function AppSettingsForm({
       // selection survives and Save can retry the remaining diff.
       if (results.some((r) => !r.ok)) return;
     }
-    onBack();
+    // Everything is saved, so close directly rather than through the
+    // unsaved-changes guard: this handler still holds the guard from the render
+    // before Save, whose dirty flag is the pre-save value.
+    onOpenChange(false);
   }
 
   return (

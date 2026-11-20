@@ -90,21 +90,38 @@ vi.mock("@/app/apps/_parts/app-tools-editor", () => ({
     </>
   ),
 }));
-// The access editor is its own tested component; here it only has to hand
-// the dialog a save so the one Save can be asserted to commit it.
+// The access editor is its own tested component; here it hands the dialog a
+// save so the one Save can be asserted to commit it, and reports dirty the way
+// the real one does: true after an edit, false once its save resolves.
 vi.mock("@/components/resource-permissions", async () => {
-  const { useEffect } = await import("react");
+  const { useCallback, useEffect, useState } = await import("react");
   return {
     ResourcePermissions: ({
       registerSave,
+      onDirtyChange,
     }: {
       registerSave?: (save: (() => Promise<void>) | null) => void;
+      onDirtyChange?: (dirty: boolean) => void;
     }) => {
+      const [dirty, setDirty] = useState(false);
       useEffect(() => {
-        registerSave?.(savePermissions);
+        onDirtyChange?.(dirty);
+      }, [dirty, onDirtyChange]);
+      const save = useCallback(async () => {
+        await savePermissions();
+        setDirty(false);
+      }, []);
+      useEffect(() => {
+        registerSave?.(save);
         return () => registerSave?.(null);
-      }, [registerSave]);
-      return <div data-testid="resource-permissions" />;
+      }, [registerSave, save]);
+      return (
+        <div data-testid="resource-permissions">
+          <button type="button" onClick={() => setDirty(true)}>
+            Change access
+          </button>
+        </div>
+      );
     },
   };
 });
@@ -221,6 +238,32 @@ describe("AppSettingsForm save", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(savePermissions).toHaveBeenCalledTimes(1);
     expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("closes after saving an access change without asking to discard it", async () => {
+    const { onOpenChange } = renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change access" }));
+    submitForm();
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(savePermissions).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("still asks before Cancel discards an unsaved access change", async () => {
+    const { onOpenChange } = renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      await screen.findByText("Discard unsaved changes?"),
+    ).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(savePermissions).not.toHaveBeenCalled();
   });
 
   test("shows labels on General and saves an in-progress label", async () => {

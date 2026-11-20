@@ -67831,7 +67831,8 @@ export type GetReadyErrors = {
         name: string;
         status: 'degraded';
         version: string;
-        database: 'connected' | 'disconnected';
+        database: 'connected' | 'disconnected' | 'not_checked';
+        kubernetes?: 'starting';
         openappa?: 'starting' | 'unavailable';
         openappaReason?: string;
     };

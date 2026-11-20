@@ -251591,7 +251591,14 @@
                       "type": "string",
                       "enum": [
                         "connected",
-                        "disconnected"
+                        "disconnected",
+                        "not_checked"
+                      ]
+                    },
+                    "kubernetes": {
+                      "type": "string",
+                      "enum": [
+                        "starting"
                       ]
                     },
                     "openappa": {

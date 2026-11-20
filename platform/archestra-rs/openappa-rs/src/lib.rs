@@ -791,7 +791,6 @@ impl State {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
                     HookDecision::Block { reason } => reason,
-                    HookDecision::Refuse { detail, .. } => detail,
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
@@ -1287,9 +1286,9 @@ impl State {
                 HookDecision::Ack
                 | HookDecision::DeliverValue { .. }
                 | HookDecision::ChildReturn { .. } => OutputSource::Tool,
-                HookDecision::ReplaceOutput { .. }
-                | HookDecision::Block { .. }
-                | HookDecision::Refuse { .. } => OutputSource::Runtime,
+                HookDecision::ReplaceOutput { .. } | HookDecision::Block { .. } => {
+                    OutputSource::Runtime
+                }
                 _ => return Err(invariant("unexpected tool result decision")),
             }
         };

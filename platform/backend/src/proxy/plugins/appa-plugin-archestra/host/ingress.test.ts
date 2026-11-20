@@ -199,3 +199,26 @@ function chatWithTaskResult(callId: string) {
     ],
   };
 }
+
+test("a Claude Desktop request with contradictory conversation metadata is scrubbed, not refused", () => {
+  const body = {
+    metadata: {
+      session_id: "desktop-chat-1",
+      conversation_id: "desktop-chat-2",
+    },
+    messages: [{ role: "user", content: "Hello" }],
+  };
+  const request = {
+    headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+    url: "/v1/anthropic/messages",
+  } as unknown as FastifyRequest;
+  // Which conversation the request binds to is settled when its session is
+  // resolved; recognising the client must not refuse a request on the way.
+  const ingress = scrubOpenappaIngress({
+    request,
+    body,
+    interactionType: "anthropic:messages",
+  });
+  expect(ingress.childReturnRefusal).toBeUndefined();
+  expect(ingress.strippedReceiptCodes).toEqual([]);
+});

@@ -11,18 +11,15 @@ Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](htt
 
 ## User Lifecycle
 
-Archestra maps each change from Entra to a user state:
+How Archestra handles each change from Entra:
 
-| Entra event | SCIM request | Result in Archestra |
-| --- | --- | --- |
-| User assigned to the app | `POST /Users` | User created with the status **Pending (auto-provisioned)** and the **Default Roles for New Users** from **Settings → Auth**. |
-| First Single Sign-On sign-in | None | The sign-in is linked to the provisioned user by email. Roles and team memberships assigned before the sign-in are kept. |
-| User unassigned from the app | `PATCH` with `active: false` | User deactivated and shown as **Deactivated** in **Settings → Users**. Sign-in, API keys, gateway tokens, and chat integrations are blocked. Chats, agents, and team memberships are kept. |
-| User assigned again | `PATCH` with `active: true` | User reactivated. |
+- **Assigned in Entra:** Archestra creates the user with the status **Pending (auto-provisioned)** and the **Default Roles for New Users** from **Settings → Auth**.
+- **First sign-in:** Single Sign-On signs the person in as the provisioned user, with any roles and teams assigned to it.
+- **Unassigned in Entra:** Archestra deactivates the user, and **Settings → Users** shows them as **Deactivated**. They can't sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and team memberships are kept. Assigning them in Entra again reactivates the user.
 
 Notes:
 
-- `DELETE /Users/{id}` also only deactivates the user. To delete a user, use **Remove user** in **Settings → Users**.
+- Archestra never deletes a user through SCIM. To delete a user, use **Remove user** in **Settings → Users**.
 - Deactivated users are excluded from the 30-user free tier count.
 
 ## Set Up Microsoft Entra ID
@@ -81,7 +78,7 @@ flowchart LR
 Notes:
 
 - `archestra_user` fails with **User Not Found** until Entra has provisioned the email. Run Terraform after the provisioning cycle.
-- Don't set `external_group_ids` on teams managed by Terraform. Each apply removes members added by Team Sync, the next sign-in adds them back, and the plan never converges.
+- Don't set `external_group_ids` on teams managed by Terraform. Each apply removes members added by Team Sync, the next sign-in adds them back, and every plan shows changes.
 - Sign-in never removes members added by Terraform.
 
 ## Troubleshooting

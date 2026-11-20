@@ -16,6 +16,8 @@ export interface ArchestraContext {
     spawn: boolean;
     /** Signed while enforcement was off; no policy ruled the call. */
     observed?: true;
+    /** The spawn was released under a deferred return: its parent decides on the answer. */
+    defersReturn?: true;
   };
   /**
    * The child trajectory an OpenAPPA spawn bound this delegated run to, minted

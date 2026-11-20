@@ -16,6 +16,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   getValidationSaveResult,
+  isOpenAppaPreview,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
   OpenAppaValidationCompletion,
@@ -149,6 +150,53 @@ test("shows a first preview of the starter with every line added", () => {
   const diff = screen.getByLabelText("Policy diff");
   expect(diff).toHaveTextContent("1Added: [policy]");
   expect(diff).toHaveTextContent("2Added: version = 2");
+});
+
+test("does not render yellow policy warning cards on the preview", () => {
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          stage: "preview",
+          delivery: "revision",
+          before: "[policy]\nversion = 2\n",
+          after:
+            '[policy]\nversion = 2\n[[policy.tool]]\nname = "calendar__create_event"\n',
+          warnings: ['tool rule "calendar__create_event" names no known tool'],
+        },
+      }}
+    />,
+  );
+
+  expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
+    'Added: name = "calendar__create_event"',
+  );
+  expect(screen.queryByText("Policy warning")).not.toBeInTheDocument();
+});
+
+test("confirmation-required results do not open a policy preview card", () => {
+  const output = {
+    structuredContent: {
+      stage: "confirmation_required",
+      valid: true,
+      unknownTools: [
+        {
+          rule: "calendar__create_event",
+          reason: "unknown_server",
+          prefix: "calendar",
+          closest: [],
+        },
+      ],
+    },
+  };
+  expect(
+    isOpenAppaPreview({
+      shortName: "preview_guardrails_policy_change",
+      output,
+    }),
+  ).toBe(false);
+  const { container } = render(<OpenAppaPolicyChange output={output} />);
+  expect(container).toBeEmptyDOMElement();
 });
 
 test("keeps a large replacement bounded in chat and counts changes beyond the preview", () => {

@@ -56,8 +56,8 @@ use crate::{
     },
     session::{
         SessionKey, check_session_identity, mark_busy_hold, operation_key, presentation_options,
-        processed_result_key, require_decision, result_presentation_options, root_id,
-        session_actor, session_binding, wire,
+        processed_result_key, recorded_root, require_decision, result_presentation_options,
+        root_id, session_actor, session_binding, wire,
     },
 };
 use appa_eventlog::{
@@ -502,37 +502,19 @@ impl State {
         };
         // A parent is only ever looked up in the child's own organization.
         let parent = SessionKey::new(&input.organization_id, parent_id);
-        Sql(&self.store)
-            .with_client(move |client| {
-                Ok(client
-                    .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                        &[&parent.organization_id, &parent.actor],
-                    )?
-                    .map(|row| row.get::<_, String>(0)))
-            })
-            ?
-            .ok_or_else(|| {
-                failure(
-                    Failure::Binding(BindingFailure::UnstartedParent),
-                    "parent session has not started",
-                )
-            })
+        recorded_root(&Sql(&self.store), &parent)?.ok_or_else(|| {
+            failure(
+                Failure::Binding(BindingFailure::UnstartedParent),
+                "parent session has not started",
+            )
+        })
     }
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
     /// the session id alone keeps that root, so its history carries on.
     fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
-        let lookup = key.clone();
-        let recorded = Sql(&self.store).with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&lookup.organization_id, &lookup.actor],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })?;
+        let recorded = recorded_root(&Sql(&self.store), key)?;
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
@@ -792,7 +774,6 @@ impl State {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
                     HookDecision::Block { reason } => reason,
-                    HookDecision::Refuse { detail, .. } => detail,
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
@@ -1290,9 +1271,9 @@ impl State {
                 HookDecision::Ack
                 | HookDecision::DeliverValue { .. }
                 | HookDecision::ChildReturn { .. } => OutputSource::Tool,
-                HookDecision::ReplaceOutput { .. }
-                | HookDecision::Block { .. }
-                | HookDecision::Refuse { .. } => OutputSource::Runtime,
+                HookDecision::ReplaceOutput { .. } | HookDecision::Block { .. } => {
+                    OutputSource::Runtime
+                }
                 _ => return Err(invariant("unexpected tool result decision")),
             }
         };

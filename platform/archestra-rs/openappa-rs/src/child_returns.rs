@@ -1,8 +1,9 @@
 use crate::{
     Sql,
-    errors::{invalid_input, panicked, sql_failure},
+    errors::{panicked, sql_failure},
+    initialized,
     input::Input,
-    sealed, state_mutex,
+    sealed,
 };
 use appa_eventlog::{encryption::StorageCipher, postgres::PostgresError};
 use appa_runtime_api::{HookEvent, SpawnBinding, SpawnRef, TrajectoryId};
@@ -48,15 +49,7 @@ pub async fn load_child_returns(
     parent_session_id: String,
     lookup: Option<ChildReturnLookup>,
 ) -> napi::Result<Vec<ChildReturnRecord>> {
-    // Mirror load_offer_review: clone state, drop the mutex, then lease a
-    // connection before host SQL so lookups never contend with dispatches.
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-            .clone()
-    };
-    let leased = state.lease().await?;
+    let leased = initialized().await?.lease().await?;
     let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // session_id is the leading PK column of openappa_operations, and
@@ -201,15 +194,7 @@ pub async fn load_child_addresses(
     organization_id: String,
     child_session_id: String,
 ) -> napi::Result<Vec<ChildAddressRecord>> {
-    // Mirror load_child_returns: clone state, drop the mutex, then lease a
-    // connection before host SQL so lookups never contend with dispatches.
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-            .clone()
-    };
-    let leased = state.lease().await?;
+    let leased = initialized().await?.lease().await?;
     let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // Only the child's own parent addresses it, and only an address the
@@ -1288,13 +1273,7 @@ pub async fn load_child_rejections(
     parent_session_id: String,
 ) -> napi::Result<Vec<ChildRejectionRecord>> {
     AssertUnwindSafe(async move {
-        let state = {
-            let slot = state_mutex().lock().await;
-            slot.as_ref()
-                .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-                .clone()
-        };
-        let leased = state.lease().await?;
+        let leased = initialized().await?.lease().await?;
         Sql(&leased.state.store)
             .with_client(move |client| {
                 let receipts = sealed::read(

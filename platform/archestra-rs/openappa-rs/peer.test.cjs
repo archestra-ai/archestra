@@ -42,7 +42,7 @@ test('a peer caller id is bounded before a session is opened', async () => {
   );
 });
 
-test('peer messages stay inside one family and do not invent a release', async (t) => {
+test('peer messages stay inside one family and do not invent a release', { skip: !databaseUrl }, async (t) => {
   const ledgerUrl = new URL(databaseUrl);
   ledgerUrl.searchParams.set('application_name', `openappa-peer-${randomUUID()}`);
   await native.initializeOpenappa(ledgerUrl.toString(), 4);

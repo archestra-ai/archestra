@@ -54,7 +54,13 @@ describe("collectArchestraToolInvalidations", () => {
           {
             type: "tool-archestra__update_guardrails_validation",
             state: "output-available",
-            output: { delivery: "revision", run: null },
+            output: {
+              delivery: "revision",
+              run: null,
+              runError:
+                "Too many Guardrails policy tests are running. Retry in a few seconds.",
+              savedPaths: ["traces/check-0.appa"],
+            },
           },
         ],
         getToolShortName,

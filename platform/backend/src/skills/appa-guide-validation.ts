@@ -45,7 +45,7 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 ## Save
 
 1. Call \`archestra__update_guardrails_validation\` with the exact patch you previewed and the same \`expectedRevision\` and \`expectedVersion\`. On a conflict, read the policy and suite again, re-apply the file, preview, and ask again if the result changed.
-2. With Git sync, give the pull request URL: the validation takes effect and runs after merge and sync. Locally, give the file path and report the result from \`run\`: passed, failed with why, or could not run. Saving runs the added or edited files right away and records the run. Do not call \`archestra__run_openappa_policy_tests\` again right after saving. A deletion-only save returns \`run: null\`; report the deletion without claiming a run. If an upsert returns \`run: null\`, say the save succeeded but the run did not complete.
+2. With Git sync, give the pull request URL: the validation takes effect and runs after merge and sync. Locally, give the file path and report the result from \`run\`: passed, failed with why, or could not run. Saving runs the added or edited files right away and records the run. Do not call \`archestra__run_openappa_policy_tests\` again right after saving. A deletion-only save returns \`run: null\`; report the deletion without claiming a run. If an upsert returns \`run: null\`, say the save succeeded but the run did not complete, include the reason from \`runError\` if present, and do not retry saving the same files.
 
 ## Run or explain saved validations
 

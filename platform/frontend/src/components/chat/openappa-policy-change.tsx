@@ -349,7 +349,11 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
       local: false,
     };
   }
-  const run = validationRunResult(change.run);
+  const run = validationRunResult(
+    change.run,
+    change.runError,
+    change.savedPaths,
+  );
   return {
     tone: run.tone,
     title:
@@ -366,13 +370,32 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
   };
 }
 
+function firstSavedPath(savedPaths: unknown): string | null {
+  if (!Array.isArray(savedPaths)) return null;
+  return (
+    savedPaths.find(
+      (path): path is string => typeof path === "string" && path.length > 0,
+    ) ?? null
+  );
+}
+
 function validationRunResult(
   run: unknown,
+  runError?: unknown,
+  savedPaths?: unknown,
 ): Pick<SaveResult, "tone" | "detail"> & { targetPath: string | null } {
   if (run === undefined)
     return { tone: "success", detail: "not run yet", targetPath: null };
-  if (run === null)
+  if (run === null) {
+    if (typeof runError === "string" && runError.length > 0) {
+      return {
+        tone: "warning",
+        detail: "could not run",
+        targetPath: firstSavedPath(savedPaths),
+      };
+    }
     return { tone: "success", detail: "saved", targetPath: null };
+  }
   if (!run || typeof run !== "object") {
     return { tone: "warning", detail: "could not run", targetPath: null };
   }

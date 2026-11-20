@@ -426,6 +426,28 @@ test.each([
     href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
+    name: "a post-save run error with saved paths",
+    run: null,
+    extra: {
+      runError:
+        "Too many Guardrails policy tests are running. Retry in a few seconds.",
+      savedPaths: ["traces/check-0.appa"],
+    },
+    tone: "warning",
+    detail: "could not run",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
+  },
+  {
+    name: "a post-save run error without saved paths",
+    run: null,
+    extra: {
+      runError: "Guardrails stopped this policy test because it ran too long.",
+    },
+    tone: "warning",
+    detail: "could not run",
+    href: "/openappa/policy",
+  },
+  {
     name: "a deletion-only save",
     run: null,
     tone: "success",
@@ -441,11 +463,14 @@ test.each([
   },
 ])("shows $name in the saved-validation result", ({
   run,
+  extra,
   tone,
   detail,
   href,
 }) => {
-  const output = { structuredContent: { ...validationPublication, run } };
+  const output = {
+    structuredContent: { ...validationPublication, ...extra, run },
+  };
   expect(getValidationSaveResult(output)).toMatchObject({
     tone,
     detail,

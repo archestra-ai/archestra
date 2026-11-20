@@ -290,7 +290,12 @@ describe("source-aware validation proposals", () => {
       },
     );
     const saved = await publishOpenAppaValidationChange(publish());
-    expect(saved).toMatchObject({ delivery: "revision", run: null });
+    expect(saved).toMatchObject({
+      delivery: "revision",
+      run: null,
+      runError: expect.stringContaining("policy changed"),
+      savedPaths: [added.path],
+    });
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
     ).toEqual([existing, added]);
@@ -299,6 +304,85 @@ describe("source-aware validation proposals", () => {
     );
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       { revision: 2, content: proposedPolicy },
+    );
+  });
+
+  test.each([
+    {
+      name: "replay_busy",
+      error: Object.assign(new Error("4 concurrent replays active"), {
+        code: "replay_busy",
+      }),
+      expectedMessage: "Too many Guardrails policy tests are running",
+    },
+    {
+      name: "replay_timed_out",
+      error: Object.assign(new Error("replay exceeded 30s limit"), {
+        code: "replay_timed_out",
+      }),
+      expectedMessage: "ran longer than its time limit",
+    },
+  ])("a post-save $name failure preserves the saved files and reports runError without fabricating a run", async ({
+    error,
+    expectedMessage,
+  }) => {
+    const native = await import("@archestra/openappa-rs");
+    const spy = vi
+      .spyOn(native, "replayOpenappaPolicy")
+      .mockRejectedValueOnce(error);
+    try {
+      const saved = await publishOpenAppaValidationChange(publish());
+      const savedVersion = (
+        await OpenAppaPolicyTestsModel.find(ctx.organizationId)
+      )?.version;
+      expect(saved).toMatchObject({
+        delivery: "revision",
+        revision: 1,
+        version: savedVersion,
+        run: null,
+        runError: expect.stringContaining(expectedMessage),
+        savedPaths: [added.path],
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
+    ).toEqual([existing, added]);
+    expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
+      [],
+    );
+  });
+
+  test("an unexpected post-save run failure preserves the saved files without leaking raw error details", async () => {
+    const spy = vi
+      .spyOn(OpenAppaPolicyTestsModel, "saveRun")
+      .mockRejectedValueOnce(
+        new Error("postgres://user:secret@db.internal/appa connection dropped"),
+      );
+    try {
+      const saved = await publishOpenAppaValidationChange(publish());
+      expect(saved).toMatchObject({
+        delivery: "revision",
+        revision: 1,
+        run: null,
+        savedPaths: [added.path],
+      });
+      expect("runError" in saved ? saved.runError : undefined).toEqual(
+        expect.stringContaining("Guardrails failed unexpectedly"),
+      );
+      expect("runError" in saved ? saved.runError : "").not.toContain("secret");
+      expect("runError" in saved ? saved.runError : "").not.toContain(
+        "postgres://",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
+    ).toEqual([existing, added]);
+    expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
+      [],
     );
   });
 
@@ -312,6 +396,8 @@ describe("source-aware validation proposals", () => {
       validation: { valid: true },
       run: null,
     });
+    expect(saved).not.toHaveProperty("runError");
+    expect(saved).not.toHaveProperty("savedPaths");
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
     ).toEqual([]);

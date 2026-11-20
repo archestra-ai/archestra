@@ -65,7 +65,9 @@ function nativeConversationIdForSetupClaim(params: {
     const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
       candidate.matches(context),
     );
-    const sessionId = adapter?.extractSessionIdentity?.(context)?.sessionId;
+    const sessionId =
+      adapter?.conversationClaimId?.(context) ??
+      adapter?.extractSessionIdentity?.(context)?.sessionId;
     if (!isWellFormedAppaId(sessionId)) return undefined;
     if (
       adapter &&

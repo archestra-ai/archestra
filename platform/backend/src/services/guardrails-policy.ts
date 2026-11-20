@@ -30,6 +30,8 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { CURSOR_WEB_SETUP_POLICY_TOOL } from "@/services/cursor-web-setup-tool-name";
+import { DOCS_MCP_TOOL_NAMES } from "@/services/docs-mcp-tool-names";
 import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { SKILL_SANDBOX_TOOL_RESULTS_DIR } from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
@@ -461,17 +463,23 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
-# The coding battery's tools under Codex's and OpenCode's spellings.
+# The coding battery's tools under Codex's, OpenCode's and Cursor's spellings.
+# Cursor shares Claude Code's other tool names; its Read, Write and StrReplace
+# \`path\` is also evaluated as \`file_path\`.
 [aliases.tool.${CODING_BATTERY}]
 shell = [
   { name = "host/archestra/exec_command", args = { command = "cmd" } },
   { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/Shell", args = { command = "command" } },
   { name = "host/archestra/bash", args = { command = "command" } },
 ]
 read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
 search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
 write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
-edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+edit_file = [
+  { name = "host/archestra/edit", args = { file_path = "filePath" } },
+  { name = "host/archestra/StrReplace", args = { file_path = "file_path" } },
+]
 fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]
 
 [policy]
@@ -544,6 +552,22 @@ hint = "Routine requester-local file and shell operations, diagnostics, edits, b
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}
 
+# The documentation servers a fresh instance installs serve public
+# documentation pages. Reading one leaves a session's label as it is, the same
+# way on every call.
+${DOCS_MCP_TOOL_NAMES.map(
+  (name) => `[[policy.tool]]
+name = "${name}"
+delta = {}
+`,
+).join("\n")}
+# Cursor's web search and fetch tools run through Cursor's command-line
+# agent. Their setup tool installs that agent and signs it in; it reads and
+# sends nothing of the session.
+[[policy.tool]]
+name = "host/archestra/${CURSOR_WEB_SETUP_POLICY_TOOL}"
+delta = {}
+
 # Starting a subagent opens a child trajectory under this deployment's context
 # control; what the subagent hands back is checked when it returns.
 [[policy.tool]]
@@ -553,6 +577,52 @@ delta = {}
 # \`Task\` is the earlier name of \`Agent\`.
 [[policy.tool]]
 name = "host/archestra/Task"
+delta = {}
+
+# Cursor checks its chats through hooks that setup writes to
+# ~/.cursor/hooks.json and ~/.cursor/archestra. A call that changes them needs
+# a person's approval, so an agent cannot turn its own checks off. A command
+# may spell the path with either slash.
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*hooks.json*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*archestra*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+# Cursor's Delete tool has no counterpart in the coding battery, so it is
+# named as Cursor spells it.
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
 delta = {}
 
 [[policy.tool]]

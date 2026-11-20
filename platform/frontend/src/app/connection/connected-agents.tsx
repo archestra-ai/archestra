@@ -5,6 +5,7 @@
 // before anything is connected.
 
 import {
+  cursorDisconnectCommand,
   INSTALLER_CLIENT_FOOTPRINT,
   revokeSignsOut,
   startupGuardStem,
@@ -32,6 +33,7 @@ import {
   type ConnectedClient,
   useConnectedClients,
   useDisconnectConnectedClient,
+  useDisconnectReference,
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
@@ -456,6 +458,9 @@ function DisconnectSteps({
   const manualOnly = !readsPrompts(client);
   const skills = data.footprintFor(client).skillsInstalled;
   const guard = startupGuardStem(client.id);
+  // The steps are on screen only while their dialog is open, so a reference
+  // is issued when a person is about to use the prompt.
+  const { data: reference } = useDisconnectReference();
   const [origin, setOrigin] = useState("");
   const [windows, setWindows] = useState(false);
   useEffect(() => {
@@ -478,10 +483,17 @@ function DisconnectSteps({
             : `Paste this into ${nameOf(client)} to remove it:`}
         </p>
         {!manualOnly && (
-          <CopyPrompt text={disconnectPrompt(data, client, origin)} />
+          <CopyPrompt
+            text={disconnectPrompt({
+              data,
+              client,
+              origin,
+              reference: reference ?? null,
+            })}
+          />
         )}
       </div>
-      {!manualOnly && guard && (
+      {!manualOnly && (guard || client.id === "cursor") && (
         <div className="space-y-2">
           <p className="text-muted-foreground">
             If {nameOf(client)}
@@ -489,9 +501,14 @@ function DisconnectSteps({
           </p>
           <CopyPrompt
             text={
-              windows
-                ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
-                : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
+              client.id === "cursor"
+                ? // Cursor has no startup check: its setup leaves a cleanup helper.
+                  cursorDisconnectCommand(windows ? "windows" : "bash", {
+                    wait: true,
+                  })
+                : windows
+                  ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
+                  : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
             }
           />
         </div>
@@ -579,13 +596,21 @@ function DisconnectSteps({
 /**
  * The cleanup prompt: disconnect.md removes what connect.md set up. Apps with
  * an installer get their own steps, other agents the generic ones; both point
- * at the base the setup wrote when it isn't this page's own.
+ * at the base the setup wrote when it isn't this page's own. The reference
+ * rides in the link, so it is in the conversation from its first message:
+ * Guardrails leave the conversation that presents it unchecked.
  */
-function disconnectPrompt(
-  data: ConnectPageData,
-  client: ConnectClient,
-  origin: string,
-) {
+function disconnectPrompt({
+  data,
+  client,
+  origin,
+  reference,
+}: {
+  data: ConnectPageData;
+  client: ConnectClient;
+  origin: string;
+  reference: string | null;
+}) {
   // Generic client: the prompt for whichever agent reads it.
   const any = client.id === "generic";
   const params = new URLSearchParams(
@@ -594,6 +619,7 @@ function disconnectPrompt(
       : { client: usesGenericInstructions(client) ? "generic" : client.id },
   );
   if (data.baseUrl !== `${origin}/v1`) params.set("base", data.baseUrl);
+  if (reference) params.set("ref", reference);
   const query = params.size ? `?${decodeURIComponent(params.toString())}` : "";
   return `Read ${origin}/disconnect.md${query} and disconnect ${any ? "this agent" : client.label} from ${data.appName}.`;
 }

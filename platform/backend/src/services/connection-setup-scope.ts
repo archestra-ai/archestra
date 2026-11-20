@@ -12,6 +12,7 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
   "claude-code-header": "claude-code",
   "claude-code-metadata": "claude-code",
   "codex-turn-metadata": "codex",
+  "cursor-opening": "cursor",
   "opencode-session-header": "opencode",
   "opencode-hosted-header": "opencode",
   "kilo-session-header": "kilo",

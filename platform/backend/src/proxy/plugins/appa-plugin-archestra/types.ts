@@ -214,6 +214,12 @@ export type AppaClientAdapter = {
   extractSessionIdentity?(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined;
+  /**
+   * False for a client whose body fields carry no known session meaning:
+   * when `extractSessionIdentity` finds nothing, the request binds the
+   * credential's fallback root instead of a generic body field.
+   */
+  readonly genericSessionFallback?: false;
   /** Native parent named by a spawn-prepared child request, if any. */
   nativeSpawnParentId?(
     context: AppaMatchContext,
@@ -321,6 +327,13 @@ export type AppaClientAdapter = {
   }): string[] | undefined;
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
+  /**
+   * The id a claim on one whole conversation is kept under, such as the one
+   * conversation a connect or disconnect reference exempts. Only a client
+   * whose session id changes within a conversation names another id here;
+   * for every other client the session id is that id.
+   */
+  conversationClaimId?(context: AppaMatchContext): string | undefined;
   /**
    * Identifies child trajectories named in tool arguments.
    * Uses the same namespace that bindChildTrajectory generates.

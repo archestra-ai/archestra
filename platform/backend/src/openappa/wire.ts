@@ -63,6 +63,7 @@ export type AppaSessionIdentity = {
     | "opencode-hosted-header"
     | "kilo-session-header"
     | "kilo-hosted-header"
+    | "cursor-opening"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"

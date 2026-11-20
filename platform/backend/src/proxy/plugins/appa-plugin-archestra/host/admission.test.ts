@@ -51,7 +51,7 @@ async function admission(params: {
     externalAgentId: undefined,
     inProcessRequest: false,
     internalCall: false,
-    installerSetupBypass: false,
+    connectionProcedureBypass: false,
     ingress: scrubOpenappaIngress({ request, body, interactionType }),
     toolIdentity: await resolveGatewayToolIdentity({
       organizationId: params.agent.organizationId,

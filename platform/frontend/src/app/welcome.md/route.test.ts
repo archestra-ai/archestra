@@ -29,6 +29,13 @@ describe("Welcome agent instructions", () => {
     );
   });
 
+  // An agent with Cursor's web tools finishes their setup from the chat.
+  it("has an agent with Cursor's web tools finish their setup", async () => {
+    const instructions = await welcome("?server=acme_ai");
+    expect(instructions).toContain(
+      "Only if your tools include cursor_web_setup: call it once.",
+    );
+  });
   it("names the gateway's server from the link", async () => {
     const instructions = await welcome("?server=acme_ai");
     expect(instructions).toContain(

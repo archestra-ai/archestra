@@ -12,12 +12,16 @@ import {
 } from "@/openappa/current-trajectory";
 import {
   getHitlAskUserArguments,
+  getHitlInspectableAskUserArguments,
+  getHitlInspectionResult,
   hitlRulingFromLabels,
   peekHitlDecision,
   recordHitlRuling,
+  resolveHitlInspectableAnswer,
   reviewSessionFromTrajectory,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
+import { hitlReviewCardAnswer } from "@/openappa/hitl-review-overview";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
@@ -208,9 +212,20 @@ const registry = defineArchestraTools([
       // Only a live review supplies the canonical text shown to the user.
       if (!hitlArgs) AskUserSchema.parse(args);
       // SPDX-SnippetEnd
+      // A client whose form shows one paragraph gets the short review with
+      // Inspect, Allow and Deny. A review that is already ruled on has no
+      // such form, and keeps the plain one.
+      const inspectable =
+        hitlArgs && session && context.inspectableReviewForm
+          ? await getHitlInspectableAskUserArguments({
+              session,
+              offerIds: liveOffers,
+              presentation: "form",
+            })
+          : undefined;
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
-      const effectiveArgs = hitlArgs ?? args;
+      const effectiveArgs = inspectable?.card ?? hitlArgs ?? args;
       const labels = effectiveArgs.options.map((option) => option.label);
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
@@ -255,6 +270,15 @@ const registry = defineArchestraTools([
             : buildSingleChoiceSchema(
                 effectiveArgs.options,
                 hitlArgs ? "Decision" : "Choice",
+                // A form preselects a choice. The short review form starts
+                // on Allow when it offers it, so a reviewer who has read the
+                // call, or has just inspected it, is not sent to Inspect
+                // again; it starts on Inspect while Allow waits for it.
+                inspectable
+                  ? (["Allow", "Inspect"].find((label) =>
+                      labels.includes(label),
+                    ) ?? undefined)
+                  : undefined,
               ),
           allowText,
         }),
@@ -337,6 +361,17 @@ const registry = defineArchestraTools([
       if (!effectiveArgs.allowMultiple && selected.length > 1) {
         return errorResult("The user selected more than one option.");
       }
+      if (hitlArgs && session && inspectable) {
+        return inspectableReviewAnswer({
+          session,
+          offerId: hitlArgs.remedy_offer_ids[0],
+          label: selected[0],
+          digest: inspectable.digest,
+          // An inspection asked for on an earlier form returned the complete
+          // review as that call's result, which this form followed.
+          carriedReviewText: inspectable.reviewText !== undefined,
+        });
+      }
       const hitlRuling = hitlArgs ? hitlRulingFromLabels(selected) : undefined;
       if (hitlArgs && !hitlRuling) {
         return errorResult("The HITL review returned an invalid choice.");
@@ -347,11 +382,7 @@ const registry = defineArchestraTools([
           offerId: hitlArgs.remedy_offer_ids[0],
           ruling: hitlRuling,
         });
-        if (!recorded) {
-          return errorResult(
-            "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.",
-          );
-        }
+        if (!recorded) return errorResult(REVIEW_NO_LONGER_PENDING);
       }
 
       return structuredSuccessResult(
@@ -384,6 +415,58 @@ export const toolEntries = registry.toolEntries;
 
 export const tools = registry.tools;
 
+const REVIEW_NO_LONGER_PENDING =
+  "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.";
+
+/**
+ * Reads the answer to a short review form. Inspect returns the complete
+ * review for the agent to print, and rules nothing; Allow and Deny are
+ * recorded against the exact review the form showed.
+ */
+async function inspectableReviewAnswer(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  label: string | undefined;
+  digest: string;
+  carriedReviewText: boolean;
+}) {
+  const { session, offerId } = params;
+  const answer = params.label ? hitlReviewCardAnswer(params.label) : undefined;
+  if (!answer)
+    return errorResult("The HITL review returned an invalid choice.");
+  const resolved = await resolveHitlInspectableAnswer({
+    session,
+    offerId,
+    answer,
+    carriedReviewText: params.carriedReviewText,
+    claimDigest: params.digest,
+    presentation: "form",
+  });
+  if (resolved.status === "closed")
+    return errorResult(REVIEW_NO_LONGER_PENDING);
+  if (resolved.status === "stale") {
+    return errorResult(
+      "The review changed while its form was open, so this answer was not recorded. Call this tool again with the same remedy_offer_ids to show the current review.",
+    );
+  }
+  if (resolved.status !== "recorded") {
+    const review = await getHitlInspectionResult({ session, offerId });
+    if (!review) return errorResult(REVIEW_NO_LONGER_PENDING);
+    return structuredSuccessResult(
+      { action: "accept" as const, selected: [params.label ?? ""] },
+      review,
+    );
+  }
+  return structuredSuccessResult(
+    { action: "accept" as const, selected: [params.label ?? ""] },
+    resolved.ruling === "deny"
+      ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
+      : `The user allowed the call. Live remedy offer: ${offerId}. Apply it with ${archestraMcpBranding.getToolName(
+          TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+        )} using the offer_id and plan from the ruling, then retry the blocked call after the plan is authorized. The user already answered, so do not ask about the same plan again.`,
+  );
+}
+
 async function sealOrReturnStoredRuling(params: {
   session: OpenAppaSession;
   offerId: string;
@@ -405,6 +488,7 @@ async function sealOrReturnStoredRuling(params: {
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
   title = "Choice",
+  preselected?: string,
 ) {
   const enumDescriptions = options.map((option) => option.description);
   return {
@@ -414,6 +498,7 @@ function buildSingleChoiceSchema(
         type: "string" as const,
         title,
         enum: options.map((option) => option.label),
+        ...(preselected ? { default: preselected } : {}),
         ...(enumDescriptions.some((description) => description)
           ? { enumDescriptions }
           : {}),

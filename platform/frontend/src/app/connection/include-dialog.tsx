@@ -148,9 +148,15 @@ export function IncludeDialog({
               title="LLM proxy"
               htmlFor="include-proxy"
               sub={
-                choices.proxy
-                  ? "Model requests go through the LLM proxy"
-                  : `Off. ${client.label} calls its model provider directly.`
+                client.id === "cursor"
+                  ? // Cursor's API key setting covers every model, and its
+                    // own models refuse a custom key.
+                    choices.proxy
+                    ? `${client.label} uses ${data.appName}'s models. Its own models are switched off.`
+                    : `Off. ${client.label} keeps its own models and your ${client.label} plan.`
+                  : choices.proxy
+                    ? "Model requests go through the LLM proxy"
+                    : `Off. ${client.label} calls its model provider directly.`
               }
               control={
                 <Switch

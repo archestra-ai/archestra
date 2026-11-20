@@ -1,5 +1,9 @@
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { AgentModel, McpServerModel, ToolModel } from "@/models";
+import {
+  ARCHESTRA_DOCS_SERVER_NAME,
+  OPENAPPA_DOCS_SERVER_NAME,
+} from "@/services/docs-mcp-tool-names";
 import type { Agent } from "@/types";
 
 export type DocsMcpServer = {
@@ -29,7 +33,7 @@ const OPENAPPA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 export const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000003",
-    name: "Archestra Docs", // white-label-ok: names the vendor's public docs site
+    name: ARCHESTRA_DOCS_SERVER_NAME,
     description: "The Archestra documentation", // white-label-ok: names the vendor's public docs site
     serverUrl: "https://archestra.ai/mcp",
     docsUrl: "https://archestra.ai/docs",
@@ -42,7 +46,7 @@ export const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   },
   {
     catalogId: "00000000-0000-4000-8000-000000000004",
-    name: "OpenAPPA Docs",
+    name: OPENAPPA_DOCS_SERVER_NAME,
     description: "The OpenAPPA documentation",
     serverUrl: "https://www.openappa.com/mcp",
     docsUrl: "https://www.openappa.com",

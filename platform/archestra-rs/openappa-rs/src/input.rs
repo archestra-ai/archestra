@@ -179,20 +179,88 @@ pub(crate) struct Input {
 }
 
 /// The return a spawn declares for its subagent: the lowest label the parent accepts from
-/// it, in the policy's `delta` spelling, and for an attested return the schema it matches.
+/// it, in the policy's `delta` spelling, and for an attested return the schema it matches;
+/// or a return the parent decides on once the subagent has stopped.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct DeclaredReturn {
-    pub(crate) label: LabelSpelling,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) return_schema: Option<Map<String, Value>>,
+#[serde(try_from = "DeclaredReturnRecord", into = "DeclaredReturnRecord")]
+pub(crate) enum DeclaredReturn {
+    Floor {
+        label: LabelSpelling,
+        return_schema: Option<Map<String, Value>>,
+    },
+    Deferred,
 }
 
-impl From<DeclaredReturn> for DeclaredArguments {
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DeclaredReturnRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label: Option<LabelSpelling>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    return_schema: Option<Map<String, Value>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    deferred: bool,
+}
+
+impl TryFrom<DeclaredReturnRecord> for DeclaredReturn {
+    type Error = &'static str;
+
+    fn try_from(record: DeclaredReturnRecord) -> Result<Self, Self::Error> {
+        match record {
+            DeclaredReturnRecord {
+                label: None,
+                return_schema: None,
+                deferred: true,
+            } => Ok(DeclaredReturn::Deferred),
+            DeclaredReturnRecord { deferred: true, .. } => {
+                Err("a deferred return takes no `label` and no `return_schema`")
+            }
+            DeclaredReturnRecord {
+                label: Some(label),
+                return_schema,
+                deferred: false,
+            } => Ok(DeclaredReturn::Floor {
+                label,
+                return_schema,
+            }),
+            DeclaredReturnRecord { label: None, .. } => {
+                Err("a declared return names its `label` or is `deferred`")
+            }
+        }
+    }
+}
+
+impl From<DeclaredReturn> for DeclaredReturnRecord {
     fn from(declared: DeclaredReturn) -> Self {
-        DeclaredArguments {
-            label: Some(declared.label),
-            return_schema: declared.return_schema.map(Value::Object),
+        match declared {
+            DeclaredReturn::Floor {
+                label,
+                return_schema,
+            } => DeclaredReturnRecord {
+                label: Some(label),
+                return_schema,
+                deferred: false,
+            },
+            DeclaredReturn::Deferred => DeclaredReturnRecord {
+                label: None,
+                return_schema: None,
+                deferred: true,
+            },
+        }
+    }
+}
+
+impl From<DeclaredReturn> for appa_runtime_api::DeclaredReturn {
+    fn from(declared: DeclaredReturn) -> Self {
+        match declared {
+            DeclaredReturn::Floor {
+                label,
+                return_schema,
+            } => Self::Arguments(DeclaredArguments {
+                label: Some(label),
+                return_schema: return_schema.map(Value::Object),
+            }),
+            DeclaredReturn::Deferred => Self::Deferred,
         }
     }
 }
@@ -581,7 +649,8 @@ mod tests {
     fn only_a_spawns_tool_call_declares_a_return() {
         let spoken = json!({ "label": {} });
         let attested = json!({ "label": {}, "return_schema": { "type": "object" } });
-        for declares in [&spoken, &attested] {
+        let deferred = json!({ "deferred": true });
+        for declares in [&spoken, &attested, &deferred] {
             assert!(validate(&tool_call_input(true, declares.clone()).unwrap()).is_ok());
             let plain = tool_call_input(false, declares.clone()).unwrap();
             assert_eq!(
@@ -608,6 +677,9 @@ mod tests {
             json!({ "label": { "rank": "trusted" } }),
             json!({ "label": {}, "return_schema": "object" }),
             json!({ "label": {}, "return_schema": [] }),
+            json!({ "deferred": false }),
+            json!({ "deferred": true, "label": {} }),
+            json!({ "deferred": true, "return_schema": { "type": "object" } }),
         ] {
             assert!(tool_call_input(true, malformed).is_err());
         }
@@ -617,17 +689,24 @@ mod tests {
         )
         .unwrap()
         .declares
-        .map(appa_runtime_api::DeclaredArguments::from);
+        .map(appa_runtime_api::DeclaredReturn::from);
         assert_eq!(
             declared,
-            Some(appa_runtime_api::DeclaredArguments {
-                label: Some(appa_runtime_api::LabelSpelling {
-                    trust: Some("trusted".to_owned()),
-                    audience: None,
-                }),
-                return_schema: Some(json!({ "type": "object" })),
-            })
+            Some(appa_runtime_api::DeclaredReturn::Arguments(
+                appa_runtime_api::DeclaredArguments {
+                    label: Some(appa_runtime_api::LabelSpelling {
+                        trust: Some("trusted".to_owned()),
+                        audience: None,
+                    }),
+                    return_schema: Some(json!({ "type": "object" })),
+                }
+            ))
         );
+        let deferred = tool_call_input(true, json!({ "deferred": true }))
+            .unwrap()
+            .declares
+            .map(appa_runtime_api::DeclaredReturn::from);
+        assert_eq!(deferred, Some(appa_runtime_api::DeclaredReturn::Deferred));
     }
 
     #[test]

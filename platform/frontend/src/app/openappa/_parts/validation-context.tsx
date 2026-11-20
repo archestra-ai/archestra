@@ -57,20 +57,6 @@ export function useValidationSuite(): ValidationSuite | null {
   return useContext(ValidationContext);
 }
 
-/** The Policy page's entry for a validation file, as the URL carries it. */
-export function validationEntry(path: string) {
-  return `${VALIDATION_ENTRY_PREFIX}${path}`;
-}
-
-/** The validation file an entry names; null for a policy file's entry. */
-export function validationPathOf(entry: string | null) {
-  return entry?.startsWith(VALIDATION_ENTRY_PREFIX)
-    ? entry.slice(VALIDATION_ENTRY_PREFIX.length)
-    : null;
-}
-
-const VALIDATION_ENTRY_PREFIX = "validation:";
-
 // Typed as the loaded collection is, with nothing in it.
 const EMPTY_COLLECTION = {
   source: "local",

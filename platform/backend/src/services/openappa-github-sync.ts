@@ -76,6 +76,7 @@ import {
   firstFileAtEachPath,
   githubAppLogin,
   githubAppProfile,
+  githubAppRequestedPermissions,
   hasRepositoryIncludeGlob,
   MissingGithubPermission,
   openappaRepositoryIncludes,
@@ -97,6 +98,7 @@ import {
 } from "@/services/openappa-template-files";
 import { ApiError } from "@/types";
 import type {
+  AppaGithubAppPermissions,
   AppaGithubSource,
   AppaPolicyCheck,
 } from "@/types/openappa-github-sync";
@@ -311,7 +313,7 @@ export async function connectAppaGithubRepository(params: {
       409,
       "Stop the current Git sync before connecting another repository",
     );
-  await saveSource(params);
+  const before = await saveSource({ ...params, deferKeeperShare: true });
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (row?.lastSyncError) {
@@ -321,6 +323,7 @@ export async function connectAppaGithubRepository(params: {
       `Could not connect ${params.source.repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -721,7 +724,9 @@ async function proposeSetupPullRequest(params: {
     setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
-  await saveAndShareKeeper(params.organizationId, source);
+  const before = await saveAndShareKeeper(params.organizationId, source, {
+    deferShare: true,
+  });
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
       organizationId: params.organizationId,
@@ -740,6 +745,7 @@ async function proposeSetupPullRequest(params: {
       `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -1045,14 +1051,21 @@ async function setSelfService(params: {
   }
 }
 
-/** Save the source, and share the Keeper when that puts self-service in force. */
+/**
+ * Save the source, and share the Keeper when that puts self-service in
+ * force. A caller that still has to learn whether the source works defers
+ * the share and gives it, with the row returned here, once the first pull
+ * succeeded: a connection that is rolled back shares nothing.
+ */
 async function saveAndShareKeeper(
   organizationId: string,
   source: Parameters<typeof OpenAppaGithubSyncModel.save>[1],
-) {
+  options: { deferShare?: boolean } = {},
+): Promise<SyncRow | null> {
   const before = await OpenAppaGithubSyncModel.find(organizationId);
   await OpenAppaGithubSyncModel.save(organizationId, source);
-  await shareKeeperOnceInForce(organizationId, before);
+  if (!options.deferShare) await shareKeeperOnceInForce(organizationId, before);
+  return before;
 }
 
 /**
@@ -3021,7 +3034,9 @@ async function saveSource(params: {
   organizationId: string;
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
-}) {
+  /** The caller shares the Keeper itself, once the source proved to work. */
+  deferKeeperShare?: boolean;
+}): Promise<SyncRow | null> {
   // Auto-merge rides on self-service, and both take a GitHub App: a source
   // saved without either keeps auto-merge off, so a later switch on merges
   // nothing nobody asked for.
@@ -3071,8 +3086,9 @@ async function saveSource(params: {
       });
     }
     await beforeSourceChange(params.organizationId, params.source);
-    await saveAndShareKeeper(params.organizationId, params.source);
-    return;
+    return saveAndShareKeeper(params.organizationId, params.source, {
+      deferShare: params.deferKeeperShare,
+    });
   }
   // Resolve now to reject a missing or cross-organization credential, or an
   // App that cannot read the repository, before saving it.
@@ -3103,7 +3119,11 @@ async function saveSource(params: {
   // Only now, with the new source checked: a save that fails leaves the
   // branch it would have left protected.
   await beforeSourceChange(params.organizationId, params.source);
-  await saveAndShareKeeper(params.organizationId, params.source);
+  const before = await saveAndShareKeeper(
+    params.organizationId,
+    params.source,
+    { deferShare: params.deferKeeperShare },
+  );
   // Saved with auto-merge on, the App may just have been granted what it
   // lacked: the next minute's round tries the merge rather than waiting out
   // a hold. A save that failed above lifts nothing.
@@ -3116,6 +3136,7 @@ async function saveSource(params: {
           "OpenAPPA could not forget a held merge",
         ),
       );
+  return before;
 }
 
 /** The policy at a GitHub source's ref, or the setup pull request's state while it is open. */
@@ -4234,6 +4255,37 @@ export async function getAppaGithubAppGrants(
   )
     await forgetRefusedChecks(organizationId, row.repo);
   return grants ?? null;
+}
+
+/**
+ * The App's grants, each with whether the App's settings ask for it now: a
+ * permission saved there and not yet accepted by the installation is told
+ * apart from one never asked for. Where the settings cannot be read, the
+ * grants stand alone.
+ */
+export async function getAppaGithubAppPermissions(
+  organizationId: string,
+): Promise<AppaGithubAppPermissions | null> {
+  const grants = await getAppaGithubAppGrants(organizationId);
+  if (!grants) return null;
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row) return grants;
+  const asked = await githubAppRequestedPermissions(row).catch((error) => {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not read the permissions the GitHub App asks for",
+    );
+    return null;
+  });
+  return asked
+    ? {
+        ...grants,
+        permissions: grants.permissions.map((permission) => ({
+          ...permission,
+          requested: asked[permission.name] === "write",
+        })),
+      }
+    : grants;
 }
 
 /** The last protection read, by organization, for a minute. */

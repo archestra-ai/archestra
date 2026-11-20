@@ -318,6 +318,58 @@ import { useOrganization } from "@/lib/organization.query";
 import { ChatMessages } from "./chat-messages";
 
 describe("ChatMessages", () => {
+  it.each([
+    ["preview_guardrails_policy_change", false],
+    ["update_guardrails_policy", false],
+    ["preview_guardrails_policy_change", true],
+    ["update_guardrails_policy", true],
+  ] as const)("keeps arguments reachable in the full %s card (wrapped: %s)", (shortName, wrapped) => {
+    const toolName = `sparky__${wrapped ? "run_tool" : shortName}`;
+    const args = {
+      expectedRevision: 3,
+      edits: [{ oldText: "old", newText: "new" }],
+    };
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        status="ready"
+        messages={
+          [
+            {
+              id: "assistant-policy",
+              role: "assistant",
+              parts: [
+                {
+                  type: `tool-${toolName}`,
+                  toolCallId: "policy",
+                  state: "approval-requested",
+                  approval: { id: "review" },
+                  input: wrapped
+                    ? { tool_name: `sparky__${shortName}`, tool_args: args }
+                    : args,
+                  output: {
+                    structuredContent: {
+                      stage: "preview",
+                      delivery: "revision",
+                      before: "old",
+                      after: "new",
+                    },
+                  },
+                },
+              ],
+            },
+          ] as unknown as UIMessage[]
+        }
+      />,
+    );
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    const toggle = screen.getByRole("button", { name: "Arguments" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/expectedRevision/)).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getByText(/expectedRevision/)).toHaveTextContent("3");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -1789,6 +1841,43 @@ describe("ChatMessages", () => {
       approved: false,
       reason: "User denied",
     });
+  });
+
+  it("shows a run_tool target's arguments for approval when they arrive as JSON text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__run_tool",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: {
+              tool_name: "workspace__export_records",
+              // run_tool takes its target's arguments in this form too.
+              tool_args: '{"destination":"external"}',
+            },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Approval required")).toBeInTheDocument();
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
   });
 
   it("renders target approval details for a branded run_tool before identity data resolves", () => {

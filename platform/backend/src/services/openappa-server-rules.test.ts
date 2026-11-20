@@ -23,8 +23,10 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
+  getAppaGithubAppPermissions,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -1233,9 +1235,12 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     path: "mcp/payments_api.toml",
     before: "",
     after: REFUNDS,
-    // Without auto-merge, the user approves the pull request first.
+    // The person approves the proposing call itself, so the model is not
+    // told to ask in text as well.
     autoMerge: false,
-    instruction: expect.stringContaining("ask the user"),
+    instruction: expect.stringContaining(
+      "asked to approve that call before it runs",
+    ),
   });
   // The first server file brings every server's in, so no later one needs
   // its own line in appa.toml.
@@ -1352,16 +1357,21 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     ),
   );
   // With auto-merge on, the pull request merges by itself once its check
-  // passes: the preview asks for no approval, and the change is proposed.
+  // passes. The preview still sends the model to the proposing call, which
+  // the person approves in the chat: nothing is proposed on the model's word.
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
-  expect(
-    await previewServerRulesChange({ ...change, userId: pat.id }),
-  ).toMatchObject({
+  const previewed = await previewServerRulesChange({
+    ...change,
+    userId: pat.id,
+  });
+  expect(previewed).toMatchObject({
     autoMerge: true,
+    delivery: "pull_request",
     instruction: expect.stringContaining(
-      "Do not ask the user to approve it first",
+      "asked to approve that call before it runs",
     ),
   });
+  expect(previewed.instruction).not.toMatch(/Do not ask the user to approve/);
   expect(
     await proposeServerRulesChange({
       ...change,
@@ -2111,6 +2121,73 @@ test("saving a GitHub App source with self-service on shares the APPA Keeper as 
       })
     ).some((agent) => agent.id === keeper.id),
   ).toBe(true);
+});
+
+test("a connection whose first pull fails is rolled back and shares nothing; one that works shares the APPA Keeper", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  const githubAppConfigId =
+    (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null;
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  const organizationGrant = async () =>
+    (
+      await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "agent",
+        scope: keeper.id,
+      })
+    )?.grants.find((grant) => grant.subject.type === "organization");
+  const connect = (path: string) =>
+    connectAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      source: {
+        repo: "example/policies",
+        ref: "main",
+        path,
+        interval: "1h",
+        validationDirectory: "",
+        githubPatId: null,
+        githubAppConfigId,
+        gitlabTokenId: null,
+        selfService: true,
+        selfServiceDirectory: "mcp",
+        selfServiceAutoMerge: false,
+      },
+    });
+
+  // No policy file at that path: the connection is refused and undone.
+  await expect(connect("missing/appa.toml")).rejects.toMatchObject({
+    statusCode: 400,
+  });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
+  expect(await organizationGrant()).toBeUndefined();
+
+  // The file is there: the pull works, and self-service is in force.
+  await connect("appa.toml");
+  expect(await organizationGrant()).toEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  });
 });
 
 test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({
@@ -4152,6 +4229,34 @@ test("a grants read lets a refused round of checks go once the App holds what th
     name: "workflows",
     granted: false,
   });
+  // The App as this test serves it lists no permissions of its own: nothing
+  // is asked for in its settings yet.
+  expect(
+    (await getAppaGithubAppPermissions(org.id))?.permissions,
+  ).toContainEqual({ name: "workflows", granted: false, requested: false });
+  // Workflows saved in the App's settings, its installation yet to accept:
+  // asked for and not granted, told apart from one never asked for.
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({
+        slug: "acme-guardrails",
+        name: "Policy App",
+        permissions: {
+          contents: "write",
+          pull_requests: "write",
+          checks: "write",
+          workflows: "write",
+          metadata: "read",
+        },
+      }),
+    ),
+  );
+  expect((await getAppaGithubAppPermissions(org.id))?.permissions).toEqual([
+    { name: "contents", granted: true, requested: true },
+    { name: "pull_requests", granted: true, requested: true },
+    { name: "checks", granted: true, requested: true },
+    { name: "workflows", granted: false, requested: true },
+  ]);
   await checkDueAppaGithubSyncs();
   expect(runs.length).toBeGreaterThan(0);
 });

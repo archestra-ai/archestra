@@ -15,6 +15,8 @@ import {
   type ModelSelection,
   markLoadBalancedRuntimeRouterTool,
   OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
+  OPENAPPA_SERVER_RULES_CHANGE_TOOL_SHORT_NAMES,
+  OPENAPPA_SERVER_RULES_PROPOSE_TOOL_SHORT_NAME,
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
@@ -221,7 +223,17 @@ export function buildMcpGatewayTool(params: {
               input,
             }),
         }
-      : {}),
+      : opensPolicyPullRequest(mcpTool.name)
+        ? // Asked directly: the person approves the pull request itself.
+          { needsApproval: true }
+        : archestraMcpBranding.getToolShortName(mcpTool.name) ===
+            TOOL_RUN_TOOL_SHORT_NAME
+          ? // Dispatched through run_tool: the same call, the same consent.
+            {
+              needsApproval: (input: unknown) =>
+                runToolOpensPolicyPullRequest(mcpTool.name, input),
+            }
+          : {}),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
       return executeWithToolSpan({
@@ -1012,7 +1024,33 @@ const STRUCTURED_RESULT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
+  ...OPENAPPA_SERVER_RULES_CHANGE_TOOL_SHORT_NAMES,
 ]);
+
+/**
+ * Whether a call opens a pull request on the policy repository in the
+ * caller's name. Such a call waits for the person's approval in the chat,
+ * whatever the Guardrails policy says and whether or not it is enforced:
+ * the file it proposes becomes the guardrails of a server's tools.
+ */
+function opensPolicyPullRequest(toolName: string): boolean {
+  return (
+    archestraMcpBranding.getToolShortName(toolName) ===
+    OPENAPPA_SERVER_RULES_PROPOSE_TOOL_SHORT_NAME
+  );
+}
+
+/**
+ * The same for a `run_tool` call, by the tool it dispatches to. The target
+ * is read as `run_tool` itself resolves it, so the bare short name it also
+ * accepts is the same call as the full one.
+ */
+function runToolOpensPolicyPullRequest(toolName: string, args: unknown) {
+  const dispatch = resolveRunToolDispatch({ toolName, args });
+  return (
+    dispatch.kind === "target" && opensPolicyPullRequest(dispatch.toolName)
+  );
+}
 
 /**
  * The execute skeleton shared by both tool kinds: the entry log, the MCP span,

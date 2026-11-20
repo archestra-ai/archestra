@@ -256,7 +256,7 @@ function globNames(entry: string, path: string): boolean {
  * policy-relative path, `<folder>/<prefix>.toml`; null for another path, a
  * hidden file, or a file deeper down.
  */
-function serverRulesFilePrefix(folder: string, path: string): string | null {
+export function serverRulesPrefix(folder: string, path: string): string | null {
   if (!path.startsWith(`${folder}/`)) return null;
   const name = path.slice(folder.length + 1);
   if (!name.endsWith(".toml") || name.startsWith(".") || name.includes("/"))
@@ -310,12 +310,7 @@ export function serverRulesPath(folder: string, toolPrefix: string): string {
 
 /** Whether a policy-relative path is a server rules file `<folder>/*.toml` takes in. */
 export function isServerRulesFile(folder: string, path: string): boolean {
-  return serverRulesFilePrefix(folder, path) !== null;
-}
-
-/** The tool prefix a server rules file is named for, or null for another path. */
-export function serverRulesPrefix(folder: string, path: string): string | null {
-  return serverRulesFilePrefix(folder, path);
+  return serverRulesPrefix(folder, path) !== null;
 }
 
 /** The branch of a pull request this deployment opens for one server's rules. */
@@ -579,7 +574,7 @@ export function expandRepositoryIncludes(params: {
       errors.push(...parsed.errors);
       continue;
     }
-    const prefix = serverRulesFilePrefix(folder, path) ?? undefined;
+    const prefix = serverRulesPrefix(folder, path) ?? undefined;
     const replaced =
       prefix === undefined
         ? []
@@ -668,7 +663,7 @@ export function serverCatchAllPrefixes(
 ): string[] {
   const prefixes = new Set<string>();
   for (const [path, text] of files) {
-    const prefix = serverRulesFilePrefix(folder, path);
+    const prefix = serverRulesPrefix(folder, path);
     if (prefix === null) continue;
     // The parsed names, as the fold reads them: an escaped spelling counts.
     const rules = tablesOf(asRecord(parsePolicyToml(text)?.policy)?.tool);
@@ -897,7 +892,7 @@ function parseIncluded(
       errors.push(
         `${path}: confined_results may list only tools this file declares; ${JSON.stringify(name)} is not one`,
       );
-  const prefix = serverRulesFilePrefix(folder, path);
+  const prefix = serverRulesPrefix(folder, path);
   if (prefix !== null)
     errors.push(...serverScopeErrors(path, folder, prefix, policy));
   if (errors.length > 0) return { errors };

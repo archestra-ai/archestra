@@ -73,7 +73,9 @@ test.describe("Chat browser setup", () => {
       request,
       makeApiRequest,
       createAgent,
-      agentName: `Browser setup required ${Date.now()}`,
+      // Avoid reusing SETUP_CARD text in the agent name: the selector renders
+      // the chosen agent's name immediately and getByText matches substrings.
+      agentName: `Playwright browser check ${Date.now()}`,
     });
 
     await goToChat(page);

@@ -15579,7 +15579,7 @@ describe("soft-block emergency override", () => {
     trusted.runtimeTaskId = "task";
     await plugin.onSessionInit(context);
     const crossing = vi
-      .spyOn(appaService, "returnRuntimeValue")
+      .spyOn(appaService, "returnSubagentValue")
       .mockResolvedValue({
         kind: "held",
         reason: "your parent takes no return from this session",

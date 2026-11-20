@@ -9,19 +9,22 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
+import { ClickPath } from "@/components/github-app-setup/click-path";
 import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  type AppaGithubAppPermissions,
   useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
@@ -31,22 +34,24 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { appaGitHost } from "./appa-git-host";
+import {
+  appaGitHost,
+  isAccessRefusal,
+  shownFailure,
+  UNEXPLAINED_REFUSAL,
+} from "./appa-git-host";
 
 type Step = "app" | "folder" | "enable";
-type Grants = NonNullable<
-  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
->;
+type Grants = AppaGithubAppPermissions;
 type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "app", label: "GitHub App" },
-  { id: "folder", label: "Folder" },
+  { id: "folder", label: "Self-service" },
   { id: "enable", label: "Finish" },
 ];
-const NEEDED = ["checks"] as const;
 const DEFAULT_FOLDER = "mcp";
 /**
  * A folder beside the policy file, nested as deep as wanted: segments of
@@ -92,11 +97,18 @@ export function SelfServiceSetupDialog({
   const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
   const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
   const folderValid = isSelfServiceFolder(chosen);
+  // Whether the App merges each server's rules pull request once its check
+  // passes: on unless unticked here, as in the Git sync setup. The
+  // environment variable, while set, decides instead.
+  const [chosenAutoMerge, setAutoMerge] = useState(true);
+  const autoMergeEnvironment =
+    useAppaGithubSync().data?.selfService?.autoMerge?.environment;
+  const autoMerge = autoMergeEnvironment
+    ? autoMergeEnvironment.value === "enabled"
+    : chosenAutoMerge;
   const grants = useAppaGithubAppGrants(open);
-  const granted = (name: Grants["permissions"][number]["name"]) =>
-    grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
-    true;
-  const ready = NEEDED.every(granted);
+  const ready =
+    !!grants.data && missingAppPermissions(grants.data).length === 0;
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
   const header = headerFor(step, appName, grants.data?.name ?? null);
   return (
@@ -172,44 +184,79 @@ export function SelfServiceSetupDialog({
           checking={grants.isFetching}
           ready={ready}
           onCheckAgain={() => void grants.refetch()}
+          checkedAt={grants.dataUpdatedAt || undefined}
         />
       ) : null}
       {step === "folder" ? (
-        <div className="space-y-2">
-          <Label htmlFor="self-service-folder">Self-service folder</Label>
-          <FieldDescription>
-            Each managed MCP server policy file goes here and included into the
-            root policy. A pull request includes it to {policyFile} if not yet
-            done.
-          </FieldDescription>
-          <Input
-            id="self-service-folder"
-            value={folder}
-            placeholder={DEFAULT_FOLDER}
-            autoComplete="off"
-            data-1p-ignore
-            spellCheck={false}
-            aria-invalid={!folderValid}
-            onChange={(event) => setFolder(event.target.value)}
-          />
-          {folderValid ? null : (
-            <p className="text-xs text-destructive">
-              Use a folder path such as <code>rules/servers</code>. Wildcards
-              and <code>..</code> are not allowed.
-            </p>
-          )}
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="self-service-folder">Self-service folder</Label>
+            <FieldDescription>
+              Each MCP server policy file goes here.
+            </FieldDescription>
+            <Input
+              id="self-service-folder"
+              value={folder}
+              placeholder={DEFAULT_FOLDER}
+              autoComplete="off"
+              data-1p-ignore
+              spellCheck={false}
+              aria-invalid={!folderValid}
+              onChange={(event) => setFolder(event.target.value)}
+            />
+            {folderValid ? null : (
+              <p className="text-xs text-destructive">
+                Use a folder path such as <code>rules/servers</code>. Wildcards
+                and <code>..</code> are not allowed.
+              </p>
+            )}
+          </div>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="self-service-auto-merge"
+              className="mt-0.5"
+              checked={autoMerge}
+              disabled={!!autoMergeEnvironment}
+              onCheckedChange={(checked) => setAutoMerge(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="self-service-auto-merge">
+                Auto-merge pull requests
+              </Label>
+              <FieldDescription>
+                MCP owners can manage their guardrails without GitHub access.
+              </FieldDescription>
+              {autoMergeEnvironment ? (
+                <FieldDescription>
+                  Set with{" "}
+                  <code className="font-mono">
+                    {autoMergeEnvironment.variable}={autoMergeEnvironment.value}
+                  </code>
+                  . Unset the environment variable to choose here.
+                </FieldDescription>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
       {step === "enable" ? (
         <SetupChecklist
           selfService
-          run={() =>
-            update.mutateAsync({
+          run={async () => {
+            const turnedOn = await update.mutateAsync({
               action: "self_service",
               enabled: true,
               directory: alreadyOn ? directory : chosen,
-            })
-          }
+            });
+            // Auto-merge takes self-service in force, so it follows the
+            // switch. Already on, the saved choice stands: Edit changes it.
+            if (alreadyOn || autoMergeEnvironment || !chosenAutoMerge)
+              return turnedOn;
+            return update.mutateAsync({
+              action: "self_service_auto_merge",
+              enabled: true,
+            });
+          }}
           labels={{
             pending: "Turn MCP Guardrails Self-Service on",
             done: "MCP Guardrails Self-Service is on",
@@ -227,12 +274,12 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "app")
     return {
       title: "MCP Guardrails Self-Service",
-      description: `${appName} posts the policy check on each pull request. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs one more permission for that.`,
+      description: `${appName} reads the policy, opens pull requests and posts the policy check through the ${githubApp ? `${githubApp} App` : "GitHub App"}. It needs every permission below.`,
     };
   if (step === "folder")
     return {
-      title: "Choose the self-service folder",
-      description: "Where each MCP server's own rules file lives.",
+      title: "MCP Guardrails Self-Service",
+      description: "Choose the folder and how pull requests merge.",
     };
   return {
     title: "Finish setup",
@@ -240,17 +287,64 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
   };
 }
 
-const PERMISSION_LABELS = {
+export const APP_PERMISSION_LABELS = {
   contents: "Contents",
   pull_requests: "Pull requests",
   checks: "Checks",
   workflows: "Workflows",
 } as const;
+export type AppPermission = keyof typeof APP_PERMISSION_LABELS;
 
 /**
- * The App's permissions: what it has, and where to grant the rest. Self-
- * service asks for Administration and Checks; a caller can ask for others,
- * such as Workflows for the validation workflow's updates.
+ * The permissions the App lacks, as GitHub reports them now. Every wizard
+ * step and the Git sync card read this one list, so none calls an App fine
+ * that another finds lacking.
+ */
+export function missingAppPermissions(
+  grants: Grants | null | undefined,
+): AppPermission[] {
+  return (grants?.permissions ?? [])
+    .filter((permission) => !permission.granted)
+    .map((permission) => permission.name);
+}
+
+/**
+ * Of the missing permissions, those the App's settings do not ask for yet.
+ * The rest are saved there and wait for the installation to accept them.
+ * Where GitHub's answer does not say, every missing one counts.
+ */
+export function unaskedAppPermissions(
+  grants: Grants | null | undefined,
+): AppPermission[] {
+  return (grants?.permissions ?? [])
+    .filter(
+      (permission) => !permission.granted && permission.requested !== true,
+    )
+    .map((permission) => permission.name);
+}
+
+/** "Checks", "Contents and Checks", "Contents, Pull requests and Checks". */
+export function appPermissionList(names: readonly AppPermission[]): string {
+  const labels = names.map((name) => APP_PERMISSION_LABELS[name]);
+  return labels.length > 1
+    ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`
+    : (labels[0] ?? "");
+}
+
+/** Where a permission is granted on the App's settings page on GitHub. */
+function permissionPath(name: AppPermission) {
+  return [
+    "Repository permissions",
+    APP_PERMISSION_LABELS[name],
+    "Read and write",
+  ];
+}
+/** Where the App's installation accepts permissions its settings now ask for. */
+const ACCEPT_PATH = ["Review request", "Accept new permissions"];
+
+/**
+ * The App's permissions: whether GitHub grants every one Git sync asks for,
+ * and where to grant the rest.
  */
 export function GithubAppPermissionsStep({
   grants,
@@ -259,16 +353,7 @@ export function GithubAppPermissionsStep({
   checking,
   ready,
   onCheckAgain,
-  needed = NEEDED,
-  title = (app) => `Grant the Checks permission to the ${app} App`,
-  hint = (
-    <>
-      Set it to <strong>Read and write</strong>: the App posts the check&apos;s
-      verdict on each pull request. Making the check required is a branch
-      ruleset you import yourself, so the App needs no Administration.
-    </>
-  ),
-  readyText = "every permission self-service needs",
+  checkedAt,
 }: {
   grants: Grants | null;
   loading: boolean;
@@ -276,11 +361,8 @@ export function GithubAppPermissionsStep({
   checking: boolean;
   ready: boolean;
   onCheckAgain: () => void;
-  needed?: readonly Grants["permissions"][number]["name"][];
-  title?: (app: string) => ReactNode;
-  hint?: ReactNode;
-  /** What the App has once every needed permission is granted. */
-  readyText?: string;
+  /** When GitHub last answered, so a check that changes nothing still shows. */
+  checkedAt?: number;
 }) {
   if (loading)
     return (
@@ -298,23 +380,44 @@ export function GithubAppPermissionsStep({
         </InlineNoticeText>
       </InlineNotice>
     );
-  const missing = needed.filter(
-    (name) =>
-      grants.permissions.find((entry) => entry.name === name)?.granted !== true,
-  );
+  const missing = missingAppPermissions(grants);
+  // Saved in the App's settings, not yet accepted by its installation:
+  // the first step is done and the second is the one that waits.
+  const unasked = unaskedAppPermissions(grants);
+  const asked = missing.length > 0 && unasked.length === 0;
+  // One string with the time GitHub last answered, so a check that changes
+  // nothing still shows that it ran.
+  const waiting = `${asked ? "Waiting for approval" : "Missing"}: ${appPermissionList(missing)}${
+    checkedAt
+      ? ` · checked ${formatRelativeTimeFromNow(new Date(checkedAt).toISOString()).toLowerCase()}`
+      : "."
+  }`;
   return (
-    <div className="space-y-4">
-      <ol className="overflow-hidden rounded-lg border bg-card">
+    // One box: the two steps, then what GitHub reports and the button that
+    // reads it again, beside the rows it updates.
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <ol>
         <ManifestRow
           index={1}
-          title={title(grants.name)}
-          hint={hint}
+          title={`Add permissions to the ${grants.name} App`}
+          hint={
+            <>
+              {unasked.map((name) => (
+                <ClickPath
+                  key={name}
+                  className="block"
+                  steps={permissionPath(name)}
+                />
+              ))}
+              <ClickPath className="block" steps={["Save changes"]} />
+            </>
+          }
           inlineAction
           waiting={false}
           error={error}
           onCheckAgain={onCheckAgain}
           result={null}
-          done={ready}
+          done={ready || asked}
           action={
             <GitHubConnectButton
               label="Update App"
@@ -326,8 +429,8 @@ export function GithubAppPermissionsStep({
         />
         <ManifestRow
           index={2}
-          title="Accept the new permission"
-          hint={null}
+          title="Accept the updated permissions"
+          hint={<ClickPath steps={ACCEPT_PATH} />}
           inlineAction
           waiting={false}
           onCheckAgain={onCheckAgain}
@@ -349,34 +452,17 @@ export function GithubAppPermissionsStep({
           }
         />
       </ol>
-      {grants.permissions.some((entry) => entry.granted) ? (
-        <p className="text-xs text-muted-foreground">
-          Granted:{" "}
-          {grants.permissions
-            .filter((entry) => entry.granted)
-            .map((entry) => PERMISSION_LABELS[entry.name])
-            .join(", ")}
-          .
-        </p>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
         {ready ? (
-          <span>
-            The {grants.name} App has {readyText}.
-          </span>
+          <span>The {grants.name} App has the required permissions.</span>
         ) : (
-          <span>
-            Missing:{" "}
-            {missing.map((name) => PERMISSION_LABELS[name]).join(" and ")}.
-            Check again once {needed.length > 1 ? "they are" : "it is"}{" "}
-            accepted.
-          </span>
+          <span>{waiting}</span>
         )}
         <Button
           type="button"
           variant="outline"
-          size="icon-xs"
-          aria-label="Check again"
+          size="sm"
+          className="shrink-0"
           disabled={checking}
           onClick={onCheckAgain}
         >
@@ -384,6 +470,7 @@ export function GithubAppPermissionsStep({
             className={cn("size-3.5", checking && "animate-spin")}
             aria-hidden
           />
+          <span>Check again</span>
         </Button>
       </div>
     </div>
@@ -653,8 +740,8 @@ export function SetupChecklist({
                 >
                   Pull request #{setupPull.number}
                 </a>{" "}
-                carries the current policy: merge it, and the next sync finishes
-                setup.
+                carries the current policy. <ClickPath steps={git.mergePath} />,
+                and the next sync finishes setup.
               </span>
             ) : (
               <span>
@@ -724,11 +811,9 @@ function SourceRows() {
   const source = status?.source;
   const files = status?.templateFiles;
   const app = !!source?.githubAppConfigId;
-  const lacksGrant =
-    status?.check?.state === "refused" ||
-    files?.state === "needs_permission" ||
-    (files?.withheld?.length ?? 0) > 0;
-  const grants = useAppaGithubAppGrants(app && lacksGrant);
+  // What GitHub grants the App now: the one reading every row goes by.
+  const grants = useAppaGithubAppGrants(app);
+  const missing = missingAppPermissions(grants.data);
   const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   const protection = useAppaRepositoryProtection(
@@ -762,34 +847,70 @@ function SourceRows() {
       {text}
     </a>
   );
+  // Each button opens the page on GitHub; beside it, what to click there.
+  const unasked = unaskedAppPermissions(grants.data);
   const grantActions = grants.data ? (
-    <span className="mt-2 flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        onClick={() =>
-          openGithubWindow(grants.data?.settingsUrl ?? "", GITHUB_WINDOW)
-        }
-      >
-        <span>Update App</span>
-        <ExternalLink aria-hidden />
-      </Button>
+    <span className="mt-2 block space-y-2">
+      {unasked.length > 0 ? (
+        <span className="flex flex-wrap items-start gap-x-3 gap-y-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() =>
+              openGithubWindow(grants.data?.settingsUrl ?? "", GITHUB_WINDOW)
+            }
+          >
+            <span>Update App</span>
+            <ExternalLink aria-hidden />
+          </Button>
+          <span className="space-y-0.5 text-xs">
+            {unasked.map((name) => (
+              <ClickPath
+                key={name}
+                className="block"
+                steps={permissionPath(name)}
+              />
+            ))}
+            <ClickPath className="block" steps={["Save changes"]} />
+          </span>
+        </span>
+      ) : null}
       {grants.data.installationUrl ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          onClick={() =>
-            openGithubWindow(grants.data?.installationUrl ?? "", GITHUB_WINDOW)
-          }
-        >
-          <span>Approve the request</span>
-          <ExternalLink aria-hidden />
-        </Button>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() =>
+              openGithubWindow(
+                grants.data?.installationUrl ?? "",
+                GITHUB_WINDOW,
+              )
+            }
+          >
+            <span>Approve the request</span>
+            <ExternalLink aria-hidden />
+          </Button>
+          <ClickPath className="text-xs" steps={ACCEPT_PATH} />
+        </span>
       ) : null}
     </span>
   ) : null;
+  // A refusal is explained while the permissions row names what is missing,
+  // and held until GitHub has said what the App holds: no sentence shows
+  // first only to give way to that row.
+  const explained = (app && grants.isPending) || missing.length > 0;
+  const syncFailure = shownFailure(source, source.lastSyncError, explained);
+  const filesFailure = shownFailure(source, files?.detail, explained);
+  const checkDetail = status.check?.detail;
+  const checkFailure = !checkDetail
+    ? null
+    : app && isAccessRefusal(checkDetail)
+      ? explained
+        ? null
+        : UNEXPLAINED_REFUSAL
+      : `${checkDetail}.`;
   const checked = source.lastSyncedAt
     ? ` · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
     : "";
@@ -799,7 +920,12 @@ function SourceRows() {
         state={source.lastSyncError ? "failed" : waiting ? "action" : "done"}
       >
         {source.lastSyncError ? (
-          <span>Could not sync the policy: {source.lastSyncError}</span>
+          // GitHub refusing the App for a permission it lacks is said by the
+          // permissions row below.
+          <span>
+            Could not sync the policy
+            {syncFailure ? <span>: {syncFailure}</span> : <span>.</span>}
+          </span>
         ) : waiting && source.setupPullRequestNumber ? (
           <span>
             {link(
@@ -815,6 +941,34 @@ function SourceRows() {
           </span>
         )}
       </ProgressRow>
+      {grants.data ? (
+        <ProgressRow state={missing.length > 0 ? "action" : "done"}>
+          {missing.length > 0 ? (
+            <span className="block">
+              <span className="block">
+                {unasked.length > 0 ? (
+                  <span>
+                    The {grants.data.name} App needs the{" "}
+                    {appPermissionList(missing)}{" "}
+                    {missing.length > 1 ? "permissions" : "permission"}.
+                  </span>
+                ) : (
+                  <span>
+                    The {grants.data.name} App's installation has still to
+                    accept the {appPermissionList(missing)}{" "}
+                    {missing.length > 1 ? "permissions" : "permission"}.
+                  </span>
+                )}
+              </span>
+              {grantActions}
+            </span>
+          ) : (
+            <span>
+              The {grants.data.name} App has the permissions it needs.
+            </span>
+          )}
+        </ProgressRow>
+      ) : null}
       {app && status.check && status.check.state !== "none" ? (
         <ProgressRow
           state={status.check.state === "posted" ? "done" : "action"}
@@ -824,12 +978,16 @@ function SourceRows() {
               The {status.check.name} check goes on every {git.changeRequest}.
             </span>
           ) : (
-            <span className="block">
-              <span className="block">
-                The {status.check.name} check is not posted: the GitHub App
-                needs the Checks permission.
-              </span>
-              {grantActions}
+            // The permissions row above says what the App lacks, if anything.
+            <span>
+              The {status.check.name} check is not posted
+              {missing.length > 0 ? (
+                <span>: it waits for the App's permissions.</span>
+              ) : checkFailure ? (
+                <span>: {checkFailure}</span>
+              ) : (
+                <span>.</span>
+              )}
             </span>
           )}
         </ProgressRow>
@@ -849,37 +1007,31 @@ function SourceRows() {
           ) : files.state === "unavailable" ? (
             <span>
               Could not compare the files beside the policy
-              {files.detail ? `: ${files.detail}` : "."}
+              {filesFailure ? `: ${filesFailure}` : "."}
             </span>
           ) : (
-            <span className="block">
-              <span className="block">
-                {files.pull ? (
-                  <span>
-                    {link(
-                      files.pull.url,
-                      `${git.changeRequestShort} #${files.pull.number}`,
-                    )}{" "}
-                    updates the files beside the policy: waiting for merge.
-                  </span>
-                ) : (
-                  <span>
-                    The validation workflow update waits for the Workflows
-                    permission.
-                  </span>
-                )}
-                {files.pull && (files.withheld?.length ?? 0) > 0 ? (
-                  <span>
-                    {" "}
-                    The validation workflow follows once the App may write
-                    workflows.
-                  </span>
-                ) : null}
-              </span>
-              {(files.withheld?.length ?? 0) > 0 ||
-              files.state === "needs_permission"
-                ? grantActions
-                : null}
+            <span>
+              {files.pull ? (
+                <span>
+                  {link(
+                    files.pull.url,
+                    `${git.changeRequestShort} #${files.pull.number}`,
+                  )}{" "}
+                  updates the files beside the policy: waiting for merge.
+                </span>
+              ) : (
+                <span>
+                  The validation workflow update waits for the Workflows
+                  permission.
+                </span>
+              )}
+              {files.pull && (files.withheld?.length ?? 0) > 0 ? (
+                <span>
+                  {" "}
+                  The validation workflow follows once the App may write
+                  workflows.
+                </span>
+              ) : null}
             </span>
           )}
         </ProgressRow>
@@ -948,9 +1100,11 @@ export function BranchRuleActions({
       case "missing":
         return (
           <>
-            Import the branch ruleset on GitHub, so a pull request merges only
-            once the {checkName} check passes: <strong>New ruleset</strong> →{" "}
-            <strong>Import a ruleset</strong>, then <strong>Create</strong>.
+            <span className="block">
+              Import the branch ruleset, so a pull request merges only once the{" "}
+              {checkName} check passes.
+            </span>
+            <ClickPath className="block" steps={IMPORT_PATH} />
           </>
         );
       case "incomplete":
@@ -969,7 +1123,9 @@ export function BranchRuleActions({
         return (
           <>
             Could not read the branch rules
-            {rules.detail ? `: ${rules.detail}` : "."}
+            {rules.detail && !isAccessRefusal(rules.detail)
+              ? `: ${rules.detail}`
+              : "."}
           </>
         );
     }
@@ -1006,20 +1162,25 @@ export function BranchRuleActions({
         <Button
           type="button"
           variant="outline"
-          size="icon-xs"
-          aria-label="Check the branch rules again"
+          size="xs"
           disabled={checking}
           onClick={onCheckAgain}
         >
-          <RefreshCw
-            className={cn("size-3.5", checking && "animate-spin")}
-            aria-hidden
-          />
+          <RefreshCw className={cn(checking && "animate-spin")} aria-hidden />
+          <span>Check again</span>
         </Button>
       </span>
     </span>
   );
 }
+
+/** Importing the downloaded ruleset, from the repository's Rulesets page. */
+const IMPORT_PATH = [
+  "New ruleset",
+  "Import a ruleset",
+  { key: "file", label: "the downloaded file" },
+  "Create",
+];
 
 /** The ruleset as a file, named after the check, for GitHub's import. */
 function downloadRuleset(ruleset: object, checkName: string) {

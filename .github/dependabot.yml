@@ -231,6 +231,80 @@ updates:
     cooldown:
       default-days: 7
 
+  # The shipped npm, Cargo and Go dependencies of a supported release line
+  # (.github/backport-targets.json). Patch releases only: a release line takes
+  # fixes, not features. Main's entries above group minors and patches, and
+  # main alone gets GitHub's security updates. test_dependabot_release_lines.py
+  # keeps one of each per line.
+  - package-ecosystem: npm
+    target-branch: release/1.4
+    directory: platform
+    schedule:
+      interval: weekly
+    groups:
+      platform-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: cargo
+    target-branch: release/1.4
+    directory: platform/archestra-rs
+    schedule:
+      interval: weekly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: gomod
+    target-branch: release/1.4
+    directory: platform/docker/dagger-dockercompat
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directories:
       - /

@@ -1641,6 +1641,47 @@ describe("GET /api/agents/:agentId/tools", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("returns delegations for a caller who can read the agent only through an object grant", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    await makeMember(author.id, organizationId, { role: "admin" });
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: author.id,
+      agentType: "agent",
+      access: { users: [user.id], preset: "view" },
+    });
+    const target = await makeAgent({
+      organizationId,
+      authorId: author.id,
+      agentType: "agent",
+      name: "Delegated target",
+    });
+    await AgentToolModel.assignDelegation({
+      agentId: agent.id,
+      targetAgentId: target.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/delegations`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: target.id, name: "Delegated target" }),
+      ]),
+    );
+  });
+
   test("returns only one catalog's tools when catalogId is given", async ({
     makeAgent,
     makeAgentTool,

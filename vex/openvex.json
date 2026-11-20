@@ -3,7 +3,950 @@
   "@id": "https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json",
   "author": "Archestra (https://archestra.ai)",
   "role": "Document Creator",
-  "timestamp": "2026-11-19T00:00:00Z",
-  "version": 1,
-  "statements": []
+  "timestamp": "2026-11-20T02:54:18Z",
+  "version": 16,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-13151"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/p4-shim",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtasn1-6@4.19.0-2%2Bdeb12u1?arch=amd64&distro=debian-12.15"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The one-byte overflow is in asn1_expand_octet_string(), which libtasn1 never calls itself and which upstream says is reached only when a program calls it explicitly. The only shipped consumer of libtasn1.so.6 is libgnutls.so.30, and no ELF file in these images imports asn1_expand_octet_string (nm -D)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-47917"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The vulnerable function mbedtls_x509_string_to_names() belongs to Mbed TLS's X.509 library (libmbedx509), which these images do not install; they ship only libmbedcrypto7, whose /usr/lib/x86_64-linux-gnu/libmbedcrypto.so.2.28.3 neither exports nor references that function (nm -D)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-10536"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs an application that sets CURLOPT_STREAM_DEPENDS and then calls curl_easy_reset(). libcurl never calls curl_easy_reset() itself, the curl CLI never sets CURLOPT_STREAM_DEPENDS, and no ELF file in the image (the only libcurl consumers are /usr/bin/curl and git's http helpers) imports curl_easy_reset (nm -D)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-10536"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/sandbox-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs an application that sets CURLOPT_STREAM_DEPENDS and then calls curl_easy_reset(). libcurl never calls curl_easy_reset() itself, the curl CLI never sets CURLOPT_STREAM_DEPENDS, and no ELF file in the image (the only libcurl consumers are /usr/bin/curl and git's http helpers) imports curl_easy_reset (nm -D)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/mcp-server-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0?arch=x86_64&distro=alpine-3.23.7&upstream=sqlite"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The injection is in the sqlite3 command-line shell's .recover command. The image installs only Alpine's sqlite-libs (/usr/lib/libsqlite3.so.3.53.4, no shell or recover code) and no sqlite3 executable."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/platform",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0?arch=x86_64&distro=alpine-3.23.8&upstream=sqlite"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The injection is in the sqlite3 command-line shell's .recover command. The image installs only Alpine's sqlite-libs (/usr/lib/libsqlite3.so.3.53.4, no shell or recover code) and no sqlite3 executable."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18924"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs HTTP/2 server push, which libcurl enables only when the application installs CURLMOPT_PUSHFUNCTION (otherwise it sends SETTINGS_ENABLE_PUSH=0 and denies every PUSH_PROMISE). The image's only libcurl consumers, /usr/bin/curl and git's http helpers, never set it: the curl CLI source has no PUSHFUNCTION and git does not import curl_multi_setopt."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18924"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/sandbox-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs HTTP/2 server push, which libcurl enables only when the application installs CURLMOPT_PUSHFUNCTION (otherwise it sends SETTINGS_ENABLE_PUSH=0 and denies every PUSH_PROMISE). The image's only libcurl consumers, /usr/bin/curl and git's http helpers, never set it: the curl CLI source has no PUSHFUNCTION and git does not import curl_multi_setopt."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-34872"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The missing peer-key check is in PSA_ALG_FFDH key agreement. In the shipped unpatched upstream 2.28.3, PSA key agreement accepts only PSA_ALG_ECDH (psa_key_agreement_try_support in library/psa_crypto.c), and the legacy mbedtls_dhm_calc_secret() rejects peer values outside [2, P-2] (dhm_check_range in library/dhm.c)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-34873"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is in Mbed TLS's TLS 1.3 server session resumption (libmbedtls, 3.5.0 and later). These images install neither libmbedtls nor libmbedx509; the shipped libmbedcrypto.so.2.28.3 defines no mbedtls_ssl_* function (nm -D), and 2.28.3 has no TLS 1.3 server."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-34875"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The overflow is in psa_export_public_key() for FFDH keys, which Mbed TLS added in 3.5.0. These images ship Debian's unpatched upstream 2.28.3 libmbedcrypto, whose PSA core has no FFDH key type at all (no PSA_KEY_TYPE_DH handling in library/*.c, no ffdh symbol or string in libmbedcrypto.so.2.28.3)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-52490"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.5.0-6%2Bdeb12u4?arch=amd64&distro=debian-12.15&upstream=tiff"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:17Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The overflow is in the tiffcrop command-line tool's -S option parsing (process_command_opts() and writeImageSections() in tools/tiffcrop.c, libtiff issue 846). These images do not install libtiff-tools or any tiffcrop binary; libtiff6 ships only /usr/lib/x86_64-linux-gnu/libtiff.so.6.0.0, which contains no tiffcrop code."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-5450"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libc-l10n@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "component_not_present",
+      "impact_statement": "libc-l10n holds only glibc's message catalogs, and the images' /etc/dpkg/dpkg.cfg.d/docker excludes /usr/share/locale/*, so of the package's files only /usr/share/doc/libc-l10n/copyright is installed. The scanf code is in libc6."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-5450"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/locales@2.36-9%2Bdeb12u14?arch=all&distro=debian-12.15&upstream=glibc"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T02:54:18Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The locales package installs locale source data under /usr/share/i18n and three scripts (locale-gen is a shell script, update-locale and validlocale are Perl), and no compiled code; the vulnerable scanf implementation is in libc6."
+    }
+  ]
 }

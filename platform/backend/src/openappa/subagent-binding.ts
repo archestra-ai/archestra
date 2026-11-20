@@ -32,7 +32,6 @@ const ClaimsSchema = z
 /** A verified in-process child: its trajectory and the spawn that opened it. */
 export type SubagentBinding = {
   token: string;
-  agentId: string;
   session: OpenAppaSession & { parent_id: string };
   spawnCallId: string;
 };
@@ -75,7 +74,6 @@ export function mintSubagentBinding(params: {
   const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
   return {
     token: `${payload}.${sign(payload)}`,
-    agentId: params.agentId,
     session: subagentChildSession(params.parent, params.spawnCallId),
     spawnCallId: params.spawnCallId,
   };
@@ -110,7 +108,6 @@ export function verifySubagentBinding(
     return null;
   return {
     token,
-    agentId: claims.agentId,
     session: subagentChildSession(
       {
         organization_id: claims.organizationId,

@@ -37,7 +37,7 @@ Both families use closed label sets to keep cardinality bounded and never emit o
 | Label | Values |
 | --- | --- |
 | `hook` | `session_start`, `prompt`, `tool_call`, `tool_result`, `turn_end`, `cancel_call`, `child_address`, `child_end`, `child_return`, [`yell`](/docs/reference/archestra-mcp-server#yell), or `other` for an unrecognized hook |
-| `decision` | `ack`, `allow_call`, `pass_control`, `deny_call`, `block`, `replace_output`, `deliver_value`, `child_return`, `context`, `refuse`, `mcp_result`, `other` for an unrecognized decision, or `error` when the dispatch rejects |
+| `decision` | `ack`, `allow_call`, `pass_control`, `deny_call`, `block`, `replace_output`, `deliver_value`, `child_return`, `defer_return`, `context`, `refuse`, `mcp_result`, `other` for an unrecognized decision, or `error` when the dispatch rejects |
 
 Related boundary counters on other pages track downstream effects: [`llm_blocked_tools_total`](/docs/admin/observability/metrics/llm#llm_blocked_tools_total) counts tool calls blocked at the LLM Proxy, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total) counts runtime boundary refusals.
 

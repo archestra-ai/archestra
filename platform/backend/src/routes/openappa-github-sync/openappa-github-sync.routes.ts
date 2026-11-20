@@ -2,7 +2,6 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   configureAppaGithubSync,
@@ -395,19 +394,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         });
         // The request opens a pull request and usually leaves the settings as
         // they were, so the record marks it beside whatever a first pull
-        // changed. The pull request is open by now: a failed read never fails
-        // the request, and marks it on the settings it started from.
-        const before = request.auditBefore;
-        const after = await OpenAppaGithubSyncModel.findByIdForAudit(
-          request.organizationId,
-          request.organizationId,
-        ).catch((err: unknown) => {
-          logger.error({ err }, "audit: include_servers snapshot read failed");
-          return before;
-        });
-        request.auditBefore = { ...before, includeServersRequested: false };
-        request.auditAfter = { ...after, includeServersRequested: true };
-        return reply.send(await getAppaGithubSync(request.organizationId));
+        // changed, read once for the response and the record.
+        const status = await getAppaGithubSync(request.organizationId);
+        request.auditBefore = {
+          ...request.auditBefore,
+          includeServersRequested: false,
+        };
+        request.auditAfter = {
+          ...(status.source
+            ? { ...status.source, hasPolicy: status.hasPolicy }
+            : {}),
+          includeServersRequested: true,
+        };
+        return reply.send(status);
       }
       // The switch's dialog opens the pull request that includes the
       // servers' folder as its own step, with include_servers.

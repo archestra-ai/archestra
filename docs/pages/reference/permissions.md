@@ -162,7 +162,7 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="mcpOauthClient:create"></span><span id="llmOauthClient:create"></span><span id="oauthClient:create"></span>`oauthClient:create` | Create OAuth client registrations |
 | <span id="organizationSettings:read"></span>`organizationSettings:read` | View every organization settings page, including messaging channels |
 | <span id="organizationSettings:update"></span>`organizationSettings:update` | Change organization settings, messaging channels, and site notifications |
-| <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |
+| <span id="plugin:read"></span>`plugin:read` | Open Plugins; viewing an individual plugin requires a grant on that plugin |
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
 | <span id="plugin:update"></span>`plugin:update` | No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin |
 | <span id="plugin:delete"></span>`plugin:delete` | No standalone effect; deleting a plugin requires a Full access grant on that plugin |

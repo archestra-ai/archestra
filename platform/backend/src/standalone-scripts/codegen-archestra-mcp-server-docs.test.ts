@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { renderSchemaRows } from "./codegen-archestra-mcp-server-docs";
+import {
+  formatToolPermission,
+  renderSchemaRows,
+} from "./codegen-archestra-mcp-server-docs";
 
 describe("codegen-archestra-mcp-server-docs", () => {
   test("renders compact nullable types without losing nested fields", () => {
@@ -133,6 +136,25 @@ describe("codegen-archestra-mcp-server-docs", () => {
             'When `source="native"`: Native label. When `source="external_mcp"`: External label.',
         }),
       ]),
+    );
+  });
+
+  test("renders per-plugin grant requirements for plugin tools except create_plugin", () => {
+    expect(formatToolPermission("list_plugins")).toBe(
+      "`read` on the plugin (granted per item)",
+    );
+    expect(formatToolPermission("get_plugin")).toBe(
+      "`read` on the plugin (granted per item)",
+    );
+    expect(formatToolPermission("create_plugin")).toBe("`plugin:create`");
+    expect(formatToolPermission("update_plugin")).toBe(
+      "`update` on the plugin (granted per item)",
+    );
+    expect(formatToolPermission("edit_plugin")).toBe(
+      "`update` on the plugin (granted per item)",
+    );
+    expect(formatToolPermission("delete_plugin")).toBe(
+      "`delete` on the plugin (granted per item)",
     );
   });
 });

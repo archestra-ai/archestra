@@ -340,7 +340,8 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
   "skill:delete": "Permanently delete skills from the trash",
-  "plugin:read": "View plugins and their file metadata",
+  "plugin:read":
+    "Open Plugins; viewing an individual plugin requires a grant on that plugin",
   "plugin:create": "Create plugins",
   "plugin:update":
     "No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin",

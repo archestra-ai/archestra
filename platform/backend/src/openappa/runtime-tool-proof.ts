@@ -1,7 +1,10 @@
 export const RUNTIME_TOOL_PROOF_ARGUMENT = "runtime_proof";
 
-/** The provider sees the original arguments, never reusable host credentials. */
-export function stripRuntimeToolProofs(request: unknown): void {
+/**
+ * The provider sees the original arguments, never reusable host credentials.
+ * Returns whether a proof was removed.
+ */
+export function stripRuntimeToolProofs(request: unknown): boolean {
   const visited = new WeakSet<object>();
   function strip(value: unknown, depth: number): boolean {
     if (!value || typeof value !== "object" || visited.has(value)) return false;
@@ -33,5 +36,5 @@ export function stripRuntimeToolProofs(request: unknown): void {
     }
     return changed;
   }
-  strip(request, 0);
+  return strip(request, 0);
 }

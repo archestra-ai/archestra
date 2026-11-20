@@ -116,9 +116,12 @@ export function peerProofAuthorizes(params: {
   return params.proof.message_id === null;
 }
 
-/** Remove proxy-only proofs without recursing through untrusted request data. */
-export function stripPeerProofs(request: unknown): void {
-  stripPeerProofsFrom(request);
+/**
+ * Remove proxy-only proofs without recursing through untrusted request data.
+ * Returns whether one was removed.
+ */
+export function stripPeerProofs(request: unknown): boolean {
+  return stripPeerProofsFrom(request);
 }
 
 /**

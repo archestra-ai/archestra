@@ -28,6 +28,11 @@ import {
   stripDelegationMarkers,
 } from "./delegation";
 import { readNotice, readRemedyExecution } from "./notice";
+import { PEER_PROOF_ARGUMENT, stripPeerProofs } from "./peer-claims";
+import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  stripRuntimeToolProofs,
+} from "./runtime-tool-proof";
 import { mayHoldTrajectoryStamp } from "./trajectory-stamp";
 import {
   type AppaSessionIdentity,
@@ -609,7 +614,8 @@ export function mayHoldOpenAppaPayload(raw: Buffer): boolean {
   return (
     mayHoldTrajectoryStamp(raw) ||
     OPENAPPA_TOOL_TOKENS.some((token) => raw.includes(token)) ||
-    PROXY_MARK_TOKENS.some((token) => raw.includes(token))
+    PROXY_MARK_TOKENS.some((token) => raw.includes(token)) ||
+    PROXY_PROOF_ARGUMENTS.some((token) => raw.includes(token))
   );
 }
 
@@ -638,7 +644,10 @@ export function sanitizeForwardedRequest(body: object): boolean {
     body: target,
     interactionType,
   });
-  return marks || stamps + sanitized > 0;
+  // Signed proofs are host credentials on every path to a provider.
+  const peerProofs = stripPeerProofs(target);
+  const runtimeProofs = stripRuntimeToolProofs(target);
+  return marks || peerProofs || runtimeProofs || stamps + sanitized > 0;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -758,6 +767,11 @@ const OPENAPPA_TOOL_TOKENS = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "remedy_offers",
+];
+/** The argument names of the signed proofs the proxy stamps into calls. */
+const PROXY_PROOF_ARGUMENTS = [
+  PEER_PROOF_ARGUMENT,
+  RUNTIME_TOOL_PROOF_ARGUMENT,
 ];
 /**
  * The fixed text of the receipts and markers the proxy writes into history:

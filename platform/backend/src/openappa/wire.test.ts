@@ -22,6 +22,7 @@ import {
   readRemedyExecution,
 } from "./notice";
 import {
+  mayHoldOpenAppaPayload,
   prepareAppaRequest,
   sanitizeForwardedRequest,
   sanitizeProviderBoundRequest,
@@ -5359,6 +5360,33 @@ describe("provider-bound sanitizer", () => {
     // establish ownership of this call.
     expect(functionCall).toEqual(unboundNotice);
     expect(toolFree).toEqual(asSent);
+  });
+
+  test("a forwarded body loses the signed proofs the proxy stamped into its calls", () => {
+    const inputTokens = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "read_peer_message",
+          arguments: JSON.stringify({
+            message_id: "m1",
+            peer_proof: "signed-peer-proof",
+            runtime_proof: "signed-runtime-proof",
+          }),
+        },
+        { type: "function_call_output", call_id: "call_1", output: "hello" },
+      ],
+    };
+
+    expect(
+      mayHoldOpenAppaPayload(Buffer.from(JSON.stringify(inputTokens))),
+    ).toBe(true);
+    expect(sanitizeForwardedRequest(inputTokens)).toBe(true);
+    expect(JSON.parse(inputTokens.input[0].arguments ?? "")).toEqual({
+      message_id: "m1",
+    });
   });
 
   test("still restores a forwarded body's history after stripping a proxy mark", () => {

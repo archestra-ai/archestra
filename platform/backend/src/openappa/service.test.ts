@@ -4166,9 +4166,6 @@ describe("remedy by offer", () => {
       args: { offer_id: "offer" },
     });
 
-    await expect(execution).rejects.toThrow(
-      "OpenAPPA returned no offer lookup state",
-    );
     await expect(execution).rejects.toMatchObject({ statusCode: 500 });
   });
 

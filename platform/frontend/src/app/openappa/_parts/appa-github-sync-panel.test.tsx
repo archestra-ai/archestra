@@ -866,6 +866,10 @@ test("Finish setup opened before GitHub has answered on the App's permissions mo
     selfService: selfServiceSetting(true),
   };
   let answered = false;
+  let releasePermissions!: () => void;
+  const permissionsGate = new Promise<void>((resolve) => {
+    releasePermissions = resolve;
+  });
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
@@ -880,7 +884,7 @@ test("Finish setup opened before GitHub has answered on the App's permissions mo
     ),
     http.get(`${url}/app-permissions`, async () => {
       // GitHub answers on the permissions after the card is up.
-      await delay(150);
+      await permissionsGate;
       answered = true;
       return HttpResponse.json({
         name: "Policy App",
@@ -901,6 +905,7 @@ test("Finish setup opened before GitHub has answered on the App's permissions mo
   // The ruleset alone is enough for the notice, so it is there first.
   fireEvent.click(await screen.findByRole("button", { name: "Finish setup" }));
   expect(answered).toBe(false);
+  releasePermissions();
   // The wizard was opened on what was known; the App's missing permission
   // is the first thing to do, so it is shown, not left behind in the stepper.
   const dialog = await screen.findByRole("dialog", {

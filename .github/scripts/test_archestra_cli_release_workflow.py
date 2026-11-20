@@ -299,8 +299,12 @@ class LockPullRequestTests(unittest.TestCase):
             '  "api repos/archestra-ai/archestra/pulls?state=open&head=archestra-ai:automation/archestra-cli-release-lock&base=main&per_page=1")\n'
             '    printf "%s" "$ARCHESTRA_TEST_EXISTING_PR" ;;\n'
             '  "pr create") echo "https://github.com/archestra-ai/archestra/pull/77" ;;\n'
-            '  "pr view") echo "Lock pull request: https://github.com/archestra-ai/archestra/pull/77" ;;\n'
-            '  "pr edit"|"auth setup-git") ;;\n'
+            '  "pr view")\n'
+            '    case "$*" in\n'
+            '      *autoMergeRequest*) echo "$ARCHESTRA_TEST_AUTO_MERGE" ;;\n'
+            '      *) echo "Lock pull request: https://github.com/archestra-ai/archestra/pull/77" ;;\n'
+            '    esac ;;\n'
+            '  "pr edit"|"pr merge"|"auth setup-git") ;;\n'
             "  *) exit 1 ;;\n"
             "esac\n"
         )})
@@ -347,7 +351,7 @@ class LockPullRequestTests(unittest.TestCase):
         ))
         return runner
 
-    def run_lock_job(self, version, existing_pr=""):
+    def run_lock_job(self, version, existing_pr="", auto_merge="false"):
         """The job's steps in order, in a fresh checkout as on a new runner."""
         self.calls.unlink(missing_ok=True)
         self.summary.unlink(missing_ok=True)
@@ -356,7 +360,8 @@ class LockPullRequestTests(unittest.TestCase):
         self.git("clone", "-q", str(self.origin), str(checkout), cwd=runner)
         env = self.env | {
             "RUNNER_TEMP": str(runner), "VERSION": version, "TAG": f"archestra-cli-v{version}",
-            "ARCHESTRA_TEST_EXISTING_PR": existing_pr, "GH_TOKEN": "fixture",
+            "ARCHESTRA_TEST_EXISTING_PR": existing_pr, "ARCHESTRA_TEST_AUTO_MERGE": auto_merge,
+            "GH_TOKEN": "fixture",
         }
         subprocess.run(
             ["bash", str(ROOT / ".github/actions/configure-git-identity/configure.sh")],
@@ -405,8 +410,17 @@ class LockPullRequestTests(unittest.TestCase):
         self.assertTrue(created[0].startswith(
             f"pr create --base main --head {self.BRANCH} --title chore: update Archestra CLI release lock to v0.2.0 --body Pin "
         ))
-        self.assertFalse(any(call.startswith("pr merge") for call in calls))
+        self.assertEqual([call for call in calls if call.startswith("pr merge")],
+                         ["pr merge https://github.com/archestra-ai/archestra/pull/77 --repo archestra-ai/archestra --auto"])
         self.assertIn("Lock pull request: https://github.com/archestra-ai/archestra/pull/77", self.summary.read_text())
+
+    def test_auto_merge_is_enabled_once(self):
+        self.run_lock_job("0.2.0")
+        (self.checkout / "platform/archestra-cli/Cargo.toml").write_text('[package]\nname = "archestra_cli"\nversion = "0.3.0"\n')
+        self.git("commit", "-qam", "bump")
+        self.git("push", "-q", "origin", "HEAD:main")
+        _, calls = self.run_lock_job("0.3.0", existing_pr="77", auto_merge="true")
+        self.assertFalse(any(call.startswith("pr merge") for call in calls))
 
     def test_open_pull_request_moves_to_the_next_version(self):
         self.run_lock_job("0.2.0")

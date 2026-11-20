@@ -43,12 +43,6 @@ const UNNAMED: ArchestraToolShortName[] = [
   "app_data_list",
   "app_data_delete",
   "llm_complete",
-  // A server's own rules, until the archestra battery names them: the
-  // default policy's catch-all annotator judges each call meanwhile.
-  "get_guardrails_server_rules",
-  "preview_guardrails_server_rules_change",
-  "propose_guardrails_server_rules_change",
-  "get_guardrails_server_rules_change_status",
 ];
 
 const ORGANIZATION_GRANT = {
@@ -140,6 +134,40 @@ describe("Archestra tools under the composed default policy", () => {
       // A link declares the key to every reader of the target agent.
       "-/internal",
       "-/trusted+internal",
+      "-/trusted+internal",
+    ]);
+  });
+
+  test("a server's own rules are read and previewed like the policy, and proposed only from trusted data the organization may read; none falls to the catch-all", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+  }) => {
+    const { organizationId } = await setUp({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+    });
+    const file = { mcpServerId: "s", content: "", expectedCommit: "c" };
+    expect(
+      await contracts(organizationId, [
+        evaluated("get_guardrails_server_rules", { mcpServerId: "s" }),
+        evaluated("preview_guardrails_server_rules_change", file),
+        evaluated("get_guardrails_server_rules_change_status", {
+          mcpServerId: "s",
+          number: 1,
+        }),
+        evaluated("propose_guardrails_server_rules_change", {
+          ...file,
+          summary: "m",
+        }),
+      ]),
+    ).toEqual([
+      // A read of the organization's own policy text: nothing asks a person.
+      "narrows/-",
+      "narrows/-",
+      "narrows/-",
+      // The pull request the organization reads, from trusted data only.
       "-/trusted+internal",
     ]);
   });

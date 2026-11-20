@@ -72,8 +72,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, DeclaredArguments, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
-    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
+    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
+    ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -957,7 +957,10 @@ impl State {
                     spawn: input.spawn.then_some(SpawnKind::Single),
                     prompt: None,
                     ruling: None,
-                    declares: input.declares.clone().map(DeclaredArguments::from),
+                    declares: input
+                        .declares
+                        .clone()
+                        .map(appa_runtime_api::DeclaredReturn::from),
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
@@ -1346,7 +1349,7 @@ impl State {
             spawn: call.spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
-            declares: recorded_declaration(&recorded)?.map(DeclaredArguments::from),
+            declares: recorded_declaration(&recorded)?.map(appa_runtime_api::DeclaredReturn::from),
         };
         let outcome = hooks::handle_embedded_with_options(
             &self.runtime,

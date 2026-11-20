@@ -143,7 +143,6 @@ function stripPeerProofsFrom(root: unknown): boolean {
         (key === "arguments" || key === "tool_args") &&
         typeof nested === "string"
       ) {
-        if (!nested.includes(PEER_PROOF_ARGUMENT)) continue;
         const parsed = parseJson(nested);
         if (stripPeerProofsFrom(parsed)) {
           record[key] = JSON.stringify(parsed);

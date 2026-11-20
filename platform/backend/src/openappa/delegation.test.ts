@@ -801,6 +801,30 @@ describe("stripping delegation markers", () => {
     });
   });
 
+  test("a reference copied into a resumed spawn prompt does not keep the marker", () => {
+    const reference =
+      "▄█▄▄▄█▄  started subagent AAA-AAAA@abcdefghijklmnopqrstuv";
+    const copied = "▄█▄▄▄█▄  started subagent BBB-BBBB@abcdefghijklmnopqrstuv";
+    const responses = {
+      input: [
+        {
+          type: "function_call",
+          call_id: "c1",
+          name: "spawn_subagent",
+          arguments: JSON.stringify({
+            prompt: `${PROMPT}\n\n${copied}\n\n${mint()}\n\n${reference}`,
+          }),
+        },
+      ],
+    };
+
+    stripDelegationMarkers({ family: "openai:responses", body: responses });
+
+    expect(JSON.parse(responses.input[0].arguments)).toEqual({
+      prompt: PROMPT,
+    });
+  });
+
   test.each([
     "functions.spawn_agent",
     "builtin:spawn_agent",

@@ -168,7 +168,11 @@ export function compositionView(row: EffectivePolicy): CompositionView {
   return {
     served: {
       kind: "previous",
-      rootRevision: served.rootRevision,
+      // A record an earlier build carried over can hold the stale mark.
+      rootRevision:
+        served.rootRevision !== null && served.rootRevision < 0
+          ? null
+          : served.rootRevision,
       composedAt: served.composedAt ? new Date(served.composedAt) : null,
       batteries:
         served.batteries?.map(({ name, status, composed }) => ({

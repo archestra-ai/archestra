@@ -37,6 +37,17 @@ describe("compositionView", () => {
     });
   });
 
+  test("a carried record holding the stale mark reports no previous revision", () => {
+    expect(
+      compositionView(
+        row({
+          lastError: "policy refused: x",
+          served: composition({ rootRevision: -1 }),
+        }),
+      ).served,
+    ).toMatchObject({ kind: "previous", rootRevision: null });
+  });
+
   test("a row marked stale reports no refused revision", () => {
     expect(
       compositionView(row({ lastError: "policy refused: x", rootRevision: -1 }))

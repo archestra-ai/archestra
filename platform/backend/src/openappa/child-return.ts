@@ -802,10 +802,12 @@ function replaceAgentReport(
   const report = reportLines
     .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
     .join("\n");
-  const metadata = lines.slice(reportLines.length).join("\n");
   const childNativeId =
     agentMessageSender(value) ??
-    metadata.match(/^agentId:\s*([a-zA-Z0-9_:-]+)/m)?.[1] ??
+    lines
+      .slice(reportLines.length)
+      .map((line) => line.match(/^agentId:\s*([a-zA-Z0-9_:-]+)/)?.[1])
+      .find((id) => id !== undefined) ??
     context.childNativeId;
   if (childNativeId && !isBoundedNativeMetadata(childNativeId)) {
     throw new ApiError(400, "OpenAPPA received invalid agent report metadata");

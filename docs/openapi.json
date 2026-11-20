@@ -529013,7 +529013,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Get all label keys used by plugins\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata",
+        "description": "Get all label keys used by plugins\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -529262,10 +529262,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -529275,7 +529274,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Get all label values used by plugins\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata",
+        "description": "Get all label values used by plugins\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -529535,10 +529534,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -538007,7 +538005,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the portable Skills embedded in the plugins visible to the caller.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
+        "description": "List the portable Skills embedded in the plugins visible to the caller.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -538370,7 +538368,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:read",
             "skill:read"
           ]
         }
@@ -538382,7 +538379,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get recent activation statistics for one Skill from an accessible plugin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
+        "description": "Get recent activation statistics for one Skill from an accessible plugin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
         "parameters": [
           {
             "schema": {
@@ -538720,7 +538717,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:read",
             "skill:read"
           ]
         }
@@ -538732,7 +538728,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Read one Skill embedded in a plugin, with its bundled resource files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
+        "description": "Read one Skill embedded in a plugin, with its bundled resource files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`skill:read`](/docs/reference/permissions#skill:read): Open Skills",
         "parameters": [
           {
             "schema": {
@@ -539164,7 +539160,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:read",
             "skill:read"
           ]
         }

@@ -11884,7 +11884,7 @@ export const transferPluginOwnership = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * [`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const pluginLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<PluginLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<PluginLabelKeysResponses, PluginLabelKeysErrors, ThrowOnError>({ url: '/api/plugins/labels/keys', ...options });
 
@@ -11897,7 +11897,7 @@ export const pluginLabelKeys = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * [`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const pluginLabelValues = <ThrowOnError extends boolean = false>(options?: Options<PluginLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<PluginLabelValuesResponses, PluginLabelValuesErrors, ThrowOnError>({ url: '/api/plugins/labels/values', ...options });
 
@@ -12142,7 +12142,6 @@ export const updatePlugin = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * [`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata
  * [`skill:read`](/docs/reference/permissions#skill:read): Open Skills
  */
 export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: Options<GetPluginSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetPluginSkillsResponses, GetPluginSkillsErrors, ThrowOnError>({ url: '/api/skills/plugins', ...options });
@@ -12156,7 +12155,6 @@ export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * [`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata
  * [`skill:read`](/docs/reference/permissions#skill:read): Open Skills
  */
 export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillUsageStatisticsData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillUsageStatisticsResponses, GetPluginSkillUsageStatisticsErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}/usage-statistics', ...options });
@@ -12170,7 +12168,6 @@ export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * [`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata
  * [`skill:read`](/docs/reference/permissions#skill:read): Open Skills
  */
 export const getPluginSkill = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillResponses, GetPluginSkillErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}', ...options });

@@ -1979,8 +1979,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Plugin Routes - access to one plugin is a grant on it, enforced in the
   // handlers; only creating a plugin is a role action.
   [RouteId.GetPlugins]: {},
-  [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
-  [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
+  [RouteId.GetPluginLabelKeys]: {},
+  [RouteId.GetPluginLabelValues]: {},
   [RouteId.CreatePlugin]: { plugin: ["create"] },
   [RouteId.GetPlugin]: {},
   [RouteId.UpdatePlugin]: {},
@@ -1998,14 +1998,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdatePluginGithubSync]: {},
   [RouteId.TriggerPluginGithubSync]: {},
   // Skills projected from plugin file trees: a Skills surface over plugin
-  // metadata, so it needs both floors — per-plugin visibility is enforced
-  // in the handlers.
-  [RouteId.GetPluginSkills]: { skill: ["read"], plugin: ["read"] },
-  [RouteId.GetPluginSkill]: { skill: ["read"], plugin: ["read"] },
-  [RouteId.GetPluginSkillUsageStatistics]: {
-    skill: ["read"],
-    plugin: ["read"],
-  },
+  // metadata, where per-plugin read grants decide visibility in the handlers.
+  [RouteId.GetPluginSkills]: { skill: ["read"] },
+  [RouteId.GetPluginSkill]: { skill: ["read"] },
+  [RouteId.GetPluginSkillUsageStatistics]: { skill: ["read"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },

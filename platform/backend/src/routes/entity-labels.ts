@@ -30,6 +30,11 @@ export function registerEntityLabelRoutes(
     model: EntityLabelModel;
     keysOperationId: RouteId;
     valuesOperationId: RouteId;
+    /** Optional per-request check when route-level permissions defer to grants. */
+    authorize?: (params: {
+      organizationId: string;
+      userId: string;
+    }) => Promise<void>;
   },
 ): void {
   const {
@@ -39,6 +44,7 @@ export function registerEntityLabelRoutes(
     model,
     keysOperationId,
     valuesOperationId,
+    authorize,
   } = options;
 
   fastify.get(
@@ -51,7 +57,8 @@ export function registerEntityLabelRoutes(
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ organizationId, user }, reply) => {
+      if (authorize) await authorize({ organizationId, userId: user.id });
       return reply.send(await model.getAllKeys(organizationId));
     },
   );
@@ -69,7 +76,8 @@ export function registerEntityLabelRoutes(
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async ({ query: { key }, organizationId }, reply) => {
+    async ({ query: { key }, organizationId, user }, reply) => {
+      if (authorize) await authorize({ organizationId, userId: user.id });
       return reply.send(
         key
           ? await model.getValuesByKey({ organizationId, key })

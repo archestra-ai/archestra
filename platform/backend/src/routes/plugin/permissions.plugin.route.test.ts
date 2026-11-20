@@ -202,6 +202,18 @@ describe("plugin permissions", () => {
         plugin.id,
       ]);
     }
+    expect(
+      (await as(viewer, { method: "GET", url: "/api/plugins/labels/keys" }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await as(viewer, { method: "GET", url: "/api/plugins/labels/values" }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await as(stranger, { method: "GET", url: "/api/plugins/labels/keys" }))
+        .statusCode,
+    ).toBe(403);
     expect((await rename(viewer)).statusCode).toBe(403);
     expect((await rename(user)).statusCode).toBe(403);
     expect((await rename(editor)).statusCode).toBe(200);

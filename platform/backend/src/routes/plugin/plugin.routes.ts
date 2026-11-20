@@ -238,6 +238,15 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: PluginLabelModel,
     keysOperationId: RouteId.GetPluginLabelKeys,
     valuesOperationId: RouteId.GetPluginLabelValues,
+    authorize: async ({ organizationId, userId }) => {
+      const checker = await getPluginPermissionChecker({
+        userId,
+        organizationId,
+      });
+      if (!checker.canRead) {
+        throw new ApiError(403, "You do not have permission to view plugins");
+      }
+    },
   });
 
   fastify.get(

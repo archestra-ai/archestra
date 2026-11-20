@@ -214,6 +214,10 @@ function SkillsList() {
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const hasPluginReadGrant =
+    scopedCapabilities.data?.some(
+      (grant) => grant.resource === "plugin" && grant.action === "read",
+    ) ?? false;
   const canOpenPluginDetails = (pluginId: string) =>
     holdsItemGrant({
       grants: scopedCapabilities.data,
@@ -221,7 +225,7 @@ function SkillsList() {
       action: "read",
       id: pluginId,
     });
-  const pluginSkillsEnabled = canReadPlugins === true;
+  const pluginSkillsEnabled = canReadPlugins === true || hasPluginReadGrant;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind = hasImportFilter
     ? "standalone"

@@ -12,6 +12,10 @@ import {
   type TestAccess,
   test,
 } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
@@ -620,5 +624,64 @@ describe("plugin Skill routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
+  });
+
+  test("a member without plugin:read sees skills from plugins granted to them through real auth middleware", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [admin, member] = await Promise.all([makeUser(), makeUser()]);
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    await makeMember(member.id, organizationId);
+
+    const shared = await PluginModel.create({
+      organizationId,
+      userId: admin.id,
+      input: stePlugin({ displayName: "Shared plugin" }),
+      initialPermissionGrants: [
+        { subject: { type: "user", id: member.id }, actions: ["read"] },
+      ],
+    });
+    const privatePlugin = await PluginModel.create({
+      organizationId,
+      userId: admin.id,
+      input: stePlugin({ displayName: "Private plugin" }),
+    });
+    if (!shared || !privatePlugin) throw new Error("failed to seed plugins");
+
+    const app = await authenticatedRouteApp({
+      organizationId,
+      routes: [pluginSkillRoutes],
+    });
+    try {
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/skills/plugins",
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(list.statusCode, list.body).toBe(200);
+      expect(
+        list.json().map((item: { pluginId: string }) => item.pluginId),
+      ).toEqual([shared.id]);
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/skills/plugins/${shared.id}?skillPath=skills/ste-writing`,
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(detail.statusCode, detail.body).toBe(200);
+      expect(detail.json().name).toBe("ste-writing");
+
+      const hidden = await app.inject({
+        method: "GET",
+        url: `/api/skills/plugins/${privatePlugin.id}?skillPath=skills/ste-writing`,
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(hidden.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
   });
 });

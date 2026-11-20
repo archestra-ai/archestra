@@ -281,6 +281,8 @@ class ServiceAccountModel {
   }
 
   static async create(params: {
+    /** A fixed ID, for accounts declared ahead of time (the Helm bootstrap). */
+    id?: string;
     organizationId: string;
     name: string;
     description?: string | null;
@@ -306,6 +308,7 @@ class ServiceAccountModel {
         .values(
           await CreatedByModel.forInsert({
             data: {
+              ...(params.id ? { id: params.id } : {}),
               organizationId: params.organizationId,
               name: params.name,
               description: params.description ?? null,
@@ -648,6 +651,15 @@ class ServiceAccountModel {
     organizationId: string,
     name: string,
   ): Promise<boolean> {
+    return (
+      (await ServiceAccountModel.findIdByName(organizationId, name)) !== null
+    );
+  }
+
+  static async findIdByName(
+    organizationId: string,
+    name: string,
+  ): Promise<string | null> {
     const [row] = await db
       .select({ id: schema.serviceAccountsTable.id })
       .from(schema.serviceAccountsTable)
@@ -658,7 +670,7 @@ class ServiceAccountModel {
         ),
       )
       .limit(1);
-    return Boolean(row);
+    return row?.id ?? null;
   }
 
   static async isTokenImported(value: string): Promise<boolean> {

@@ -45,6 +45,8 @@ function model(
       outputModalities: null,
       supportsToolCalling,
       supportsReasoningEffort: null,
+      outputLength: null,
+      supportedReasoningEfforts: null,
       recommendedForAgents: null,
       pricePerMillionInput: null,
       pricePerMillionOutput: null,

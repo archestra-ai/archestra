@@ -47,6 +47,9 @@ workflows:
     '.github/workflows/build-sandbox-base-docker-image.yml':
         - 'actions/checkout@v7.0.1'
         - 'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2'
+    '.github/workflows/bump-dockerfile-go-pins.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/cancel-obsolete-queue-runs.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/clear-github-actions-cache.yml':
@@ -86,6 +89,9 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'pnpm/action-setup@v6.1.1'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+    '.github/workflows/move-release-line.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/napi-dev-cache.yml':
         - 'actions/checkout@v7.0.1'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
@@ -160,11 +166,15 @@ workflows:
         - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+    '.github/workflows/stale-dependabot-prs.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
+        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
         - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@322ad980dd4f3b530a192df546bf3bb703dcb003'
@@ -185,8 +195,8 @@ workflows:
     '.github/workflows/vex-triage.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
         - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -293,14 +303,14 @@ dependencies:
             - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
             - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
             - 'grafana/shared-workflows@70c40e5b6522c854a55334124545261cae3d4c73'
-    'archestra-ai/.github@v1.33.0':
-        ref: 'v1.33.0'
-        commit: 'sha1-1bf4a7d38b15e9a4f48a1d4ad476ad4e4b932e00'
-        owner_id: 216022683
-        repo_id: 1192166927
     'archestra-ai/.github@v1.31.1':
         ref: 'v1.31.1'
         commit: 'sha1-0bd6a54bf206174fd0cebc3222def111651e91bb'
+        owner_id: 216022683
+        repo_id: 1192166927
+    'archestra-ai/.github@v1.33.0':
+        ref: 'v1.33.0'
+        commit: 'sha1-1bf4a7d38b15e9a4f48a1d4ad476ad4e4b932e00'
         owner_id: 216022683
         repo_id: 1192166927
     'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2':
@@ -340,12 +350,12 @@ dependencies:
         commit: 'sha1-7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         owner_id: 71461757
         repo_id: 407242578
-    'google-github-actions/get-secretmanager-secrets@v3.0.0':
+    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757
         repo_id: 308778069
-    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
+    'google-github-actions/get-secretmanager-secrets@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757

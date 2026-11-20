@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.5.0-rc.40",
+  "version": "1.5.0-rc.41",
   "private": true,
   "type": "module",
   "scripts": {
@@ -60,6 +60,7 @@
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@sentry/nextjs": "^10.76.1",
     "@streamdown/code": "1.1.1",
+    "@streamdown/math": "1.0.3",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
@@ -82,6 +83,7 @@
     "import-in-the-middle": "3.0.0",
     "js-yaml": "^4.3.2",
     "jszip": "^3.10.1",
+    "katex": "0.18.10",
     "lodash-es": "^4.18.1",
     "lucide-react": "^0.577.0",
     "mermaid": "^11.16.1",

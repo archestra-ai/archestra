@@ -657,6 +657,16 @@ builtin = "hitl"
     assert.equal(laterParentResult.decision, 'block');
     assert.match(laterParentResult.approved_output, /no record of releasing a call/);
 
+    // A parent result holding U+0000 is stored escaped; its fork replays it decoded.
+    const binaryParent = scope();
+    assert.equal((await call(binaryParent, 'binary-read', 'read_plain')).decision, 'allow_call');
+    const binaryProcessed = await result(binaryParent, 'binary-read', 'restricted\u0000contents');
+    assert.equal(binaryProcessed.approved_output, 'restricted\u0000contents', JSON.stringify(binaryProcessed));
+    const binaryFork = { ...scope(), fork_of: binaryParent.session_id };
+    assert.equal(await writes(binaryFork, 'binary-fork-write'), true);
+    const binaryReplay = await result(binaryFork, 'binary-read', 'restricted\u0000contents');
+    assert.equal(binaryReplay.approved_output, binaryProcessed.approved_output, JSON.stringify(binaryReplay));
+
     // A session that opened on a root of its own never becomes a fork.
     const own = scope();
     assert.equal(await writes(own, 'own-write'), true);

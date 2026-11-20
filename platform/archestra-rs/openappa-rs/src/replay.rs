@@ -28,7 +28,7 @@ use std::{
 use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "06bc9cef7166a0de0885a4607508a9fc6e6a0123:archestra-live-v3";
+    "b8d63cdded690af45b87393d33de8e7c472f939a:archestra-live-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 /// A root policy can be 1 MiB, and composition adds its batteries' contracts to it.
@@ -1163,5 +1163,19 @@ mod tests {
         ] {
             assert!(inspect(&serde_json::json!({"files":files}).to_string()).is_err());
         }
+    }
+
+    #[test]
+    fn engine_version_names_the_pinned_openappa_rev() {
+        let pinned = include_str!("../Cargo.toml")
+            .lines()
+            .find(|line| line.contains("github.com/archestra-ai/OpenAPPA.git"))
+            .and_then(|line| line.split("rev = \"").nth(1))
+            .and_then(|rest| rest.split('"').next())
+            .expect("Cargo.toml pins an OpenAPPA rev");
+        assert!(
+            ENGINE_VERSION.starts_with(&format!("{pinned}:")),
+            "{ENGINE_VERSION} does not name the pinned rev {pinned}"
+        );
     }
 }

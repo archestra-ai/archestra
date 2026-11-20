@@ -174,3 +174,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
         run: gh workflow run sync-terraform-provider.yml --ref main -f "release_tag=$TAG_NAME"
+
+  move-release-line:
+    name: Start Move Release Line
+    # A stable X.Y.0 makes release/X.Y the supported line: start the workflow
+    # on main that opens the pull request moving backports and Dependabot to
+    # it (move-release-line.yml checks the tag again).
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') && needs.publish.outputs.published == 'true' && endsWith(needs.finalize.outputs.tag-name, '.0') }}
+    needs:
+      - finalize
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # Start the Move Release Line workflow.
+    steps:
+      - name: Start Move Release Line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
+        run: gh workflow run move-release-line.yml --ref main -f "release_tag=$TAG_NAME"

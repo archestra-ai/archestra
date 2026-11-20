@@ -137,6 +137,7 @@ import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { seedRequiredStartingData } from "@/services/seed";
+import { bootstrapServiceAccounts } from "@/services/service-account-bootstrap";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -963,6 +964,9 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // Runtimes locked before runtime permissions become those permissions.
     await ensureAgentRuntimeLockUpgrade();
+    // Service accounts the deployment declares (Helm bootstrap), after the
+    // license is known so federated credentials can be created.
+    await bootstrapServiceAccounts();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels

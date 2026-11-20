@@ -86,13 +86,16 @@ class OpenAppaSpawnCorrelationModel {
     callerId: string | undefined;
     sessionId: string;
     toolCallIds: string[];
-  }): Promise<Map<string, { spawn: boolean; tool: string }>> {
+  }): Promise<
+    Map<string, { spawn: boolean; tool: string; defersReturn: boolean }>
+  > {
     if (params.toolCallIds.length === 0) return new Map();
     const rows = await db
       .select({
         operationId: operations.operationId,
         tool: sql<string>`COALESCE(${operations.input}->'semantic'->>'tool', ${operations.input}->'context'->>'tool', ${operations.input}->>'tool', '')`,
         spawn: sql<string>`COALESCE(${operations.input}->'semantic'->>'spawn', ${operations.input}->>'spawn', 'false')`,
+        defersReturn: sql<string>`COALESCE(${operations.decision}->>'defers_return', 'false')`,
       })
       .from(operations)
       .where(
@@ -116,6 +119,7 @@ class OpenAppaSpawnCorrelationModel {
         {
           spawn: row.spawn === "true",
           tool: row.tool,
+          defersReturn: row.defersReturn === "true",
         },
       ]),
     );

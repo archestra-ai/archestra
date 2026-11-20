@@ -689,13 +689,24 @@ mod tests {
         );
         let recovered = crate::operations::recorded_declaration(&semantic)
             .unwrap()
-            .map(appa_runtime_api::DeclaredArguments::from);
+            .map(appa_runtime_api::DeclaredReturn::from);
         assert_eq!(
             recovered,
-            Some(appa_runtime_api::DeclaredArguments {
-                label: Some(appa_runtime_api::LabelSpelling::default()),
-                return_schema: Some(serde_json::json!({"type": "object"})),
-            })
+            Some(appa_runtime_api::DeclaredReturn::Arguments(
+                appa_runtime_api::DeclaredArguments {
+                    label: Some(appa_runtime_api::LabelSpelling::default()),
+                    return_schema: Some(serde_json::json!({"type": "object"})),
+                }
+            ))
+        );
+        let deferred = serde_json::json!({"deferred": true});
+        let semantic = crate::operations::operation_semantic(&spawn(Some(deferred.clone())));
+        assert_eq!(semantic["declares"], deferred);
+        assert_eq!(
+            crate::operations::recorded_declaration(&semantic)
+                .unwrap()
+                .map(appa_runtime_api::DeclaredReturn::from),
+            Some(appa_runtime_api::DeclaredReturn::Deferred)
         );
 
         let undeclared = crate::operations::operation_semantic(&spawn(None));

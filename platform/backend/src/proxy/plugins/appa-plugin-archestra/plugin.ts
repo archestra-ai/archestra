@@ -130,11 +130,12 @@ import {
   loadChildAddresses,
   loadChildRejections,
   loadChildReturns,
+  loadDeferredReturn,
   loadOfferReview,
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
-  returnRuntimeValue,
+  returnSubagentValue,
   type SpawnReturnDeclaration,
   SpawnReturnNotReported,
   SUBAGENT_TOOL,
@@ -790,12 +791,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       session: governed,
       spawnIds: runtimeSpawns,
     });
+    const deferredReturns = await loadDeferredReturns({
+      session: governed,
+      spawnIds: [...runtimeSpawns]
+        .filter(([id, spawn]) => spawn.defersReturn && !subagentReturns.has(id))
+        .map(([id]) => id),
+      controlToolName:
+        binding.request.tools?.control.name ??
+        binding.request.historicalControlToolName,
+    });
     const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
       {
         organizationId: governed.organization_id,
         callerId: governed.caller_id,
         sessionId: governed.session_id,
-        toolCallIds: [...runtimeSpawns],
+        toolCallIds: [...runtimeSpawns.keys()],
       },
     );
     // An undeclared call or one whose annotator gave no answer never ran, and
@@ -832,9 +842,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         const subagentReturn = subagentReturns.get(
           withoutTrajectoryStamp(result.id),
         );
-        if (subagentReturn !== undefined) {
-          childResultUpdates[result.id] = subagentReturn;
-          return { ...result, content: subagentReturn };
+        const delivered =
+          subagentReturn ??
+          deferredReturns.get(withoutTrajectoryStamp(result.id));
+        if (delivered !== undefined) {
+          childResultUpdates[result.id] = delivered;
+          return { ...result, content: delivered };
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
@@ -859,7 +872,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       isUserQuestion: (answer) => isUserQuestionResult({ binding, answer }),
       classifySpawnResult: (answer) => {
         // Recorded above as the spawn's result: nothing more to approve.
-        if (subagentReturns.has(withoutTrajectoryStamp(answer.id))) {
+        if (
+          subagentReturns.has(withoutTrajectoryStamp(answer.id)) ||
+          deferredReturns.has(withoutTrajectoryStamp(answer.id))
+        ) {
           return "pending";
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
@@ -1811,8 +1827,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: binding.session.organization_id,
       profileId: binding.profileId,
-      callerId: binding.session.caller_id,
-      chat: binding.chat,
       identity: binding.identity,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
@@ -1822,7 +1836,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         [...runtimeCalls].filter(([, call]) => call.spawn).map(([id]) => id),
       ),
       declareSpawnReturn: (call: { id: string }) =>
-        delegationReturnDeclaration(runtimeCalls.get(call.id)),
+        delegationReturnDeclaration(
+          runtimeCalls.get(call.id),
+          // The session decides through its control call; a subagent's own
+          // delegations stay as spoken.
+          binding.request.tools?.control !== undefined && !session.parent_id,
+        ),
       ...this.resolution(binding),
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
@@ -1951,13 +1970,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const [id, decision] of decisionById) {
       // Only the notice of this call runs. The runtime holds no record of the
       // call, so the result the client sends back is answered from here and
-      // never ruled on as a call that ran.
-      if (decision.kind === "deny" && decision.unanswered)
-        await cacheManager.set(
-          unansweredNoticeKey({ session, callId: id }),
-          decision.feedback,
-          TimeInMs.Day,
-        );
+      // never ruled on as a call that ran. Without the retained reason the
+      // runtime answers that result as withheld, so a failed write is not fatal.
+      if (decision.kind === "deny" && decision.unanswered) {
+        try {
+          await cacheManager.set(
+            unansweredNoticeKey({ session, callId: id }),
+            decision.feedback,
+            TimeInMs.Day,
+          );
+        } catch (err) {
+          logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+        }
+      }
     }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
@@ -2161,13 +2186,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               },
             };
           } catch (error) {
-            await cancelCalls(
-              session,
-              rest.flatMap((each) =>
-                decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-              ),
-              policy,
-            );
+            await cancelCalls(session, admittedCalls(), policy);
             if (error instanceof GrokChildResumeRefusal) {
               return {
                 decision: "refuse",
@@ -2194,13 +2213,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           // An unmarked nested child would fall back to its native parent and
           // lose the governed lineage. Nothing from this evaluated batch may
           // run when that happens.
-          await cancelCalls(
-            session,
-            rest.flatMap((each) =>
-              decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-            ),
-            policy,
-          );
+          await cancelCalls(session, admittedCalls(), policy);
           throw new ApiError(
             400,
             "OpenAPPA cannot safely start a nested child because its delegation marker could not be attached",
@@ -2361,9 +2374,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
-        const admitted = rest.flatMap((each) =>
-          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-        );
+        const admitted = admittedCalls();
         let transient: boolean;
         try {
           transient =
@@ -2588,11 +2599,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           "OpenAPPA found no authenticated task identity for the runtime turn",
         );
       }
-      const outcome = await returnRuntimeValue({
+      const outcome = await returnSubagentValue({
         session: this.governedSession(binding),
         operationId: `runtime-return:${binding.runtimeTaskId}:${context.requestId}`,
         value: context.responseText,
       });
+      // The answer stays in this subagent's own conversation; its parent
+      // reads the runtime's notice and decides.
+      if (outcome.kind === "deferred") return { decision: "release" };
       if (outcome.kind === "held") {
         await refuseSoftBlock(outcome.reason);
         return { decision: "replace", responseText: outcome.reason };
@@ -2696,11 +2710,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onSessionInit",
-      async () => {
-        const result = await this.guardedSessionInit(context);
-
-        return result;
-      },
+      () => this.guardedSessionInit(context),
       () => undefined,
     );
   }
@@ -2719,11 +2729,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onToolResults",
-      async () => {
-        const result = await this.guardedToolResults(context);
-
-        return result;
-      },
+      () => this.guardedToolResults(context),
       () => undefined,
     );
   }
@@ -2753,11 +2759,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
-      async () => {
-        const result = await this.guardedBeforeModel(context);
-
-        return result;
-      },
+      () => this.guardedBeforeModel(context),
       () => undefined,
     );
     // A waiver above returns early or restores the request. Insertion is
@@ -2862,11 +2864,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onBufferedModelResponse",
-      async () => {
-        const result = await this.guardedBufferedModelResponse(context);
-
-        return result;
-      },
+      () => this.guardedBufferedModelResponse(context),
       () => ({ decision: "release" }),
     );
   }
@@ -2912,11 +2910,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.withSoftBlockWaiver(
       context,
       "onModelResponse",
-      async () => {
-        const result = await this.guardedModelResponse(context);
-
-        return result;
-      },
+      () => this.guardedModelResponse(context),
       () => undefined,
     );
   }
@@ -3687,6 +3681,8 @@ type RuntimeCall = {
   wrapper?: Record<string, unknown>;
   stringArgs?: boolean;
   spawn: boolean;
+  /** A spawn this process runs to its end before the call returns. */
+  foreground: boolean;
 };
 
 const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
@@ -3747,8 +3743,6 @@ function signedCall(params: {
 async function resolveRuntimeCalls(params: {
   organizationId: string;
   profileId: string;
-  callerId?: string;
-  chat?: boolean;
   identity: AppaTrustedContext["toolIdentity"];
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
@@ -3780,6 +3774,7 @@ async function resolveRuntimeCalls(params: {
       args,
       ...(gatewayId ? { gatewayId } : {}),
       spawn: false,
+      foreground: false,
       ...(wrapper
         ? { wrapper, stringArgs: typeof wrapper.tool_args === "string" }
         : {}),
@@ -3841,6 +3836,9 @@ async function resolveRuntimeCalls(params: {
         }
       } else {
         call.spawn = names.has(call.action);
+        // A runtime or a load-balanced pool takes the delegation to the
+        // background; every other target of the organization runs here.
+        call.foreground = call.spawn && !runtimeNames.has(call.action);
       }
     }
   }
@@ -3855,11 +3853,11 @@ async function resolveRuntimeCalls(params: {
  */
 async function admitSubagentReturns(params: {
   session: OpenAppaSession;
-  spawnIds: ReadonlySet<string>;
+  spawnIds: ReadonlyMap<string, unknown>;
 }): Promise<Map<string, string>> {
   const returns = await withCapturedGuardrailsActivation("active", () =>
     Promise.all(
-      [...params.spawnIds].map(async (spawnCallId) => {
+      [...params.spawnIds.keys()].map(async (spawnCallId) => {
         const child = subagentChildSession(params.session, spawnCallId);
         const [latest] = await loadChildReturns({
           organizationId: params.session.organization_id,
@@ -3886,17 +3884,55 @@ async function admitSubagentReturns(params: {
 }
 
 /**
+ * The runtime's notice for each spawn whose subagent's answer was deferred,
+ * which the session reads as that spawn's result on every request, before and
+ * after it decides. A spawn whose subagent has not stopped has none yet.
+ */
+async function loadDeferredReturns(params: {
+  session: OpenAppaSession;
+  spawnIds: readonly string[];
+  controlToolName: string | undefined;
+}): Promise<Map<string, string>> {
+  const notices = await withCapturedGuardrailsActivation("active", () =>
+    Promise.all(
+      params.spawnIds.map(
+        async (spawnCallId) =>
+          [
+            spawnCallId,
+            await loadDeferredReturn({
+              session: params.session,
+              spawnCallId,
+              controlToolName: params.controlToolName,
+            }),
+          ] as const,
+      ),
+    ),
+  );
+  return new Map(
+    notices.flatMap(([id, notice]) => (notice === null ? [] : [[id, notice]])),
+  );
+}
+
+/**
  * An Archestra delegation call declares its own child's return: as spoken by
  * default, schema-attested when it names a `return_schema`. A runtime launch
  * through `start_agent_run` keeps the explicit declaration flow.
+ *
+ * `decides` says the proposing session can decide on an answer once its
+ * subagent has stopped. Then a delegation that runs to its end in this
+ * process declares a deferred return in place of an as-spoken one: the
+ * subagent reads under the session's own limits, and an answer that would
+ * narrow the session waits for its decision instead of being refused.
  */
 function delegationReturnDeclaration(
   call: RuntimeCall | undefined,
+  decides: boolean,
 ): SpawnReturnDeclaration | undefined {
   if (!call?.spawn || !isAgentTool(call.action)) return undefined;
   const schema = call.args.return_schema;
-  return isRecord(schema)
-    ? { kind: "attested", schema }
+  if (isRecord(schema)) return { kind: "attested", schema };
+  return decides && call.foreground
+    ? { kind: "deferred" }
     : { kind: "as_spoken" };
 }
 
@@ -3904,7 +3940,7 @@ async function releasedRuntimeSpawns(params: {
   binding: AppaPluginBinding;
   session: OpenAppaSession;
   toolResults: LlmProxyToolResultsContext["toolResults"];
-}): Promise<Set<string>> {
+}): Promise<Map<string, { defersReturn: boolean }>> {
   const possible = params.toolResults.filter((answer) => {
     const name = params.binding.identity.canonicalize(
       answer.name,
@@ -3923,7 +3959,7 @@ async function releasedRuntimeSpawns(params: {
     sessionId: params.session.session_id,
     toolCallIds: possible.map((answer) => withoutTrajectoryStamp(answer.id)),
   });
-  return new Set(
+  return new Map(
     [...calls]
       .filter(([, call]) => {
         const action =
@@ -3935,7 +3971,7 @@ async function releasedRuntimeSpawns(params: {
             isAgentTool(action))
         );
       })
-      .map(([id]) => id),
+      .map(([id, call]) => [id, { defersReturn: call.defersReturn }]),
   );
 }
 
@@ -4875,8 +4911,6 @@ async function signObservedRuntimeCalls(
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: observer.session.organization_id,
       profileId: observer.profileId,
-      callerId: observer.session.caller_id,
-      chat: observer.chat,
       identity: observer.identity,
       calls,
       resolution: toolNameResolution(observer),
@@ -6960,13 +6994,12 @@ async function canonicalizeHitlAskUserCall(params: {
     }
     // A missing snapshot here can be a concurrent replacement, not an absent
     // feature. Never downgrade it to the old, potentially unreadable card.
-    if (params.offerIds.length > 0)
-      return {
-        call: params.call,
-        invalidOfferCount: false,
-        reviewUnavailable: true,
-        offerIds: [],
-      };
+    return {
+      call: params.call,
+      invalidOfferCount: false,
+      reviewUnavailable: true,
+      offerIds: [],
+    };
   }
   const hitl = await getHitlAskUserArguments({
     session: params.binding.session,
@@ -7320,7 +7353,7 @@ async function claimNativeQuestionResults(params: {
     const entry = candidate.keys
       .map((key) => claimed.get(key))
       .find((value) => value?.name === candidate.name);
-    if (entry?.name === candidate.name) {
+    if (entry) {
       // A card issued by the removed paged review never grants anything:
       // its answer is unverified, and the review re-asks or stays open.
       if (entry.page !== undefined) continue;

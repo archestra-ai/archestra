@@ -1978,6 +1978,33 @@ describe("release image digests", () => {
   });
 });
 
+describe("parseServiceAccountBootstrap", () => {
+  test("declares nothing when unset or empty", async () => {
+    const { parseServiceAccountBootstrap } = await import("./config");
+    expect(parseServiceAccountBootstrap(undefined)).toBeNull();
+    expect(parseServiceAccountBootstrap("  ")).toBeNull();
+    expect(parseServiceAccountBootstrap("[]")).toBeNull();
+  });
+
+  test("returns the declared accounts", async () => {
+    const { parseServiceAccountBootstrap } = await import("./config");
+    expect(
+      parseServiceAccountBootstrap(
+        '[{"name":"crossplane","roles":["member"]}]',
+      ),
+    ).toEqual([{ name: "crossplane", roles: ["member"] }]);
+  });
+
+  test("fails startup on a value that is not a JSON array", async () => {
+    const { parseServiceAccountBootstrap } = await import("./config");
+    for (const raw of ["not json", '{"name":"crossplane"}']) {
+      expect(() => parseServiceAccountBootstrap(raw)).toThrow(
+        /ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP/,
+      );
+    }
+  });
+});
+
 describe("mcp gateway config", () => {
   const originalEnv = process.env;
 

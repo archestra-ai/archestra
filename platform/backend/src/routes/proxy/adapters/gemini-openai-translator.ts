@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   type GeminiThinkingLevel,
-  supportsGeminiThinkingEffort,
+  geminiAcceptedReasoningEfforts,
+  geminiFamily,
 } from "@archestra/shared/gemini-models";
 import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
@@ -285,46 +286,31 @@ function openaiEffortToGeminiThinkingConfig(
   | undefined {
   if (effort === undefined || effort === null) return undefined;
 
-  // Identify documented exceptions, including their dated/preview aliases.
-  // New families use the shared text/version rules and provider validation.
-  const family = modelId
-    .toLowerCase()
-    .match(
-      /^(gemini-\d+(?:\.\d+)?-(?:flash-lite|flash|pro))(?:-(?:preview(?:-(?:customtools|\d[\d-]*))?|latest|\d[\d-]*))?$/,
-    )?.[1];
-  const unsupported = () =>
-    new ApiError(
+  // The accepted set is shared with the model catalogue, which reports it to
+  // clients; documented family exceptions include dated/preview aliases, and
+  // new families use the shared text/version rules and provider validation.
+  if (!geminiAcceptedReasoningEfforts(modelId).includes(effort)) {
+    throw new ApiError(
       400,
       `reasoning_effort "${effort}" is not supported for model "${modelId}".`,
     );
-  if (effort === "xhigh" || effort === "max") throw unsupported();
-  if (effort === "none") {
-    if (family === "gemini-2.5-flash" || family === "gemini-2.5-flash-lite") {
-      return { thinkingBudget: 0 };
-    }
-    throw unsupported();
   }
+  if (effort === "none") return { thinkingBudget: 0 };
+  // No family accepts `xhigh` or `max`, so the check above already refused them.
+  const level = effort as GeminiThinkingLevel;
+  const family = geminiFamily(modelId);
   if (family?.startsWith("gemini-2.5-")) {
     return {
       thinkingBudget: { minimal: 1024, low: 1024, medium: 8192, high: 24576 }[
-        effort
+        level
       ],
     };
   }
-
-  if (!supportsGeminiThinkingEffort(modelId)) throw unsupported();
-  if (
-    (effort === "medium" && family === "gemini-3-pro") ||
-    (effort === "minimal" &&
-      (family === "gemini-3.7-flash" || family === "gemini-3.8-flash"))
-  ) {
-    throw unsupported();
-  }
   const thinkingLevel =
-    effort === "minimal" &&
+    level === "minimal" &&
     (family === "gemini-3-pro" || family === "gemini-3.1-pro")
       ? "low"
-      : effort;
+      : level;
   return { thinkingLevel };
 }
 

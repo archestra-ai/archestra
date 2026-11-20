@@ -802,7 +802,10 @@ pub(crate) fn inherited_result(
                 "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND COALESCE(completed_at, created_at) < $4",
                 &[&parent, &call_id, &organization_id, &forked_at],
             )? {
-                return Ok(row.get::<_, Option<Value>>(0));
+                return row
+                    .get::<_, Option<Value>>(0)
+                    .map(sealed::unescape)
+                    .transpose();
             }
             session = parent;
         }

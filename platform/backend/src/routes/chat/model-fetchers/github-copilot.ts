@@ -1,4 +1,8 @@
-import type { SupportedProviderEndpoint } from "@archestra/shared";
+import {
+  type ReasoningEffortLevel,
+  type SupportedProviderEndpoint,
+  toReasoningEffortLevels,
+} from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
@@ -89,7 +93,16 @@ export async function fetchGithubCopilotModels(
       // must replace the window an earlier sync stored.
       authoritativeContextLength: true,
       supportsToolCalling: model.capabilities?.supports?.tool_calls ?? null,
+      supportsVision: model.capabilities?.supports?.vision ?? null,
       supportedEndpoints: servableEndpoints(model),
+      supportedReasoningEfforts: copilotReasoningEfforts(
+        model.capabilities?.supports,
+      ),
+      // Copilot's own `supports` block describes the model as Copilot serves
+      // it, so a re-sync replaces modalities and tool support an earlier sync
+      // took from the registry (which can describe the same model id as
+      // text-only while Copilot accepts images).
+      authoritative: model.capabilities?.supports !== undefined,
     },
   }));
 }
@@ -278,6 +291,21 @@ function copilotContextLength(
   return window === null ? promptAndOutput : Math.min(window, promptAndOutput);
 }
 
+/**
+ * The levels in `supports.reasoning_effort`. Copilot answers any level a model
+ * does not list with `400 invalid_reasoning_effort`, and a model whose
+ * `supports` has no `reasoning_effort` key rejects every level, so that case
+ * is an empty list rather than unknown.
+ */
+function copilotReasoningEfforts(
+  supports: GithubCopilotModelSupports | undefined,
+): ReasoningEffortLevel[] | null {
+  if (!supports) return null;
+  return Array.isArray(supports.reasoning_effort)
+    ? toReasoningEffortLevels(supports.reasoning_effort)
+    : [];
+}
+
 function positiveTokenCount(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value > 0
     ? value
@@ -306,8 +334,16 @@ interface GithubCopilotModel {
     /** "chat" | "embeddings" | "completion" — only "chat" is usable here. */
     type?: string;
     limits?: GithubCopilotModelLimits;
-    supports?: { tool_calls?: boolean };
+    supports?: GithubCopilotModelSupports;
   };
+}
+
+interface GithubCopilotModelSupports {
+  tool_calls?: boolean;
+  /** Whether the model accepts image input. */
+  vision?: boolean;
+  /** The `reasoning_effort` values the model accepts, e.g. ["low", "medium", "high"]. */
+  reasoning_effort?: unknown[];
 }
 
 interface GithubCopilotModelLimits {

@@ -1723,6 +1723,33 @@ export function parseReleaseImageDigests(params: {
   return parsed.version === params.appVersion ? parsed : null;
 }
 
+/**
+ * Parse `ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`: a JSON array of service
+ * accounts to create on startup (the Helm chart renders it from
+ * `archestra.bootstrap.serviceAccounts`). Only the JSON shape is checked here;
+ * the bootstrap validates each entry against the service account schemas.
+ * Unset or `[]` declares nothing. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseServiceAccountBootstrap(
+  rawValue: string | undefined,
+): unknown[] | null {
+  const raw = rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP must be JSON");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      "ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP must be a JSON array of service accounts",
+    );
+  }
+  return parsed.length > 0 ? parsed : null;
+}
+
 const releaseImageDigests = parseReleaseImageDigests({
   rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
   appVersion,
@@ -2985,6 +3012,10 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /** Service accounts to create on startup; see parseServiceAccountBootstrap. */
+    serviceAccountBootstrap: parseServiceAccountBootstrap(
+      process.env.ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP,
+    ),
     /**
      * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
      * scope cookies to the host without the port, so parallel local instances

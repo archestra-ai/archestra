@@ -12,8 +12,12 @@ import {
   type TestAccess,
   test,
 } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
 import { useRouteTestApp } from "@/test/route-test-app";
-import { grantEverywhere } from "@/test/wildcard-grants";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
@@ -80,7 +84,7 @@ function stePlugin(overrides: Partial<CreatePlugin> = {}): CreatePlugin {
 
 describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
-  let pluginAdmin: boolean;
+  let readerRoleId: string;
 
   beforeEach(async ({ makeCustomRole, makeMember }) => {
     // Plugin visibility reads grants, and a grant reaches only a member of
@@ -89,9 +93,8 @@ describe("plugin Skill routes", () => {
     const reader = await makeCustomRole(ctx.organizationId, {
       permission: { ...memberPermissions, plugin: ["read"] },
     });
+    readerRoleId = reader.id;
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
-    pluginAdmin = false;
-    grantEverywhere(["plugin"], () => pluginAdmin);
   });
 
   afterEach(() => {
@@ -145,15 +148,17 @@ describe("plugin Skill routes", () => {
       lookups,
     });
     expect(readable.map((skill) => skill.pluginId)).toEqual([visible.id]);
-    // A caller without plugin:read cannot borrow the previous caller's cache,
-    // even for a plugin they own or one shared with the organization.
+    // The next caller does not borrow the previous caller's cache: grants
+    // decide, so a member without plugin:read sees the plugin they authored.
     expect(
-      await listPluginSkills({
-        organizationId: ctx.organizationId,
-        userId: other.id,
-        lookups,
-      }),
-    ).toEqual([]);
+      (
+        await listPluginSkills({
+          organizationId: ctx.organizationId,
+          userId: other.id,
+          lookups,
+        })
+      ).map((skill) => skill.pluginId),
+    ).toEqual([hidden.id]);
   });
 
   test("lists portable skills across plugins, skipping invalid manifests", async () => {
@@ -265,7 +270,12 @@ describe("plugin Skill routes", () => {
 
     // a plugin admin sees the whole org catalog
     ctx.user = reader;
-    pluginAdmin = true;
+    await grantRoleEverywhere({
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      roleId: readerRoleId,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    });
     const adminResponse = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",
@@ -338,7 +348,12 @@ describe("plugin Skill routes", () => {
   });
 
   test("projects only portable resources from root and nested skill trees", async () => {
-    pluginAdmin = true;
+    await grantRoleEverywhere({
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      roleId: readerRoleId,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    });
     const plugin = await seedPlugin(
       stePlugin({
         files: [
@@ -618,5 +633,64 @@ describe("plugin Skill routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
+  });
+
+  test("a member without plugin:read sees skills from plugins granted to them through real auth middleware", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [admin, member] = await Promise.all([makeUser(), makeUser()]);
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    await makeMember(member.id, organizationId);
+
+    const shared = await PluginModel.create({
+      organizationId,
+      userId: admin.id,
+      input: stePlugin({ displayName: "Shared plugin" }),
+      initialPermissionGrants: [
+        { subject: { type: "user", id: member.id }, actions: ["read"] },
+      ],
+    });
+    const privatePlugin = await PluginModel.create({
+      organizationId,
+      userId: admin.id,
+      input: stePlugin({ displayName: "Private plugin" }),
+    });
+    if (!shared || !privatePlugin) throw new Error("failed to seed plugins");
+
+    const app = await authenticatedRouteApp({
+      organizationId,
+      routes: [pluginSkillRoutes],
+    });
+    try {
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/skills/plugins",
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(list.statusCode, list.body).toBe(200);
+      expect(
+        list.json().map((item: { pluginId: string }) => item.pluginId),
+      ).toEqual([shared.id]);
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/skills/plugins/${shared.id}?skillPath=skills/ste-writing`,
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(detail.statusCode, detail.body).toBe(200);
+      expect(detail.json().name).toBe("ste-writing");
+
+      const hidden = await app.inject({
+        method: "GET",
+        url: `/api/skills/plugins/${privatePlugin.id}?skillPath=skills/ste-writing`,
+        headers: { [USER_HEADER]: member.id },
+      });
+      expect(hidden.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
   });
 });

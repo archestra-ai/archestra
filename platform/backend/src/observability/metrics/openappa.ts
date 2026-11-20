@@ -23,6 +23,7 @@ const decisions = new Set([
   "replace_output",
   "deliver_value",
   "child_return",
+  "defer_return",
   "context",
   "refuse",
   "mcp_result",

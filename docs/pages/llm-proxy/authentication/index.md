@@ -134,7 +134,7 @@ For an app where people sign in. Each call uses that person's provider keys, cos
 
 ## Identity Provider JWT
 
-Already signed in to Okta or Entra ID? Send that token. Each call uses that person's provider keys. Identity providers are an Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
+Already signed in to Okta or Entra ID? Send that token. Each call uses that person's provider keys. Identity providers are an Enterprise feature. See [Pricing](/pricing).
 
 1. Add your OIDC provider under **Settings → Identity Providers**.
 2. On **LLM Proxy**, under **Identity provider**, pick it. You need [`llmProxy:update`](/docs/reference/permissions#llmProxy:update).

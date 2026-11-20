@@ -36,6 +36,7 @@
     "src/routes/proxy/model-pool-failover.ts",
     "src/routes/proxy/model-pool-transport.ts",
     "src/routes/proxy/model-router-access.ts",
+    "src/routes/proxy/model-router-catalog.ts",
     "src/routes/proxy/model-router-resolver.ts",
     "src/routes/proxy/passthrough-log.ts",
     "src/routes/proxy/provider-file-handler.ts",

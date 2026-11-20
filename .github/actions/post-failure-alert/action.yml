@@ -8,6 +8,10 @@ inputs:
   summary:
     description: One line saying what failed and what it means, such as "VEX Triage did not start".
     required: true
+  details:
+    description: Lines to post under the summary in place of the run's failed jobs, for an alert that is not a job failure.
+    required: false
+    default: ""
   test:
     description: '"true" posts a test message instead of the run''s failures.'
     required: false
@@ -44,6 +48,7 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
         SUMMARY: ${{ inputs.summary }}
+        DETAILS: ${{ inputs.details }}
         TEST_ALERT: ${{ inputs.test }}
         WORKFLOW: ${{ github.workflow }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -56,6 +61,8 @@ runs:
         fi
         if [[ "$TEST_ALERT" == "true" ]]; then
           message=":test_tube: Test of the ${WORKFLOW} failure alert; nothing ran, nothing to do. <$RUN_URL|View workflow run>"
+        elif [[ -n "$DETAILS" ]]; then
+          message=":rotating_light: ${SUMMARY} <$RUN_URL|View workflow run>"$'\n'"$DETAILS"
         else
           # One line per failed job, with its first failed step.
           failures="$(gh api --paginate "$JOBS_URL?per_page=100" --jq '

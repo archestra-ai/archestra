@@ -71,7 +71,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
 import {
   clientConnectionQueryKey,
@@ -104,6 +107,10 @@ import {
   type PluginListItem,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
+import {
+  canUseAnyPlugin,
+  canUsePlugin,
+} from "@/lib/plugins/plugin-eligibility";
 import {
   isDocumentSeedFresh,
   useDocumentSeedFresh,
@@ -362,21 +369,24 @@ export function ConnectCommandPanel({
   );
   const includeSkills = skillsEligible && selectedSkills.length > 0;
 
-  const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
-    useHasPermissions({ plugin: ["read", "update"] }, "*");
+  // Plugins are offered by their own `use` grant.
+  const { data: scopedGrants, isPending: pluginsPermissionPending } =
+    useScopedCapabilities();
   const pluginsQueryEnabled =
     client.id !== "pi" &&
     client.id !== "grok-build" &&
     pluginsEnabled &&
-    canAdminPlugins === true;
+    canUseAnyPlugin(scopedGrants ?? []);
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
     () =>
-      (allPlugins ?? []).filter((plugin) =>
-        isDeliverablePlugin(plugin, client.id),
+      (allPlugins ?? []).filter(
+        (plugin) =>
+          isDeliverablePlugin(plugin, client.id) &&
+          canUsePlugin(scopedGrants ?? [], plugin.id),
       ),
-    [allPlugins, client.id],
+    [allPlugins, client.id, scopedGrants],
   );
   const pluginsLoading =
     (pluginsEnabled && pluginsPermissionPending) ||

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import ipaddr from "ipaddr.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -270,8 +271,8 @@ export const guardrailsPolicyService = {
 
   /**
    * What the root rules `content` adds or changes against `previous` point at,
-   * checked against the MCP tools of the catalogs the caller can read, so the
-   * answer never reveals a tool the caller could not otherwise see.
+   * checked against catalog and observed proxy tools visible to the caller,
+   * so the answer never reveals a tool the caller could not otherwise see.
    */
   async touchedRuleTargets(params: {
     organizationId: string;
@@ -285,13 +286,22 @@ export const guardrailsPolicyService = {
       params.userId,
       params.organizationId,
     );
-    const { tools } = await ToolModel.findCoverageInventory(
-      params.organizationId,
-      { includeAppCatalogs: true, catalogIds: visibleCatalogIds },
-    );
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission(params);
+    const [{ tools }, proxyTools] = await Promise.all([
+      ToolModel.findCoverageInventory(params.organizationId, {
+        includeAppCatalogs: true,
+        catalogIds: visibleCatalogIds,
+      }),
+      ToolModel.findProxyToolNames({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        isAgentAdmin,
+      }),
+    ]);
     // Built-in tools exist in code even when a feature flag keeps one unseeded.
     const inventory = new Set([
       ...tools.map((tool) => tool.name),
+      ...proxyTools.map((tool) => tool.name),
       ...ARCHESTRA_TOOL_SHORT_NAMES.map((name) =>
         archestraMcpBranding.getToolName(name),
       ),

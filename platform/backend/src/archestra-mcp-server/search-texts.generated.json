@@ -408,7 +408,7 @@
     "searchText": "list held peer messages inbox pending queued messages message IDs expiration time check incoming messages from other agents before reading message content"
   },
   "list_plugins": {
-    "definitionHash": "997e09c178c7df397bb60252276fd4684677128fd113e24bdcfa410d1c8ee46c",
+    "definitionHash": "45ac691f6a567f6b8e1b87cd7db262182bdf40d4899dd8ca309982d0b5eca89a",
     "searchText": "list plugins organization, browse available plugins, plugin id client platforms visibility file count, filter by access mine shared org others, my plugins, shared with team role user service account, filter by owner creator, find plugin id"
   },
   "list_projects": {
@@ -468,8 +468,8 @@
     "searchText": "preview run app assigned MCP tool server-side, test tool call with arguments, inspect real output response shape schema before writing app code, debug app authoring, check auth required, sample tool result"
   },
   "preview_guardrails_policy_change": {
-    "definitionHash": "c58978983ccc3019b6431b04fb1fcaf0fc27a7bcbed2cd9bcf83b21915481d42",
-    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, check rules before publishing, text replacement edits, full rewrite, expected revision"
+    "definitionHash": "4c878d839bcfa31c38beccbe3eb4c8ca97a7427b56ece434ef6d57950f4e80d5",
+    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, confirm unknown or unobserved MCP tools before previewing, allowUnknownTools, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {
     "definitionHash": "8c0a0fd16430d63653bc893e7065cb37d8d4cbb65dcd2fb4d4c52ca8c0d0269d",

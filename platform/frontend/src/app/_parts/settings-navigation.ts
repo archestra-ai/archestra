@@ -64,7 +64,7 @@ export function getSettingsNavigationUrl(
  * baseline holds for the API, and the one thing a member needs from them —
  * their own credentials — lives in Personal Settings. So those three count
  * only for a reader who can manage them: create, update or delete on the
- * resource, or a Can update or Full access grant on every object of it (`*`).
+ * resource, or a Can edit or Full access grant on every object of it (`*`).
  * A grant on one object counts for Teams and OAuth Clients, and for
  * Credentials only on an organization credential: credentials that take a
  * personal value, your own included, belong on the reader's credentials page
@@ -181,7 +181,7 @@ function isManageGrant(
   );
 }
 
-/** Actions that only the Can update and Full access presets carry. */
+/** Actions that only the Can edit and Full access presets carry. */
 const OBJECT_MANAGE_ACTIONS: readonly ScopedPermission["action"][] = [
   "update",
   "delete",

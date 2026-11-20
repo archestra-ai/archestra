@@ -21,7 +21,11 @@ vi.mock("sonner");
 vi.mock("@/lib/clipboard");
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
@@ -294,6 +298,7 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
+  pluginGrants(["*"]);
   availableKeysMock.mockReturnValue({
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
@@ -1799,13 +1804,10 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("waits for plugin permissions before generating the command", async () => {
-    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
-      const pluginCheck = "plugin" in permissions;
-      return {
-        data: !pluginCheck,
-        isPending: pluginCheck,
-      } as ReturnType<typeof useHasPermissions>;
-    });
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     const { rerender } = renderPanel();
 
     // The debounce runs at 0 ms here (see beforeEach), so a short wait is
@@ -1813,16 +1815,50 @@ describe("ConnectCommandPanel", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(createSetupMock).not.toHaveBeenCalled();
 
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as ReturnType<typeof useHasPermissions>);
+    pluginGrants(["*"]);
     rerender(<ConnectCommandPanel {...renderPanelProps()} />);
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenCalledWith(
         expect.objectContaining({ pluginIds: ["b1"] }),
       ),
+    );
+  });
+
+  it("offers only the plugins the user may use", async () => {
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? ["b1", "b2"].map((id) => ({
+            id,
+            displayName: `Plugin ${id}`,
+            clientType: "claude-code",
+            enabled: true,
+            contentHash: "hash-1",
+            approvedContentHash: "hash-1",
+            supportedPlatforms: ["posix"],
+          }))
+        : undefined,
+      isPending: false,
+    }));
+    // A read grant on b1 alone does not let the user install it.
+    pluginGrants(["b2"], { readOnly: ["b1"] });
+    renderPanel();
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pluginIds: ["b2"] }),
+      ),
+    );
+  });
+
+  it("leaves plugins out without a use grant on any of them", async () => {
+    pluginGrants([], { readOnly: ["b1"] });
+    renderPanel();
+
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+    expect(pluginsMock).not.toHaveBeenCalledWith(true);
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pluginIds: [] }),
     );
   });
 
@@ -2332,6 +2368,7 @@ describe("ConnectCommandPanel", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
+    pluginGrants([]);
     renderPanel({
       mcpGateways: null,
       mcpGatewayId: null,
@@ -3935,9 +3972,11 @@ describe("first approval setup, as the server seed prepares it", () => {
       },
       scoped: [
         { resource: "plugin", action: "read", scope: "*" },
+        { resource: "plugin", action: "use", scope: "*" },
         { resource: "plugin", action: "update", scope: "*" },
       ],
     },
+    // Reads both plugins, and may install only one of them.
     member: {
       permissions: {
         mcpGateway: ["read"],
@@ -3945,7 +3984,11 @@ describe("first approval setup, as the server seed prepares it", () => {
         skill: ["read"],
         llmVirtualKey: ["create"],
       },
-      scoped: [],
+      scoped: [
+        { resource: "plugin", action: "read", scope: "pl-1" },
+        { resource: "plugin", action: "read", scope: "pl-2" },
+        { resource: "plugin", action: "use", scope: "pl-1" },
+      ],
     },
   } as const;
   const organization = {
@@ -4016,6 +4059,10 @@ describe("first approval setup, as the server seed prepares it", () => {
     configuredBaseUrls,
   }) => {
     const grants = roles[role];
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: grants.scoped,
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useHasPermissions).mockImplementation(
       (wanted, scope) =>
         ({
@@ -4265,3 +4312,23 @@ describe("connectionSetupKeyDigest", () => {
     ).not.toBe(connectionSetupKeyDigest(key));
   });
 });
+
+/** The user's plugin grants: `use` on `usable`, `read` alone on `readOnly`. */
+function pluginGrants(
+  usable: string[],
+  { readOnly = [] }: { readOnly?: string[] } = {},
+) {
+  const grant = (scope: string, action: "read" | "use") => ({
+    organizationId: "org-1",
+    resource: "plugin" as const,
+    scope,
+    action,
+  });
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [
+      ...usable.flatMap((scope) => [grant(scope, "read"), grant(scope, "use")]),
+      ...readOnly.map((scope) => grant(scope, "read")),
+    ],
+    isPending: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
+}

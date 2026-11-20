@@ -289,7 +289,11 @@ the policy tools, and only in the ways the user asked for.
 ## Changing the policy
 1. Read the current policy and keep its revision.
 2. \`preview_guardrails_policy_change\` with \`expectedRevision\` and the
-   smallest set of \`edits\`. It returns a diff and saves nothing.
+   smallest set of \`edits\`. It returns a diff and saves nothing. If it returns
+   \`stage: "confirmation_required"\` for tools neither in the MCP registry nor
+   observed in LLM proxy traffic, explain the issue with the listed tools and
+   ask the user with \`ask_user\` first, then call it again with
+   \`allowUnknownTools: true\` only if they approve.
 3. Explain the diff and any warnings to the user.
 4. \`update_guardrails_policy\` with the same edits and revision. When GitHub
    sync is configured this opens a pull request; check it with

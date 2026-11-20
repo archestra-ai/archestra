@@ -123,7 +123,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
   - Values: `true`, `false`
-  - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
+  - See [Pricing](/pricing) for what it unlocks.
   - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
   - Turns [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) off unless that variable is set.
 
@@ -192,6 +192,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix of the auth cookie names, for example `archestra.session_token`.
   - Default: `archestra`
   - Give each instance a unique prefix when two instances run on one host on different ports, or on sibling subdomains that share a [cookie domain](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_COOKIE_DOMAIN). Otherwise their session cookies overwrite each other.
+
+- **`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`** - Service accounts and federated credentials to create on startup, as a JSON array. Requires an Enterprise license.
+  - Default: unset (nothing is created)
+  - With the Helm chart, set `archestra.bootstrap.serviceAccounts` instead. See [Declare Accounts in the Helm Chart](/docs/admin/identity/workload-identity#declare-accounts-in-the-helm-chart).
+  - Only missing accounts and credentials are created, matched by name. A malformed value stops startup.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Turns off email and password sign-in. Users sign in only through SSO.
   - Default: `false`
@@ -1502,7 +1507,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives [Real User Monitoring](/docs/admin/observability#real-user-monitoring) events from the web UI. Setting it turns RUM on.
   - Default: unset (RUM off)
-  - Requires an [Enterprise license](/docs/get-started/pricing-model). The backend does not start when this is set without one.
+  - Requires an [Enterprise license](/pricing). The backend does not start when this is set without one.
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for basic authentication to the RUM endpoint.
   - Default: unset. Used only together with [`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD).
@@ -1556,7 +1561,7 @@ To disable captured prompt/response and tool argument/result fields on trace spa
 
 ## Data Retention
 
-Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started/pricing-model). Each value is a whole number of days; any other value turns that window off.
+Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/pricing). Each value is a whole number of days; any other value turns that window off.
 
 - **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to keep LLM proxy logs and Guardrails consult records.
   - Default: `0` (keep forever)

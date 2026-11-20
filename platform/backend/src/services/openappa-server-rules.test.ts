@@ -23,6 +23,7 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
   getAppaGithubSync,
@@ -2111,6 +2112,73 @@ test("saving a GitHub App source with self-service on shares the APPA Keeper as 
       })
     ).some((agent) => agent.id === keeper.id),
   ).toBe(true);
+});
+
+test("a connection whose first pull fails is rolled back and shares nothing; one that works shares the APPA Keeper", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  const githubAppConfigId =
+    (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null;
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  const organizationGrant = async () =>
+    (
+      await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "agent",
+        scope: keeper.id,
+      })
+    )?.grants.find((grant) => grant.subject.type === "organization");
+  const connect = (path: string) =>
+    connectAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      source: {
+        repo: "example/policies",
+        ref: "main",
+        path,
+        interval: "1h",
+        validationDirectory: "",
+        githubPatId: null,
+        githubAppConfigId,
+        gitlabTokenId: null,
+        selfService: true,
+        selfServiceDirectory: "mcp",
+        selfServiceAutoMerge: false,
+      },
+    });
+
+  // No policy file at that path: the connection is refused and undone.
+  await expect(connect("missing/appa.toml")).rejects.toMatchObject({
+    statusCode: 400,
+  });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
+  expect(await organizationGrant()).toBeUndefined();
+
+  // The file is there: the pull works, and self-service is in force.
+  await connect("appa.toml");
+  expect(await organizationGrant()).toEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  });
 });
 
 test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({

@@ -666,10 +666,11 @@ function stripTextArgument(
 ): boolean {
   const value = args[field];
   if (typeof value !== "string") return false;
-  // The marker goes first, while its line still stands: removing a reference
-  // takes the blank lines around it and could join text onto the marker line.
+  // The marker goes first, while its line still stands: removing a receipt or
+  // a reference takes the blank lines around it and could join text onto the
+  // marker line.
   const stripped = stripChildTrajectoryReferences(
-    stripMarkerLines(stripChildTrajectoryReceipts(value).text),
+    stripChildTrajectoryReceipts(stripMarkerLines(value)).text,
     { collectReferences: false },
   ).text;
   if (stripped === value) return false;

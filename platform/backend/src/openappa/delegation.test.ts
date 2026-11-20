@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
+import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
@@ -801,10 +802,21 @@ describe("stripping delegation markers", () => {
     });
   });
 
-  test("a reference copied into a resumed spawn prompt does not keep the marker", () => {
+  test.each([
+    {
+      carrier: "reference",
+      copied: () => "▄█▄▄▄█▄  started subagent BBB-BBBB@abcdefghijklmnopqrstuv",
+    },
+    {
+      carrier: "receipt",
+      copied: () =>
+        mintChildTrajectoryReceipt({ ...SPAWN, childId: "another-child" }),
+    },
+  ])("a $carrier copied into a resumed spawn prompt does not keep the marker", ({
+    copied,
+  }) => {
     const reference =
       "▄█▄▄▄█▄  started subagent AAA-AAAA@abcdefghijklmnopqrstuv";
-    const copied = "▄█▄▄▄█▄  started subagent BBB-BBBB@abcdefghijklmnopqrstuv";
     const responses = {
       input: [
         {
@@ -812,7 +824,7 @@ describe("stripping delegation markers", () => {
           call_id: "c1",
           name: "spawn_subagent",
           arguments: JSON.stringify({
-            prompt: `${PROMPT}\n\n${copied}\n\n${mint()}\n\n${reference}`,
+            prompt: `${PROMPT}\n\n${copied()}\n\n${mint()}\n\n${reference}`,
           }),
         },
       ],

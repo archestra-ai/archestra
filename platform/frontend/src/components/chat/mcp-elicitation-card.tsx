@@ -879,39 +879,20 @@ function AnswerSummary({
 }
 
 /**
- * The choices the agent offered stay folded behind a link: the outcome
- * already shows the pick, so the full list is context on demand. The link
- * sits beside a one-line outcome and under a multi-line one.
+ * Answered questions show only the question and the chosen (or typed) answer.
+ * Unanswered outcomes (dismissed, declined, timed out, stopped) keep the
+ * offered choices folded behind a link as context on demand.
  */
 function AnswerSummaryItem({ member }: { member: AskUserGroupMember }) {
   const [expanded, setExpanded] = useState(false);
   const isAnswered = member.outcome?.status === "answered";
   const summary = getOutcomeSummary(member);
-  const isMultiline = summary.includes("\n");
   const isTyped =
     member.outcome?.status === "answered" &&
     member.outcome.text !== undefined &&
     member.outcome.selected.length === 0;
-  const selected =
-    member.outcome?.status === "answered" ? member.outcome.selected : [];
   const count = member.options.length;
-  const optionsToggle =
-    count > 0 ? (
-      <Button
-        type="button"
-        variant="link"
-        size="xs"
-        className="h-auto px-0 text-muted-foreground"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <span>
-          {expanded
-            ? "Hide options"
-            : `Show ${count} ${count === 1 ? "option" : "options"}`}
-        </span>
-      </Button>
-    ) : null;
+  const showOptionsToggle = !isAnswered && count > 0;
   const separator = (
     <span aria-hidden className="text-xs text-muted-foreground">
       ·
@@ -950,51 +931,45 @@ function AnswerSummaryItem({ member }: { member: AskUserGroupMember }) {
               </span>
             </>
           ) : null}
-          {optionsToggle && !isMultiline ? (
+          {showOptionsToggle ? (
             <>
               {separator}
-              {optionsToggle}
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                className="h-auto px-0 text-muted-foreground"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((current) => !current)}
+              >
+                <span>
+                  {expanded
+                    ? "Hide options"
+                    : `Show ${count} ${count === 1 ? "option" : "options"}`}
+                </span>
+              </Button>
             </>
           ) : null}
         </div>
-        {optionsToggle && isMultiline ? (
-          <div className="flex">{optionsToggle}</div>
-        ) : null}
-        {expanded && count > 0 ? (
-          <OfferedOptionList member={member} selected={selected} />
+        {showOptionsToggle && expanded ? (
+          <OfferedOptionList options={member.options} />
         ) : null}
       </div>
     </li>
   );
 }
 
-function OfferedOptionList({
-  member,
-  selected,
-}: {
-  member: AskUserGroupMember;
-  selected: string[];
-}) {
+function OfferedOptionList({ options }: { options: string[] }) {
   return (
     <ul aria-label="Offered options" className="flex flex-wrap gap-1.5">
-      {member.options.map((option) => {
-        const picked = selected.includes(option);
-        return (
-          <li
-            key={option}
-            aria-current={picked ? "true" : undefined}
-            className={cn(
-              "flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs [overflow-wrap:anywhere]",
-              picked
-                ? "border-primary/30 bg-primary/10 font-medium text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            {picked ? <CheckIcon className="size-3" aria-hidden /> : null}
-            {option}
-          </li>
-        );
-      })}
+      {options.map((option) => (
+        <li
+          key={option}
+          className="flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+        >
+          {option}
+        </li>
+      ))}
     </ul>
   );
 }

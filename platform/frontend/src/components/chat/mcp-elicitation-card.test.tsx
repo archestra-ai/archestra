@@ -1374,8 +1374,7 @@ describe("McpElicitationCard", () => {
     expect(typed).toHaveTextContent("Which site?Google·Typed answer");
   });
 
-  it("folds the offered options under an answered question until expanded", async () => {
-    const user = userEvent.setup();
+  it("omits offered options under an already-answered question", () => {
     render(
       <McpElicitationCard
         groupId="assistant-1-ask-user-1"
@@ -1392,24 +1391,19 @@ describe("McpElicitationCard", () => {
       />,
     );
 
+    const [item] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(item).toHaveTextContent("Stricter or looser?Stricter");
+    expect(
+      screen.queryByRole("button", { name: /Show .* option/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("list", { name: "Offered options" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
-
-    const options = within(
-      screen.getByRole("list", { name: "Offered options" }),
-    ).getAllByRole("listitem");
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Stricter",
-      "Looser",
-    ]);
-    expect(options[0]).toHaveAttribute("aria-current", "true");
-    expect(options[1]).not.toHaveAttribute("aria-current");
   });
 
-  it("shows a settled approval answer under its question, not as a button", async () => {
-    const user = userEvent.setup();
+  it("shows a settled approval answer under its question, not as a button", () => {
     render(
       <McpElicitationCard
         groupId="assistant-1-ask-user-1"
@@ -1429,18 +1423,11 @@ describe("McpElicitationCard", () => {
     const [item] = within(
       screen.getByRole("list", { name: "Answers" }),
     ).getAllByRole("listitem");
-    // The answer reads as part of the question's own row, followed by the
-    // folded options, rather than as a lone control after it.
-    expect(item).toHaveTextContent("Apply this policy?Approve·Show 2 options");
+    // The answer reads as part of the question's own row without redundant
+    // option toggles or a button-like pill after it.
+    expect(item).toHaveTextContent("Apply this policy?Approve");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
-    const [approve, notNow] = within(
-      screen.getByRole("list", { name: "Offered options" }),
-    ).getAllByRole("listitem");
-    expect(approve).toHaveAttribute("aria-current", "true");
-    expect(notNow).not.toHaveAttribute("aria-current");
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show 2 options" })).toBeNull();
   });
 
   it("shows an unanswered outcome with the options it was offered", async () => {

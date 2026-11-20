@@ -333,6 +333,9 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // Parse a suite and replay it without saving a run: both only read.
+  { kind: "exact", value: "/api/openappa/policy-tests/inspect" },
+  { kind: "exact", value: "/api/openappa/policy-tests/preview" },
   // The MCP registry list is a read sent as a POST body (its ranked ids can
   // outgrow a URL); it changes nothing.
   { kind: "exact", value: "/api/internal_mcp_catalog/registry/search" },

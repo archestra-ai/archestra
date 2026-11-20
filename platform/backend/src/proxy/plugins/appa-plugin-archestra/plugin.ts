@@ -2608,7 +2608,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // reads the runtime's notice and decides.
       if (outcome.kind === "deferred") return { decision: "release" };
       if (outcome.kind === "held") {
-        if (!binding.hardBlockSeen) await refuseSoftBlock(outcome.reason);
+        await refuseSoftBlock(outcome.reason);
         return { decision: "replace", responseText: outcome.reason };
       }
       return outcome.value === context.responseText
@@ -2662,7 +2662,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
-        if (!binding.hardBlockSeen) await refuseSoftBlock(admitted);
+        await refuseSoftBlock(admitted);
         return {
           decision: "replace",
           responseText:
@@ -2894,7 +2894,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onPrepareToolCalls",
       async () => {
         const result = await this.guardedPrepareToolCalls(context);
-        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
         if (result?.decision === "refuse")
           await refuseSoftBlock(result.refusal.refusalMessage, [
             result.refusal.blockedToolName,

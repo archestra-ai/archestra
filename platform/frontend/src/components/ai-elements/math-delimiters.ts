@@ -13,6 +13,9 @@
  *   followed by a letter or digit. That keeps "$HOME and $PATH",
  *   "$5 and $10" and "$5-$10" as plain text.
  *
+ * Inside a table row a `|` in a formula becomes `\vert`: the table splits its
+ * cells on every `|` before any math is parsed.
+ *
  * Code spans and fenced code blocks, including a fence still streaming in,
  * are left untouched.
  */
@@ -96,7 +99,7 @@ function normalizeOutsideFences(text: string): string {
       const end = close + 2;
       out += display
         ? displayMath({ text, start: i, end, body })
-        : `$$${body.trim()}$$`;
+        : inlineMath({ text, start: i, body });
       i = end;
       continue;
     }
@@ -131,7 +134,7 @@ function normalizeOutsideFences(text: string): string {
         i += 1;
         continue;
       }
-      out += `$$${text.slice(i + 1, close)}$$`;
+      out += inlineMath({ text, start: i, body: text.slice(i + 1, close) });
       i = close + 1;
       continue;
     }
@@ -159,12 +162,26 @@ function displayMath(params: {
   const lineEnd = text.indexOf("\n", end);
   const rest = text.slice(end, lineEnd === -1 ? text.length : lineEnd);
   const ownsLine = /^[ \t]*$/.test(indent) && /^[ \t]*$/.test(rest);
-  if (!ownsLine) return `$$${body.trim()}$$`;
+  if (!ownsLine) return inlineMath({ text, start, body });
   const lines = body
     .trim()
     .split("\n")
     .map((line) => `${indent}${line.trim()}`);
   return `$$\n${lines.join("\n")}\n${indent}$$`;
+}
+
+function inlineMath(params: {
+  text: string;
+  start: number;
+  body: string;
+}): string {
+  const { text, start, body } = params;
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const inTableRow = /^[ \t]*\|/.test(text.slice(lineStart, start + 1));
+  const tex = inTableRow
+    ? body.replace(/\\\||\|/g, (bar) => (bar === "|" ? "{\\vert}" : "{\\Vert}"))
+    : body;
+  return `$$${tex.trim()}$$`;
 }
 
 /** Index of the `$` closing a single-dollar formula opened at `open`, or -1. */

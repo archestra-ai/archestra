@@ -233,6 +233,20 @@ describe("Response math", () => {
     expect(container.textContent).not.toContain("$");
   });
 
+  it("keeps a formula with | inside its table cell", () => {
+    const { container } = renderResponse(
+      [
+        "| Condition | Roots |",
+        "| :--- | :--- |",
+        "| $\\Delta < 0$ | Complex ($x = \\frac{-b \\pm i\\sqrt{|\\Delta|}}{2a}$) |",
+      ].join("\n"),
+    );
+    const cells = container.querySelectorAll("tbody td");
+    expect(cells).toHaveLength(2);
+    expect(cells[1].querySelectorAll(".katex")).toHaveLength(1);
+    expect(cells[1].textContent).not.toContain("$");
+  });
+
   it("keeps a display formula inside its list item", () => {
     const { container } = renderResponse(
       "1. Square it:\n\n   \\[ x^2 \\]\n\n2. Next step",

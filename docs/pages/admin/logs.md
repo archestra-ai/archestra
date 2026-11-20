@@ -62,6 +62,6 @@ Sharing an agent or a gateway with someone does not let them read its logs.
 
 ## What to Know
 
-- Logs stay forever by default. To delete old records, set a retention window. Retention is an [Enterprise feature](/docs/get-started/pricing-model). See [Data Retention](/docs/admin/deployment/configuration#data-retention).
+- Logs stay forever by default. To delete old records, set a retention window. Retention is an [Enterprise feature](/pricing). See [Data Retention](/docs/admin/deployment/configuration#data-retention).
 - Behind a load balancer, set [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY). Otherwise audit records show the load balancer's IP, not the client's.
 - To send data to your own tools, use [metrics](/docs/admin/observability/metrics) and [traces](/docs/admin/observability/tracing).

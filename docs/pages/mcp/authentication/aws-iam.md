@@ -9,7 +9,7 @@ lastUpdated: 2026-11-15
 
 Call MCP servers that sit behind AWS, such as a Bedrock AgentCore Gateway, as each agent's own IAM role session. Archestra stores no AWS keys: each agent proves who it is with its [SPIFFE ID](/docs/agents/identity/spiffe), assumes the role for an hour, and signs every request with SigV4. The role's trust policy decides which agents may call the server, and CloudTrail names the agent in each session.
 
-Use it for servers behind an AWS service that checks SigV4 signatures: Bedrock AgentCore Gateway or Runtime, API Gateway, or a Lambda function URL. AWS IAM sign-in is an [Enterprise feature](/docs/get-started/pricing-model).
+Use it for servers behind an AWS service that checks SigV4 signatures: Bedrock AgentCore Gateway or Runtime, API Gateway, or a Lambda function URL. AWS IAM sign-in is an [Enterprise feature](/pricing).
 
 ## What Happens on a Tool Call
 

@@ -74,7 +74,7 @@ Each dashboard scopes its optional data sources and aggregates multi-replica met
 
 ## Real User Monitoring (RUM)
 
-Frontend monitoring requires an [Enterprise license](/docs/get-started/pricing-model).
+Frontend monitoring requires an [Enterprise license](/pricing).
 
 1. Set the collector endpoint in your environment:
    ```bash

@@ -49,7 +49,7 @@ Give people **Can use** on an agent to let them run it without changing it. Give
 
 ## Share a Resource
 
-Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
+Resource sharing is an [Enterprise feature](/pricing).
 
 1. Open the item's **Permissions** control.
 2. Add a person, team, role, service account, OAuth client (on Knowledge Bases, knowledge connectors, and files), or **Everyone in the organization**.

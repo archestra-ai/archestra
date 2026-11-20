@@ -42,7 +42,7 @@ Startup refuses a key that cannot decrypt existing secrets. Preserve the old key
 
 HashiCorp Vault stores secret values externally instead of in the database. PostgreSQL stores each secret's metadata.
 
-Vault storage requires an [Enterprise license](/docs/get-started/pricing-model) and a Vault identity that can create, read, update, and delete secrets, plus list their paths. For KV v2, allow listing and deletion on the metadata path too.
+Vault storage requires an [Enterprise license](/pricing) and a Vault identity that can create, read, update, and delete secrets, plus list their paths. For KV v2, allow listing and deletion on the metadata path too.
 
 1. Set [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER) and [`ARCHESTRA_HASHICORP_VAULT_ADDR`](/docs/admin/deployment/configuration#ARCHESTRA_HASHICORP_VAULT_ADDR).
 2. Configure one authentication method below on every web and worker pod, using Kubernetes Secret references for sensitive values.

@@ -323,7 +323,13 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
       --source docker --distribution docker --update-mechanism external \
  && printf '%s\n' docker > .install_method \
  # Discard superseded wheels and build-only installers, including pip's vendored packages.
- && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+ # Hermes runs only HERMES_NODE at runtime; the npm and corepack its Node
+ # tarball bundles are build tools (npm 11.20.0 carries brace-expansion 5.0.9
+ # and undici 6.28.0). The pnpm store holds only the TUI build's packages,
+ # including lefthook's Go binary (go1.27.0, x/net 0.59.0).
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes /usr/local/share/pnpm/store \
+      /opt/hermes-node/lib/node_modules/npm /opt/hermes-node/lib/node_modules/corepack \
+      /opt/hermes-node/bin/npm /opt/hermes-node/bin/npx /opt/hermes-node/bin/corepack \
       /opt/hermes-python/lib/python3.14/site-packages/pip \
       /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
       /opt/hermes-python/lib/python3.14/ensurepip \

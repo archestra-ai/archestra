@@ -123,7 +123,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
     # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
-    go get github.com/containerd/containerd/v2@v2.2.7 && \
+    # CVE-2026-95839: containerd uncaught exception (HIGH) fixed in >= 2.2.10
+    go get github.com/containerd/containerd/v2@v2.2.10 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.

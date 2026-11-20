@@ -88,11 +88,11 @@ Go to **Settings → OAuth Clients → Create OAuth Client**, and select **LLM P
 
 ### Call as the App
 
-For a bot or a nightly job with no person behind it. Select **Service account (optional)** under **Access → Advanced** to use that account’s permissions and attribute LLM spend to it. Enable **MCP Gateway** or **A2A** on the same client for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
+For a bot or a nightly job with no person behind it. On the **Access** step, select **Service account (optional)** under **Identity, budget and labels** to use that account’s permissions and attribute LLM spend to it. Enable **MCP Gateway** or **A2A** on the same client for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
 
 1. Pick **As itself**. On **Access**, choose **Selected providers** to fix the allowed providers and keys, or **Current and future providers** to follow shared Primary keys automatically. If you enabled tools or agents, select their gateways and agents too.
-2. Under **Advanced → Budget** on the same step, optionally pick the team that pays for it or set a spend cap.
-3. Save the client ID and secret. The secret shows only once.
+2. Under **Identity, budget and labels** on the same step, optionally pick the team that pays for it or set a spend cap.
+3. Save the client ID and secret. The secret shows only once. A CI job or cluster workload can skip the secret and [sign in with its own OIDC token](/docs/admin/identity/workload-identity#sign-in-as-an-oauth-client) instead.
 4. Get a token. It lasts one hour.
 
    ```bash

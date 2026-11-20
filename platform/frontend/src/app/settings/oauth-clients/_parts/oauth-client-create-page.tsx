@@ -19,7 +19,6 @@ import {
   resolveOauthClientFormBody,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
-import { OAuthClientReview } from "@/components/oauth-client/review";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
@@ -37,18 +36,17 @@ import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 
-type StepId = "details" | "access" | "review";
+type StepId = "details" | "access";
 const steps = [
   { id: "details" as const, title: "Details" },
   { id: "access" as const, title: "Access" },
-  { id: "review" as const, title: "Review" },
 ];
 
 const LIST_HREF = "/settings/oauth-clients";
 
 /**
- * Creating an OAuth client, as a page: what it is and how it signs in, what
- * it may reach, then a review. The secret is shown once, on creation; the
+ * Creating an OAuth client, as a page: what it is and how it signs in, then
+ * what it may reach. The secret is shown once, on creation; the
  * client's page then holds everything else, including the federated
  * credentials a client that signs in as itself can use instead of it.
  */
@@ -92,13 +90,11 @@ export function OAuthClientCreatePage() {
   const detailsReady = !!values.name.trim() && values.scopes.length > 0;
   const ready =
     oauthClientFormReady(values) && !scopeChange.isPending && !create.isPending;
-  // A later step opens only once the steps before it are filled in.
-  const canVisit = (id: StepId) =>
-    id === "details" || (detailsReady && (id === "access" || ready));
+  // Access opens only once the details are filled in.
+  const canVisit = (id: StepId) => id === "details" || detailsReady;
 
   useEffect(() => {
-    const visitable = (id: StepId) =>
-      id === "details" || (detailsReady && (id === "access" || ready));
+    const visitable = (id: StepId) => id === "details" || detailsReady;
     setActionButton(
       <WizardStepper
         variant="progress"
@@ -110,7 +106,7 @@ export function OAuthClientCreatePage() {
       />,
     );
     return () => setActionButton(null);
-  }, [setActionButton, step, detailsReady, ready]);
+  }, [setActionButton, step, detailsReady]);
 
   const index = steps.findIndex((entry) => entry.id === step);
   const prev = steps[index - 1];
@@ -167,21 +163,6 @@ export function OAuthClientCreatePage() {
             </SettingsSection>
           </SettingsSectionGroup>
         )}
-        {step === "review" && (
-          <SettingsSectionGroup>
-            <SettingsSection
-              title="Review"
-              description="Check every choice before creating the client. Its secret is shown once, next."
-            >
-              <OAuthClientReview
-                values={values}
-                gateways={gateways}
-                providerApiKeys={providerApiKeys}
-                onEdit={(target) => setStep(target)}
-              />
-            </SettingsSection>
-          </SettingsSectionGroup>
-        )}
         <WizardFooter>
           <div className="flex min-w-0 items-center gap-3">
             {prev && (
@@ -206,7 +187,10 @@ export function OAuthClientCreatePage() {
               Cancel
             </Button>
             {next ? (
+              // Keyed apart from Create: reusing one button would turn this
+              // click into a submit once the step changes under it.
               <Button
+                key={`next-${next.id}`}
                 size="sm"
                 type="button"
                 disabled={!canVisit(next.id)}
@@ -216,7 +200,7 @@ export function OAuthClientCreatePage() {
                 <ArrowRight className="size-4" />
               </Button>
             ) : (
-              <Button size="sm" type="submit" disabled={!ready}>
+              <Button key="create" size="sm" type="submit" disabled={!ready}>
                 <span>
                   {create.isPending ? "Creating..." : "Create OAuth client"}
                 </span>

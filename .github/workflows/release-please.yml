@@ -733,10 +733,11 @@ jobs:
     needs: [release-please, release-subjects, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
+      contents: read # read vex/openvex.json from main (release-publish.yml)
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@e33c343b99708647d13965d6bd57d9a168b4d814 # v1.35.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -746,6 +747,10 @@ jobs:
       latest: ${{ needs.release-subjects.outputs.latest }}
       chart-artifact: release-helm-chart
       wait: false
+      # Each image's statements, attested next to its SBOMs. This branch has no
+      # copy of the document: main holds the statements for every release line.
+      vex-document: vex/openvex.json
+      vex-ref: main
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

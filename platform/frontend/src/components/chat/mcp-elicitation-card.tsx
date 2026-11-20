@@ -888,9 +888,7 @@ function AnswerSummaryItem({ member }: { member: AskUserGroupMember }) {
   const isAnswered = member.outcome?.status === "answered";
   const summary = getOutcomeSummary(member);
   const isTyped =
-    member.outcome?.status === "answered" &&
-    member.outcome.text !== undefined &&
-    member.outcome.selected.length === 0;
+    member.outcome?.status === "answered" && member.outcome.text !== undefined;
   const count = member.options.length;
   const showOptionsToggle = !isAnswered && count > 0;
   const separator = (

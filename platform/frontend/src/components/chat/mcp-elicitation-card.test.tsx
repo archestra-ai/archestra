@@ -1374,6 +1374,34 @@ describe("McpElicitationCard", () => {
     expect(typed).toHaveTextContent("Which site?Google·Typed answer");
   });
 
+  it("marks multi-select answers with custom text as typed", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Which checks should run?",
+            { status: "answered", selected: ["Run tests"], text: "lint" },
+            ["Run tests", "Type check"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [item] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(item).toHaveTextContent(
+      "Which checks should run?Run tests, lint·Typed answer",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Show .* option/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("omits offered options under an already-answered question", () => {
     render(
       <McpElicitationCard

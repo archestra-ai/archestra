@@ -23,6 +23,7 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
   getAppaGithubSync,
@@ -2167,9 +2168,28 @@ test("connecting a GitHub App source where the deployment enables self-service s
   expect(await organizationGrant()).toBeUndefined();
   expect(await inMembersChat()).toBe(false);
 
+  // A connection whose first pull fails is rolled back, and shares nothing.
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  await expect(
+    connectAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      source: {
+        repo: "example/policies",
+        ref: "main",
+        path: "missing/appa.toml",
+        interval: "1h",
+        validationDirectory: "",
+        githubPatId: null,
+        githubAppConfigId,
+        gitlabTokenId: null,
+      },
+    }),
+  ).rejects.toMatchObject({ statusCode: 400 });
+  expect(await organizationGrant()).toBeUndefined();
+
   // A stopped sync is self-service out of force: connecting again shares
   // the Keeper again.
-  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
   expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
   await connect();
   expect(await inMembersChat()).toBe(true);

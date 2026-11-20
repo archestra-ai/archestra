@@ -316,7 +316,7 @@ export async function connectAppaGithubRepository(params: {
       409,
       "Stop the current Git sync before connecting another repository",
     );
-  await saveSource(params);
+  const before = await saveSource({ ...params, deferKeeperShare: true });
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (row?.lastSyncError) {
@@ -326,6 +326,7 @@ export async function connectAppaGithubRepository(params: {
       `Could not connect ${params.source.repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -709,7 +710,9 @@ async function proposeSetupPullRequest(params: {
     setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
-  await saveAndShareKeeper(params.organizationId, source);
+  const before = await saveAndShareKeeper(params.organizationId, source, {
+    deferShare: true,
+  });
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
       organizationId: params.organizationId,
@@ -728,6 +731,7 @@ async function proposeSetupPullRequest(params: {
       `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -927,14 +931,21 @@ export async function updateAppaGithubSync(params: {
   return getAppaGithubSync(params.organizationId);
 }
 
-/** Save the source, and share the Keeper when that puts self-service in force. */
+/**
+ * Save the source, and share the Keeper when that puts self-service in
+ * force. A caller that still has to learn whether the source works defers
+ * the share and gives it, with the row returned here, once the first pull
+ * succeeded: a connection that is rolled back shares nothing.
+ */
 async function saveAndShareKeeper(
   organizationId: string,
   source: Parameters<typeof OpenAppaGithubSyncModel.save>[1],
-) {
+  options: { deferShare?: boolean } = {},
+): Promise<SyncRow | null> {
   const before = await OpenAppaGithubSyncModel.find(organizationId);
   await OpenAppaGithubSyncModel.save(organizationId, source);
-  await shareKeeperOnceInForce(organizationId, before);
+  if (!options.deferShare) await shareKeeperOnceInForce(organizationId, before);
+  return before;
 }
 
 /**
@@ -2882,7 +2893,9 @@ async function saveSource(params: {
   organizationId: string;
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
-}) {
+  /** The caller shares the Keeper itself, once the source proved to work. */
+  deferKeeperShare?: boolean;
+}): Promise<SyncRow | null> {
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -2935,8 +2948,9 @@ async function saveSource(params: {
       });
     }
     await beforeSourceChange(params.organizationId, params.source);
-    await saveAndShareKeeper(params.organizationId, params.source);
-    return;
+    return saveAndShareKeeper(params.organizationId, params.source, {
+      deferShare: params.deferKeeperShare,
+    });
   }
   // Resolve now to reject a missing or cross-organization credential, or an
   // App that cannot read the repository, before saving it.
@@ -2967,7 +2981,11 @@ async function saveSource(params: {
   // Only now, with the new source checked: a save that fails leaves the
   // branch it would have left protected.
   await beforeSourceChange(params.organizationId, params.source);
-  await saveAndShareKeeper(params.organizationId, params.source);
+  const before = await saveAndShareKeeper(
+    params.organizationId,
+    params.source,
+    { deferShare: params.deferKeeperShare },
+  );
   // Saved with auto-merge in force, the App may just have been granted what
   // it lacked: the next minute's round tries the merge rather than waiting
   // out a hold. A save that failed above lifts nothing.
@@ -2984,6 +3002,7 @@ async function saveSource(params: {
           "OpenAPPA could not forget a held merge",
         ),
       );
+  return before;
 }
 
 /** A rejected or timed-out network call, as `fetch` and `AbortSignal.timeout` raise them. */

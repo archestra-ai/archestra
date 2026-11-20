@@ -3347,7 +3347,7 @@ function remedylessRefusalNote(params: {
   // needs a sign-in. The client known to send one is Codex in code mode, which
   // runs its tools outside the request, so the text names its setting.
   if (params.binding.request.declaredTools.length === 0) {
-    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set features.code_mode_host = false: code mode keeps its tools out of the request.`;
   }
   const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
   const hint = params.binding.adapter?.gatewayToolsHint?.(server);
@@ -5101,10 +5101,7 @@ async function governRelays(params: {
       continue;
     }
     if (relay.value.length === 0) {
-      outcomes.set(call.id, {
-        kind: "deny",
-        feedback: RELAY_UNKNOWN_RECIPIENT,
-      });
+      outcomes.set(call.id, { kind: "deny", feedback: RELAY_EMPTY_MESSAGE });
       continue;
     }
     const target = await resolveRelayTarget({
@@ -5431,6 +5428,8 @@ async function childOfNamedSpawn(params: {
 
 const RELAY_BROADCAST =
   "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
+const RELAY_EMPTY_MESSAGE =
+  "This message has no text, so OpenAPPA did not send it. Send the teammate a message with plain text.";
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_AMBIGUOUS_RECIPIENT =

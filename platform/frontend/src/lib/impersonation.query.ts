@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { authQueryKeys, useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableImpersonation } from "@/lib/config/config.query";
+import { impersonationEndedNotice } from "@/lib/impersonation-ended-notice";
 import { clearPersistedQueryCache } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -123,7 +124,7 @@ export function useStopImpersonating() {
       clearPersistedQueryCache();
       // The reload takes a toast with it, and nobody asked for this return:
       // the reason is kept for the page that loads next.
-      if (reason === "expiring") impersonationEndedNotice.remember();
+      if (reason === "expiring") impersonationEndedNotice.remember("returned");
       else toast.success("Returned to admin session");
       window.location.assign("/");
     },
@@ -142,26 +143,3 @@ export function useStopImpersonating() {
     },
   });
 }
-
-/** Why the admin is suddenly back in their own session, across the reload. */
-export const impersonationEndedNotice = {
-  remember() {
-    try {
-      window.sessionStorage.setItem(ENDED_NOTICE_KEY, "1");
-    } catch {
-      // Storage is unavailable: the return still happens, without the note.
-    }
-  },
-  /** Whether a return by expiry happened just before this page; asked once. */
-  take(): boolean {
-    try {
-      const noted = window.sessionStorage.getItem(ENDED_NOTICE_KEY) !== null;
-      if (noted) window.sessionStorage.removeItem(ENDED_NOTICE_KEY);
-      return noted;
-    } catch {
-      return false;
-    }
-  },
-};
-
-const ENDED_NOTICE_KEY = "archestra:impersonation-ended";

@@ -2,11 +2,9 @@
 
 import { E2eTestId } from "@archestra/shared";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   IMPERSONATION_RETURN_MARGIN_MS,
-  impersonationEndedNotice,
   useStopImpersonating,
 } from "@/lib/impersonation.query";
 import { Button } from "./ui/button";
@@ -21,7 +19,8 @@ export function ImpersonationBanner() {
   // An impersonated session has a fixed length. Left to run out, every
   // request is refused while the page still looks signed in, and the way
   // back to the admin's own session is gone with it. So the app returns
-  // shortly before that, while it still can.
+  // shortly before that, while it still can. `ImpersonationEndedNotice`
+  // says why on the page that loads next.
   useEffect(() => {
     if (expiresAt === null || Number.isNaN(expiresAt)) return;
     const timer = setTimeout(
@@ -30,15 +29,6 @@ export function ImpersonationBanner() {
     );
     return () => clearTimeout(timer);
   }, [expiresAt, stopImpersonating]);
-
-  // Back in the admin's own session after such a return: say why.
-  useEffect(() => {
-    if (impersonationEndedNotice.take())
-      toast.info(
-        "Viewing as another user ended: it lasts one hour at most. You are back in your own session.",
-        { duration: 12000 },
-      );
-  }, []);
 
   // The end is a time of day on the reader's clock, so it is filled in on
   // their device, not on the server that rendered the page.

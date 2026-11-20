@@ -6,7 +6,6 @@ import {
   ResourcePermissionActionSchema,
 } from "@archestra/shared";
 import { type QueryClient, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   hasPagePermissions,
   hasPermissions,
@@ -14,6 +13,7 @@ import {
 } from "@/lib/auth/auth.utils";
 import { sessionConfirmation } from "@/lib/auth/session-confirmation";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { impersonationEndedNotice } from "@/lib/impersonation-ended-notice";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -356,16 +356,13 @@ const REVALIDATE_ON_MOUNT_MIN_AGE_MS = 2_000;
 /**
  * The session is gone and the last one known was an impersonated one: it ran
  * out (it has a fixed length) before the app could return to the admin's own
- * session. The sign-in page follows; this says why.
+ * session. The sign-in page follows and says why (`ImpersonationEndedNotice`).
  */
 function explainEndedImpersonation(
   previous: { session?: { impersonatedBy?: string | null } } | null | undefined,
 ) {
   if (!previous?.session?.impersonatedBy) return;
-  toast.info(
-    "Viewing as another user ended: it lasts one hour at most. Sign in to continue.",
-    { duration: 12000, id: "impersonation-ended" },
-  );
+  impersonationEndedNotice.remember("signed-out");
 }
 
 function isAwaitingOrganization(

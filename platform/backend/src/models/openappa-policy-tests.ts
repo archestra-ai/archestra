@@ -344,6 +344,7 @@ class OpenAppaPolicyTestsModel {
     },
     automaticKey?: string,
     automaticSourceIdentity?: string,
+    options?: { requireCurrentPolicy?: boolean },
   ) {
     return db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, organizationId);
@@ -443,6 +444,48 @@ class OpenAppaPolicyTestsModel {
         )
           return null;
         retryRunId = previous?.id;
+      } else if (options?.requireCurrentPolicy) {
+        const [source] = await tx
+          .select()
+          .from(schema.openappaGithubSyncTable)
+          .where(
+            eq(schema.openappaGithubSyncTable.organizationId, organizationId),
+          );
+        const [suite] = await tx
+          .select()
+          .from(suites)
+          .where(eq(suites.organizationId, organizationId));
+        const [policy] = await tx
+          .select()
+          .from(schema.guardrailsPolicyRevisionsTable)
+          .where(
+            eq(
+              schema.guardrailsPolicyRevisionsTable.organizationId,
+              organizationId,
+            ),
+          )
+          .orderBy(desc(schema.guardrailsPolicyRevisionsTable.revision))
+          .limit(1);
+        const [effective] = await tx
+          .select()
+          .from(schema.openappaEffectivePoliciesTable)
+          .where(
+            eq(
+              schema.openappaEffectivePoliciesTable.organizationId,
+              organizationId,
+            ),
+          )
+          .for("update");
+        const currentRevision = policy?.revision ?? 0;
+        if (
+          Boolean(source?.interval) !== (result.source === "github") ||
+          (result.source === "local" &&
+            (suite?.version ?? "empty") !== result.sourceVersion) ||
+          currentRevision !== result.policyRevision ||
+          (currentRevision > 0 && policy?.contentHash !== result.policyHash) ||
+          (effective && effective.contentHash !== result.effectivePolicyHash)
+        )
+          return null;
       }
       const values = {
         organizationId,

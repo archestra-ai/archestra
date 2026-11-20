@@ -22,6 +22,10 @@ on:
         description: "Published platform release, such as platform-v1.5.0-rc.36"
         type: string
         required: true
+      test_alert:
+        description: Post a test message to #alerts and start nothing.
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -34,7 +38,7 @@ jobs:
     name: Start the Terraform Provider Sync agent
     # The Archestra service account and the Google account trust this file on
     # main only; any other ref would be refused at sign-in.
-    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && !inputs.test_alert
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -83,3 +87,24 @@ jobs:
           SERVICE_ACCOUNT_ID: ${{ vars.TERRAFORM_PROVIDER_SYNC_SERVICE_ACCOUNT_ID }}
           AGENT_ID: ${{ vars.TERRAFORM_PROVIDER_SYNC_AGENT_ID }}
         run: python3 .github/scripts/terraform-provider-sync.py
+
+  # A failure here means no agent run started, so the Grafana runtime alerts
+  # (archestra-ai/infra services/runtime-alert-context) never see it.
+  notify:
+    name: Report a failure to start
+    needs: [start]
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (needs.start.result == 'failure' || inputs.test_alert) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Post to #alerts
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: "Terraform Provider Sync did not start for ${{ inputs.release_tag }}, so the provider was not synced with that release."
+          test: ${{ inputs.test_alert || 'false' }}
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

@@ -986,6 +986,43 @@ describe("protected runtime protocol", () => {
     expect(ended).not.toHaveBeenCalled();
   });
 
+  test("runs a bound child with a contract on a wire without turn ids", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const base = request(org.id, true);
+    const trusted = base.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    delete trusted.request.turnEndOperationId;
+    const context = { ...base, interactionType: "bedrock:converse" };
+    const plugin = new AppaPluginArchestra([]);
+    vi.spyOn(service, "startRuntimeChild").mockResolvedValue({
+      contract: "Only return an approved summary.",
+    });
+    const returned = vi
+      .spyOn(service, "returnRuntimeValue")
+      .mockResolvedValue({ kind: "admitted", value: "Final answer" });
+    await plugin.onSessionInit(context);
+    const body = {
+      messages: [{ role: "user", content: [{ text: "Do the work" }] }],
+    };
+    const before = structuredClone(body);
+    await plugin.onBeforeModel({ ...context, request: body });
+    expect(body).toEqual(before);
+    const outcome = await plugin.onBufferedModelResponse({
+      ...context,
+      response: {},
+      responseText: "Final answer",
+    });
+    expect(outcome).toEqual({ decision: "release" });
+    expect(returned).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: "runtime-return:task-one:request-one",
+      }),
+    );
+  });
+
   test("releases files pinned for a runtime on the runtime's own request, and only there", async ({
     makeOrganization,
   }) => {

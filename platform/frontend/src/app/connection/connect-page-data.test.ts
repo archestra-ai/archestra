@@ -52,6 +52,10 @@ vi.mock("@/lib/agent-options.query", () => ({
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
+  // Installs any plugin: the tests pick plugins, not permissions.
+  useScopedCapabilities: () => ({
+    data: [{ resource: "plugin", action: "use", scope: "*" }],
+  }),
 }));
 vi.mock("@/lib/mcp/gateway-tool-preview.query", () => ({
   useGatewayToolPreview: () => ({ data: undefined }),

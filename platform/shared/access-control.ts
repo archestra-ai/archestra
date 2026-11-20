@@ -353,8 +353,10 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:delete": "Permanently delete skills from the trash",
   "plugin:read": "View plugins and their file metadata",
   "plugin:create": "Create plugins",
-  "plugin:update": "Modify plugin metadata and files",
-  "plugin:delete": "Delete plugins",
+  "plugin:update":
+    "No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin",
+  "plugin:delete":
+    "No standalone effect; deleting a plugin requires a Full access grant on that plugin",
   "app:read": "Open Apps",
   "app:create": "Create new MCP Apps",
   "guardrailsPolicy:read": "View Guardrails policy, batteries, and coverage",
@@ -718,7 +720,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Ownership transfers on per-entry resources need update and
   // manage-permissions grants on the entry itself (authorizeOwnershipTransfer).
   [RouteId.TransferSkillOwnership]: {},
-  [RouteId.TransferPluginOwnership]: { plugin: ["update"] },
+  [RouteId.TransferPluginOwnership]: {},
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
@@ -1976,34 +1978,32 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaRemedies]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaRemediesActivity]: { guardrailsPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
-  [RouteId.GetPlugins]: { plugin: ["read"] },
-  [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
-  [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
+  // Plugin Routes - access to one plugin is a grant on it, enforced in the
+  // handlers; only creating a plugin is a role action.
+  [RouteId.GetPlugins]: {},
+  [RouteId.GetPluginLabelKeys]: {},
+  [RouteId.GetPluginLabelValues]: {},
   [RouteId.CreatePlugin]: { plugin: ["create"] },
-  [RouteId.GetPlugin]: { plugin: ["read"] },
-  [RouteId.UpdatePlugin]: { plugin: ["update"] },
-  [RouteId.DeletePlugin]: { plugin: ["delete"] },
+  [RouteId.GetPlugin]: {},
+  [RouteId.UpdatePlugin]: {},
+  [RouteId.DeletePlugin]: {},
   [RouteId.PreviewGithubPlugin]: { plugin: ["create"] },
   [RouteId.ImportGithubPlugin]: { plugin: ["create"] },
-  [RouteId.PreviewGithubPluginUpdate]: { plugin: ["update"] },
-  [RouteId.ApplyGithubPluginUpdate]: { plugin: ["update"] },
+  [RouteId.PreviewGithubPluginUpdate]: {},
+  [RouteId.ApplyGithubPluginUpdate]: {},
   [RouteId.DiscoverGithubPluginMarketplace]: {
     plugin: ["create"],
   },
   [RouteId.ImportGithubPluginMarketplace]: {
     plugin: ["create"],
   },
-  [RouteId.UpdatePluginGithubSync]: { plugin: ["update"] },
-  [RouteId.TriggerPluginGithubSync]: { plugin: ["update"] },
+  [RouteId.UpdatePluginGithubSync]: {},
+  [RouteId.TriggerPluginGithubSync]: {},
   // Skills projected from plugin file trees: a Skills surface over plugin
-  // metadata, so it needs both floors — per-plugin visibility is enforced
-  // in the handlers.
-  [RouteId.GetPluginSkills]: { skill: ["read"], plugin: ["read"] },
-  [RouteId.GetPluginSkill]: { skill: ["read"], plugin: ["read"] },
-  [RouteId.GetPluginSkillUsageStatistics]: {
-    skill: ["read"],
-    plugin: ["read"],
-  },
+  // metadata, where per-plugin read grants decide visibility in the handlers.
+  [RouteId.GetPluginSkills]: { skill: ["read"] },
+  [RouteId.GetPluginSkill]: { skill: ["read"] },
+  [RouteId.GetPluginSkillUsageStatistics]: { skill: ["read"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },

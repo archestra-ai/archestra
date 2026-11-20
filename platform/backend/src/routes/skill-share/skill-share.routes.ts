@@ -1,7 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
@@ -456,20 +456,32 @@ async function validatePluginsForLink(params: {
     );
   }
   const pluginPlatform = params.pluginPlatform;
-  const [canRead, canAdmin] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "plugin", "read"),
-    ResourcePermissions.allows({
+  // A link is public: whoever holds it installs the plugins without signing
+  // in, so publishing one shares them with everyone, beyond the
+  // organization. That takes the right to share plugins organization-wide,
+  // on top of using every plugin the link carries.
+  const [canShareWidely, checker] = await Promise.all([
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ResourcePermissions.canShareOrganizationWide({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "plugin",
+    }),
+    // SPDX-SnippetEnd
+    getPluginPermissionChecker({
       userId: params.userId,
       organizationId: params.organizationId,
-      resource: "plugin",
-      scope: "*",
-      action: "update",
     }),
   ]);
-  if (!canRead || !canAdmin) {
+  if (
+    !canShareWidely ||
+    !params.pluginIds.every((id) => checker.allowsScoped(id, "use"))
+  ) {
     throw new ApiError(
       403,
-      "Only users with plugin:read and plugin:admin can publish plugins",
+      "Publishing plugins needs permission to share plugins with the organization and to use every plugin on the link",
     );
   }
   const deliveryError = pluginDeliveryBudgetError(

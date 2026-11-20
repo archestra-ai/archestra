@@ -221,13 +221,14 @@ const layerTable = [
       "src/models/usage-statistics.ts",
       "src/models/virtual-api-key.ts",
       // The auth helpers that check access to agents, catalogs, OAuth
-      // clients and skills, and the auth barrel.
+      // clients, plugins and skills, and the auth barrel.
       "src/auth/agent-type-permissions.ts",
       "src/auth/idp.ee.ts",
       "src/auth/index.ts",
       "src/auth/linked-idp.ts",
       "src/auth/mcp-catalog-permissions.ts",
       "src/auth/oauth-client-permissions.ts",
+      "src/auth/plugin-permissions.ts",
       "src/auth/request-lookups.ts",
       "src/auth/skill-permissions.ts",
       // Observability setup and the active-user metric, which count through

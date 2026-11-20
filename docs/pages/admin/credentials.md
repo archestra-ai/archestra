@@ -42,7 +42,7 @@ For a GitHub App, supply its API URL, app ID, installation ID, and private key. 
 
 ## Share a Credential
 
-Open **Edit → Permissions** on its row. **Can use** lets someone connect their personal value and bind the credential; **Can update** also lets them change an organization value. **Full access** includes deletion and sharing. See [Access Control](/docs/admin/access-control#share-a-resource).
+Open **Edit → Permissions** on its row. **Can use** lets someone connect their personal value and bind the credential; **Can edit** also lets them change an organization value. **Full access** includes deletion and sharing. See [Access Control](/docs/admin/access-control#share-a-resource).
 
 Adding a shared or organization credential requires [`credential:create`](/docs/reference/permissions#credential:create). Review its permissions after creation: shared credentials can start available to everyone at **Can use**.
 

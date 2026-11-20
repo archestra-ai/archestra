@@ -31,7 +31,10 @@ import {
 } from "vitest";
 import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -1551,6 +1554,17 @@ describe("ConnectPage plugins", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: "*",
+          action: "use",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useConfig).mockReturnValue({
       data: { features: { plugins: true } },
     } as unknown as ReturnType<typeof useConfig>);

@@ -408,7 +408,7 @@
     "searchText": "list held peer messages inbox pending queued messages message IDs expiration time check incoming messages from other agents before reading message content"
   },
   "list_plugins": {
-    "definitionHash": "997e09c178c7df397bb60252276fd4684677128fd113e24bdcfa410d1c8ee46c",
+    "definitionHash": "45ac691f6a567f6b8e1b87cd7db262182bdf40d4899dd8ca309982d0b5eca89a",
     "searchText": "list plugins organization, browse available plugins, plugin id client platforms visibility file count, filter by access mine shared org others, my plugins, shared with team role user service account, filter by owner creator, find plugin id"
   },
   "list_projects": {

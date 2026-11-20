@@ -1,6 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   getApiErrorMessage,
@@ -98,6 +104,7 @@ export function useCreatePlugin() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin created");
+      return invalidatePluginCapabilities(queryClient);
     },
   });
 }
@@ -169,6 +176,7 @@ export function useImportGithubPlugin() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin imported");
+      return invalidatePluginCapabilities(queryClient);
     },
   });
 }
@@ -219,6 +227,9 @@ export function useImportGithubPluginMarketplace() {
             duration: 10_000,
           },
         );
+      }
+      if (data.created.length > 0) {
+        return invalidatePluginCapabilities(queryClient);
       }
     },
   });
@@ -316,6 +327,7 @@ export function useDeletePlugin(id: string) {
       queryClient.removeQueries({ queryKey: ["plugins", id] });
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin deleted");
+      return invalidatePluginCapabilities(queryClient);
     },
   });
 }
@@ -345,8 +357,25 @@ export function useBulkDeletePlugins() {
         toast.warning(
           `Deleted ${succeeded.length} plugins; ${failed.length} failed`,
         );
+      if (succeeded.length > 0) {
+        return invalidatePluginCapabilities(queryClient);
+      }
     },
   });
 }
 
 export { isDeliverablePlugin } from "./plugin-eligibility";
+
+// === Internal helpers ===
+
+/**
+ * A new plugin is written with its author's full-access grants on it (read,
+ * use, update, delete, manage-permissions), which the cached capability list
+ * predates. Edit, install, delete, and permissions controls read that list, so
+ * refetch it before the create or import flow navigates to the new plugin.
+ */
+function invalidatePluginCapabilities(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({
+    queryKey: authQueryKeys.scopedCapabilities(),
+  });
+}

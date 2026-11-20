@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -172,8 +172,8 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="skill:delete"></span>`skill:delete` | Permanently delete skills from the trash |
 | <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
-| <span id="plugin:update"></span>`plugin:update` | Modify plugin metadata and files |
-| <span id="plugin:delete"></span>`plugin:delete` | Delete plugins |
+| <span id="plugin:update"></span>`plugin:update` | No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin |
+| <span id="plugin:delete"></span>`plugin:delete` | No standalone effect; deleting a plugin requires a Full access grant on that plugin |
 | <span id="app:read"></span>`app:read` | Open Apps |
 | <span id="app:create"></span>`app:create` | Create new MCP Apps |
 | <span id="guardrailsPolicy:read"></span>`guardrailsPolicy:read` | View Guardrails policy, batteries, and coverage |

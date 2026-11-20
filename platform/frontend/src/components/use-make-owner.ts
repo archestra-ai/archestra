@@ -8,7 +8,6 @@ import {
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTransferAgentOwnership } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type TransferResourceKind,
   useTransferResourceOwnership,
@@ -34,17 +33,10 @@ export function useMakeOwner({
   const other = useTransferResourceOwnership(
     kind === "agent" || !kind ? "skill" : kind,
   );
-  // Plugins still transfer by role: only someone who manages every plugin.
-  const { data: managesEveryPlugin } = useHasPermissions(
-    { plugin: ["update"] },
-    "*",
-  );
   const mutation = kind === "agent" ? agent : other;
   const allowed =
-    kind === "plugin"
-      ? !!managesEveryPlugin
-      : effectiveActions.includes("update") &&
-        effectiveActions.includes("manage-permissions");
+    effectiveActions.includes("update") &&
+    effectiveActions.includes("manage-permissions");
   const supported =
     !!kind &&
     scope !== "*" &&

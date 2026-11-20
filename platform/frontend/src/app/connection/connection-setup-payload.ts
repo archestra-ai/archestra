@@ -1,11 +1,9 @@
 import {
-  ManagedResourceSchema,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
   PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
-  ResourcePermissionActionSchema,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -21,7 +19,11 @@ import {
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import type { CreateConnectionSetupBody } from "@/lib/connection-setup.query";
 import type { PluginListItem } from "@/lib/plugins/plugin.query";
-import { isDeliverablePlugin } from "@/lib/plugins/plugin-eligibility";
+import {
+  canUseAnyPlugin,
+  canUsePlugin,
+  isDeliverablePlugin,
+} from "@/lib/plugins/plugin-eligibility";
 import type { ConnectClient } from "./clients";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
@@ -219,7 +221,7 @@ export function firstConnectionSetupInputs(params: {
   /** The providers the organization offers; null offers all. */
   shownProviders: readonly SupportedProvider[] | null;
   permissions: Permissions;
-  /** Grants on scoped resources (`useHasPermissions` with a scope). */
+  /** Grants on scoped resources: plugins are offered by their `use` grant. */
   scopedCapabilities: { resource: string; action: string; scope: string }[];
   request: {
     exclude?: readonly string[] | null;
@@ -262,20 +264,9 @@ export function firstConnectionSetupInputs(params: {
   ) {
     return null;
   }
-  // As `useHasPermissions`: role permissions, and for a check with a scope,
-  // the grants on managed resources.
+  // As `useHasPermissions`: role permissions.
   const can = (resource: string, action: string) =>
     hasPermissions(params.permissions, { [resource]: [action] } as Permissions);
-  const canAnywhere = (resource: string, action: string) =>
-    ManagedResourceSchema.safeParse(resource).success &&
-    ResourcePermissionActionSchema.safeParse(action).success
-      ? params.scopedCapabilities.some(
-          (grant) =>
-            grant.resource === resource &&
-            grant.action === action &&
-            grant.scope === "*",
-        )
-      : can(resource, action);
 
   // Gateway (ConnectionFlow): URL, then admin default, then the member's
   // default, then the first listed.
@@ -309,11 +300,12 @@ export function firstConnectionSetupInputs(params: {
   const pluginsQueryEnabled =
     client.id !== "grok-build" &&
     pluginsEnabled &&
-    canAnywhere("plugin", "read") &&
-    canAnywhere("plugin", "update");
+    canUseAnyPlugin(params.scopedCapabilities);
   if (pluginsQueryEnabled && !params.plugins) return null;
   const plugins = (pluginsQueryEnabled ? (params.plugins ?? []) : []).filter(
-    (plugin) => isDeliverablePlugin(plugin, client.id),
+    (plugin) =>
+      isDeliverablePlugin(plugin, client.id) &&
+      canUsePlugin(params.scopedCapabilities, plugin.id),
   );
   const requested = params.requestedPlatform;
   const platformOption =

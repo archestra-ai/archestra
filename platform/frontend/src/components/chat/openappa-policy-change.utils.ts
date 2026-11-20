@@ -8,7 +8,6 @@ type PolicyChange = {
   revision?: number;
   number?: number;
   url?: string;
-  warnings?: string[];
   errors?: string[];
   enforcement?: { enabled: boolean; reason?: string };
   /** One MCP server's own rules file: the server the change is for. */

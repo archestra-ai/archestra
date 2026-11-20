@@ -411,27 +411,27 @@ export function CompactToolGroup({
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
   // The latest proposed or saved Guardrails change opens its circle once, so
   // the diff or the save result shows without a click; a circle the user
-  // picked is left alone.
+  // picked is left alone. It opens for every reader, also one who cannot
+  // open tool calls: a change the person is asked to approve is theirs to
+  // see, not a detail of how the agent worked.
   const userToggledRef = useRef(false);
   const autoOpenedRef = useRef(new Set<string>());
-  const policyChangeKey = canExpandToolCalls
-    ? tools.findLast((entry) => {
-        if (entry.kind === "hook") return false;
-        const call = releasedCall(entry);
-        if (!call) return false;
-        const shortName = getToolShortName(
-          resolveRunToolTargetName(call.part, call.toolName, {
-            getToolShortName,
-          }),
-        );
-        const output = call.toolResultPart?.output ?? call.part.output;
-        return (
-          !call.errorText &&
-          (getOpenAppaSaveResult({ shortName, output }) !== null ||
-            isOpenAppaPreview({ shortName, output, input: call.part.input }))
-        );
-      })?.key
-    : undefined;
+  const policyChangeKey = tools.findLast((entry) => {
+    if (entry.kind === "hook") return false;
+    const call = releasedCall(entry);
+    if (!call) return false;
+    const shortName = getToolShortName(
+      resolveRunToolTargetName(call.part, call.toolName, {
+        getToolShortName,
+      }),
+    );
+    const output = call.toolResultPart?.output ?? call.part.output;
+    return (
+      !call.errorText &&
+      (getOpenAppaSaveResult({ shortName, output }) !== null ||
+        isOpenAppaPreview({ shortName, output, input: call.part.input }))
+    );
+  })?.key;
   useEffect(() => {
     if (!policyChangeKey || autoOpenedRef.current.has(policyChangeKey)) return;
     autoOpenedRef.current.add(policyChangeKey);

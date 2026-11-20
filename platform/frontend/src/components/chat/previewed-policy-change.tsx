@@ -42,7 +42,8 @@ export function usePreviewedChange(
 
 /**
  * For each call that proposes a server's rules, the completed preview of the
- * very same file earlier in the conversation, keyed by the proposing call.
+ * very same file, keyed by the proposing call, when that preview is the
+ * latest one before it: the one whose card is open on its diff.
  * The diff of a change is shown in one place, its preview's card, whether or
  * not a pull request follows. A proposal of a previewed file therefore
  * points at that preview and prints neither the diff nor the raw file a
@@ -53,7 +54,8 @@ export function collectPreviewedChanges(
   messages: UIMessage[],
   getToolShortName: (name: string) => ArchestraToolShortName | null,
 ): ReadonlyMap<string, PreviewedChange> {
-  const previews = new Map<string, PreviewedChange>();
+  // The latest preview so far, if its card shows a diff.
+  let latest: { key: string; change: PreviewedChange } | null = null;
   const result = new Map<string, PreviewedChange>();
   for (const message of messages) {
     if (message.role !== "assistant") continue;
@@ -80,13 +82,11 @@ export function collectPreviewedChanges(
       const key = fileKey(args);
       if (!key) continue;
       if (shortName === "propose_guardrails_server_rules_change") {
-        const previewed = previews.get(key);
-        if (previewed) result.set(part.toolCallId, previewed);
-      } else if (
-        part.state === "output-available" &&
-        showsAsDiff(part.output, args)
-      ) {
-        previews.set(key, { output: part.output, input: args });
+        if (latest?.key === key) result.set(part.toolCallId, latest.change);
+      } else if (part.state === "output-available") {
+        latest = showsAsDiff(part.output, args)
+          ? { key, change: { output: part.output, input: args } }
+          : null;
       }
     }
   }

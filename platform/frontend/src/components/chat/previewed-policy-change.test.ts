@@ -90,6 +90,25 @@ describe("collectPreviewedChanges", () => {
       ).toBe(true);
   });
 
+  it("leaves a proposal unmatched when another file was previewed after its own", () => {
+    const messages = conversation({ output: valid });
+    const parts = messages[0].parts as unknown as Array<
+      Record<string, unknown>
+    >;
+    // A second preview, of another file, between the first one and the proposal.
+    parts.splice(1, 0, {
+      ...parts[0],
+      toolCallId: "preview-2",
+      input: { ...FILE, content: "x\nz\n" },
+      output: stored({
+        valid: true,
+        diff: "--- a/mcp/s.toml\n+++ b/mcp/s.toml\n@@ -1 +1,2 @@\n x\n+z\n",
+        mcpServer: { id: "s1", name: "S" },
+      }),
+    });
+    expect(collectPreviewedChanges(messages, shortName).size).toBe(0);
+  });
+
   it("leaves a proposal unmatched when its preview put no diff on screen", () => {
     for (const output of [
       // An error text in place of a result.

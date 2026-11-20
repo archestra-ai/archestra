@@ -342,6 +342,22 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText(/"mcpServerId":/)).not.toBeInTheDocument();
   });
 
+  it("opens a rules preview on its diff for a reader who cannot open tool calls", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[previewEntry(RULES_AFTER, { diff: RULES_DIFF })]}
+          canExpandToolCalls={false}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    expect(screen.getByText("1 added")).toBeVisible();
+  });
+
   const proposeEntry = (content: string) => {
     const toolName = "archestra__propose_guardrails_server_rules_change";
     return {

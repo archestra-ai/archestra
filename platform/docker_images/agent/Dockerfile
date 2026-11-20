@@ -277,7 +277,15 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
- && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["python"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ # Python itself is pinned here, not taken from Hermes' lock: the lock's
+ # CPython 3.14.9 lacks the 3.14.10 fix to the ssl module's denylist of
+ # compromised intermediate certificates. Same python-build-standalone
+ # install_only build, a newer release. Digests from its SHA256SUMS.
+ && case "${TARGETARCH}" in \
+      amd64) set -- x86_64 3fe0d7c0538eb5d190c34582992d26230532551355cbd789fabc6591621cfc07 ;; \
+      arm64) set -- aarch64 e59f83159984a55e719bb3805a0b2b5b281f645769222218084b78b92eedc07f ;; \
+    esac \
+ && set -- "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.14.10+20261110-$1-unknown-linux-gnu-install_only.tar.gz" "$2" \
  && curl -fsSL "$1" -o /tmp/hermes-python.tgz \
  && echo "$2  /tmp/hermes-python.tgz" | sha256sum -c - \
  && mkdir -p /opt/hermes-python \
@@ -297,7 +305,7 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && mkdir -p /tmp/hermes-pnpm \
  && tar -xzf /tmp/hermes-pnpm.tgz -C /tmp/hermes-pnpm --strip-components=1 \
  && rm /tmp/hermes-pnpm.tgz \
- && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
+ && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:3] >= (3, 14, 10); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
  # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
  && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \

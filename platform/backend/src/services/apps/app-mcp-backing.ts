@@ -122,13 +122,6 @@ export async function createAppBacking(params: {
 }
 
 /**
- * Mirror an app edit onto its backing catalog + server so the registry card,
- * tool environment isolation, and gateway visibility track the app: name, scope,
- * environment, and team membership. The server's scope (install-time-only for
- * real installs) is re-pointed in place via {@link McpServerModel.setScope} —
- * safe because an app server has no deployment. Best-effort; failures are logged.
- */
-/**
  * 409 when a server in `environmentId` already carries this app's tool
  * prefix. An app shares its prefix with no one, so the move would give two
  * catalogs tools of one name there. The backing sync below is best-effort and
@@ -156,6 +149,13 @@ export async function assertAppToolPrefixFreeIn(params: {
   });
 }
 
+/**
+ * Mirror an app edit onto its backing catalog + server so the registry card,
+ * tool environment isolation, and gateway visibility track the app: name, scope,
+ * environment, and team membership. The server's scope (install-time-only for
+ * real installs) is re-pointed in place via {@link McpServerModel.setScope} —
+ * safe because an app server has no deployment. Best-effort; failures are logged.
+ */
 export async function syncAppBacking(app: App): Promise<void> {
   if (!app.mcpServerId) return;
   try {

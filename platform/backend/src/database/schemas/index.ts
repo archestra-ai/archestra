@@ -8,7 +8,8 @@
  * 1. Library-owned (permanent — better-auth defines these, do not rename):
  *      account, apikey, invitation, jwks, member, organization, session, team,
  *      team_member, two_factor, user, verification,
- *      oauth_access_token, oauth_client, oauth_consent, oauth_refresh_token
+ *      oauth_access_token, oauth_client, oauth_client_assertion,
+      oauth_client_resource, oauth_consent, oauth_refresh_token, oauth_resource
  *
  * 2. Status-quo drift (app-code singular names predating this policy — eligible
  *    to be renamed to plural in future migrations):
@@ -232,11 +233,14 @@ export { default as modelTeamsTable } from "./model-team";
 export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
+export { default as oauthClientAssertionsTable } from "./oauth-client-assertion";
 export { default as oauthClientFederatedCredentialsTable } from "./oauth-client-federated-credential";
 export { default as oauthClientLabelsTable } from "./oauth-client-label";
+export { default as oauthClientResourcesTable } from "./oauth-client-resource";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
+export { default as oauthResourcesTable } from "./oauth-resource";
 export * from "./openappa";
 export * from "./openappa-batteries";
 export * from "./openappa-github-sync";

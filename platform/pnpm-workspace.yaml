@@ -18,7 +18,7 @@ catalog:
   # Keep core/OAuth contexts aligned; SSO retains its OAuth-only patch below.
   better-auth: 1.7.7
   "@better-auth/core": 1.7.7
-  "@better-auth/oauth-provider": 1.6.22
+  "@better-auth/oauth-provider": 1.7.7
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1.
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
@@ -32,7 +32,6 @@ overrides:
   # endpoint context. The older plugin's exact peer otherwise installs a
   # second, incompatible better-call/core context.
   '@better-auth/sso@1.6.22>better-call': 1.4.0
-  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
   # Run their validators on patched Zod 4; the package patches below adapt
   # their record/function/error APIs while preserving current SDK interfaces.
@@ -297,7 +296,15 @@ patchedDependencies:
   # Settle reconnect failures and cancellation; do not reopen after disconnect.
   # Remove after an upstream upgrade passes the real Socket Mode lifecycle tests.
   '@slack/socket-mode@2.0.5': patches/@slack__socket-mode@2.0.5.patch
-  better-auth@1.7.7: patches/better-auth@1.7.7.patch
+  # Better Auth 1.7 accepts a native client's custom-scheme redirect URI only
+  # in RFC 8252 reverse-domain form without an authority (`com.example.app:/cb`).
+  # Shipping MCP clients register authority-form URIs such as Cursor's
+  # `cursor://anysphere.cursor-mcp/oauth/callback`, which 1.6 accepted, so DCR
+  # keeps rejecting only the reserved schemes (javascript:, data:, file:, ...).
+  # Remove when those clients register reverse-domain redirect URIs, or the
+  # provider accepts authority-form custom schemes; re-run
+  # backend/src/routes/auth-oauth-provider.test.ts.
+  '@better-auth/oauth-provider@1.7.7': patches/@better-auth__oauth-provider@1.7.7.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
   confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,

@@ -110,6 +110,8 @@ class OAuthAccessTokenModel {
    * Find an access token by its hashed value.
    * better-auth stores tokens as SHA-256 base64url hashes.
    *
+   * Revoked access tokens are treated as absent.
+   *
    * LEFT JOINs with oauth_refresh_token to include revocation status.
    * When a refresh token is revoked, all associated access tokens should
    * be considered invalid (defense-in-depth — better-auth's revocation
@@ -223,7 +225,12 @@ class OAuthAccessTokenModel {
         ),
       )
       .where(
-        eq(schema.oauthAccessTokensTable.token, sql.placeholder("tokenHash")),
+        and(
+          eq(schema.oauthAccessTokensTable.token, sql.placeholder("tokenHash")),
+          // Better Auth 1.7 revokes a session's access tokens on sign-out by
+          // stamping `revoked` instead of deleting them.
+          isNull(schema.oauthAccessTokensTable.revoked),
+        ),
       )
       .limit(1)
       .prepare("archestra_oauth_access_token_by_hash");

@@ -1,0 +1,68 @@
+name: Post a failure alert
+description: >-
+  Post a workflow run's failed jobs to #alerts. The webhook is read from GCP
+  Secret Manager by ci-archestra-alerts, which trusts only the workflows listed
+  in archestra-ai/infra gcp/workload_identity/ci-workflow-trust.tf. The calling
+  job grants `actions: read` and `id-token: write`.
+inputs:
+  summary:
+    description: One line saying what failed and what it means, such as "VEX Triage did not start".
+    required: true
+  test:
+    description: '"true" posts a test message instead of the run''s failures.'
+    required: false
+    default: "false"
+  service-account:
+    description: The CI_ALERTS_SECRETS_SERVICE_ACCOUNT repository variable.
+    required: true
+  workload-identity-provider:
+    description: The DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER repository variable.
+    required: true
+  github-token:
+    description: "A token that can read this run's jobs: github.token, with the job granting actions read."
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to read the alerting webhook
+      uses: archestra-ai/.github/actions/google-auth@322ad980dd4f3b530a192df546bf3bb703dcb003 # v1.25.2
+      with:
+        service_account: ${{ inputs.service-account }}
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+
+    # The #alerts webhook (ci-alerts-slack-webhook-url posts to #approvals).
+    - name: Read the alerting webhook
+      id: alerting
+      uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+      with:
+        secrets: |-
+          slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url
+
+    - name: Post to #alerts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
+        SUMMARY: ${{ inputs.summary }}
+        TEST_ALERT: ${{ inputs.test }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        JOBS_URL: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+      run: |
+        set -euo pipefail
+        if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+          echo "::warning::The alerting webhook secret is empty; skipping Slack notification."
+          exit 0
+        fi
+        if [[ "$TEST_ALERT" == "true" ]]; then
+          message=":test_tube: Test of the ${WORKFLOW} failure alert; nothing ran, nothing to do. <$RUN_URL|View workflow run>"
+        else
+          # One line per failed job, with its first failed step.
+          failures="$(gh api --paginate "$JOBS_URL?per_page=100" --jq '
+            .jobs[] | select(.conclusion == "failure") |
+            ([.steps[] | select(.conclusion == "failure") | .name][0] // "setup") as $step |
+            "• <\(.html_url)|\(.name)>: failed at \($step)"')"
+          message=":rotating_light: ${SUMMARY} <$RUN_URL|View workflow run>"$'\n'"${failures:-• No failed job was listed; check the run.}"
+        fi
+        jq -n --arg text "$message" '{text: $text}' |
+          curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

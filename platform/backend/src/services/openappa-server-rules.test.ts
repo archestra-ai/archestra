@@ -2074,7 +2074,7 @@ test("Archestra reads the branch's rules and writes none: a missing rule comes w
   );
 });
 
-test("connecting a GitHub App source where the deployment enables self-service shares the APPA Keeper with the organization for use, so a member finds it in chat; a share taken away stays away on a later save", async ({
+test("connecting a GitHub App source where the deployment enables self-service shares the APPA Keeper with the organization for use, so a member finds it in chat; a share taken away stays away on a later save, and comes back when a stopped sync is connected again", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -2166,6 +2166,13 @@ test("connecting a GitHub App source where the deployment enables self-service s
   await connect();
   expect(await organizationGrant()).toBeUndefined();
   expect(await inMembersChat()).toBe(false);
+
+  // A stopped sync is self-service out of force: connecting again shares
+  // the Keeper again.
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
+  await connect();
+  expect(await inMembersChat()).toBe(true);
 });
 
 test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({

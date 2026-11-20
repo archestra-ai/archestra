@@ -9,7 +9,7 @@ const TEAM_EXTERNAL_GROUPS_PATTERN = /^\/api\/teams\/[^/]+\/external-groups/;
 
 // Workload identity federation: federated credentials and the token exchange
 const FEDERATED_CREDENTIALS_PATTERN =
-  /^\/api\/service-accounts\/[^/]+\/federated-credentials(?:[/?]|$)/;
+  /^\/api\/(?:service-accounts|oauth-clients)\/[^/]+\/federated-credentials(?:[/?]|$)/;
 const WORKLOAD_IDENTITY_PREFIX = "/api/workload-identity/";
 
 const ENTERPRISE_CONTACT_MESSAGE =

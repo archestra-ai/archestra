@@ -1276,6 +1276,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // grant on the client. Creating one still takes the role action: there is
   // no client to hold a grant yet.
   [RouteId.GetOauthClients]: {},
+  // Per-client grants are checked in the route, as for update and delete.
+  [RouteId.GetOauthClient]: {},
+  [RouteId.GetOauthClientFederatedCredentials]: {},
+  [RouteId.CreateOauthClientFederatedCredential]: {},
+  [RouteId.UpdateOauthClientFederatedCredential]: {},
+  [RouteId.DeleteOauthClientFederatedCredential]: {},
   [RouteId.GetOauthClientLabelKeys]: { oauthClient: ["read"] },
   [RouteId.GetOauthClientLabelValues]: { oauthClient: ["read"] },
   [RouteId.CreateOauthClient]: { oauthClient: ["create"] },

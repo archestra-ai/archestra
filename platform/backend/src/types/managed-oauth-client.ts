@@ -27,6 +27,8 @@ export const ManagedOauthClientMetadataSchema = z.object({
   autoRouterIds: z.array(z.string().uuid()).default([]),
 });
 export const ManagedOauthClientSchema = LlmOauthClientSchema.extend({
+  /** An emoji, a logo id or an image, shown beside the name. */
+  icon: z.string().nullable(),
   scopes: z.array(OAuthClientScopeSchema),
   allowedGatewayIds: z.array(z.string().uuid()),
   includeFutureProviders: z.boolean(),

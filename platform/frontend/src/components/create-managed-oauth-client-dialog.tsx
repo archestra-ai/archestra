@@ -1,28 +1,22 @@
 "use client";
 import type { archestraApiTypes } from "@archestra/shared";
-import { Server, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { formatSpendCap } from "@/components/credential-billing/budget-fields";
-import {
-  ReviewList,
-  ReviewListRow,
-} from "@/components/credential-billing/review-list";
 import { WizardSteps } from "@/components/credential-billing/wizard-steps";
 import { FormDialog } from "@/components/form-dialog";
-import { ChoiceCards } from "@/components/oauth-client/choice-cards";
+import { OAuthClientBasicsFields } from "@/components/oauth-client/basics-fields";
 import {
+  newOauthClientFormValues,
   OAuthClientAccessFields,
   OAuthClientAdvancedFields,
   type OAuthClientFormValues,
-  OAuthClientScopePicker,
-  oauthCapabilities,
   oauthClientFormReady,
   resolveOauthClientFormBody,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
+import { OAuthClientReview } from "@/components/oauth-client/review";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import {
   Accordion,
@@ -32,12 +26,8 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
-import { useServiceAccounts } from "@/lib/service-account.query";
-import { useTeams } from "@/lib/teams/team.query";
 
 const steps = [
   { id: "client", title: "Client" },
@@ -69,20 +59,7 @@ export function CreateManagedOAuthClientDialog({
   defaultProviderApiKeys?: ProviderApiKeyMappings;
 }) {
   const form = useForm<OAuthClientFormValues>({
-    defaultValues: {
-      name: "",
-      serviceAccountId: null,
-      grantType: "client_credentials",
-      scopes: ["mcp", "a2a"],
-      providerApiKeys: [],
-      includeFutureProviders: false,
-      allowedGatewayIds: [],
-      redirectUrisText: "",
-      spendCap: null,
-      billingTeamId: null,
-      labels: [],
-      initialGrants: [],
-    },
+    defaultValues: newOauthClientFormValues(),
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const defaultTargetIds = defaultAllowedGatewayIds?.join(",") ?? "";
@@ -103,20 +80,15 @@ export function CreateManagedOAuthClientDialog({
     if (open) {
       setStep(0);
       setAdvancedOpen(false);
-      form.reset({
-        name: "",
-        serviceAccountId: null,
-        grantType: "client_credentials",
-        scopes: defaultClientType === "llm" ? ["llm:proxy"] : ["mcp", "a2a"],
-        providerApiKeys: defaultProviderApiKeysRef.current ?? [],
-        includeFutureProviders: false,
-        allowedGatewayIds: defaultTargetIds ? defaultTargetIds.split(",") : [],
-        redirectUrisText: "",
-        spendCap: null,
-        billingTeamId: null,
-        labels: [],
-        initialGrants: [],
-      });
+      form.reset(
+        newOauthClientFormValues({
+          clientType: defaultClientType,
+          allowedGatewayIds: defaultTargetIds
+            ? defaultTargetIds.split(",")
+            : [],
+          providerApiKeys: defaultProviderApiKeysRef.current,
+        }),
+      );
     }
   }, [open, form, defaultClientType, defaultTargetIds]);
   const ready = oauthClientFormReady(values) && !scopeChange.isPending;
@@ -166,47 +138,7 @@ export function CreateManagedOAuthClientDialog({
             }
           />
           {step === 0 && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="oauth-client-name">Name</Label>
-                <Input
-                  id="oauth-client-name"
-                  placeholder="support-assistant-prod"
-                  autoComplete="off"
-                  data-1p-ignore
-                  {...form.register("name")}
-                  autoFocus
-                />
-              </div>
-              <OAuthClientScopePicker
-                value={values.scopes}
-                onChange={scopeChange.change}
-                disabled={scopeChange.isPending || form.formState.isSubmitting}
-              />
-              <ChoiceCards
-                label="How does it sign in?"
-                idPrefix="oauth-client-signin"
-                value={values.grantType ?? "client_credentials"}
-                onValueChange={(
-                  value: "client_credentials" | "authorization_code",
-                ) => form.setValue("grantType", value, { shouldDirty: true })}
-                options={[
-                  {
-                    value: "client_credentials",
-                    title: "As itself",
-                    description: "A service or bot uses its own credentials.",
-                    icon: <Server className="size-4" />,
-                  },
-                  {
-                    value: "authorization_code",
-                    title: "For its users",
-                    description:
-                      "An app signs users in and acts with their identity.",
-                    icon: <Users className="size-4" />,
-                  },
-                ]}
-              />
-            </>
+            <OAuthClientBasicsFields form={form} scopeChange={scopeChange} />
           )}
           {step === 1 && (
             <>
@@ -242,96 +174,18 @@ export function CreateManagedOAuthClientDialog({
             </>
           )}
           {step === 2 && (
-            <ReviewList>
-              <ReviewListRow label="Name" onEdit={() => setStep(0)}>
-                <span>{values.name}</span>
-              </ReviewListRow>
-              <ReviewListRow label="API access" onEdit={() => setStep(0)}>
-                <span>
-                  {oauthCapabilities
-                    .filter((item) => values.scopes.includes(item.scope))
-                    .map((item) => item.label)
-                    .join(", ")}
-                </span>
-              </ReviewListRow>
-              <ReviewListRow label="Signs in" onEdit={() => setStep(0)}>
-                <span>
-                  {values.grantType === "authorization_code"
-                    ? "For its users"
-                    : "As itself"}
-                </span>
-              </ReviewListRow>
-              {values.grantType === "client_credentials" && (
-                <ReviewListRow label="Service account" onEdit={editAdvanced}>
-                  <span>
-                    {values.serviceAccountId ? (
-                      <AccountName id={values.serviceAccountId} />
-                    ) : (
-                      <span>No service account</span>
-                    )}
-                  </span>
-                </ReviewListRow>
-              )}
-              {values.grantType === "authorization_code" && (
-                <ReviewListRow label="Redirect URIs" onEdit={() => setStep(1)}>
-                  <span className="whitespace-pre-line break-all">
-                    {values.redirectUrisText}
-                  </span>
-                </ReviewListRow>
-              )}
-              {values.scopes.includes("llm:proxy") && (
-                <ReviewListRow label="Budget" onEdit={editAdvanced}>
-                  <span>
-                    {values.grantType === "authorization_code" ? (
-                      <span>Each user pays</span>
-                    ) : values.billingTeamId ? (
-                      <BillingTeamName id={values.billingTeamId} />
-                    ) : (
-                      <span>No billing team</span>
-                    )}
-                    {" · "}
-                    {values.spendCap
-                      ? formatSpendCap(values.spendCap)
-                      : "No spend cap"}
-                  </span>
-                </ReviewListRow>
-              )}
-              {values.allowedGatewayIds?.length ? (
-                <ReviewListRow
-                  label="Gateways & agents"
-                  onEdit={() => setStep(1)}
-                >
-                  <span>
-                    {values.allowedGatewayIds
-                      .map(
-                        (id) =>
-                          gateways.find((item) => item.id === id)?.name ?? id,
-                      )
-                      .join(", ")}
-                  </span>
-                </ReviewListRow>
-              ) : null}
-              {values.scopes.includes("llm:proxy") &&
-                values.grantType === "client_credentials" && (
-                  <ReviewListRow
-                    label="Provider keys"
-                    onEdit={() => setStep(1)}
-                  >
-                    <span>
-                      {values.includeFutureProviders
-                        ? "Current and future providers"
-                        : values.providerApiKeys
-                            ?.map(
-                              (mapping) =>
-                                providerApiKeys.find(
-                                  (key) => key.id === mapping.providerApiKeyId,
-                                )?.name ?? mapping.provider,
-                            )
-                            .join(", ")}
-                    </span>
-                  </ReviewListRow>
-                )}
-            </ReviewList>
+            <OAuthClientReview
+              values={values}
+              gateways={gateways}
+              providerApiKeys={providerApiKeys}
+              onEdit={(target, advanced) =>
+                target === "details"
+                  ? setStep(0)
+                  : advanced
+                    ? editAdvanced()
+                    : setStep(1)
+              }
+            />
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -363,16 +217,4 @@ export function CreateManagedOAuthClientDialog({
       </form>
     </FormDialog>
   );
-}
-
-function AccountName({ id }: { id: string }) {
-  const { data: accounts = [] } = useServiceAccounts();
-  return (
-    accounts.find((account) => account.id === id)?.name ??
-    "Selected service account"
-  );
-}
-function BillingTeamName({ id }: { id: string }) {
-  const { data: teams = [] } = useTeams({ includeRelations: false });
-  return teams.find((team) => team.id === id)?.name ?? "Selected billing team";
 }

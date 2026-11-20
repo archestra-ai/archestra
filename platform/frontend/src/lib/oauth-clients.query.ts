@@ -5,6 +5,7 @@ import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
+  getOauthClient,
   getOauthClients,
   createOauthClient,
   updateOauthClient,
@@ -76,6 +77,19 @@ export function useOauthClients(params?: OauthClientsParams) {
       );
     },
     enabled: params?.enabled,
+  });
+}
+
+/** One client, for its own page. `null` when it does not exist (or is hidden). */
+export function useOauthClient(id: string) {
+  return useQuery({
+    queryKey: ["oauth-clients", "detail", id],
+    queryFn: async () => {
+      const { data, error } = await getOauthClient({ path: { id } });
+      // The page renders its own QueryLoadError panel.
+      throwOnApiError(error, { toastOnError: false, allowNotFound: true });
+      return data ?? null;
+    },
   });
 }
 

@@ -165,6 +165,22 @@ export const AppaGithubAppGrantsSchema = z.object({
 });
 
 /**
+ * The grants, each with whether the App's settings ask for it now. Asked
+ * for and not granted: the installation has still to accept the change.
+ * `requested` is absent when the settings were not read.
+ */
+export const AppaGithubAppPermissionsSchema = AppaGithubAppGrantsSchema.extend({
+  permissions: z.array(
+    AppaGithubAppGrantsSchema.shape.permissions.element.extend({
+      requested: z.boolean().optional(),
+    }),
+  ),
+});
+export type AppaGithubAppPermissions = z.infer<
+  typeof AppaGithubAppPermissionsSchema
+>;
+
+/**
  * The branch ruleset an administrator imports on the policy repository, as
  * GitHub's "Import a ruleset" takes it: one rule, the policy check required
  * from the GitHub App that posts it.

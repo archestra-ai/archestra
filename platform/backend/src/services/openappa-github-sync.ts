@@ -76,6 +76,7 @@ import {
   firstFileAtEachPath,
   githubAppLogin,
   githubAppProfile,
+  githubAppRequestedPermissions,
   hasRepositoryIncludeGlob,
   MissingGithubPermission,
   openappaRepositoryIncludes,
@@ -97,6 +98,7 @@ import {
 } from "@/services/openappa-template-files";
 import { ApiError } from "@/types";
 import type {
+  AppaGithubAppPermissions,
   AppaGithubSource,
   AppaPolicyCheck,
 } from "@/types/openappa-github-sync";
@@ -4234,6 +4236,37 @@ export async function getAppaGithubAppGrants(
   )
     await forgetRefusedChecks(organizationId, row.repo);
   return grants ?? null;
+}
+
+/**
+ * The App's grants, each with whether the App's settings ask for it now: a
+ * permission saved there and not yet accepted by the installation is told
+ * apart from one never asked for. Where the settings cannot be read, the
+ * grants stand alone.
+ */
+export async function getAppaGithubAppPermissions(
+  organizationId: string,
+): Promise<AppaGithubAppPermissions | null> {
+  const grants = await getAppaGithubAppGrants(organizationId);
+  if (!grants) return null;
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row) return grants;
+  const asked = await githubAppRequestedPermissions(row).catch((error) => {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not read the permissions the GitHub App asks for",
+    );
+    return null;
+  });
+  return asked
+    ? {
+        ...grants,
+        permissions: grants.permissions.map((permission) => ({
+          ...permission,
+          requested: asked[permission.name] === "write",
+        })),
+      }
+    : grants;
 }
 
 /** The last protection read, by organization, for a minute. */

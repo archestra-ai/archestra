@@ -25,6 +25,7 @@ import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
+  getAppaGithubAppPermissions,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -4160,6 +4161,34 @@ test("a grants read lets a refused round of checks go once the App holds what th
     name: "workflows",
     granted: false,
   });
+  // The App as this test serves it lists no permissions of its own: nothing
+  // is asked for in its settings yet.
+  expect(
+    (await getAppaGithubAppPermissions(org.id))?.permissions,
+  ).toContainEqual({ name: "workflows", granted: false, requested: false });
+  // Workflows saved in the App's settings, its installation yet to accept:
+  // asked for and not granted, told apart from one never asked for.
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({
+        slug: "acme-guardrails",
+        name: "Policy App",
+        permissions: {
+          contents: "write",
+          pull_requests: "write",
+          checks: "write",
+          workflows: "write",
+          metadata: "read",
+        },
+      }),
+    ),
+  );
+  expect((await getAppaGithubAppPermissions(org.id))?.permissions).toEqual([
+    { name: "contents", granted: true, requested: true },
+    { name: "pull_requests", granted: true, requested: true },
+    { name: "checks", granted: true, requested: true },
+    { name: "workflows", granted: false, requested: true },
+  ]);
   await checkDueAppaGithubSyncs();
   expect(runs.length).toBeGreaterThan(0);
 });

@@ -175,3 +175,86 @@ test("a pending setup pull request shows the Finish setup notice, whose wizard l
   ).not.toBeInTheDocument();
   client.clear();
 });
+
+test("a failed sync that a missing permission does not explain shows beside the Finish setup notice; GitHub refusing the App for that permission shows the notice alone", async () => {
+  let lastSyncError = "The policy file is not valid TOML.";
+  server.use(
+    http.get("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          interval: "1h",
+          githubAppConfigId: "app-1",
+          lastSyncError,
+        },
+      }),
+    ),
+    http.get(
+      "http://localhost:9000/api/openappa/github-sync/app-permissions",
+      () =>
+        HttpResponse.json({
+          name: "Policy App",
+          url: "https://github.com/apps/policy-app",
+          settingsUrl:
+            "https://github.com/settings/apps/policy-app/permissions",
+          installationUrl: "https://github.com/settings/installations/7",
+          permissions: [
+            { name: "contents", granted: true },
+            { name: "pull_requests", granted: true },
+            { name: "checks", granted: true },
+            { name: "workflows", granted: false },
+          ],
+        }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GithubManagedPolicyNotice />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  expect(screen.getByText("Git sync failed")).toBeVisible();
+
+  // The refusal that the missing permission explains is the notice's to say.
+  lastSyncError =
+    "The GitHub App cannot act on example/policies with Workflows (read and write).";
+  await client.invalidateQueries();
+  await waitFor(() =>
+    expect(screen.queryByText("Git sync failed")).not.toBeInTheDocument(),
+  );
+  expect(screen.getByText("Finish the Git sync setup")).toBeVisible();
+  client.clear();
+  cleanup();
+
+  // On a page that opens before GitHub has said what the App holds, the
+  // refusal is not announced first only to give way to the notice.
+  let announced = false;
+  const watcher = new MutationObserver(() => {
+    if (document.body.textContent?.includes("Git sync failed"))
+      announced = true;
+  });
+  watcher.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <GithubManagedPolicyNotice />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  watcher.disconnect();
+  expect(announced).toBe(false);
+});

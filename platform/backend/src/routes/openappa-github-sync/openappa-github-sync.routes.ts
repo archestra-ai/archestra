@@ -7,6 +7,7 @@ import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
+  getAppaGithubAppPermissions,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -34,6 +35,7 @@ import {
 } from "@/types/openappa-github-app-setup";
 import {
   AppaGithubAppGrantsSchema,
+  AppaGithubAppPermissionsSchema,
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
@@ -93,6 +95,26 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) =>
       reply.send(
         (await getAppaGithubAppGrants(request.organizationId)) ?? null,
+      ),
+  );
+  app.get(
+    "/api/openappa/github-sync/app-permissions",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppPermissions,
+        // Listed in the API reference once the docs for it ship.
+        hide: true,
+        description:
+          "The GitHub App's permissions against what self-service needs: which its installation holds, and which its settings ask for now",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(
+          AppaGithubAppPermissionsSchema.nullable(),
+        ),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        (await getAppaGithubAppPermissions(request.organizationId)) ?? null,
       ),
   );
   app.get(

@@ -3,6 +3,7 @@ import config from "@/config";
 import {
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  underPolicyCallIds,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { stampToolCallId } from "./trajectory-stamp";
@@ -1053,6 +1054,35 @@ describe("OpenAPPA child-return markers", () => {
       notification(stampedSpawnCallId),
     ).completions;
     expect(stamped).toMatchObject({ spawnCallId: stampedSpawnCallId });
+  });
+
+  test("reads a spawn call id too long for policy, and names it by its policy id", () => {
+    // A stamp around an id that carries a Gemini thought signature.
+    const spawnCallId = stampToolCallId({
+      callId: `gemsig-${"s".repeat(2000)}.gemini-call-task-1`,
+      sessionId: "root",
+      organizationId: RETURN.organizationId,
+      callerId: RETURN.callerId,
+      secret: SECRET,
+    });
+    const notification = (id: string) => ({
+      content: `<task-notification>\n<task-id>child</task-id>\n<tool-use-id>${id}</tool-use-id>\n<status>completed</status>\n<result>${carrier(requiredMarker(RETURN))}</result>\n</task-notification>`,
+    });
+    const collected = collectAndStripChildReturns(notification(spawnCallId));
+    expect(collected.completions).toMatchObject([{ spawnCallId }]);
+    expect(underPolicyCallIds(collected).completions).toMatchObject([
+      { spawnCallId: "gemini-call-task-1" },
+    ]);
+    const subagentNotification = {
+      content: `<subagent_notification>\n${JSON.stringify({ agent_id: "child", tool_use_id: spawnCallId, status: { completed: carrier(requiredMarker(RETURN)) } })}\n</subagent_notification>`,
+    };
+    expect(
+      collectAndStripChildReturns(subagentNotification).completions,
+    ).toMatchObject([{ spawnCallId }]);
+    for (const refused of [`${spawnCallId} x`, "c".repeat(16385)])
+      expect(() =>
+        collectAndStripChildReturns(notification(refused)),
+      ).toThrow();
   });
 
   test("records the notification's native child identity", () => {

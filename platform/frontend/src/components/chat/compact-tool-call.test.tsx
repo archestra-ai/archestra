@@ -45,6 +45,10 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 import { CompactToolGroup } from "./compact-tool-call";
 import { RemedyChainCard } from "./openappa-remedy-chain-card";
 import { identifyRemedyChains } from "./openappa-remedy-chains";
+import {
+  collectPreviewedChanges,
+  PreviewedChangesProvider,
+} from "./previewed-policy-change";
 
 const LOAD_SKILL_TOOL_NAME = "archestra__load_skill";
 
@@ -76,6 +80,456 @@ describe("CompactToolGroup", () => {
     vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
+  });
+
+  it.each([
+    ["preview_guardrails_policy_change", false],
+    ["update_guardrails_policy", false],
+    ["preview_guardrails_policy_change", true],
+    ["update_guardrails_policy", true],
+  ] as const)("opens %s with collapsed arguments (wrapped: %s)", (shortName, wrapped) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const toolName = `archestra__${wrapped ? "run_tool" : shortName}`;
+    const args = {
+      expectedRevision: 3,
+      edits: [{ oldText: "old", newText: "new" }],
+    };
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "policy",
+              toolName,
+              part: {
+                type: `tool-${toolName}`,
+                state: "output-available",
+                toolCallId: "policy",
+                input: wrapped
+                  ? { tool_name: `archestra__${shortName}`, tool_args: args }
+                  : args,
+                output: {
+                  structuredContent: {
+                    delivery: "pull_request",
+                    stage: shortName.startsWith("preview")
+                      ? "preview"
+                      : undefined,
+                    number: 7,
+                    url: "https://github.com/example/policies/pull/7",
+                    before: "old",
+                    after: "new",
+                  },
+                },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    const toggle = screen.getByRole("button", { name: "Arguments" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/"expectedRevision":/)).not.toBeInTheDocument();
+    if (shortName.startsWith("preview")) {
+      expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    } else {
+      expect(screen.getByText("Opened PR #7")).toBeVisible();
+    }
+    fireEvent.click(toggle);
+    expect(screen.getByText(/"expectedRevision":/)).toHaveTextContent("3");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens the latest policy result instead of an earlier preview", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const tools = [
+      "preview_guardrails_policy_change",
+      "update_guardrails_policy",
+    ].map((shortName) => ({
+      kind: "tool" as const,
+      key: shortName,
+      toolName: `archestra__${shortName}`,
+      part: {
+        type: `tool-archestra__${shortName}`,
+        state: "output-available",
+        toolCallId: shortName,
+        input: { expectedRevision: 3 },
+        output: {
+          structuredContent: {
+            stage: shortName.startsWith("preview") ? "preview" : undefined,
+            delivery: "pull_request",
+            number: 7,
+            url: "https://github.com/example/policies/pull/7",
+            before: "old",
+            after: "new",
+          },
+        },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    }));
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup tools={tools} />
+      </QueryClientProvider>,
+    );
+    const preview = screen.getByRole("button", {
+      name: "preview guardrails policy change",
+    });
+    const update = screen.getByRole("button", {
+      name: "update guardrails policy",
+    });
+    expect(preview).toHaveAttribute("aria-expanded", "false");
+    expect(update).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Opened PR #7")).toBeVisible();
+    fireEvent.click(preview);
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    expect(update).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens a validation preview on its result, with the request in place", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const toolName = "archestra__preview_guardrails_validation_change";
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "validation",
+              toolName,
+              part: {
+                type: `tool-${toolName}`,
+                state: "output-available",
+                toolCallId: "validation",
+                input: { expectedRevision: 3 },
+                output: {
+                  structuredContent: { stage: "preview", replayed: 4 },
+                },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "preview guardrails validation change",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    // No diff card takes the request's place, so it shows as for any tool.
+    expect(screen.getByText(/"expectedRevision":/)).toBeVisible();
+    expect(screen.getByText(/"replayed":/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Arguments" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a failed policy update's request in place, as for any tool", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const toolName = "archestra__update_guardrails_policy";
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "update",
+              toolName,
+              part: {
+                type: `tool-${toolName}`,
+                state: "output-error",
+                toolCallId: "update",
+                input: { expectedRevision: 3 },
+                errorText: "The policy changed since revision 3.",
+              } as never,
+              toolResultPart: null,
+              errorText: "The policy changed since revision 3.",
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /update guardrails policy/ }),
+    );
+    expect(screen.getByText(/"expectedRevision":/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Arguments" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // The shape a chat stores when only the model's copy of the result is
+  // kept: the diff, without the two texts.
+  const storedResult = (result: Record<string, unknown>) => ({
+    _meta: { archestraExecutedAs: { kind: "platform" } },
+    content: JSON.stringify(result),
+  });
+  const RULES_BEFORE = "[policy]\nversion = 2\n";
+  const RULES_AFTER = "[policy]\nversion = 2\n# a note\n";
+  const RULES_DIFF =
+    "--- a/mcp/helpdesk.toml\n+++ b/mcp/helpdesk.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# a note\n";
+  const previewEntry = (content: string, result: Record<string, unknown>) => {
+    const toolName = "archestra__preview_guardrails_server_rules_change";
+    return {
+      kind: "tool" as const,
+      key: "preview",
+      toolName,
+      part: {
+        type: `tool-${toolName}`,
+        state: "output-available",
+        toolCallId: "preview",
+        input: { mcpServerId: "server-1", content, expectedCommit: "c1" },
+        output: storedResult({
+          stage: "preview",
+          delivery: "pull_request",
+          mcpServer: { id: "server-1", name: "Helpdesk" },
+          path: "mcp/helpdesk.toml",
+          valid: true,
+          autoMerge: true,
+          ...result,
+        }),
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+  };
+
+  it.each([
+    [
+      "a new file, every line added",
+      RULES_BEFORE,
+      "--- a/mcp/helpdesk.toml\n+++ b/mcp/helpdesk.toml\n@@ -0,0 +1,2 @@\n+[policy]\n+version = 2\n",
+      "2 added",
+    ],
+    ["a changed file, its changed lines", RULES_AFTER, RULES_DIFF, "1 added"],
+  ])("opens a server's rules preview on its diff, never its raw result, however the chat stored it: %s", (_case, content, diff, added) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup tools={[previewEntry(content, { diff })]} />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "preview guardrails server rules change",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    expect(screen.getByText(added)).toBeVisible();
+    expect(screen.getByText("mcp/helpdesk.toml")).toBeVisible();
+    // Neither the raw result nor the raw file stands in for the diff.
+    expect(screen.queryByText("Result")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"stage":/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Arguments" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText(/"mcpServerId":/)).not.toBeInTheDocument();
+  });
+
+  it("opens a rules preview on its diff for a reader who cannot open tool calls", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[previewEntry(RULES_AFTER, { diff: RULES_DIFF })]}
+          canExpandToolCalls={false}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    expect(screen.getByText("1 added")).toBeVisible();
+  });
+
+  const proposeEntry = (content: string) => {
+    const toolName = "archestra__propose_guardrails_server_rules_change";
+    return {
+      kind: "tool" as const,
+      key: "propose",
+      toolName,
+      part: {
+        type: `tool-${toolName}`,
+        state: "approval-requested",
+        toolCallId: "propose",
+        approval: { id: "approval-1" },
+        input: {
+          mcpServerId: "server-1",
+          content,
+          expectedCommit: "c1",
+          summary: "Adds a note to the Helpdesk rules.",
+        },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+  };
+  const renderProposal = (proposed: string) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const preview = previewEntry(RULES_AFTER, { diff: RULES_DIFF });
+    const propose = proposeEntry(proposed);
+    const onToolApprovalResponse = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PreviewedChangesProvider
+          value={collectPreviewedChanges(
+            [
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [preview.part, propose.part],
+              } as never,
+            ],
+            (name: string) => name.replace(/^archestra__/, "") as never,
+          )}
+        >
+          <CompactToolGroup
+            tools={[preview, propose]}
+            onToolApprovalResponse={onToolApprovalResponse}
+          />
+        </PreviewedChangesProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^propose guardrails server rules change/,
+      }),
+    );
+    return onToolApprovalResponse;
+  };
+
+  it("asks the person to approve a proposed file by pointing at its preview, printing neither the diff nor the file again, and opens no pull request before they do", () => {
+    const onToolApprovalResponse = renderProposal(RULES_AFTER);
+    // The proposal's card is the open one here: it carries no diff of its
+    // own and no raw file.
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"content":/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Adds a note to the Helpdesk rules."),
+    ).toBeVisible();
+    expect(screen.getByText("The change previewed above")).toBeVisible();
+    expect(screen.getByText("mcp/helpdesk.toml")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Approving opens a pull request with the change previewed above on the policy repository. It merges by itself once its checks pass.",
+      ),
+    ).toBeVisible();
+    expect(onToolApprovalResponse).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Approve/ }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval-1",
+      approved: true,
+    });
+  });
+
+  it("keeps the diff on the preview's card when its file is proposed: the preview stays open, in every flow", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const preview = previewEntry(RULES_AFTER, { diff: RULES_DIFF });
+    const propose = proposeEntry(RULES_AFTER);
+    const shortName = (name: string) =>
+      name.replace(/^archestra__/, "") as never;
+    const group = (parts: unknown[]) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <PreviewedChangesProvider
+          value={collectPreviewedChanges(
+            [{ id: "m1", role: "assistant", parts } as never],
+            shortName,
+          )}
+        >
+          {/* The preview's own row: a call awaiting approval has its own card. */}
+          <CompactToolGroup tools={[preview]} />
+        </PreviewedChangesProvider>
+      </QueryClientProvider>
+    );
+    const view = render(group([preview.part]));
+    const circle = () =>
+      screen.getByRole("button", {
+        name: "preview guardrails server rules change",
+      });
+    expect(circle()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+    // The model proposes that file: the preview still shows its diff.
+    view.rerender(group([preview.part, propose.part]));
+    expect(circle()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
+  });
+
+  it("shows what a proposal sends when its file is not the one previewed", () => {
+    renderProposal(`${RULES_AFTER}# and one more line\n`);
+    // No preview stands for this file: the person reads the file itself.
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    expect(screen.getByText(/# and one more line/)).toBeVisible();
+    expect(
+      screen.getByText("Review this tool call before it can continue."),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /Approve/ })).toBeVisible();
+  });
+
+  it.each([
+    [true, "it merges once its checks pass"],
+    [false, "merge it to apply"],
+  ] as const)("opens a proposed server rules change on its pull request, in one line (auto-merge: %s)", (autoMerge, detail) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const toolName = "archestra__propose_guardrails_server_rules_change";
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "propose",
+              toolName,
+              part: {
+                type: `tool-${toolName}`,
+                state: "output-available",
+                toolCallId: "propose",
+                input: { mcpServerId: "server-1", summary: "Starter rules" },
+                output: storedResult({
+                  stage: "proposed",
+                  delivery: "pull_request",
+                  number: 12,
+                  url: "https://github.com/example/policies/pull/12",
+                  mcpServer: { id: "server-1", name: "Helpdesk" },
+                  path: "mcp/helpdesk.toml",
+                  diff: RULES_DIFF,
+                  autoMerge,
+                }),
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("Opened PR #12")).toBeVisible();
+    expect(screen.getByText(`· ${detail} ·`)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Review pull request/ }),
+    ).toHaveAttribute("href", "https://github.com/example/policies/pull/12");
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
   it("opens a saved policy's circle on its one-line result, with no diff", () => {

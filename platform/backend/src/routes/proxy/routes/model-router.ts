@@ -96,10 +96,7 @@ import {
   toGeminiImageRequest,
 } from "../adapters/gemini-images";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
-import {
-  decodeSignedToolCallId,
-  openaiToGemini,
-} from "../adapters/gemini-openai-translator";
+import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
@@ -143,6 +140,7 @@ import {
 } from "../model-router-resolver";
 import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
 import { registerMediaMultipartParser } from "../utils/media-multipart";
+import { decodeSignedToolCallId } from "../utils/tool-call-ids";
 import {
   AudioMultipartBodySchema,
   type AudioProxyBody,

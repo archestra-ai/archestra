@@ -472,7 +472,7 @@
     "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {
-    "definitionHash": "9c7a65198ad482003306a6d5bd62994f4faa7c23bc5fd0de317bd99e9169a6b3",
+    "definitionHash": "8c0a0fd16430d63653bc893e7065cb37d8d4cbb65dcd2fb4d4c52ca8c0d0269d",
     "searchText": "preview proposed MCP server guardrails rules file, diff, validate whole organization policy, dry run check, appa.toml include change, tool prefix rules, annotators, attention marks, tags, tool output sanitizer confined results, auto merge, expected commit, review before proposing"
   },
   "preview_guardrails_validation_change": {
@@ -480,7 +480,7 @@
     "searchText": "preview guardrails validation test suite change, dry run, check syntax of .appa test files, replay test cases against saved policy with live annotators, pass/fail results, add replace delete validation files, optimistic concurrency revision version"
   },
   "propose_guardrails_server_rules_change": {
-    "definitionHash": "c22607b64a0c1fbb26e3f4a79b50a0f8502facef3bc0df8f7c244d66743e4c12",
+    "definitionHash": "9ebd3f61ef068360b9dc55bbbc3415c54587d7859e1e6ec63375db57d6baeb4b",
     "searchText": "propose MCP server guardrails rules change, open pull request on policy repository, update per-server rules file, add self-service folder include to appa.toml, change summary for reviewers, Git sync after merge, pull request link, edit tool policy for one server"
   },
   "publish_app": {

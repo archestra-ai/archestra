@@ -1,5 +1,6 @@
 import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
 import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
+import { policyCallId } from "@/openappa/call-id";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { type AppaSessionIdentity, declaredToolEntries } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -264,7 +265,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
         if (identifier?.label === "agentId" && isChildId(teammate)) {
           launches.set(teammate, {
             childNativeId: identifier.value,
-            spawnCallId: callId,
+            spawnCallId: policyCallId(callId),
           });
         }
         continue;
@@ -272,7 +273,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       if (id && name === teammate && isChildId(id) && isChildId(name))
-        launches.set(name, { childNativeId: id, spawnCallId: callId });
+        launches.set(name, {
+          childNativeId: id,
+          spawnCallId: policyCallId(callId),
+        });
     }
     return launches;
   }

@@ -698,6 +698,11 @@ export const RouteId = {
 
   // Unified OAuth Client Routes
   GetOauthClients: "getOauthClients",
+  GetOauthClient: "getOauthClient",
+  GetOauthClientFederatedCredentials: "getOauthClientFederatedCredentials",
+  CreateOauthClientFederatedCredential: "createOauthClientFederatedCredential",
+  UpdateOauthClientFederatedCredential: "updateOauthClientFederatedCredential",
+  DeleteOauthClientFederatedCredential: "deleteOauthClientFederatedCredential",
   GetOauthClientLabelKeys: "oauthClientLabelKeys",
   GetOauthClientLabelValues: "oauthClientLabelValues",
   CreateOauthClient: "createOauthClient",
@@ -1032,6 +1037,7 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaGithubAppPermissions: "getAppaGithubAppPermissions",
   GetAppaSelfService: "getAppaSelfService",
   GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
   GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",

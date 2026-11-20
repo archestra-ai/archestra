@@ -272,3 +272,40 @@ test("auto routers are kept on the client and need permission to change", async 
     (await update({ autoRouterIds: [crypto.randomUUID()] })).statusCode,
   ).toBe(400);
 });
+
+test("an icon is kept when an update omits it and cleared by null", async ({
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  const secret = await makeSecret();
+  const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+    provider: "openai",
+  });
+  const { oauthClient } = await ManagedOauthClientModel.create({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    name: "Nightly evals",
+    icon: "🧪",
+    providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+  });
+  expect(oauthClient.icon).toBe("🧪");
+  const update = (payload: Record<string, unknown>) =>
+    ctx.app.inject({
+      method: "PUT",
+      url: `/api/oauth-clients/${oauthClient.id}`,
+      payload: { name: "Nightly evals", scopes: ["llm:proxy"], ...payload },
+    });
+
+  const renamed = await update({ name: "Evals" });
+  expect(renamed.statusCode, renamed.body).toBe(200);
+  expect(renamed.json().icon).toBe("🧪");
+
+  const changed = await update({ icon: "🤖" });
+  expect(changed.json().icon).toBe("🤖");
+
+  const cleared = await update({ icon: null });
+  expect(cleared.statusCode, cleared.body).toBe(200);
+  expect(cleared.json().icon).toBeNull();
+});

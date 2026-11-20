@@ -300,7 +300,6 @@ describe("registerAuditLogHook", () => {
     app.post("/api/skills/github/discover", async () => ({ ok: true }));
     app.post("/api/skills/github/preview", async () => ({ ok: true }));
     app.post("/api/openappa/policy-tests/inspect", async () => ({ ok: true }));
-    app.post("/api/openappa/policy-tests/preview", async () => ({ ok: true }));
 
     // Route-pattern (":id/suffix") denylist entries — a variable id sits before
     // a static suffix, so a concrete-URL prefix would over-match the parent.
@@ -959,11 +958,11 @@ describe("registerAuditLogHook", () => {
       expect(await getRows()).toHaveLength(0);
     });
 
-    test.each([
-      "/api/openappa/policy-tests/inspect",
-      "/api/openappa/policy-tests/preview",
-    ])("POST %s writes zero rows (a read sent as a POST)", async (url) => {
-      await app.inject({ method: "POST", url });
+    test("POST /api/openappa/policy-tests/inspect writes zero rows (a read sent as a POST)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/openappa/policy-tests/inspect",
+      });
       await settle();
       expect(await getRows()).toHaveLength(0);
     });

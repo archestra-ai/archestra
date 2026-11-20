@@ -394,18 +394,23 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           userId: request.user.id,
         });
         // The request opens a pull request and usually leaves the settings as
-        // they were, so the record marks it beside whatever a first pull changed.
-        request.auditBefore = {
-          ...request.auditBefore,
-          includeServersRequested: false,
-        };
-        request.auditAfter = {
-          ...(await OpenAppaGithubSyncModel.findByIdForAudit(
-            request.organizationId,
-            request.organizationId,
-          )),
-          includeServersRequested: true,
-        };
+        // they were, so the record marks it beside whatever a first pull
+        // changed. The pull request is open by now: a failed read leaves the
+        // record unmarked and never fails the request.
+        const after = await OpenAppaGithubSyncModel.findByIdForAudit(
+          request.organizationId,
+          request.organizationId,
+        ).catch((err: unknown) => {
+          logger.error({ err }, "audit: include_servers snapshot read failed");
+          return undefined;
+        });
+        if (after !== undefined) {
+          request.auditBefore = {
+            ...request.auditBefore,
+            includeServersRequested: false,
+          };
+          request.auditAfter = { ...after, includeServersRequested: true };
+        }
         return reply.send(await getAppaGithubSync(request.organizationId));
       }
       // The switch's dialog opens the pull request that includes the

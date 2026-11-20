@@ -1964,9 +1964,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(h.providerRequests).toHaveLength(1);
       });
 
-      test("a teammate spawned while it was on that first ran while it was off stays out of OpenAPPA, and gets no message from its lead", async () => {
+      test.for([
+        "in the request",
+        "on record",
+      ] as const)("a teammate spawned while it was on that first ran while it was off stays out of OpenAPPA, and gets no message from its lead (launch result %s)", async (launch) => {
         const spawned = await spawnTeammate();
         await recordSpawn("toolu_test_weather");
+        if (launch === "on record")
+          await db
+            .insert(database.schema.openappaProcessedResultsTable)
+            .values({
+              organizationId: h.agent.organizationId,
+              callerId: `user:${h.userId}`,
+              sessionId: scoped(lead),
+              toolCallId: "toolu_test_weather",
+              root: openappaActor(scoped(lead)),
+              status: "complete",
+              approvedOutput: launchReceipt(auditor, "auditor"),
+              decision: { decision: "ack" },
+            });
         await GuardrailsDeploymentModel.setEnabled(false);
         answerText();
         const first = await send(auditor, [
@@ -2019,6 +2035,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(
           h.events.filter((event) => event.event === "child_address"),
         ).toEqual([]);
+        expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
       });
 
       test("a Codex wait result from a child that ran while it was off reaches its parent", async () => {

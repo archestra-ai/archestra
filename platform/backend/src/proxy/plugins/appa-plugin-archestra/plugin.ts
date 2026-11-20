@@ -5346,7 +5346,16 @@ async function resolveNamedChild(params: {
   if (!childNativeId) return childOfNamedSpawn({ ...params, aliases, started });
   const childStarted = started.includes(childNativeId);
   if (!spawnCallId) return { childNativeId, started: childStarted };
-  if (durable) return { childNativeId, spawnCallId, started: childStarted };
+  if (durable) {
+    const off = await startedUnenforced({
+      ...params.parent,
+      session_id: childSessionId(params.parent.session_id, childNativeId),
+      parent_id: params.parent.session_id,
+    });
+    return off
+      ? { childNativeId, spawnCallId, started: childStarted, unchecked: true }
+      : { childNativeId, spawnCallId, started: childStarted };
+  }
   const allowed = await OpenAppaSpawnCorrelationModel.allowedSpawn({
     organizationId: params.parent.organization_id,
     callerId: params.parent.caller_id,

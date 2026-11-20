@@ -53,6 +53,7 @@ import {
   McpToolCallModel,
   ServiceAccountModel,
   ToolModel,
+  UserModel,
   UserTokenModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -63,6 +64,7 @@ import {
 } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { jwksValidator } from "@/services/jwks-validator";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types/api";
@@ -1525,6 +1527,45 @@ describe("validateExternalIdpToken", () => {
 
 describe("authenticateMCPGatewayRequest failure reasons", () => {
   const FAKE_JWT = "eyJhbGciOiJSUzI1NiJ9.fake.jwt";
+
+  test("refuses a valid user token while the identity provider has the user deactivated", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
+    const { value } = await UserTokenModel.create(user.id, org.id);
+    const baseline = await authenticateMCPGatewayRequest(gateway.id, value);
+    expect(baseline.reason).toBeNull();
+    expect(baseline.result).toMatchObject({ userId: user.id });
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    expect(await authenticateMCPGatewayRequest(gateway.id, value)).toEqual({
+      result: null,
+      reason: "account_deactivated",
+    });
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    expect(
+      (await authenticateMCPGatewayRequest(gateway.id, value)).result,
+    ).toMatchObject({ userId: user.id });
+  });
 
   test("reports that no identity provider is linked to the gateway", async ({
     makeAgent,

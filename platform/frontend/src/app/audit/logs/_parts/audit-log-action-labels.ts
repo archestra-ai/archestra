@@ -181,6 +181,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "member.role_updated": "User role changed",
   "member.deleted": "User removed",
   "member.bulk_deleted": "Users bulk removed",
+  "member.provisioning_updated": "User updated by identity provider",
+  "member.soft_deleted": "User deactivated by identity provider",
   // Optimization rule
   // Retired with the LLM optimization rules feature; retained so audit rows
   // written before its removal still render with a readable label.

@@ -6,6 +6,7 @@ import {
   isNull,
   lt,
   notExists,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -688,6 +689,30 @@ class A2ATaskModel {
       tasks: rows.map((row) => row.task),
       totalSize: Number(count),
     };
+  }
+
+  /** The tasks of one actor that have not reached a terminal state. */
+  static async findUnfinishedByActor(params: {
+    actorKind: string;
+    actorId: string;
+  }): Promise<{ id: string; agentId: string | null }[]> {
+    return db
+      .select({
+        id: schema.a2aTasksTable.id,
+        agentId: schema.a2aTasksTable.agentId,
+      })
+      .from(schema.a2aTasksTable)
+      .innerJoin(
+        schema.a2aContextsTable,
+        eq(schema.a2aTasksTable.contextId, schema.a2aContextsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.a2aContextsTable.actorKind, params.actorKind),
+          eq(schema.a2aContextsTable.actorId, params.actorId),
+          notInArray(schema.a2aTasksTable.state, TERMINAL_TASK_STATES),
+        ),
+      );
   }
 
   /** Graceful-shutdown path: fail this pod's still-active tasks. */

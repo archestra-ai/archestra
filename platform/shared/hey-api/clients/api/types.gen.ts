@@ -33866,7 +33866,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -33973,7 +33973,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -34206,7 +34206,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -113400,6 +113400,7 @@ export type GetMembersResponses = {
             role: string;
             createdAt: string;
             twoFactorEnabled: boolean;
+            softDeleted: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -160239,6 +160240,686 @@ export type IngestRumEventsResponses = {
 };
 
 export type IngestRumEventsResponse = IngestRumEventsResponses[keyof IngestRumEventsResponses];
+
+export type ScimGetServiceProviderConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/scim/v2/ServiceProviderConfig';
+};
+
+export type ScimGetServiceProviderConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimGetServiceProviderConfigError = ScimGetServiceProviderConfigErrors[keyof ScimGetServiceProviderConfigErrors];
+
+export type ScimGetServiceProviderConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ScimGetServiceProviderConfigResponse = ScimGetServiceProviderConfigResponses[keyof ScimGetServiceProviderConfigResponses];
+
+export type ScimListUsersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        filter?: string;
+        startIndex?: number;
+        count?: number;
+    };
+    url: '/api/scim/v2/Users';
+};
+
+export type ScimListUsersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimListUsersError = ScimListUsersErrors[keyof ScimListUsersErrors];
+
+export type ScimListUsersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        totalResults: number;
+        startIndex: number;
+        itemsPerPage: number;
+        Resources: Array<{
+            schemas: Array<string>;
+            id: string;
+            userName: string;
+            displayName: string;
+            name: {
+                formatted: string;
+            };
+            emails: Array<{
+                value: string;
+                type: string;
+                primary: boolean;
+            }>;
+            active: boolean;
+            meta: {
+                resourceType: string;
+                created: string;
+                lastModified: string;
+            };
+        }>;
+    };
+};
+
+export type ScimListUsersResponse = ScimListUsersResponses[keyof ScimListUsersResponses];
+
+export type ScimCreateUserData = {
+    body: {
+        userName: string;
+        displayName?: string;
+        name?: {
+            formatted?: string;
+            givenName?: string;
+            familyName?: string;
+            [key: string]: unknown;
+        };
+        emails?: Array<{
+            value: string;
+            primary?: boolean;
+            [key: string]: unknown;
+        }>;
+        active?: boolean;
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/scim/v2/Users';
+};
+
+export type ScimCreateUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimCreateUserError = ScimCreateUserErrors[keyof ScimCreateUserErrors];
+
+export type ScimCreateUserResponses = {
+    /**
+     * Default Response
+     */
+    201: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimCreateUserResponse = ScimCreateUserResponses[keyof ScimCreateUserResponses];
+
+export type ScimDeleteUserData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimDeleteUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimDeleteUserError = ScimDeleteUserErrors[keyof ScimDeleteUserErrors];
+
+export type ScimDeleteUserResponses = {
+    /**
+     * Default Response
+     */
+    204: void;
+};
+
+export type ScimDeleteUserResponse = ScimDeleteUserResponses[keyof ScimDeleteUserResponses];
+
+export type ScimGetUserData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimGetUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimGetUserError = ScimGetUserErrors[keyof ScimGetUserErrors];
+
+export type ScimGetUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimGetUserResponse = ScimGetUserResponses[keyof ScimGetUserResponses];
+
+export type ScimPatchUserData = {
+    body: {
+        Operations: Array<{
+            op: string;
+            path?: string;
+            value?: unknown;
+            [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimPatchUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimPatchUserError = ScimPatchUserErrors[keyof ScimPatchUserErrors];
+
+export type ScimPatchUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimPatchUserResponse = ScimPatchUserResponses[keyof ScimPatchUserResponses];
+
+export type ScimReplaceUserData = {
+    body: {
+        userName: string;
+        displayName?: string;
+        name?: {
+            formatted?: string;
+            givenName?: string;
+            familyName?: string;
+            [key: string]: unknown;
+        };
+        emails?: Array<{
+            value: string;
+            primary?: boolean;
+            [key: string]: unknown;
+        }>;
+        active?: boolean;
+        [key: string]: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimReplaceUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimReplaceUserError = ScimReplaceUserErrors[keyof ScimReplaceUserErrors];
+
+export type ScimReplaceUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimReplaceUserResponse = ScimReplaceUserResponses[keyof ScimReplaceUserResponses];
 
 export type GetServiceAccountFederatedCredentialsData = {
     body?: never;

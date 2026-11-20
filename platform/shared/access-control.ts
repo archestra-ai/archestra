@@ -1549,6 +1549,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMemberOptions]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
+  // SCIM 2.0 user provisioning, called by an identity provider with a service-account token
+  [RouteId.ScimGetServiceProviderConfig]: { member: ["read"] },
+  [RouteId.ScimListUsers]: { member: ["read"] },
+  [RouteId.ScimGetUser]: { member: ["read"] },
+  [RouteId.ScimCreateUser]: { member: ["create"] },
+  [RouteId.ScimReplaceUser]: { member: ["update", "delete"] },
+  [RouteId.ScimPatchUser]: { member: ["update", "delete"] },
+  [RouteId.ScimDeleteUser]: { member: ["delete"] },
   [RouteId.GetUserPermissionSources]: {},
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   // Other members' saved browser logins: managing someone else's sessions is a

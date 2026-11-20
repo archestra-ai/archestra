@@ -10,6 +10,7 @@ import {
   ConnectionSetupModel,
   MemberModel,
   OrganizationModel,
+  UserModel,
 } from "@/models";
 import { ApiError, GATEWAY_CAPABLE_AGENT_TYPES } from "@/types";
 import { verifyConnectionInstructionsToken } from "./connection-instructions-token";
@@ -44,7 +45,8 @@ export async function getConnectionManagedInstructions(token: string) {
 
 /**
  * An installation stays live while its setup was approved, its owner is still
- * a member, and the owner can still read the gateway it connected.
+ * a member the identity provider has not deactivated, and the owner can still
+ * read the gateway it connected.
  */
 export async function verifyLiveConnectionInstallation(setup: {
   consumedAt: Date | null;
@@ -58,7 +60,7 @@ export async function verifyLiveConnectionInstallation(setup: {
     organizationId: setup.organizationId,
     userIds: [setup.userId],
   });
-  if (members.length === 0)
+  if (members.length === 0 || (await UserModel.getSoftDeleted(setup.userId)))
     throw new ApiError(403, "Connection is no longer available");
   const [canRead, isAdmin] = await Promise.all([
     userHasPermission(setup.userId, setup.organizationId, "mcpGateway", "read"),

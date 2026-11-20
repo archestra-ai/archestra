@@ -24,11 +24,13 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  UserModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
 import { projectService } from "@/services/project";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -90,6 +92,7 @@ const service = websocketService as unknown as {
     request: IncomingMessage,
   ) => Promise<WebSocketClientContext | null>;
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
+  closeSoftDeletedClients: () => Promise<void>;
   clientContexts: Map<WS, WebSocketClientContext>;
   browserSubscriptions: {
     clear: () => void;
@@ -145,6 +148,87 @@ describe("websocket authentication", () => {
     const result = await service.authenticateConnection(request);
 
     expect(result).toBeNull();
+  });
+
+  test("authenticateConnection refuses a session of a user the identity provider deactivated", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id);
+    vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
+      user: { id: user.id },
+      session: { id: "session-ws" },
+    } as never);
+    vi.spyOn(betterAuth.api, "verifyApiKey").mockResolvedValue({
+      valid: false,
+      error: null,
+      key: null,
+    });
+    const request = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as IncomingMessage;
+
+    await expect(
+      service.authenticateConnection(request),
+    ).resolves.toMatchObject({ userId: user.id, organizationId: org.id });
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    await expect(service.authenticateConnection(request)).resolves.toBeNull();
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    await expect(
+      service.authenticateConnection(request),
+    ).resolves.toMatchObject({ userId: user.id });
+  });
+
+  test("an open connection of a user deactivated since is closed, by the sweep and on their next message", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const deactivated = await makeUser();
+    const active = await makeUser();
+    await makeMember(deactivated.id, org.id);
+    await makeMember(active.id, org.id);
+    const openSocket = () =>
+      ({ readyState: WS.OPEN, send: vi.fn(), close: vi.fn() }) as unknown as WS;
+    const connect = (userId: string) => {
+      const ws = openSocket();
+      service.clientContexts.set(ws, {
+        userId,
+        organizationId: org.id,
+        userIsMcpServerAdmin: false,
+      });
+      return ws;
+    };
+    const receiving = connect(deactivated.id);
+    const sending = connect(deactivated.id);
+    const other = connect(active.id);
+    await UserModel.setSoftDeleted({
+      userId: deactivated.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(deactivated.id);
+
+    await service.handleMessage(
+      { type: "unsubscribe_mcp_logs", payload: {} } as ClientWebSocketMessage,
+      sending,
+    );
+    expect(sending.close).toHaveBeenCalledWith(4401, "Unauthorized");
+
+    await service.closeSoftDeletedClients();
+    expect(receiving.close).toHaveBeenCalledWith(4401, "Unauthorized");
+    expect(other.close).not.toHaveBeenCalled();
   });
 });
 

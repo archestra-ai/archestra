@@ -92,6 +92,7 @@
     "src/routes/project/project.routes.ts",
     "src/routes/resource-permission/resource-permission.routes.ts",
     "src/routes/rum/rum.routes.ee.ts",
+    "src/routes/scim/scim.routes.ee.ts",
     "src/routes/runtime-credential/runtime-credential.routes.ts",
     "src/routes/schedule-trigger.ts",
     "src/routes/secrets.ts",

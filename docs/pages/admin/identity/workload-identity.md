@@ -9,7 +9,7 @@ lastUpdated: 2026-11-19
 
 Let a CI job sign in as a service account with the OIDC token its platform already issues, so no Archestra API key sits in your CI secrets. A GitHub Actions job that deploys from `main` gets a one-hour token; the same workflow run from a pull request gets nothing.
 
-Workload identity federation is an [Enterprise feature](/docs/get-started/pricing-model). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Workload identity federation is an [Enterprise feature](/pricing). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## When to Use It
 

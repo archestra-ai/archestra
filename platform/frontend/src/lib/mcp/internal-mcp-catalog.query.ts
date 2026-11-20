@@ -51,11 +51,10 @@ export const REMOTE_SERVER_URL_NOT_ALLOWED_CODE =
   "remote_server_url_not_allowed";
 
 /**
- * `internal_code` the backend sets when a rename targets a name already used
- * by another root catalog in the organization (tool names embed the catalog
- * name, so duplicates would route tool calls to the wrong server). Shown
- * inline on the Name field. Keep in sync with the backend constant of the
- * same value.
+ * `internal_code` the backend sets when a name is already used by another
+ * root catalog in the same environment (tool names embed the catalog name,
+ * so duplicates would route tool calls to the wrong server). Shown inline
+ * on the Name field. Keep in sync with the backend constant of the same value.
  */
 export const CATALOG_NAME_CONFLICT_CODE = "catalog_name_conflict";
 
@@ -170,11 +169,12 @@ export function useCreateInternalMcpCatalogItem() {
       toast.success("Catalog item created successfully");
     },
     onError: (error) => {
-      // The network-policy error is shown inline on the Server URL field by the
-      // dialog; everything else falls back to a toast.
+      // The network-policy error is shown inline on the Server URL field, and
+      // a taken name on the Name field; everything else falls back to a toast.
+      const code = getCatalogMutationErrorCode(error);
       if (
-        getCatalogMutationErrorCode(error) ===
-        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+        code === REMOTE_SERVER_URL_NOT_ALLOWED_CODE ||
+        code === CATALOG_NAME_CONFLICT_CODE
       ) {
         return;
       }

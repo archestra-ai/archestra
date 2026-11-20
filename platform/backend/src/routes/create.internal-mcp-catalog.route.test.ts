@@ -1,4 +1,8 @@
-import { describe, expect, test } from "@/test";
+import { eq } from "drizzle-orm";
+import config from "@/config";
+import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
+import { afterEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -20,6 +24,11 @@ const OAUTH_CONFIG = {
 
 describe("POST /api/internal_mcp_catalog validation", () => {
   const ctx = useRouteTestApp(internalMcpCatalogRoutes);
+  const coreAtStart = config.enterpriseFeatures.core;
+
+  afterEach(() => {
+    config.enterpriseFeatures.core = coreAtStart;
+  });
 
   test.for([
     [
@@ -187,5 +196,54 @@ describe("POST /api/internal_mcp_catalog validation", () => {
       serverUrl: null,
       localConfig: null,
     });
+  });
+
+  test("refuses a name another live root server already uses in the same environment", async ({
+    makeMember,
+  }) => {
+    config.enterpriseFeatures.core = true;
+    enterpriseTier.setUserCountForTesting(0);
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const existing = await ctx.app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "Weather",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+    expect(existing.statusCode, existing.body).toBe(200);
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "Weather",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    expect(response.json().error.message).toMatch(/environment/i);
+    const rows = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.name, "Weather"));
+    expect(rows).toHaveLength(1);
   });
 });

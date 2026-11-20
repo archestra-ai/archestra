@@ -107,7 +107,7 @@ include = [
 
 Git sync proposes that include itself. When the policy file lacks it, the next sync opens a pull request that adds it. If the setup pull request has not merged yet, Git sync adds the include to that pull request instead. **Finish setup** lists the pull request with the others to merge. If someone closes the include pull request without merging it, later syncs do not open it again, and **Finish setup** opens a new one.
 
-MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
+MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. Two environments can each hold a server of the same name, and those servers share one rules file. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
 
 Enable it in the Guardrails setting when setting up git sync or afterwards. Can also be controlled with the [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) env var.
 

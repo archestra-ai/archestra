@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-20
 ---
 
 Keep a staging agent away from production tools and knowledge, and give its workloads a different network policy. Environments separate resource sets inside one Archestra organization.
@@ -65,7 +65,7 @@ An agent or gateway sees resources from its own environment, with two shared-res
 
 | Resource | Available to an agent or gateway |
 | --- | --- |
-| MCP tools and registry entries | Only servers in the same environment. |
+| MCP tools and registry entries | Only servers in the same environment. Two environments can each hold a server of the same name, and each agent's calls reach the server in its own environment. |
 | Knowledge connectors | Only connectors in the same environment. |
 | Subagents | Only delegation targets in the same environment. |
 | [Skills](/docs/agents/skills) | Skills restricted to that environment, or to no environments. A skill naming a subagent also needs that agent in the same environment. |

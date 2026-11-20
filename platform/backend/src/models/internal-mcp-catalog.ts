@@ -1448,8 +1448,10 @@ class InternalMcpCatalogModel {
     const candidates = rows.filter((row) => {
       if (row.id === params.excludeId) return false;
       // An app's tools carry its allocated prefix and keep it when the app is
-      // renamed, so its display name says nothing once it has one.
-      if (row.serverType === "app" && row.toolPrefix !== null)
+      // renamed, so its display name says nothing once it has one. An app
+      // that moves collides only with the prefix a server's tools carry, so
+      // a server with an allocated prefix is compared by that alone as well.
+      if ((row.serverType === "app" || checksApp) && row.toolPrefix !== null)
         return targetPrefixes.has(row.toolPrefix);
       // An allocated prefix (a cut long name) is the prefix a server's tools
       // carry, so it is taken just like a slug.

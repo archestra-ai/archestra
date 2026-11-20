@@ -170,3 +170,97 @@ describe("Response app-link canonicalization", () => {
     expect(container.querySelector("code")?.textContent).toBe(`a/${APP_ID}`);
   });
 });
+
+// Through the real Streamdown pipeline: pins that the math plugin is wired up,
+// that KaTeX output survives rehype-harden, and that the delimiter rewrite
+// reaches it.
+describe("Response math", () => {
+  const formulas = (container: HTMLElement) =>
+    container.querySelectorAll(".katex").length;
+  const displayFormulas = (container: HTMLElement) =>
+    container.querySelectorAll(".katex-display").length;
+
+  it.each([
+    [
+      "\\[…\\]",
+      "The roots are:\n\n\\[ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} \\]",
+    ],
+    ["$$…$$ on its own line", "The roots are:\n\n$$x = \\frac{-b}{2a}$$"],
+    ["a $$ fenced block", "$$\nx^2 + y^2 = r^2\n$$"],
+  ])("renders %s as a display formula", (_label, markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(displayFormulas(container)).toBe(1);
+    // No delimiter is left behind as text.
+    expect(container.textContent).not.toMatch(/\\\[|\$\$/);
+  });
+
+  it.each([
+    ["\\(…\\)", "where \\(a \\neq 0\\) holds"],
+    ["$…$", "where $a \\neq 0$ holds"],
+    ["$$…$$ inside a sentence", "where $$a \\neq 0$$ holds"],
+  ])("renders %s inline", (_label, markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(formulas(container)).toBe(1);
+    expect(displayFormulas(container)).toBe(0);
+    expect(container.querySelector("p")?.textContent).toMatch(
+      /^where .+ holds$/,
+    );
+  });
+
+  it("renders a model's quadratic-formula answer without stray TeX", () => {
+    const answer = [
+      "The quadratic formula solves $ax^2 + bx + c = 0$ for $x$, where $a \\neq 0$:",
+      "",
+      "$$",
+      "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+      "$$",
+      "",
+      "- $a$, $b$, $c$ are the coefficients of the equation.",
+      "- $\\pm$ gives two solutions, one with $+$ and one with $-$.",
+      "- $b^2 - 4ac$ is the **discriminant**.",
+      "",
+      "**Example:** $2x^2 + 4x - 6 = 0$ gives $a = 2$, $b = 4$, $c = -6$:",
+      "",
+      "So $x = 1$ or $x = -3$.",
+    ].join("\n");
+    const { container } = renderResponse(answer);
+    expect(displayFormulas(container)).toBe(1);
+    // 16 inline formulas and the display one.
+    expect(formulas(container)).toBe(17);
+    for (const element of container.querySelectorAll(".katex-mathml")) {
+      element.remove();
+    }
+    expect(container.textContent).not.toContain("$");
+  });
+
+  it("keeps a display formula inside its list item", () => {
+    const { container } = renderResponse(
+      "1. Square it:\n\n   \\[ x^2 \\]\n\n2. Next step",
+    );
+    const items = container.querySelectorAll("li");
+    expect(items).toHaveLength(2);
+    expect(items[0].querySelector(".katex-display")).not.toBeNull();
+    expect(items[1].textContent?.trim()).toBe("Next step");
+  });
+
+  it.each([
+    "Set $HOME and $PATH before running.",
+    'Write "$HOME" and "$PATH"',
+    "Use $HOME/$PATH here",
+    "It costs $5 and $10 later",
+    "Between $5-$10 per seat",
+    "Plans run $5/$10 a month",
+  ])("leaves %j as plain text", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(formulas(container)).toBe(0);
+    expect(container.textContent).toBe(markdown);
+  });
+
+  it("leaves TeX inside code alone", () => {
+    const { container } = renderResponse(
+      "Inline `$x$` and `\\(y\\)`.\n\n```tex\n\\[ z \\]\n$$w$$\n```",
+    );
+    expect(formulas(container)).toBe(0);
+    expect(container.querySelector("p code")?.textContent).toBe("$x$");
+  });
+});

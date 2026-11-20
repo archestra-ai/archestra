@@ -1710,6 +1710,50 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("adds no guidance after the user's message in a plain-string Codex input", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-string-guidance" });
+    trustedOf(context).request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "request_user_input" }],
+    };
+    context.headers = {
+      originator: "codex_cli_rs",
+      "x-archestra-native-question": "request_user_input",
+    };
+    context.interactionType = "openai:responses";
+    const request: { input: unknown } = { input: "hi" };
+    try {
+      await plugin.onSessionInit(context);
+      const lengths: number[] = [];
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request });
+        if (!Array.isArray(request.input))
+          throw new Error("expected the input to become a message list");
+        expect(request.input.at(-1)).toEqual({
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "hi" }],
+        });
+        expect(
+          request.input.slice(0, -1).map((item) => item.role),
+        ).not.toContain("user");
+        lengths.push(request.input.length);
+      }
+      expect(lengths[0]).toBeGreaterThan(1);
+      expect(lengths[1]).toBe(lengths[0]);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test.each([
     "xai:responses",
     "xai:chatCompletions",

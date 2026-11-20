@@ -8705,6 +8705,20 @@ function insertRequestGuidance(params: {
   const wire = nativeAppaGuidanceWire(params.interactionType);
   if (!wire) return;
   if (
+    wire === "openai:responses" &&
+    isRecord(request) &&
+    typeof request.input === "string"
+  ) {
+    if (params.onContinue === "skip") return;
+    request.input = [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: request.input }],
+      },
+    ];
+  }
+  if (
     wire !== "openai:responses" ||
     !isRecord(request) ||
     !Array.isArray(request.input)

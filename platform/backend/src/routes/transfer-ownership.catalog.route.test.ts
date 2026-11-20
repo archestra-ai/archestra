@@ -141,6 +141,17 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
   test("rejects an unknown resource", async () => {
     expect((await transfer(crypto.randomUUID())).statusCode).toBe(404);
   });
+  test("refuses a transfer when the new owner has a personal server of the same name", async () => {
+    const resource = await create(user.id, "Weather");
+    await create(recipient.id, "Weather");
+
+    const response = await transfer(resource.id);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    expect(await snapshot(resource.id)).toMatchObject({ authorId: user.id });
+  });
+
   test("rejects a stale ownership snapshot", async () => {
     const resource = await create();
     expect((await transfer(resource.id)).statusCode).toBe(200);

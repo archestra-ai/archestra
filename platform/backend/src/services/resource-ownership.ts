@@ -13,6 +13,7 @@ import {
   ProjectModel,
   SkillModel,
 } from "@/models";
+import { catalogNameAudienceOf } from "@/models/internal-mcp-catalog";
 import SkillTeamModel from "@/models/skill-team";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import { ApiError } from "@/types";
@@ -67,6 +68,23 @@ export async function transferResourceOwnership(params: {
       currentTarget: target,
       nextTarget: { ...target, authorId: ownerId },
     });
+  }
+  if (kind === "catalog") {
+    // Two members can each have a personal server of one name. A transfer
+    // would give both to one author, which the name rule does not allow.
+    const catalog = await InternalMcpCatalogModel.findNameCheckTarget(id);
+    if (
+      catalog &&
+      catalog.parentCatalogItemId === null &&
+      (await catalogNameAudienceOf(catalog)).kind === "personal"
+    )
+      await InternalMcpCatalogModel.assertRootNameAvailable({
+        name: catalog.name,
+        organizationId,
+        environmentId: catalog.environmentId,
+        audience: { kind: "personal", authorId: ownerId },
+        excludeId: id,
+      });
   }
   try {
     const transferred = await entry.transfer({

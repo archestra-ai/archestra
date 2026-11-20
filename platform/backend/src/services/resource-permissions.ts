@@ -34,6 +34,10 @@ import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
 import AgentModel from "@/models/agent";
+import InternalMcpCatalogModel, {
+  catalogNameAudienceFromGrants,
+  catalogNameAudienceOf,
+} from "@/models/internal-mcp-catalog";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -695,6 +699,38 @@ export class ResourcePermissions {
         throw new ApiError(400, "Personal MCP gateways cannot be shared");
     }
     const effective = await ResourcePermissions.getEffective(params);
+    // A grants change can move an MCP server between personal and shared.
+    // Sharing a personal server can put its name next to a shared server
+    // that already has it in the same environment. Narrowing a shared server
+    // to its author can put it next to that author's personal server of the
+    // same name. The check runs before the grants change, so a conflict
+    // leaves them as they are. A change that keeps the audience is not
+    // checked, so an existing duplicate can still be edited.
+    if (params.resource === "mcpRegistry" && params.scope !== "*") {
+      const catalog = await InternalMcpCatalogModel.findNameCheckTarget(
+        params.scope,
+      );
+      if (
+        catalog &&
+        catalog.organizationId === params.organizationId &&
+        catalog.serverType !== "app" &&
+        catalog.parentCatalogItemId === null
+      ) {
+        const nextAudience = catalogNameAudienceFromGrants({
+          grants: params.grants,
+          authorId: catalog.authorId,
+        });
+        if ((await catalogNameAudienceOf(catalog)).kind !== nextAudience.kind) {
+          await InternalMcpCatalogModel.assertRootNameAvailable({
+            name: catalog.name,
+            organizationId: params.organizationId,
+            environmentId: catalog.environmentId,
+            audience: nextAudience,
+            excludeId: catalog.id,
+          });
+        }
+      }
+    }
     await ResourcePermissions.assertNoStaticPinsBroken({
       ...params,
       authorId: effective.target?.authorId ?? null,

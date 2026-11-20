@@ -2,7 +2,7 @@
 title: "Environments"
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -51,7 +51,7 @@ An environment can list the image registries it trusts. If an MCP server's image
 
 An agent or MCP gateway assigned to **Production** can only see and use:
 
-- MCP tools whose server (catalog item) is in Production
+- MCP tools whose server (catalog item) is in Production. Two environments can each hold a server of the same name, and each agent's calls reach the server in its own environment.
 - MCP servers in the [private registry](/docs/mcp/servers) that are in Production, including their deployments
 - knowledge connectors in Production
 - [Agent Skills](/docs/agents/skills) restricted to Production, or restricted to no environment at all

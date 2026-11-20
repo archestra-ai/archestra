@@ -305,6 +305,79 @@ export function oauthClientFormBody(
   };
 }
 
+/** A new client's starting values: an LLM client or an MCP/A2A one. */
+export function newOauthClientFormValues(params?: {
+  clientType?: "mcp" | "llm";
+  allowedGatewayIds?: string[];
+  providerApiKeys?: OAuthClientFormValues["providerApiKeys"];
+}): OAuthClientFormValues {
+  return {
+    name: "",
+    serviceAccountId: null,
+    grantType: "client_credentials",
+    scopes: params?.clientType === "llm" ? ["llm:proxy"] : ["mcp", "a2a"],
+    providerApiKeys: params?.providerApiKeys ?? [],
+    includeFutureProviders: false,
+    allowedGatewayIds: params?.allowedGatewayIds ?? [],
+    redirectUrisText: "",
+    spendCap: null,
+    billingTeamId: null,
+    labels: [],
+    initialGrants: [],
+  };
+}
+
+/** An existing client as the edit form's values. */
+export function oauthClientFormValuesFrom(
+  client: archestraApiTypes.GetOauthClientResponses["200"],
+): OAuthClientFormValues {
+  return {
+    serviceAccountId: client.serviceAccountId ?? null,
+    name: client.name,
+    includeFutureProviders: client.includeFutureProviders ?? false,
+    grantType: client.grantType,
+    scopes: client.scopes,
+    allowedGatewayIds: client.allowedGatewayIds,
+    providerApiKeys: client.providerApiKeys.map(
+      ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
+    ),
+    modelPoolIds: client.modelPoolIds,
+    autoRouterIds: client.autoRouterIds,
+    redirectUrisText: client.redirectUris.join("\n"),
+    labels: client.labels,
+    billingTeamId: client.billingTeam?.id ?? null,
+    spendCap: client.spendCap
+      ? {
+          limitValue: client.spendCap.limitValue,
+          cleanupInterval: client.spendCap.cleanupInterval,
+        }
+      : null,
+  };
+}
+
+/**
+ * The update body for an edited client. Fields that need their own
+ * permission (the service account, billing, pools and routers) are sent only
+ * when changed, so saving a rename does not require those permissions.
+ */
+export async function oauthClientUpdateBody(params: {
+  values: OAuthClientFormValues;
+  dirtyFields: Partial<Record<keyof OAuthClientFormValues, unknown>>;
+  gateways?: AgentSelectorAgent[];
+}): Promise<archestraApiTypes.UpdateOauthClientData["body"]> {
+  const { initialGrants: _initial, ...body } = await resolveOauthClientFormBody(
+    params.values,
+    params.gateways,
+  );
+  const { dirtyFields } = params;
+  if (!dirtyFields.serviceAccountId) delete body.serviceAccountId;
+  if (!dirtyFields.spendCap) delete body.spendCap;
+  if (!dirtyFields.billingTeamId) delete body.billingTeamId;
+  if (!dirtyFields.modelPoolIds) delete body.modelPoolIds;
+  if (!dirtyFields.autoRouterIds) delete body.autoRouterIds;
+  return body;
+}
+
 /** Scope changes need only IDs to remove gateway targets from an A2A-only grant. */
 export async function resolveOauthClientFormBody(
   values: OAuthClientFormValues,

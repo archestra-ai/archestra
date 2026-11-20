@@ -1128,6 +1128,53 @@ describe("resource permission routes", () => {
     ).toEqual(before);
   });
 
+  test("narrowing a shared server to its author refuses a name the author's personal server has", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "personal",
+    });
+    const sharedServer = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+    });
+    const url = `/api/resource-permissions/mcpRegistry/${sharedServer.id}`;
+    const current = await app.inject({ method: "GET", url });
+    expect(current.statusCode).toBe(200);
+    const before = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: sharedServer.id,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: current.json().revision,
+        grants: keptGrants(current.json().grants).filter(
+          (grant: { subject: { type: string } }) =>
+            grant.subject.type === "user",
+        ),
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "mcpRegistry",
+        scope: sharedServer.id,
+      }),
+    ).toEqual(before);
+  });
+
   test("sharing a personal server is accepted when the shared server is in another environment", async ({
     makeInternalMcpCatalog,
   }) => {

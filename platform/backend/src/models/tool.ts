@@ -4283,23 +4283,10 @@ class ToolModel {
   }
 
   /**
-   * True when the connection a tool call would actually reach is connected
-   * and authenticated: the assignment's pinned server when it has one (a
-   * static credential pin), otherwise any healthy install of the tool's
-   * catalog item — dynamic resolution defers to the connection policy,
-   * which could reach any of them. Checking catalog-wide health alone would
-   * misrank a static pin to a broken server as healthy whenever the same
-   * catalog item has an unrelated working install elsewhere. Two different
-   * catalog items can produce tool rows with an identical name; ordering by
-   * this expression lets every caller that picks "the" match among
-   * same-named candidates prefer a working connection over one that needs
-   * re-authentication, was never installed, or is pinned to a broken one.
-   */
-  /**
    * Order for an app's assigned tools when one name exists twice: the app's
    * own environment (its backing catalog's environment) before Default, then
-   * a healthy install, then a stable id. An app in Default has no preference,
-   * so the environment term is false for every row and the older order stands.
+   * a healthy install, then a stable id. For an app in Default the environment
+   * term is true for every candidate row, so the older order stands.
    */
   private static appAssignedToolOrder(appId: string) {
     const appEnvironment = sql`(
@@ -4322,6 +4309,19 @@ class ToolModel {
     ];
   }
 
+  /**
+   * True when the connection a tool call would actually reach is connected
+   * and authenticated: the assignment's pinned server when it has one (a
+   * static credential pin), otherwise any healthy install of the tool's
+   * catalog item — dynamic resolution defers to the connection policy,
+   * which could reach any of them. Checking catalog-wide health alone would
+   * misrank a static pin to a broken server as healthy whenever the same
+   * catalog item has an unrelated working install elsewhere. Two different
+   * catalog items can produce tool rows with an identical name; ordering by
+   * this expression lets every caller that picks "the" match among
+   * same-named candidates prefer a working connection over one that needs
+   * re-authentication, was never installed, or is pinned to a broken one.
+   */
   private static hasHealthyMcpServerInstall(
     assignmentMcpServerId: AnyPgColumn,
   ) {

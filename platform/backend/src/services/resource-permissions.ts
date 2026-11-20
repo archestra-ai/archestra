@@ -734,26 +734,28 @@ export class ResourcePermissions {
         throw new ApiError(400, "Personal MCP gateways cannot be shared");
     }
     const effective = await ResourcePermissions.getEffective(params);
-    // Sharing a personal MCP server with a team or the organization can put
-    // its name next to a shared server that already has it in the same
-    // environment. The check runs before the grants change, so a conflict
-    // leaves the server personal.
+    // A grants change can move an MCP server between personal and shared.
+    // Sharing a personal server can put its name next to a shared server
+    // that already has it in the same environment. Narrowing a shared server
+    // to its author can put it next to that author's personal server of the
+    // same name. The check runs before the grants change, so a conflict
+    // leaves them as they are. A change that keeps the audience is not
+    // checked, so an existing duplicate can still be edited.
     if (params.resource === "mcpRegistry" && params.scope !== "*") {
-      const nextAudience = catalogNameAudienceFromGrants({
-        grants: params.grants,
-        authorId: effective.target?.authorId ?? null,
-      });
-      if (nextAudience.kind === "shared") {
-        const catalog = await InternalMcpCatalogModel.findNameCheckTarget(
-          params.scope,
-        );
-        if (
-          catalog &&
-          catalog.organizationId === params.organizationId &&
-          catalog.serverType !== "app" &&
-          catalog.parentCatalogItemId === null &&
-          (await catalogNameAudienceOf(catalog)).kind === "personal"
-        ) {
+      const catalog = await InternalMcpCatalogModel.findNameCheckTarget(
+        params.scope,
+      );
+      if (
+        catalog &&
+        catalog.organizationId === params.organizationId &&
+        catalog.serverType !== "app" &&
+        catalog.parentCatalogItemId === null
+      ) {
+        const nextAudience = catalogNameAudienceFromGrants({
+          grants: params.grants,
+          authorId: catalog.authorId,
+        });
+        if ((await catalogNameAudienceOf(catalog)).kind !== nextAudience.kind) {
           await InternalMcpCatalogModel.assertRootNameAvailable({
             name: catalog.name,
             organizationId: params.organizationId,

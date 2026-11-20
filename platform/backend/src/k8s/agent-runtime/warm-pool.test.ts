@@ -4,6 +4,7 @@ import { HttpResponse, http } from "msw";
 import { expect, test, vi } from "vitest";
 import config from "@/config";
 import { createK8sClients } from "@/k8s/shared";
+import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
   runtimeSystemPrompt,
@@ -588,6 +589,22 @@ test("pools privileged spares on the privileged node pool and the rest on the ru
     nodeSelector: { "archestra-agent-runtime": "true" },
     tolerations: toleration("archestra-agent-runtime"),
   });
+});
+
+test("defers without a warning when the Kubernetes API asks to retry", async () => {
+  // A resource registered moments ago answers 429 while its storage starts.
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
+  vi.spyOn(AgentModel, "listWarmPoolCandidates").mockRejectedValue(
+    Object.assign(new Error("storage is (re)initializing"), { code: 429 }),
+  );
+  const warn = vi.spyOn(logger, "warn");
+  Object.assign(agentWarmPoolManager, { clients: {} });
+
+  await (
+    agentWarmPoolManager as unknown as { reconcileSafely(): Promise<void> }
+  ).reconcileSafely();
+
+  expect(warn).not.toHaveBeenCalled();
 });
 
 test("removes templates and the warm-workspace policy a moved pool left behind", async () => {

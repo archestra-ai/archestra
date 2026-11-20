@@ -8,6 +8,7 @@ import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ServiceAccountModel from "@/models/service-account";
+import { recordsCall } from "@/openappa/call-id";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
@@ -175,7 +176,7 @@ async function traceLinks(
       inSession.find(
         (candidate) =>
           candidate.llmToolCallId !== null &&
-          withoutTrajectoryStamp(candidate.llmToolCallId) === callId,
+          recordsCall(callId, candidate.llmToolCallId),
       ) ?? nearest(inSession, row.createdAt);
     links.set(row.id, { llmSessionId, mcpToolCallId: call?.id ?? null });
   }

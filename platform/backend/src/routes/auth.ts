@@ -6,6 +6,7 @@ import {
   OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
@@ -42,6 +43,7 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { issueManagedOauthClientAccessToken } from "@/services/oauth-client-credentials";
+// SPDX-SnippetEnd
 import { revokeManagedOauthClientAccessToken } from "@/services/oauth-client-revocation";
 import {
   shieldRefreshTokenGrant,
@@ -49,6 +51,13 @@ import {
 } from "@/services/oauth-refresh-replay";
 import { oauthRevocationRateLimiter } from "@/services/oauth-revocation-rate-limit";
 import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  authenticateOauthClientAssertion,
+  type FederatedOauthClient,
+} from "@/services/workload-identity/oauth-client-assertion";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   isLoopbackRedirectUri,
@@ -544,6 +553,28 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationHeader: request.headers.authorization,
             body,
           });
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // A workload's own OIDC token in place of the secret (RFC 7523).
+        if (body.client_assertion !== undefined) {
+          const assertion = await authenticateOauthClientAssertionGrant({
+            clientId: authenticatedClientId,
+            clientSecret,
+            body,
+            request,
+          });
+          if (!assertion.ok)
+            return reply.status(assertion.statusCode).send(assertion.body);
+          const result = await issueManagedOauthClientAccessToken({
+            scope: body.scope as string | undefined,
+            federated: assertion.federated,
+          });
+          return reply
+            .status(result.ok ? 200 : result.statusCode)
+            .send(result.body);
+        }
+        // SPDX-SnippetEnd
         const result = await issueManagedOauthClientAccessToken({
           clientId: authenticatedClientId,
           clientSecret,
@@ -1299,6 +1330,62 @@ function appendHostedDomainHint(urlString: string, hostedDomainHint: string) {
   const url = new URL(urlString);
   url.searchParams.set("hd", hostedDomainHint);
   return url.toString();
+}
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function authenticateOauthClientAssertionGrant(params: {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  body: Record<string, unknown>;
+  request: FastifyRequest;
+}): Promise<
+  | { ok: true; federated: FederatedOauthClient }
+  | { ok: false; statusCode: number; body: Record<string, unknown> }
+> {
+  if (params.clientSecret)
+    return {
+      ok: false,
+      statusCode: 400,
+      body: {
+        error: "invalid_request",
+        error_description:
+          "Authenticate with either client_secret or client_assertion, not both",
+      },
+    };
+  const { request } = params;
+  const result = await authenticateOauthClientAssertion({
+    clientId: params.clientId,
+    clientAssertionType: optionalString(params.body.client_assertion_type),
+    clientAssertion: optionalString(params.body.client_assertion) ?? "",
+    request: {
+      method: request.method,
+      path: "/api/auth/oauth2/token",
+      route: request.routeOptions.url ?? null,
+      requestId: request.id,
+      sourceIp: request.ip || null,
+      userAgent: (request.headers["user-agent"] as string | undefined) ?? null,
+    },
+  });
+  if (!result.ok)
+    return {
+      ok: false,
+      statusCode: result.error === "invalid_request" ? 400 : 401,
+      body: { error: result.error, error_description: result.description },
+    };
+  return {
+    ok: true,
+    federated: {
+      client: result.client,
+      federatedCredentialId: result.federatedCredentialId,
+    },
+  };
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 // SPDX-SnippetEnd
 

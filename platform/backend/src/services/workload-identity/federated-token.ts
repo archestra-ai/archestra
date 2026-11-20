@@ -10,8 +10,10 @@ import {
 } from "jose";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
+import { ApiError } from "@/types";
 import type { AuditOutcome } from "@/types/audit-log";
-import type { SelectServiceAccountFederatedCredential } from "@/types/service-account-federated-credential";
+import type { FederatedCredentialClaimConditions } from "@/types/service-account-federated-credential";
+import { isPrivateOrLoopbackHostname } from "@/utils/network";
 import { OidcIssuerKeysError, oidcIssuerKeys } from "./oidc-issuer-keys";
 
 /*
@@ -37,6 +39,30 @@ export type VerifiedClaims = JWTPayload & {
 };
 
 export const ALLOWED_ALGORITHMS = ["RS256", "ES256"];
+
+/**
+ * The part of a federated credential a token is matched against, whatever it
+ * belongs to (a service account or an OAuth client). The issuer is matched
+ * first, when the candidates are read.
+ */
+export type FederatedTrustPolicy = {
+  audience: string;
+  subject: string;
+  claimConditions: FederatedCredentialClaimConditions;
+};
+
+/**
+ * The server fetches the issuer's discovery document and keys, so an issuer
+ * on a private or loopback address is refused when a credential is saved as
+ * well as at fetch time.
+ */
+export function assertPublicIssuer(issuer: string): void {
+  if (isPrivateOrLoopbackHostname(new URL(issuer).hostname))
+    throw new ApiError(
+      400,
+      "The issuer must be publicly reachable: private and loopback addresses are refused",
+    );
+}
 
 /** The token's algorithm and issuer, read before any verification. */
 export function readUnverified(
@@ -132,7 +158,7 @@ export function toAudienceList(aud: JWTPayload["aud"]): string[] {
 }
 
 export function mismatchReason(params: {
-  credential: SelectServiceAccountFederatedCredential;
+  credential: FederatedTrustPolicy;
   claims: VerifiedClaims;
   audiences: string[];
 }): string | null {
@@ -150,7 +176,7 @@ export function mismatchReason(params: {
 /** The token's values for the claims any of the credentials constrain. */
 export function pickConditionClaims(
   claims: JWTPayload,
-  credentials: SelectServiceAccountFederatedCredential[],
+  credentials: FederatedTrustPolicy[],
 ): Record<string, unknown> {
   const picked: Record<string, unknown> = {};
   for (const credential of credentials) {
@@ -163,6 +189,8 @@ export function pickConditionClaims(
 }
 
 export async function recordFederationAudit(params: {
+  /** What the token signs in as; defaults to a service account. */
+  kind?: "serviceAccount" | "oauthClient";
   account: { id: string; name: string; organizationId: string };
   request: FederationRequestContext | null;
   outcome: AuditOutcome;
@@ -170,17 +198,23 @@ export async function recordFederationAudit(params: {
   details: Record<string, unknown>;
 }): Promise<boolean> {
   const { account } = params;
+  const kind = params.kind ?? "serviceAccount";
   const request = params.request ?? NO_REQUEST;
   try {
     await AuditLogModel.create({
       organizationId: account.organizationId,
       actorId: null,
-      actorType: "service_account",
+      // An OAuth client is no principal of its own in the audit log; its
+      // name says which client authenticated.
+      actorType: kind === "serviceAccount" ? "service_account" : "system",
       actorName: account.name,
       actorEmail: null,
-      action: "serviceAccount.token_exchanged",
+      action:
+        kind === "serviceAccount"
+          ? "serviceAccount.token_exchanged"
+          : "oauthClient.token_exchanged",
       outcome: params.outcome,
-      resourceType: "serviceAccount",
+      resourceType: kind,
       resourceId: account.id,
       resourceName: account.name,
       before: null,
@@ -199,7 +233,7 @@ export async function recordFederationAudit(params: {
     // A failed audit write must not decide the exchange; it is logged so it
     // can be noticed.
     logger.error(
-      { err, serviceAccountId: account.id, outcome: params.outcome },
+      { err, kind, id: account.id, outcome: params.outcome },
       "[workload-identity] Failed to write the token exchange audit row",
     );
     return false;

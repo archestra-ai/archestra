@@ -127,6 +127,7 @@ function oauthClient(overrides: Partial<OauthClient>): OauthClient {
     clientId: "client-id",
     serviceAccountId: null,
     name: "OAuth client",
+    icon: null,
     organizationId: "test-org",
     grantType: "client_credentials",
     providerApiKeys: [],

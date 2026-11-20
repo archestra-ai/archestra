@@ -8,6 +8,7 @@ import type { FastifyRequest } from "fastify";
 import {
   type CollectedChildReturns,
   collectAndStripChildReturns,
+  underPolicyCallIds,
 } from "@/openappa/child-return";
 import {
   type AppaChildTrajectoryReceipt,
@@ -94,7 +95,9 @@ export function scrubOpenappaIngress(params: {
     ...(scrubbed?.delegationMarkers
       ? { delegationMarkers: scrubbed.delegationMarkers }
       : {}),
-    ...(scrubbed?.childReturns ? { childReturns: scrubbed.childReturns } : {}),
+    ...(scrubbed?.childReturns
+      ? { childReturns: underPolicyCallIds(scrubbed.childReturns) }
+      : {}),
     ...(scrubbed && scrubbed.releasedSpawnCalls.length > 0
       ? { releasedSpawnCalls: scrubbed.releasedSpawnCalls }
       : {}),

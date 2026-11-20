@@ -1,4 +1,5 @@
 import { McpToolCallModel, OpenappaLabelChangeModel } from "@/models";
+import { recordedCallId } from "@/openappa/call-id";
 import { openappaCoverageService } from "@/openappa/coverage";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import type { CoverageRule } from "@/types/openappa-coverage";
@@ -47,12 +48,16 @@ export async function listSessionLabelChanges(params: {
       organizationId,
       sessionId: llmSessionId,
     });
-    for (const call of calls)
-      if (call.toolName)
-        toolByCallId.set(
-          withoutTrajectoryStamp(call.llmToolCallId),
-          call.toolName,
-        );
+    for (const call of calls) {
+      if (!call.toolName) continue;
+      // Under both ids a change may name the call by: a release that knew
+      // no bounded id recorded the provider's whole.
+      toolByCallId.set(
+        withoutTrajectoryStamp(call.llmToolCallId),
+        call.toolName,
+      );
+      toolByCallId.set(recordedCallId(call.llmToolCallId), call.toolName);
+    }
   }
   const withTools = changes.map((change) => ({
     ...change,

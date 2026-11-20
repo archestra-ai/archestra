@@ -86,6 +86,8 @@ class OAuthAccessTokenModel {
     expiresAt: Date;
     scopes: string[];
     referenceId?: string | null;
+    /** Set when the client authenticated with a federated credential. */
+    federatedCredentialId?: string | null;
   }) {
     const [accessToken] = await db
       .insert(schema.oauthAccessTokensTable)
@@ -96,6 +98,7 @@ class OAuthAccessTokenModel {
         expiresAt: params.expiresAt,
         scopes: params.scopes,
         referenceId: params.referenceId ?? null,
+        federatedCredentialId: params.federatedCredentialId ?? null,
         createdAt: new Date(),
       })
       .returning();

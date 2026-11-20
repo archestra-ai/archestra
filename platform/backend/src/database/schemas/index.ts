@@ -234,6 +234,7 @@ export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientAssertionsTable } from "./oauth-client-assertion";
+export { default as oauthClientFederatedCredentialsTable } from "./oauth-client-federated-credential";
 export { default as oauthClientLabelsTable } from "./oauth-client-label";
 export { default as oauthClientResourcesTable } from "./oauth-client-resource";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";

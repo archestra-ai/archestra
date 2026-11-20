@@ -4,22 +4,21 @@ set -e
 # Runtime initialization for the unified platform image.
 # This script:
 # - bootstraps a persistent auth secret when one is not provided
-# - in quickstart mode, resumes or creates the embedded KinD cluster in the
-#   background while the database initializes, and hands the backend its
-#   Kubernetes settings once the cluster's API answers
-#   (docker/scripts/start-backend.sh waits for them)
+# - in quickstart mode, hands the backend its Kubernetes settings up front and
+#   resumes or creates the embedded KinD cluster in the background; the
+#   backend starts at once and attaches to the cluster when its kubeconfig
+#   appears at KUBECONFIG_PATH
 # - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
 # - injects the resolved DATABASE_URL into supervisord's environment
 # - starts supervisord in the background so container signals can trigger graceful cleanup
 # - stops the embedded KinD cluster on shutdown but keeps it, so the next start
 #   resumes it in seconds instead of creating a new one
 
-# The backend waits for this file in quickstart mode (start-backend.sh).
-QUICKSTART_ENV_FILE=/run/archestra/quickstart.env
 # Written when the background cluster setup fails, so cleanup exits non-zero.
 QUICKSTART_FAILED_FILE=/run/archestra/quickstart.failed
 CLUSTER_NAME="archestra-mcp"
 CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+# Appears only once the cluster's API answers: the backend waits for it.
 KUBECONFIG_PATH="/app/data/.kubeconfig"
 # Put the cluster on an IPv4-only network of our own instead of KinD's
 # default `kind` network, which is dual-stack. This container joins that
@@ -155,11 +154,14 @@ create_cluster() {
 # KinD network and waits up to $1 seconds for the API server. Returns 1 when
 # the API does not answer in time.
 connect_cluster() {
-    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}" >/dev/null 2>&1; then
+    # Built under another name and moved into place once the API answers: the
+    # backend attaches to the cluster as soon as KUBECONFIG_PATH exists.
+    staged="${KUBECONFIG_PATH}.staged"
+    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${staged}" >/dev/null 2>&1; then
         echo "Could not export the kubeconfig for KinD cluster '${CLUSTER_NAME}'"
         return 1
     fi
-    chmod 600 "${KUBECONFIG_PATH}"
+    chmod 600 "${staged}"
 
     # The node's address can change when it restarts, so read it every time.
     CONTROL_PLANE_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "${CONTROL_PLANE_CONTAINER}")
@@ -179,7 +181,7 @@ connect_cluster() {
     # certificate-authority-data is dropped alongside enabling insecure-skip-tls-verify:
     # strict clients (kubectl, and the Dagger kube-pod:// transport) reject a kubeconfig
     # that sets both, so keeping the CA would break the bundled Dagger Engine connection.
-    cat "${KUBECONFIG_PATH}" | \
+    cat "${staged}" | \
         sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
         awk '
             /^    server: https:\/\/.*:6443$/ {
@@ -193,27 +195,12 @@ connect_cluster() {
             /^    insecure-skip-tls-verify:/ { next }
             /^    certificate-authority-data:/ { next }
             { print }
-        ' > "${KUBECONFIG_PATH}.tmp"
-    mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
-    chmod 600 "${KUBECONFIG_PATH}"
-
-    # Connect this container to the KinD network for direct communication
-    # SECURITY WARNING: This grants the container privileged access to manipulate
-    # host Docker networks. This is acceptable ONLY for local development.
-    CONTAINER_ID=$(hostname)
-    if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
-        echo "Container already connected to KinD network"
-    else
-        echo "Connecting container to KinD network..."
-        if ! docker network connect "${KIND_NETWORK}" "$CONTAINER_ID"; then
-            echo "ERROR: Failed to connect container to KinD network"
-            quickstart_fail
-        fi
-        echo "Connected to KinD network successfully"
-    fi
+        ' > "${staged}.tmp"
+    mv "${staged}.tmp" "${staged}"
+    chmod 600 "${staged}"
 
     waited=0
-    until kubectl --kubeconfig "${KUBECONFIG_PATH}" get --raw=/readyz >/dev/null 2>&1; do
+    until kubectl --kubeconfig "${staged}" get --raw=/readyz >/dev/null 2>&1; do
         if [ "$waited" -ge "$1" ]; then
             echo "The KinD cluster's API did not answer within ${1}s"
             return 1
@@ -221,20 +208,70 @@ connect_cluster() {
         waited=$((waited + 1))
         sleep 1
     done
+    mv "${staged}" "${KUBECONFIG_PATH}"
 }
 
-# Brings up the embedded cluster, writes the backend's Kubernetes settings,
-# then the Dagger Engine and the Agent Sandbox controller. Runs in the
-# background: supervisord starts PostgreSQL and the frontend meanwhile, and
-# the backend waits only for QUICKSTART_ENV_FILE.
+# Joins the KinD network and exports the backend's Kubernetes settings, none
+# of which depend on the cluster existing yet. Fast, so it runs before
+# supervisord: the backend reads these once at startup.
+configure_quickstart_backend() {
+    # From a previous run, in the data volume: the backend must not attach to
+    # the cluster before this run's API answers.
+    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged"
+
+    if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
+        docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null || exit 1
+    fi
+    # Connect this container to the KinD network for direct communication
+    # SECURITY WARNING: This grants the container privileged access to manipulate
+    # host Docker networks. This is acceptable ONLY for local development.
+    CONTAINER_ID=$(hostname)
+    if ! docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+        if ! docker network connect "${KIND_NETWORK}" "$CONTAINER_ID"; then
+            echo "ERROR: Failed to connect container to KinD network"
+            exit 1
+        fi
+    fi
+
+    # Agent Runtime pods call back into the platform (MCP gateway, LLM
+    # proxy). The internal URL is this container's loopback, which inside a
+    # pod is the pod itself, so hand them this container's address on the
+    # KinD network instead. Given as an IP, the run's egress policy allows
+    # exactly that address.
+    if [ -z "${ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL:-}" ]; then
+        KIND_NETWORK_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "$CONTAINER_ID")
+        PLATFORM_PORT=$(printf '%s' "${ARCHESTRA_INTERNAL_API_BASE_URL:-}" | sed -n 's#^[a-z]*://[^/]*:\([0-9][0-9]*\).*#\1#p')
+        if [ -n "$KIND_NETWORK_IP" ]; then
+            export ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL="http://${KIND_NETWORK_IP}:${PLATFORM_PORT:-9000}"
+        else
+            echo "WARNING: Could not read this container's KinD network IP; Agent Runtime runs cannot reach the platform"
+        fi
+    fi
+
+    export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+    export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+    # The node's address can change when it restarts; Docker's DNS on the
+    # KinD network resolves its name to the current one.
+    export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_CONTAINER}"
+    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
+        # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
+        # the engine pod for the kube-pod:// transport.
+        export KUBECONFIG="${KUBECONFIG_PATH}"
+        # Setting the Dagger runner host is what turns the code sandbox on.
+        # The engine may still be starting when the backend boots; the
+        # backend retries the connection on the first sandbox use.
+        export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
+    fi
+}
+
+# Brings up the embedded cluster, publishes its kubeconfig, then the Dagger
+# Engine and the Agent Sandbox controller. Runs in the background while
+# supervisord starts PostgreSQL, the backend and the frontend.
 provision_cluster() {
     # Failures are handled explicitly: under set -e a stray failing command
     # would end this background job silently and leave the backend waiting.
     set +e
     export KIND_EXPERIMENTAL_DOCKER_NETWORK="${KIND_NETWORK}"
-    if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
-        docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null || quickstart_fail
-    fi
 
     # A cluster created by an older image sits on KinD's dual-stack `kind`
     # network. Joining it would bring the localhost reset back, so recreate it
@@ -264,43 +301,6 @@ provision_cluster() {
         connect_cluster 120 || quickstart_fail
     fi
 
-    # Agent Runtime pods call back into the platform (MCP gateway, LLM
-    # proxy). The internal URL is this container's loopback, which inside a
-    # pod is the pod itself, so hand them this container's address on the
-    # KinD network instead. Given as an IP, the run's egress policy allows
-    # exactly that address.
-    AGENT_RUNTIME_PLATFORM_BASE_URL="${ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL:-}"
-    if [ -z "$AGENT_RUNTIME_PLATFORM_BASE_URL" ]; then
-        KIND_NETWORK_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "$(hostname)")
-        PLATFORM_PORT=$(printf '%s' "${ARCHESTRA_INTERNAL_API_BASE_URL:-}" | sed -n 's#^[a-z]*://[^/]*:\([0-9][0-9]*\).*#\1#p')
-        if [ -n "$KIND_NETWORK_IP" ]; then
-            AGENT_RUNTIME_PLATFORM_BASE_URL="http://${KIND_NETWORK_IP}:${PLATFORM_PORT:-9000}"
-        else
-            echo "WARNING: Could not read this container's KinD network IP; Agent Runtime runs cannot reach the platform"
-        fi
-    fi
-
-    # The backend reads these once at startup; start-backend.sh sources them.
-    {
-        printf "export ARCHESTRA_ORCHESTRATOR_KUBECONFIG='%s'\n" "${KUBECONFIG_PATH}"
-        printf "export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE='%s'\n" "${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
-        printf "export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST='%s'\n" "${CONTROL_PLANE_IP}"
-        if [ -n "$AGENT_RUNTIME_PLATFORM_BASE_URL" ]; then
-            printf "export ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL='%s'\n" "${AGENT_RUNTIME_PLATFORM_BASE_URL}"
-        fi
-        if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
-            # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
-            # the engine pod for the kube-pod:// transport.
-            printf "export KUBECONFIG='%s'\n" "${KUBECONFIG_PATH}"
-            # Setting the Dagger runner host is what turns the code sandbox on.
-            # The engine below may still be starting when the backend boots; the
-            # backend retries the connection on the first sandbox use.
-            printf "export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST='%s'\n" \
-                "kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
-        fi
-    } > "${QUICKSTART_ENV_FILE}.tmp" \
-        && mv "${QUICKSTART_ENV_FILE}.tmp" "${QUICKSTART_ENV_FILE}" \
-        || quickstart_fail
     echo "Kubernetes orchestrator configured with embedded KinD cluster"
 
     # Agent Runtime runs each task as a Sandbox resource of the upstream Agent
@@ -455,14 +455,15 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     fi
 fi
 
-rm -f "$QUICKSTART_ENV_FILE" "$QUICKSTART_FAILED_FILE"
-mkdir -p "$(dirname "$QUICKSTART_ENV_FILE")"
+rm -f "$QUICKSTART_FAILED_FILE"
+mkdir -p "$(dirname "$QUICKSTART_FAILED_FILE")"
 
 # Set up signal handlers before any background work, so Ctrl+C at any point
 # stops what has started.
 trap cleanup SIGTERM SIGINT
 
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
+    configure_quickstart_backend
     provision_cluster &
     PROVISION_PID=$!
 fi

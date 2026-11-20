@@ -1,15 +1,15 @@
 ---
 title: Workload Identity Federation
-description: Let CI jobs and workloads sign in as a service account with their own OIDC token instead of a stored API key
+description: Let CI jobs and workloads sign in as a service account or an OAuth client with their own OIDC token instead of a stored key or secret
 order: 6
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Let a CI job sign in as a service account with the OIDC token its platform already issues, so no Archestra API key sits in your CI secrets. A GitHub Actions job that deploys from `main` gets a one-hour token; the same workflow run from a pull request gets nothing.
 
-Workload identity federation is an [Enterprise feature](/docs/get-started/pricing-model). To manage an account's federated credentials, you need update access on that service account. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Workload identity federation is an [Enterprise feature](/docs/get-started/pricing-model). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## When to Use It
 
@@ -88,7 +88,7 @@ The token passes the same checks as an exchange. Exactly one service account may
 
 What to know:
 
-- The LLM Proxy does not take service account tokens. Give the workload a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) instead.
+- The LLM Proxy does not take service account tokens. To call it, [sign in as an OAuth client](#sign-in-as-an-oauth-client) instead.
 - Each actor needs its own credential, since every value matches exactly. A service account holds up to 20.
 
 ### Agent Substrate
@@ -114,14 +114,39 @@ What to know:
 
 To check it works, call a tool through the gateway from the actor. The credential's **Last used** time updates.
 
+## Sign In as an OAuth Client
+
+Federate an [OAuth client](/docs/llm-proxy/authentication#call-as-the-app) when the workload calls the LLM Proxy, or needs the provider keys, gateways, and budget a client fixes. A nightly eval job then gets a one-hour LLM Proxy token with its GitHub OIDC token, and no client secret sits in CI.
+
+1. Go to **Settings → OAuth Clients** and open a client that signs in **As itself**.
+2. Open the **Federated Credentials** tab and click **Add credential**. The form is the same as a service account's.
+3. In the job, send the OIDC token as the client assertion ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523)) in place of the secret:
+
+   ```bash
+   curl --request POST "$ARCHESTRA_URL/api/auth/oauth2/token" \
+     --data-urlencode 'grant_type=client_credentials' \
+     --data-urlencode "client_id=$CLIENT_ID" \
+     --data-urlencode 'client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer' \
+     --data-urlencode "client_assertion=$OIDC_TOKEN" \
+     --data-urlencode 'scope=llm:proxy'
+   ```
+
+4. Send `Authorization: Bearer <access_token>` as you would a token issued for the secret.
+
+What to know:
+
+- The token reaches what the client allows, with its provider keys, service account, and budget. The `sub` claim names the workload, not the client, so `client_id` is required.
+- The secret keeps working. Send the secret or the assertion, never both.
+- A refused assertion answers `401` with `invalid_client`. The **OAuth client signed in with an OIDC token** audit event records why, with the same reasons as the table below, plus `oauth_client_disabled`.
+
 ## What Gets Checked
 
-Each exchange checks the token, then the account's credentials. Any failure refuses the exchange.
+Each exchange checks the token, then the credentials of the service account or OAuth client. Any failure refuses the exchange.
 
 - **Signature:** RS256 or ES256, by a key from the issuer's published key set. Archestra fetches it only from an issuer one of the account's credentials names, and only over https from a public address.
 - **Lifetime:** the token is not expired or not yet valid, with 30 seconds of clock skew. A token valid for more than 24 hours is refused, however much time it has left.
 - **Match:** one credential's issuer, audience, subject, and claim conditions all match the token.
-- **Account:** the service account is enabled.
+- **Account:** the service account or OAuth client is enabled.
 
 Changing a credential's issuer, audience, subject, or conditions revokes the tokens it already issued, as does deleting it. Disabling the account stops them too.
 

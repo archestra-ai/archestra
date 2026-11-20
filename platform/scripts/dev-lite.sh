@@ -58,7 +58,8 @@
 #   ARCHESTRA_DEV_LITE_DB_PORT
 #       PostgreSQL port (5432)
 #   ARCHESTRA_DEV_LITE_WIREMOCK_JAR
-#       WireMock standalone jar for --e2e
+#       WireMock standalone jar for --e2e (default: the jar .agents/setup
+#       installs in an Amp orb, the version the lite image pins)
 #   ARCHESTRA_DEV_LITE_KEYCLOAK_DIST
 #       an unpacked Keycloak distribution for --keycloak (default: the pinned
 #       release, downloaded into the state dir on first use; needs Java 21)
@@ -602,9 +603,11 @@ frontend_build_env() {
   if ! source_maps_on; then printf 'ARCHESTRA_DEV_LITE_SOURCE_MAPS=false '; fi
 }
 
-# Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID.
+# Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID. An Amp
+# orb (AMP_ORB=1) counts as one: it is as small, and its project snapshot drops
+# the variables .agents/setup could export instead.
 in_agent_runtime() {
-  [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]
+  [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ] || [ "${AMP_ORB:-}" = 1 ]
 }
 
 # Node with the arguments given, in platform/frontend and in the frontend
@@ -769,7 +772,11 @@ cmd_frontend_artifact() {
 
 start_e2e_deps() {
   local jar="${ARCHESTRA_DEV_LITE_WIREMOCK_JAR:-}"
-  [ -n "$jar" ] && [ -f "$jar" ] || die "--e2e needs ARCHESTRA_DEV_LITE_WIREMOCK_JAR pointing at a WireMock standalone jar"
+  if [ -z "$jar" ]; then
+    # Where .agents/setup installs it: the version the lite image pins.
+    jar="$HOME/.local/share/archestra-lite/wiremock-standalone-$(sed -n 's/^ARG WIREMOCK_VERSION=//p' "$PLATFORM_DIR/dev/lite-runtime/Dockerfile").jar"
+  fi
+  [ -f "$jar" ] || die "--e2e needs a WireMock standalone jar at $jar (ARCHESTRA_DEV_LITE_WIREMOCK_JAR chooses the path)"
   command -v java >/dev/null 2>&1 || die "--e2e needs java for WireMock"
   mkdir -p "$STATE_DIR/wiremock/__files"
   ln -sfn "$PLATFORM_DIR/helm/e2e-tests/mappings" "$STATE_DIR/wiremock/mappings"

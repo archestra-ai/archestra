@@ -19,6 +19,7 @@ import {
   GitSourceNotice,
   GitSourceSchedule,
 } from "@/components/git/git-source-card";
+import { ClickPath } from "@/components/github-app-setup/click-path";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -48,9 +49,9 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
+  useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
   useAppaRepositoryProtection,
@@ -59,11 +60,17 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { appaGitHost } from "./appa-git-host";
+import {
+  appaGitHost,
+  isAccessRefusal,
+  shownFailure,
+  UNEXPLAINED_REFUSAL,
+} from "./appa-git-host";
 import {
   FinishSetupHost,
   FinishSetupNotice,
   useFinishSetupPieces,
+  useRefusalHold,
 } from "./finish-setup-dialog";
 import {
   DEFAULT_SYNC_INTERVAL,
@@ -84,6 +91,10 @@ export function AppaGithubSyncPanel() {
     organizationSettings: ["update"],
   });
   const pieces = useFinishSetupPieces();
+  const { syncError, refusalHeld } = useShownFailures(
+    query.data?.source,
+    pieces,
+  );
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -120,6 +131,9 @@ export function AppaGithubSyncPanel() {
   } = query.data;
   const git = appaGitHost(query.data);
   const urls = source?.repo ? git.urls(source.repo) : null;
+  const filesRefused =
+    !!source?.githubAppConfigId &&
+    isAccessRefusal(query.data.templateFiles?.detail);
   const lastChecked = source?.lastSyncedAt
     ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
     : source?.interval
@@ -261,14 +275,22 @@ export function AppaGithubSyncPanel() {
                     <FinishSetupNotice pieces={pieces} />
                   </GitSourceNotice>
                 ) : null}
-                {source.lastSyncError ? (
+                {syncError ? (
                   <GitSourceError
                     title="Could not sync policy"
-                    message={source.lastSyncError}
+                    message={syncError}
                   />
                 ) : null}
                 {connected &&
-                (query.data.templateFiles?.state === "unavailable" ||
+                // GitHub refusing the App for a permission it lacks is the
+                // Finish setup notice's to say; a refusal nothing explains
+                // shows in plain words, once: the failed sync above says it
+                // already when the sync was refused too.
+                ((query.data.templateFiles?.state === "unavailable" &&
+                  !(
+                    filesRefused &&
+                    (refusalHeld || syncError === UNEXPLAINED_REFUSAL)
+                  )) ||
                   // An access token has no App to grant it Workflows: what
                   // it lacks shows here, not as a Finish setup step.
                   (!source.githubAppConfigId &&
@@ -283,7 +305,9 @@ export function AppaGithubSyncPanel() {
                           : "Repository files could not be updated"}
                       </span>
                       <InlineNoticeText className="flex-1">
-                        {query.data.templateFiles.detail ??
+                        {(filesRefused
+                          ? UNEXPLAINED_REFUSAL
+                          : query.data.templateFiles.detail) ??
                           "Try again at the next sync."}
                       </InlineNoticeText>
                     </InlineNotice>
@@ -370,7 +394,6 @@ function SelfServiceRow({
   urls: ReturnType<typeof gitWebUrls> | null;
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
 }) {
-  const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
   const protection = useAppaRepositoryProtection(selfService.enabled);
   const data = selfService.enabled ? (protection.data ?? null) : null;
@@ -404,7 +427,7 @@ function SelfServiceRow({
   const description = (
     <>
       {eligible
-        ? "MCP owners can manage MCP Guardrails. The GitHub App checks their pull requests, and a branch ruleset you import makes the check required."
+        ? "Lets MCP owners manage their MCPs' Guardrails."
         : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
       <SelfServiceDocsLink />
     </>
@@ -456,7 +479,7 @@ function SelfServiceRow({
             description={
               selfService.autoMerge.enabled
                 ? "Admitted self-service pull requests merge automatically."
-                : "Someone with write access to the repository merges admitted self-service pull requests."
+                : "Self-service pull requests have to be merged manually."
             }
             value={selfService.autoMerge.enabled ? "enabled" : "disabled"}
             disabled
@@ -470,10 +493,18 @@ function SelfServiceRow({
         ) : null}
         {selfService.leftoverRule ? (
           <p className="pt-2 text-sm leading-5 text-muted-foreground">
-            A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
-            requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
-            keeps posting it, so pull requests merge once it passes. Remove the
-            rule before you move or stop Git sync.
+            {hostLink(selfService.leftoverRule.url, "Ruleset")} still requires
+            the{" "}
+            {hostLink(
+              getVisibleDocsUrl(
+                getDocsUrl(
+                  DocsPage.PlatformAiToolGuardrailsGitSync,
+                  "the-check-and-the-ruleset",
+                ),
+              ),
+              "guardrails check",
+            )}
+            .
           </p>
         ) : null}
         {data ? (
@@ -487,6 +518,71 @@ function SelfServiceRow({
       </div>
     </GitSourceNotice>
   );
+}
+
+/**
+ * What the card prints for a failure: the failed sync's message
+ * (`syncError`, null for nothing), and whether a refusal of the App is held
+ * back for now (`refusalHeld`), which the repository files warning goes by
+ * as well.
+ *
+ * A failure that is not GitHub refusing the App (a policy that does not
+ * validate, a missing file) always shows: no setup step explains it.
+ *
+ * GitHub refusing the App is never printed in GitHub's words. While a
+ * permission the App lacks waits, the Finish setup notice is the one notice
+ * and the refusal is its to say; until GitHub's answer on the permissions
+ * is in, nothing is known and nothing shows, so no error flashes ahead of
+ * that notice. The syncs that fail right after a grant are held back too,
+ * since GitHub takes a moment to honour it. A refusal past all of that has
+ * no explanation on the page, and shows as a plain sentence.
+ */
+function useShownFailures(
+  source: Source | null | undefined,
+  pieces: ReturnType<typeof useFinishSetupPieces>,
+): { syncError: string | null; refusalHeld: boolean } {
+  const connected = !!source?.interval;
+  const viaApp = connected && !!source?.githubAppConfigId;
+  const grants = useAppaGithubAppGrants(viaApp);
+  const hold = useRefusalHold(source, pieces);
+  const error = source?.lastSyncError ?? null;
+  const failedAt = error ? (source?.lastSyncedAt ?? "") : null;
+  const refusal = viaApp && isAccessRefusal(error);
+  // When this failure was first seen here.
+  const [seen, setSeen] = useState<{ failedAt: string; at: number } | null>(
+    null,
+  );
+  if (failedAt !== null && seen?.failedAt !== failedAt)
+    setSeen({ failedAt, at: Date.now() });
+  // GitHub's answer on the permissions, read after the failure was seen;
+  // a read that failed counts, since nothing more can be learned.
+  const answeredAt = Math.max(grants.dataUpdatedAt, grants.errorUpdatedAt);
+  const stale = refusal && failedAt !== null && !!seen && answeredAt < seen.at;
+  const { refetch, isFetching } = grants;
+  useEffect(() => {
+    if (stale && !isFetching) void refetch();
+  }, [stale, isFetching, refetch]);
+  // The refusal seen while permissions waited or settled, by when its sync
+  // ran: it stays unshown afterwards, until a later sync reports.
+  const [excused, setExcused] = useState<string | null>(null);
+  if (
+    refusal &&
+    (hold.waits || hold.settling) &&
+    failedAt !== null &&
+    excused !== failedAt
+  )
+    setExcused(failedAt);
+  const refusalHeld = hold.held;
+  if (failedAt === null) return { syncError: null, refusalHeld };
+  if (!refusal) return { syncError: error, refusalHeld };
+  return {
+    syncError: shownFailure(
+      source,
+      error,
+      refusalHeld || excused === failedAt || stale,
+    ),
+    refusalHeld,
+  };
 }
 
 /** How self-service works, on the Git sync docs page; the row says only what it is. */
@@ -575,7 +671,9 @@ function includeSentence(
           >
             Pull request #{include.pull?.number}
           </a>{" "}
-          adds {entry} to {policyFile}. Merge it and re-sync.
+          adds {entry} to {policyFile}.{" "}
+          <ClickPath steps={appaGitHost(null).mergePath} />, then{" "}
+          <span className="font-medium text-foreground">Sync now</span>.
         </span>
       );
     case "unknown":

@@ -214,6 +214,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/openappa/server-rules/files", { files: [] }),
   ...getJson("/api/openappa/github-sync/protection", null),
   ...getJson("/api/openappa/github-sync/app-grants", null),
+  ...getJson("/api/openappa/github-sync/app-permissions", null),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [

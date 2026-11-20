@@ -257,7 +257,7 @@ it("logs source: labels a saved user outside the capped list and searches on the
 
 it("logs source: tells apart two users who share a name by their email", async () => {
   server.use(
-    http.get(`${origin}/api/llm-proxy-logs/user-ids`, () =>
+    http.get(`${origin}/api/interactions/user-ids`, () =>
       HttpResponse.json([
         { id: "alex-1", name: "Alex Kim", email: "alex@example.com" },
         { id: "alex-2", name: "Alex Kim", email: "alex.kim@example.org" },

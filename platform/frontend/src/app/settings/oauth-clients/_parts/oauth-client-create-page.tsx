@@ -81,7 +81,7 @@ export function OAuthClientCreatePage() {
     setPageHeader({
       title: "New OAuth client",
       documentTitle: "New OAuth client",
-      description: "One credential set for the APIs your application needs.",
+      description: "One client ID for every API it needs.",
       backLink: (
         <PageBackLink href={LIST_HREF}>Back to OAuth clients</PageBackLink>
       ),

@@ -140,7 +140,10 @@ import {
   OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
-import { isPolicyChangeTool } from "./openappa-policy-change.utils";
+import {
+  isPolicyChangeTool,
+  runToolArguments,
+} from "./openappa-policy-change.utils";
 import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
 import {
   collectPreviewedChanges,
@@ -2310,9 +2313,8 @@ function getApprovalToolDisplay({
 
   return {
     toolName: targetToolName,
-    input: isPlainRecord(displayInput.tool_args)
-      ? displayInput.tool_args
-      : undefined,
+    // As run_tool reads them: an object, or the JSON text of one.
+    input: runToolArguments(displayInput.tool_args) ?? undefined,
   };
 }
 

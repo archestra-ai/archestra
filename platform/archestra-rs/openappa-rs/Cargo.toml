@@ -75,10 +75,10 @@ crate-type = ["cdylib"]
 # that a host can defer to its parent's decision, declared on the spawn as
 # `DeclaredReturn` (#960), and the archestra battery ruling the four MCP
 # server rules tools (#965).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "228afc540b87e75d847ab62c005a38008940216e", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "228afc540b87e75d847ab62c005a38008940216e" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "228afc540b87e75d847ab62c005a38008940216e", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "228afc540b87e75d847ab62c005a38008940216e" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

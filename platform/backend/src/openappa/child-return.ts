@@ -796,15 +796,16 @@ function replaceAgentReport(
   const lines = content.split("\n");
   const metadataAt = lines.findIndex(
     (line) =>
-      /^\s*agentId:\s*[a-zA-Z0-9_:-]+/.test(line) || line.startsWith("<usage>"),
+      /^agentId:\s*[a-zA-Z0-9_:-]+/.test(line) || line.startsWith("<usage>"),
   );
   const reportLines = metadataAt === -1 ? lines : lines.slice(0, metadataAt);
   const report = reportLines
     .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
     .join("\n");
+  const metadata = lines.slice(reportLines.length).join("\n");
   const childNativeId =
     agentMessageSender(value) ??
-    value.match(/agentId:\s*([a-zA-Z0-9_:-]+)/)?.[1] ??
+    metadata.match(/^agentId:\s*([a-zA-Z0-9_:-]+)/m)?.[1] ??
     context.childNativeId;
   if (childNativeId && !isBoundedNativeMetadata(childNativeId)) {
     throw new ApiError(400, "OpenAPPA received invalid agent report metadata");

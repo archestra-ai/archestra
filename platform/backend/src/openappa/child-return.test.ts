@@ -351,6 +351,27 @@ describe("OpenAPPA child-return markers", () => {
     expect(nativeResultContent(body)).toBe(output);
   });
 
+  test("reads a Claude Code Agent report whose body has an agentId line", () => {
+    const report = "Checked the worker.\nagentId: other-agent\nIt is idle.";
+    const returned = { ...RETURN, childNativeId: "a1", value: report };
+    const indented = carrier(requiredMarker(returned), report)
+      .split("\n")
+      .map((line) => `  ${line}`)
+      .join("\n");
+    const output = `[Subagent hand-back] The text below is the final report. The report follows:\n${indented}\nagentId: a1 (use SendMessage with to: 'a1', summary: '<5-10 word recap>' to continue this agent)\n<usage>subagent_tokens: 1234\ntool_uses: 3\nduration_ms: 1000</usage>`;
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([
+      {
+        value: report,
+        childNativeId: "a1",
+        envelopeId: "native-result",
+        assistantOrigin: false,
+      },
+    ]);
+    expect(nativeResultContent(body)).toBe(report);
+  });
+
   test("treats a synthetic OpenCode user message as a child return", () => {
     const output = `<task id="child" state="completed">\n<summary>UNTRUSTED</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
     const body = {

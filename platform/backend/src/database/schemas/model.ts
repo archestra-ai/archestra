@@ -1,4 +1,5 @@
 import type {
+  ReasoningEffortLevel,
   SupportedEmbeddingDimension,
   SupportedProvider,
   SupportedProviderEndpoint,
@@ -108,6 +109,19 @@ const modelsTable = pgTable(
      */
     supportedEndpoints: jsonb("supported_endpoints").$type<
       SupportedProviderEndpoint[]
+    >(),
+
+    /**
+     * The `reasoning_effort` levels this model accepts, as the provider
+     * publishes them per model: GitHub Copilot's `supports.reasoning_effort`,
+     * the ChatGPT Codex catalog's `supported_reasoning_levels`, or a LiteLLM
+     * `/model/info` deployment's `supports_*_reasoning_effort` flags.
+     * Tri-state: an empty array means the provider says the model takes no
+     * level, null means no provider said anything and the catalogue falls back
+     * to Archestra's own per-model rules (see `ModelModel.toCapabilities`).
+     */
+    supportedReasoningEfforts: jsonb("supported_reasoning_efforts").$type<
+      ReasoningEffortLevel[]
     >(),
 
     /** Price per token for prompt/input (in dollars) */

@@ -106,6 +106,91 @@ test("uses the smallest output limit across deployments and abstains when one is
   expect(outputLimits.get("missing-first")).toBeNull();
 });
 
+test("reads accepted reasoning levels from the per-level flags", async () => {
+  server.use(
+    http.get("https://gateway.example.test/proxy/v1/model/info", () =>
+      HttpResponse.json({
+        data: [
+          {
+            model_name: "deep",
+            model_info: {
+              supports_reasoning: true,
+              supports_none_reasoning_effort: false,
+              supports_minimal_reasoning_effort: false,
+              supports_xhigh_reasoning_effort: true,
+              supports_max_reasoning_effort: true,
+            },
+          },
+          {
+            model_name: "skippable",
+            model_info: {
+              supports_reasoning: true,
+              supports_none_reasoning_effort: true,
+            },
+          },
+          { model_name: "plain", model_info: { supports_reasoning: false } },
+          { model_name: "silent", model_info: {} },
+        ],
+      }),
+    ),
+  );
+  const { reasoningEfforts } = await fetchLiteLlmMetadata(params);
+  expect(reasoningEfforts.get("deep")).toEqual([
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  expect(reasoningEfforts.get("skippable")).toEqual([
+    "none",
+    "low",
+    "medium",
+    "high",
+  ]);
+  expect(reasoningEfforts.get("plain")).toEqual([]);
+  expect(reasoningEfforts.get("silent")).toBeNull();
+});
+
+test("an alias accepts only the levels all of its deployments accept", async () => {
+  server.use(
+    http.get("https://gateway.example.test/proxy/v1/model/info", () =>
+      HttpResponse.json({
+        data: [
+          {
+            model_name: "mixed",
+            model_info: {
+              supports_reasoning: true,
+              supports_xhigh_reasoning_effort: true,
+              supports_max_reasoning_effort: true,
+            },
+          },
+          {
+            model_name: "mixed",
+            model_info: {
+              supports_reasoning: true,
+              supports_xhigh_reasoning_effort: true,
+            },
+          },
+          {
+            model_name: "partly-known",
+            model_info: { supports_reasoning: true },
+          },
+          { model_name: "partly-known", model_info: {} },
+        ],
+      }),
+    ),
+  );
+  const { reasoningEfforts } = await fetchLiteLlmMetadata(params);
+  expect(reasoningEfforts.get("mixed")).toEqual([
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+  expect(reasoningEfforts.get("partly-known")).toBeNull();
+});
+
 test.each([
   0,
   -1,
@@ -138,6 +223,7 @@ test.each([
   expect(await fetchLiteLlmMetadata(params)).toEqual({
     prices: new Map(),
     outputLimits: new Map(),
+    reasoningEfforts: new Map(),
   });
 });
 
@@ -155,6 +241,7 @@ test("invalid JSON and incompatible payloads do not break discovery", async () =
     expect(await fetchLiteLlmMetadata(params)).toEqual({
       prices: new Map(),
       outputLimits: new Map(),
+      reasoningEfforts: new Map(),
     });
   }
 });
@@ -173,6 +260,7 @@ test("does not forward credentials to a metadata redirect", async () => {
   expect(await fetchLiteLlmMetadata(params)).toEqual({
     prices: new Map(),
     outputLimits: new Map(),
+    reasoningEfforts: new Map(),
   });
 });
 
@@ -182,5 +270,9 @@ test("does not probe the public OpenAI API for LiteLLM metadata", async () => {
       ...params,
       baseUrl: "https://api.openai.com/v1",
     }),
-  ).toEqual({ prices: new Map(), outputLimits: new Map() });
+  ).toEqual({
+    prices: new Map(),
+    outputLimits: new Map(),
+    reasoningEfforts: new Map(),
+  });
 });

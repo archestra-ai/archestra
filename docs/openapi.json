@@ -169914,6 +169914,12 @@
                                 "nullable": true,
                                 "type": "boolean"
                               },
+                              "outputLength": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "supportedEndpoints": {
                                 "nullable": true,
                                 "type": "array",
@@ -169922,6 +169928,22 @@
                                   "enum": [
                                     "/chat/completions",
                                     "/responses"
+                                  ]
+                                }
+                              },
+                              "supportedReasoningEfforts": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max"
                                   ]
                                 }
                               },
@@ -170048,6 +170070,8 @@
                               "outputModalities",
                               "supportsToolCalling",
                               "supportsReasoningEffort",
+                              "outputLength",
+                              "supportedReasoningEfforts",
                               "recommendedForAgents",
                               "pricePerMillionInput",
                               "pricePerMillionOutput",
@@ -171319,6 +171343,12 @@
                                     "nullable": true,
                                     "type": "boolean"
                                   },
+                                  "outputLength": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
                                   "supportedEndpoints": {
                                     "nullable": true,
                                     "type": "array",
@@ -171327,6 +171357,22 @@
                                       "enum": [
                                         "/chat/completions",
                                         "/responses"
+                                      ]
+                                    }
+                                  },
+                                  "supportedReasoningEfforts": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "none",
+                                        "minimal",
+                                        "low",
+                                        "medium",
+                                        "high",
+                                        "xhigh",
+                                        "max"
                                       ]
                                     }
                                   },
@@ -171453,6 +171499,8 @@
                                   "outputModalities",
                                   "supportsToolCalling",
                                   "supportsReasoningEffort",
+                                  "outputLength",
+                                  "supportedReasoningEfforts",
                                   "recommendedForAgents",
                                   "pricePerMillionInput",
                                   "pricePerMillionOutput",
@@ -173273,6 +173321,12 @@
                                     "nullable": true,
                                     "type": "boolean"
                                   },
+                                  "outputLength": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
                                   "supportedEndpoints": {
                                     "nullable": true,
                                     "type": "array",
@@ -173281,6 +173335,22 @@
                                       "enum": [
                                         "/chat/completions",
                                         "/responses"
+                                      ]
+                                    }
+                                  },
+                                  "supportedReasoningEfforts": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "none",
+                                        "minimal",
+                                        "low",
+                                        "medium",
+                                        "high",
+                                        "xhigh",
+                                        "max"
                                       ]
                                     }
                                   },
@@ -173407,6 +173477,8 @@
                                   "outputModalities",
                                   "supportsToolCalling",
                                   "supportsReasoningEffort",
+                                  "outputLength",
+                                  "supportedReasoningEfforts",
                                   "recommendedForAgents",
                                   "pricePerMillionInput",
                                   "pricePerMillionOutput",
@@ -174678,6 +174750,12 @@
                                         "nullable": true,
                                         "type": "boolean"
                                       },
+                                      "outputLength": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
                                       "supportedEndpoints": {
                                         "nullable": true,
                                         "type": "array",
@@ -174686,6 +174764,22 @@
                                           "enum": [
                                             "/chat/completions",
                                             "/responses"
+                                          ]
+                                        }
+                                      },
+                                      "supportedReasoningEfforts": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "enum": [
+                                            "none",
+                                            "minimal",
+                                            "low",
+                                            "medium",
+                                            "high",
+                                            "xhigh",
+                                            "max"
                                           ]
                                         }
                                       },
@@ -174812,6 +174906,8 @@
                                       "outputModalities",
                                       "supportsToolCalling",
                                       "supportsReasoningEffort",
+                                      "outputLength",
+                                      "supportedReasoningEfforts",
                                       "recommendedForAgents",
                                       "pricePerMillionInput",
                                       "pricePerMillionOutput",
@@ -423755,6 +423851,12 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "outputLength": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "supportedEndpoints": {
                             "nullable": true,
                             "type": "array",
@@ -423763,6 +423865,22 @@
                               "enum": [
                                 "/chat/completions",
                                 "/responses"
+                              ]
+                            }
+                          },
+                          "supportedReasoningEfforts": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "minimal",
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
                               ]
                             }
                           },
@@ -423889,6 +424007,8 @@
                           "outputModalities",
                           "supportsToolCalling",
                           "supportsReasoningEffort",
+                          "outputLength",
+                          "supportedReasoningEfforts",
                           "recommendedForAgents",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
@@ -424718,6 +424838,22 @@
                           }
                         ]
                       },
+                      "supportedReasoningEfforts": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh",
+                            "max"
+                          ]
+                        }
+                      },
                       "promptPricePerToken": {
                         "nullable": true,
                         "type": "string"
@@ -425157,6 +425293,7 @@
                       "supportsToolCalling",
                       "supportsReasoningEffort",
                       "supportedEndpoints",
+                      "supportedReasoningEfforts",
                       "promptPricePerToken",
                       "completionPricePerToken",
                       "cacheReadPricePerToken",
@@ -427021,6 +427158,22 @@
                         }
                       ]
                     },
+                    "supportedReasoningEfforts": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "minimal",
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max"
+                        ]
+                      }
+                    },
                     "promptPricePerToken": {
                       "nullable": true,
                       "type": "string"
@@ -427228,6 +427381,7 @@
                     "supportsToolCalling",
                     "supportsReasoningEffort",
                     "supportedEndpoints",
+                    "supportedReasoningEfforts",
                     "promptPricePerToken",
                     "completionPricePerToken",
                     "cacheReadPricePerToken",
@@ -458313,6 +458467,100 @@
                           },
                           "owned_by": {
                             "type": "string"
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "properties": {
+                              "context_length": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "max_output_tokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "input_modalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "video",
+                                    "pdf"
+                                  ]
+                                }
+                              },
+                              "output_modalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio"
+                                  ]
+                                }
+                              },
+                              "supports_tools": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supports_vision": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supports_reasoning_effort": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supported_reasoning_efforts": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max"
+                                  ]
+                                }
+                              },
+                              "supported_endpoints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "/chat/completions",
+                                    "/responses",
+                                    "/embeddings"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "context_length",
+                              "max_output_tokens",
+                              "input_modalities",
+                              "output_modalities",
+                              "supports_tools",
+                              "supports_vision",
+                              "supports_reasoning_effort",
+                              "supported_reasoning_efforts",
+                              "supported_endpoints"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -458621,6 +458869,100 @@
                           },
                           "owned_by": {
                             "type": "string"
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "properties": {
+                              "context_length": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "max_output_tokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "input_modalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "video",
+                                    "pdf"
+                                  ]
+                                }
+                              },
+                              "output_modalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio"
+                                  ]
+                                }
+                              },
+                              "supports_tools": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supports_vision": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supports_reasoning_effort": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "supported_reasoning_efforts": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max"
+                                  ]
+                                }
+                              },
+                              "supported_endpoints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "/chat/completions",
+                                    "/responses",
+                                    "/embeddings"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "context_length",
+                              "max_output_tokens",
+                              "input_modalities",
+                              "output_modalities",
+                              "supports_tools",
+                              "supports_vision",
+                              "supports_reasoning_effort",
+                              "supported_reasoning_efforts",
+                              "supported_endpoints"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [

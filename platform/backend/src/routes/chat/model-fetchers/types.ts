@@ -1,6 +1,7 @@
 import type {
   ModelInputModality,
   ModelOutputModality,
+  ReasoningEffortLevel,
   SupportedProvider,
   SupportedProviderEndpoint,
 } from "@archestra/shared";
@@ -50,6 +51,13 @@ export interface FetchedModelCapabilities {
    */
   inputModalities?: ModelInputModality[] | null;
   outputModalities?: ModelOutputModality[] | null;
+  /**
+   * Whether the model accepts image input, when the provider says only that
+   * (GitHub Copilot's `supports.vision`) rather than listing modalities. Sync
+   * adds or removes `image` on the modalities the other tiers resolve, so a
+   * registry's richer list (`pdf`, …) survives. `undefined` means unknown.
+   */
+  supportsVision?: boolean | null;
   /**
    * The fetcher classified this model from its id (OpenAI's media, audio
    * chat and search models), so sync overwrites what an earlier sync stored
@@ -103,6 +111,14 @@ export interface FetchedModelCapabilities {
    * families use bare ids. `undefined` means the provider said nothing.
    */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
+  /**
+   * The `reasoning_effort` levels the provider says this model accepts
+   * (GitHub Copilot's `supports.reasoning_effort`, the Codex catalog's
+   * `supported_reasoning_levels`, LiteLLM's `supports_*_reasoning_effort`).
+   * An empty array is the provider saying the model takes none; `undefined`
+   * means it said nothing.
+   */
+  supportedReasoningEfforts?: ReasoningEffortLevel[] | null;
 }
 
 export interface ModelInfo {

@@ -76,6 +76,51 @@ describe("fetchOpenAiModels with a ChatGPT-subscription credential", () => {
     expect(modelsInit?.redirect).toBe("error");
   });
 
+  it("records each model's supported reasoning levels", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/oauth/token")) {
+          return Response.json({ access_token: "at_1", expires_in: 3600 });
+        }
+        return Response.json({
+          models: [
+            {
+              slug: "gpt-6-sol",
+              visibility: "list",
+              priority: 1,
+              supported_reasoning_levels: [
+                { effort: "low", description: "Fast" },
+                { effort: "medium", description: "Balanced" },
+                { effort: "high", description: "Deep" },
+                { effort: "xhigh", description: "Deepest" },
+              ],
+            },
+            // Not a list the catalog can read: ignored, not a failed sync.
+            {
+              slug: "gpt-6-luna",
+              visibility: "list",
+              priority: 2,
+              supported_reasoning_levels: "high",
+            },
+          ],
+        });
+      }),
+    );
+
+    await expect(fetchOpenAiModels(credential)).resolves.toEqual([
+      {
+        id: "gpt-6-sol",
+        displayName: "gpt-6-sol",
+        provider: "openai",
+        capabilities: {
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      },
+      { id: "gpt-6-luna", displayName: "gpt-6-luna", provider: "openai" },
+    ]);
+  });
+
   it("propagates a rejected credential so key creation fails clearly", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       Response.json({ error: "invalid_grant" }, { status: 400 }),

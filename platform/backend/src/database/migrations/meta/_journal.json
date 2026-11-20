@@ -4579,6 +4579,13 @@
       "when": 1795141677181,
       "tag": "0653_shocking_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 654,
+      "version": "7",
+      "when": 1795192300555,
+      "tag": "0654_solid_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

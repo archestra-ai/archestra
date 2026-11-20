@@ -8,6 +8,7 @@ import {
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  type ReasoningEffortLevel,
   requiresPerplexityAgentApi,
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
@@ -404,6 +405,7 @@ interface ProviderModelCapabilities {
   supportsToolCalling: boolean | null;
   supportsReasoningEffort: boolean | null;
   supportedEndpoints: SupportedProviderEndpoint[] | null;
+  supportedReasoningEfforts: ReasoningEffortLevel[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
@@ -534,6 +536,7 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       supportsReasoningEffort: capabilities.supportsReasoningEffort,
       supportedEndpoints: capabilities.supportedEndpoints,
+      supportedReasoningEfforts: capabilities.supportedReasoningEfforts,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
@@ -931,14 +934,16 @@ export function resolveModelCapabilities(params: {
         inferredCapabilities.outputLength ??
         crossProviderMetadata?.outputLength ??
         null,
-      inputModalities:
+      inputModalities: applyVisionSupport(
+        fetched?.supportsVision,
         fetched?.inputModalities ??
-        capabilities?.inputModalities ??
-        inferredCapabilities.inputModalities ??
-        parseModalities(
-          crossProviderMetadata?.inputModalities,
-          ModelInputModalitySchema,
-        ),
+          capabilities?.inputModalities ??
+          inferredCapabilities.inputModalities ??
+          parseModalities(
+            crossProviderMetadata?.inputModalities,
+            ModelInputModalitySchema,
+          ),
+      ),
       outputModalities:
         fetched?.outputModalities ??
         capabilities?.outputModalities ??
@@ -968,6 +973,9 @@ export function resolveModelCapabilities(params: {
       // a given model over. models.dev describes the model, not the transport
       // a particular reseller exposes it on.
       supportedEndpoints: fetched?.supportedEndpoints ?? null,
+      // Fetcher-only too: models.dev says whether a model reasons, not which
+      // levels a given provider accepts for it.
+      supportedReasoningEfforts: fetched?.supportedReasoningEfforts ?? null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
@@ -1082,6 +1090,7 @@ function buildCapabilitiesMap(
         // models.dev describes the model, not which transport a given provider
         // exposes it on — only a fetcher can know that.
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: prices.promptPricePerToken,
         completionPricePerToken: prices.completionPricePerToken,
         cacheReadPricePerToken: prices.cacheReadPricePerToken,
@@ -1092,6 +1101,26 @@ function buildCapabilitiesMap(
   }
 
   return map;
+}
+
+/**
+ * The input modalities with `image` added or removed as the provider's own
+ * vision flag says. The registry can describe the same model id as text-only
+ * while the provider serves it images (or the reverse); the provider knows
+ * what it accepts, and everything else the list says (`pdf`, `audio`) stays.
+ */
+function applyVisionSupport(
+  supportsVision: boolean | null | undefined,
+  modalities: ModelInputModality[] | null,
+): ModelInputModality[] | null {
+  if (supportsVision === true) {
+    const base = modalities ?? ["text"];
+    return base.includes("image") ? base : [...base, "image"];
+  }
+  if (supportsVision === false && modalities?.includes("image")) {
+    return modalities.filter((modality) => modality !== "image");
+  }
+  return modalities;
 }
 
 /**
@@ -1460,6 +1489,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     supportsReasoningEffort: null,
     supportsToolCalling: null,
     supportedEndpoints: null,
+    supportedReasoningEfforts: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
     cacheReadPricePerToken: null,

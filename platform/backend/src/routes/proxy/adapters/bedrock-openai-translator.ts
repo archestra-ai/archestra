@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { bedrockOpenAiReasoningEfforts } from "@archestra/shared/bedrock-models";
 import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
@@ -862,11 +863,7 @@ function buildReasoningFields(req: OpenAiRequest) {
   if (effort == null || effort === "none") return undefined;
   // Limit mapping to the verified Nova dialect. Claude tool continuations
   // require signed history that reasoning_content alone cannot preserve.
-  if (
-    !/^(?:(?:us|eu|apac|jp|global)\.)?amazon\.nova-2-lite-v1(?::\d+)?$/.test(
-      req.model,
-    )
-  ) {
+  if (bedrockOpenAiReasoningEfforts(req.model).length === 0) {
     throw new ApiError(
       400,
       "reasoning_effort is not supported for this Bedrock model. Use the native Converse endpoint for model-specific reasoning parameters.",

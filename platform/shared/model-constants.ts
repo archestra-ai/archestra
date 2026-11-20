@@ -173,6 +173,38 @@ export const ProviderEndpointSchema = z.enum([
 export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
 
 /**
+ * The `reasoning_effort` values a client can send on the OpenAI wire, from the
+ * shallowest to the deepest. Which of them a model accepts differs per model
+ * and per provider (GitHub Copilot answers an unlisted level with a 400), so
+ * the model catalogue reports the accepted subset per model.
+ */
+export const ReasoningEffortLevelSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+export type ReasoningEffortLevel = z.infer<typeof ReasoningEffortLevelSchema>;
+
+/**
+ * The known levels among `values`, deduplicated and in
+ * {@link ReasoningEffortLevelSchema} order. A provider's own spelling is kept
+ * only when it is one of ours: an unknown level is something no client of
+ * this catalogue can send.
+ */
+export function toReasoningEffortLevels(
+  values: readonly unknown[],
+): ReasoningEffortLevel[] {
+  const present = new Set(values);
+  return ReasoningEffortLevelSchema.options.filter((level) =>
+    present.has(level),
+  );
+}
+
+/**
  * True for providers that serve one model catalog over more than one wire
  * format, where the model id alone does not say which. Gates the per-model
  * surface lookup on the chat hot path so single-surface providers — every

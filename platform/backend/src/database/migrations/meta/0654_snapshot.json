@@ -1,5 +1,5 @@
 {
-  "id": "a290acc3-ddd3-45d7-8d09-c90d68e36622",
+  "id": "a00a26bc-6126-4f80-9769-2ca283e64c5a",
   "prevId": "aa798f17-44b4-43e7-bd5b-986f5345dd42",
   "version": "7",
   "dialect": "postgresql",
@@ -21581,6 +21581,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "supported_reasoning_efforts": {
+          "name": "supported_reasoning_efforts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "prompt_price_per_token": {
           "name": "prompt_price_per_token",
           "type": "numeric(20, 12)",
@@ -33955,18 +33961,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "soft_deleted": {
-          "name": "soft_deleted",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scim_provisioned": {
-          "name": "scim_provisioned",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

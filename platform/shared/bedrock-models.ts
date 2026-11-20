@@ -1,3 +1,19 @@
+import type { ReasoningEffortLevel } from "./model-constants";
+
+/**
+ * The OpenAI `reasoning_effort` levels the Unified Model API's Bedrock
+ * translation maps for a model. Only Nova 2 Lite's dialect is verified; the
+ * translation refuses a level on every other model rather than drop it. `none`
+ * (send no reasoning) is accepted everywhere and so is not listed.
+ */
+export function bedrockOpenAiReasoningEfforts(
+  modelId: string,
+): ReasoningEffortLevel[] {
+  return BEDROCK_OPENAI_REASONING_MODEL_RE.test(modelId)
+    ? ["low", "medium", "high"]
+    : [];
+}
+
 /** Verified Converse reasoning dialects. Unknown models must not inherit Nova's dialect. */
 export function getBedrockReasoningFamily(
   modelId: string,
@@ -17,3 +33,6 @@ export function getBedrockReasoningFamily(
   }
   return null;
 }
+
+const BEDROCK_OPENAI_REASONING_MODEL_RE =
+  /^(?:(?:us|eu|apac|jp|global)\.)?amazon\.nova-2-lite-v1(?::\d+)?$/;

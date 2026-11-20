@@ -3,7 +3,7 @@ import KeyvPostgres from "@keyv/postgres";
 import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
 import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";

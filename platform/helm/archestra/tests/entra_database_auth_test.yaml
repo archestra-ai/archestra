@@ -65,6 +65,15 @@ tests:
           path: metadata.annotations["azure.workload.identity/client-id"]
           value: 00000000-0000-0000-0000-000000000000
 
+  - it: runs migrations under the hook ServiceAccount when requested
+    template: migration-job.yaml
+    set:
+      archestra.migrationJob.serviceAccount.create: true
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-archestra-platform-migrate
+
   - it: keeps an explicitly configured client ID annotation
     template: serviceaccount.yaml
     documentIndex: 0

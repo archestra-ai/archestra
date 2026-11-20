@@ -25,7 +25,6 @@
  */
 import config from "@/config";
 import db, { initializeDatabase } from "@/database";
-import { assertPortsBound } from "@/models/ports";
 import { reencryptStoredSecrets } from "@/secrets-manager/reencrypt";
 
 async function main(): Promise<void> {

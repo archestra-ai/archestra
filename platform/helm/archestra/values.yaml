@@ -590,6 +590,9 @@ archestra:
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
+    serviceAccount:
+      # Create a hook-only ServiceAccount with current cloud identity annotations.
+      create: false
     # Whether the migration pod mounts a Kubernetes API token. Migrations
     # never call the Kubernetes API, so null (the default) mounts none unless
     # initContainers.vaultSecrets is enabled, whose Vault Kubernetes login

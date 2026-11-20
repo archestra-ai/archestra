@@ -5,11 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
-import { dropInvalidConcurrentIndexes } from "./concurrent-index-leftovers.mjs";
 import { buildPgConnectionConfig } from "./rds-iam.mjs";
-
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const migrationsDir = path.resolve(scriptDir, "../src/database/migrations");
 
 dotenv.config({
   path: path.resolve(
@@ -34,9 +30,7 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 const ACQUIRE_RETRY_MS = 1_000;
 const holder = randomUUID();
 const client = new pg.Client(
-  buildPgConnectionConfig(databaseUrl, {
-    connectionTimeoutMillis: 10_000,
-  }),
+  buildPgConnectionConfig(databaseUrl, { connectionTimeoutMillis: 10_000 }),
 );
 let leaseAcquired = false;
 
@@ -74,31 +68,6 @@ try {
     } finally {
       await client.query("RESET lock_timeout");
     }
-    // An interrupted concurrent index build leaves an invalid index that the
-    // rerun would keep. Dropping it concurrently waits for older transactions
-    // but blocks no one, so it gets the same lock_timeout as the build. It
-    // runs on its own connection: the wait can outlast the lease, which this
-    // connection must keep renewing meanwhile.
-    const maintenance = new pg.Client(
-      buildPgConnectionConfig(databaseUrl, {
-        connectionTimeoutMillis: 10_000,
-      }),
-    );
-    await maintenance.connect();
-    try {
-      await maintenance.query("SET lock_timeout = '5min'");
-      for (const name of await dropInvalidConcurrentIndexes(maintenance, {
-        migrationsDir,
-      })) {
-        console.log(
-          `Dropped invalid index ${name} left by an interrupted concurrent build`,
-        );
-      }
-    } finally {
-      await maintenance.end();
-    }
-    // Without the lease, another process may already be migrating.
-    if (heartbeatError) throw heartbeatError;
     child = spawn("./node_modules/.bin/drizzle-kit", ["migrate"], {
       cwd: process.cwd(),
       env: process.env,

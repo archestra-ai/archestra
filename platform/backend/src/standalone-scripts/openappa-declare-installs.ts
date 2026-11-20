@@ -24,9 +24,7 @@
  * every one of them.
  */
 // Binds the ports of the layers below before any other module loads.
-import "@/server/composition";
 import db, { initializeDatabase } from "@/database";
-import { assertPortsBound } from "@/models/ports";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 
 async function main(): Promise<number> {

@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
-import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
 import { buildPgConnectionConfig } from "./rds-iam";
 import {
   installDbErrorSafetyNet,

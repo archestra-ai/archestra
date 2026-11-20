@@ -256,9 +256,13 @@ sensitive. Read it with: splitList "," (include "archestra-platform.sensitiveEnv
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
   "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET"
+  "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN"
   "AWS_SECRET_ACCESS_KEY"
   "AWS_SESSION_TOKEN"
-}}
+) -}}
+{{- end }}
+
+{{- define "archestra-platform.env" -}}
 {{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
 {{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
 {{- range .Values.archestra.envWithValueFrom }}
@@ -535,36 +539,7 @@ An explicit archestra.env value overrides the injection.
   value: {{ .Values.archestra.fileStorage.filesystem.mountPath | quote }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
-{{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
-{{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
-{{/* Only use secretKeyRef for sensitive vars with non-empty values; empty values are set as regular env vars */}}
-{{- if and $isSensitive $value }}
-{{/* Sensitive env vars with values are stored in the Secret and referenced via secretKeyRef */}}
-{{- $secretNameForKey := include "archestra-platform.authSecretName" $ }}
-{{- if and (has $key (list "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN")) $.migrationAwsSecretNameOverride }}
-{{- $secretNameForKey = $.migrationAwsSecretNameOverride }}
-{{- end }}
-- name: {{ $key }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ $secretNameForKey }}
-      key: {{ $key | lower | replace "_" "-" }}
-{{- /*
-optional: the pre-upgrade migrate Job renders from the NEW templates but runs
-BEFORE the upgraded Secret is applied, so on the upgrade that first introduces
-one of these keys the referenced Secret key does not exist yet and a required
-ref would wedge the Job in CreateContainerConfigError until its deadline.
-Migrations don't need the key; app pods start after the Secret update in the
-same apply, and the application's own fail-closed key check (canary) catches a
-genuinely missing key loudly at startup.
-*/}}
-{{- if has $key (list "ARCHESTRA_CONTENT_ENCRYPTION_SECRET" "ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS") }}
-      optional: true
-{{- end }}
-{{- else }}
-- name: {{ $key }}
-  value: {{ $value | quote }}
-{{- end }}
+{{- include "archestra-platform.envEntry" (dict "root" $ "key" $key "value" $value) }}
 {{- end }}
 {{- range .Values.archestra.envFromSecrets }}
 - name: {{ .name }}

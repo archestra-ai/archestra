@@ -70,7 +70,7 @@ spec:
         {{- . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      serviceAccountName: {{ include "archestra-platform.migrationJobServiceAccountName" . }}
       {{- /*
       Migrations reach only PostgreSQL. The Vault Kubernetes login is the one
       startup path here that reads the pod's API token.

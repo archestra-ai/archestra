@@ -242476,11 +242476,15 @@
                       },
                       "name": {
                         "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
                       }
                     },
                     "required": [
                       "id",
-                      "name"
+                      "name",
+                      "email"
                     ],
                     "additionalProperties": false
                   }

@@ -498,7 +498,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!canSeeAllLogs) {
         // Own-logs view: the only user to filter by is the caller — anything
         // more would enumerate the org roster through a side door.
-        return reply.send([{ id: user.id, name: user.name }]);
+        return reply.send([
+          { id: user.id, name: user.name, email: user.email },
+        ]);
       }
 
       return reply.send(

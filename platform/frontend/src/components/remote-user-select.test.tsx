@@ -255,6 +255,39 @@ it("logs source: labels a saved user outside the capped list and searches on the
   client.clear();
 });
 
+it("logs source: tells apart two users who share a name by their email", async () => {
+  server.use(
+    http.get(`${origin}/api/interactions/user-ids`, () =>
+      HttpResponse.json([
+        { id: "alex-1", name: "Alex Kim", email: "alex@example.com" },
+        { id: "alex-2", name: "Alex Kim", email: "alex.kim@example.org" },
+      ]),
+    ),
+  );
+  const onChange = vi.fn();
+  const { wrapper, client } = setup();
+  render(
+    <RemoteUserSelect
+      value="all"
+      onValueChange={onChange}
+      source="logs"
+      searchMode="name"
+      pinnedOption={{ value: "all", label: "All Users" }}
+    />,
+    { wrapper },
+  );
+  await userEvent.click(screen.getByRole("combobox"));
+  await screen.findByRole("option", { name: /alex@example\.com/ });
+  const options = screen.getAllByRole("option", { name: /Alex Kim/ });
+  expect(options.map((option) => option.textContent)).toEqual([
+    expect.stringContaining("alex@example.com"),
+    expect.stringContaining("alex.kim@example.org"),
+  ]);
+  await userEvent.click(options[1]);
+  expect(onChange).toHaveBeenCalledWith("alex-2");
+  client.clear();
+});
+
 it("labels a newly picked user right away, before the lookup by id returns", async () => {
   server.use(
     http.get(`${origin}/api/interactions/user-ids`, async ({ request }) => {

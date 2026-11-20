@@ -1,19 +1,19 @@
 ---
 title: User Provisioning from Microsoft Entra ID
-description: Create users from Microsoft Entra ID before they sign in, so Terraform can put them in teams on day one
+description: Let Microsoft Entra ID create and deactivate Archestra users
 order: 3
 lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Add people to teams before their first sign-in. Normally a person exists in Archestra only after they sign in once, so nobody can add them to a team ahead of time. With provisioning, Microsoft Entra ID creates them in Archestra as soon as they are assigned to the Archestra app. Archestra uses [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard Entra uses to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
+Let Microsoft Entra ID manage who has an Archestra account. Entra creates a person in Archestra as soon as you assign them to the Archestra app, and deactivates them when you unassign them. Without provisioning, a person appears in Archestra only after their first sign-in. Archestra uses [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard Entra uses to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
 
-What happens to a person Entra pushes:
+What happens to a person in Archestra:
 
-- **Created:** they appear in **Settings → Users** as **Pending (auto-provisioned)**, with the **Default Roles for New Users** from **Settings → Auth** and no team. You can add them to teams right away.
-- **First sign-in:** their Single Sign-On sign-in opens that same user, so the teams you added are already there.
-- **Removed in Entra:** they can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and teams stay, and **Settings → Users** marks them **Deactivated**. Assigning them again restores them.
+- **Assigned in Entra:** they appear in **Settings → Users** as **Pending (auto-provisioned)**, with the **Default Roles for New Users** from **Settings → Auth**.
+- **First sign-in:** Single Sign-On opens that same user, with any roles and teams you gave them in the meantime.
+- **Unassigned in Entra:** they can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and teams stay, and **Settings → Users** marks them **Deactivated**. Assigning them again restores them.
 
 Archestra never deletes a user through SCIM. To remove someone for good, use **Remove user** in **Settings → Users**. Deactivated users don't count toward the 30-user free tier.
 
@@ -85,7 +85,7 @@ What to know:
 
 | What you see | Cause and fix |
 | --- | --- |
-| Someone signs in and has none of their teams | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, remove the extra user in **Settings → Users**, then use **Provision on demand** for that person. Their next sign-in opens the pushed user, with their teams. |
+| Someone signs in and has none of the roles or teams you gave them | Their sign-in email differs from the `userName` Entra pushed, so Archestra created a second user. Map `userName` to the sign-in email, remove the extra user in **Settings → Users**, then use **Provision on demand** for that person. Their next sign-in opens the pushed user, with their teams. |
 | **Account Not Linked** at first sign-in | Add their email domain to the provider's **Allowed Email Domains**. |
 | **Account Deactivated** at sign-in | They were removed from the group or the app in Entra. Assign them again. |
 | **Test Connection** fails | Check that the tenant URL ends in `/api/scim/v2`, the key is active, and the service account holds the `member` permissions. |

@@ -1,11 +1,14 @@
+import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { openappaFailure } from "@/openappa/failure";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { publishOpenAppaPolicyChange } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
   replayOpenAppaDraft,
+  runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import { PolicyTestFilesSchema } from "@/types/openappa-policy-tests";
@@ -178,10 +181,64 @@ export async function publishOpenAppaValidationChange(
       409,
       "Policy or validations changed, or Git sync was enabled; read both again",
     );
+  let run: Awaited<ReturnType<typeof runOpenAppaPolicyTests>> | null = null;
+  let runError: string | undefined;
+  if (request.changes.upsert.length > 0) {
+    try {
+      run = await runOpenAppaPolicyTests({
+        organizationId,
+        userId,
+        files: request.changes.upsert,
+        sourceVersion: saved.version,
+        directory: proposal.collection.directory,
+        partial: request.changes.upsert.length < proposal.files.length,
+        requireCurrentPolicy: true,
+      });
+    } catch (error) {
+      runError = classifyPostSaveRunFailure(error, organizationId);
+    }
+  }
   return {
     delivery: "revision" as const,
     revision: proposal.root.revision,
     version: saved.version,
     validation: proposal.validation,
+    run,
+    ...(runError
+      ? {
+          runError,
+          savedPaths: request.changes.upsert.map((file) => file.path),
+        }
+      : {}),
   };
+}
+
+/**
+ * Classifies a failure in the immediate post-save run without turning a
+ * committed local save into an error. Known 4xx domain errors (such as a
+ * concurrent 409 change) keep their safe message; native replay and runtime
+ * failures go through {@link openappaFailure} so their raw cause is logged
+ * safely and the caller gets an actionable message without leaking internals.
+ */
+function classifyPostSaveRunFailure(
+  error: unknown,
+  organizationId: string,
+): string {
+  if (
+    error instanceof ApiError &&
+    error.statusCode < 500 &&
+    error.statusCode !== 429
+  ) {
+    const fields = {
+      organizationId,
+      status: error.statusCode,
+      message: error.message,
+    };
+    const line =
+      "OpenAPPA saved local validations, but could not complete the immediate run";
+    if (error.statusCode === 409) logger.info(fields, line);
+    else logger.warn(fields, line);
+    return error.message || "The saved validations could not be run";
+  }
+  return openappaFailure(error).message;
 }

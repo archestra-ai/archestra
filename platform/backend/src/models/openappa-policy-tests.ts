@@ -344,11 +344,12 @@ class OpenAppaPolicyTestsModel {
     },
     automaticKey?: string,
     automaticSourceIdentity?: string,
+    options?: { requireCurrentPolicy?: boolean },
   ) {
     return db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, organizationId);
       let retryRunId: string | undefined;
-      if (automaticKey) {
+      if (automaticKey || options?.requireCurrentPolicy) {
         const [source] = await tx
           .select()
           .from(schema.openappaGithubSyncTable)
@@ -380,69 +381,83 @@ class OpenAppaPolicyTestsModel {
             ),
           )
           .for("update");
-        const [previous] = await tx
-          .select({ id: runs.id, result: runs.result })
-          .from(runs)
-          .where(
-            and(
-              eq(runs.organizationId, organizationId),
-              sql`${runs.result}->>'automaticKey' = ${automaticKey}`,
-            ),
+        if (automaticKey) {
+          const [previous] = await tx
+            .select({ id: runs.id, result: runs.result })
+            .from(runs)
+            .where(
+              and(
+                eq(runs.organizationId, organizationId),
+                sql`${runs.result}->>'automaticKey' = ${automaticKey}`,
+              ),
+            )
+            .limit(1);
+          const [completedTask] = await tx
+            .select({ id: schema.tasksTable.id })
+            .from(schema.tasksTable)
+            .where(
+              and(
+                eq(schema.tasksTable.taskType, "openappa_policy_validation"),
+                sql`${schema.tasksTable.payload}->>'organizationId' = ${organizationId}`,
+                sql`${schema.tasksTable.payload}->>'key' = ${automaticKey}`,
+                sql`${schema.tasksTable.payload}->>'validationCompleted' = 'true'`,
+              ),
+            )
+            .limit(1);
+          const directory = source?.interval
+            ? (suite?.directory ?? "traces")
+            : suite?.directory || "traces";
+          const github = Boolean(source?.interval);
+          const githubVersion =
+            github && suite && suite.sourceCommit === source?.sourceCommit
+              ? githubPolicyTestVersion({
+                  repo: source?.repo ?? null,
+                  commit: source?.sourceCommit ?? null,
+                  directory,
+                  files: suite.files,
+                })
+              : null;
+          if (
+            completedTask ||
+            (previous && !previous.result.executionError) ||
+            result.source !== (github ? "github" : "local") ||
+            (automaticSourceIdentity !== undefined &&
+              automaticSourceIdentity !==
+                OpenAppaPolicyTestsModel.policyValidationSourceIdentity(
+                  source ?? null,
+                  directory,
+                )) ||
+            (github &&
+              (!directory ||
+                source?.repo !== snapshots.sourceRepo ||
+                source?.sourceCommit !== result.sourceCommit ||
+                directory !== snapshots.directory)) ||
+            ((!result.executionError ||
+              result.source === "local" ||
+              !result.sourceVersion.startsWith("unavailable:")) &&
+              (github
+                ? githubVersion !== result.sourceVersion
+                : (suite?.version ?? "empty") !== result.sourceVersion)) ||
+            policy?.contentHash !== result.policyHash ||
+            policy?.revision !== result.policyRevision ||
+            effective?.rootRevision !== policy?.revision ||
+            effective?.contentHash !== result.effectivePolicyHash
           )
-          .limit(1);
-        const [completedTask] = await tx
-          .select({ id: schema.tasksTable.id })
-          .from(schema.tasksTable)
-          .where(
-            and(
-              eq(schema.tasksTable.taskType, "openappa_policy_validation"),
-              sql`${schema.tasksTable.payload}->>'organizationId' = ${organizationId}`,
-              sql`${schema.tasksTable.payload}->>'key' = ${automaticKey}`,
-              sql`${schema.tasksTable.payload}->>'validationCompleted' = 'true'`,
-            ),
+            return null;
+          retryRunId = previous?.id;
+        } else {
+          const currentRevision = policy?.revision ?? 0;
+          if (
+            Boolean(source?.interval) !== (result.source === "github") ||
+            (result.source === "local" &&
+              (suite?.version ?? "empty") !== result.sourceVersion) ||
+            currentRevision !== result.policyRevision ||
+            (currentRevision > 0 &&
+              policy?.contentHash !== result.policyHash) ||
+            (effective && effective.contentHash !== result.effectivePolicyHash)
           )
-          .limit(1);
-        const directory = source?.interval
-          ? (suite?.directory ?? "traces")
-          : suite?.directory || "traces";
-        const github = Boolean(source?.interval);
-        const githubVersion =
-          github && suite && suite.sourceCommit === source?.sourceCommit
-            ? githubPolicyTestVersion({
-                repo: source?.repo ?? null,
-                commit: source?.sourceCommit ?? null,
-                directory,
-                files: suite.files,
-              })
-            : null;
-        if (
-          completedTask ||
-          (previous && !previous.result.executionError) ||
-          result.source !== (github ? "github" : "local") ||
-          (automaticSourceIdentity !== undefined &&
-            automaticSourceIdentity !==
-              OpenAppaPolicyTestsModel.policyValidationSourceIdentity(
-                source ?? null,
-                directory,
-              )) ||
-          (github &&
-            (!directory ||
-              source?.repo !== snapshots.sourceRepo ||
-              source?.sourceCommit !== result.sourceCommit ||
-              directory !== snapshots.directory)) ||
-          ((!result.executionError ||
-            result.source === "local" ||
-            !result.sourceVersion.startsWith("unavailable:")) &&
-            (github
-              ? githubVersion !== result.sourceVersion
-              : (suite?.version ?? "empty") !== result.sourceVersion)) ||
-          policy?.contentHash !== result.policyHash ||
-          policy?.revision !== result.policyRevision ||
-          effective?.rootRevision !== policy?.revision ||
-          effective?.contentHash !== result.effectivePolicyHash
-        )
-          return null;
-        retryRunId = previous?.id;
+            return null;
+        }
       }
       const values = {
         organizationId,

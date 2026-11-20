@@ -32,46 +32,39 @@ export function grokChildOutputs(text: string): GrokChildOutput[] | undefined {
   if (Buffer.byteLength(text) > 8 * 1024 * 1024) throw malformed();
   // The host renders admitted values this way. Replays still undergo the
   // same exact-value and native-child checks against retained ChildEnd rows.
-  if (text.trimStart().startsWith("{")) {
-    try {
-      const value = JSON.parse(text);
-      // Canonical host failure notices must be checked on every replay too.
-      // Treat their text as a candidate, never as an already-trusted status.
-      if (
-        value?.status &&
-        typeof value.status === "object" &&
-        !Array.isArray(value.status) &&
-        Object.values(value.status).some(
-          (entry) => entry && typeof entry === "object" && "failed" in entry,
-        )
-      ) {
-        return Object.entries(value.status).map(([id, entry]) => {
-          if (!NATIVE_ID.test(id) || !entry || typeof entry !== "object")
-            throw malformed();
-          const record = entry as Record<string, unknown>;
-          const output = record.failed ?? record.completed;
-          if (typeof output !== "string" || Object.keys(record).length !== 1)
-            throw malformed();
-          return { id, status: "completed", value: output };
-        });
-      }
-      if (
-        value &&
-        typeof value === "object" &&
-        typeof value.subagent_id === "string" &&
-        NATIVE_ID.test(value.subagent_id) &&
-        typeof value.output === "string" &&
-        Object.keys(value).every((key) =>
-          ["subagent_id", "output"].includes(key),
-        )
-      )
-        return [
-          { id: value.subagent_id, status: "completed", value: value.output },
-        ];
-    } catch {
-      // Other native envelope parsers below retain their fail-closed behavior.
-    }
+  // Text that is not JSON is left to the native envelope parsers below.
+  const value = text.trimStart().startsWith("{") ? parsedJson(text) : undefined;
+  // Canonical host failure notices must be checked on every replay too.
+  // Treat their text as a candidate, never as an already-trusted status.
+  if (
+    value?.status &&
+    typeof value.status === "object" &&
+    !Array.isArray(value.status) &&
+    Object.values(value.status).some(
+      (entry) => entry && typeof entry === "object" && "failed" in entry,
+    )
+  ) {
+    return Object.entries(value.status).map(([id, entry]) => {
+      if (!NATIVE_ID.test(id) || !entry || typeof entry !== "object")
+        throw malformed();
+      const record = entry as Record<string, unknown>;
+      const output = record.failed ?? record.completed;
+      if (typeof output !== "string" || Object.keys(record).length !== 1)
+        throw malformed();
+      return { id, status: "completed", value: output };
+    });
   }
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof value.subagent_id === "string" &&
+    NATIVE_ID.test(value.subagent_id) &&
+    typeof value.output === "string" &&
+    Object.keys(value).every((key) => ["subagent_id", "output"].includes(key))
+  )
+    return [
+      { id: value.subagent_id, status: "completed", value: value.output },
+    ];
   const launch = LAUNCH.exec(text);
   if (launch) return [{ id: launch[1], status: "running" }];
   if (text.startsWith("=== Multi-wait ")) return multiWaitOutputs(text);
@@ -174,6 +167,14 @@ function completedOutput(text: string): GrokChildOutput | undefined {
     value = value.slice(0, meta.index);
   }
   return { id: footer[1], status: "completed", value };
+}
+
+function parsedJson(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function malformed(): ApiError {

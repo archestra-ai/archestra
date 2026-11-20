@@ -2,7 +2,7 @@
 title: Add a Server
 description: Configure a remote or self-hosted MCP server and test its connection
 order: 1
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,11 +21,13 @@ For a server someone else runs, such as GitHub's or Linear's.
 
 1. Go to **MCP Registry** and click **Add MCP Server**.
 2. Click **Start from scratch**. To copy a known server's settings, click **Select from Online Catalog** instead.
-3. Enter a name, pick **Remote**, and enter the server's MCP URL.
+3. Enter a name, pick **Remote**, and enter the server's MCP URL. A name is unique among the shared servers in one environment, and among your own personal servers there. The same name is free in another environment.
 4. Pick how it signs in. See the table below.
 5. Open **Advanced**. Under permissions, choose who can find it. To keep it in one [environment](/docs/admin/environments), pick that too.
 6. Click **Add Server**. On **Test Connection**, install it to see the tools it offers.
 7. Cover the new tools in your [Guardrails policy](/docs/agents/guardrails/policies).
+
+**Clone** on a server's page copies its settings into this form. The copy's name ends in `-copy`. Put the copy in another environment and it can keep the original name, and the same tool names, because each environment routes its own calls.
 
 ![Adding a remote server with OAuth 2.1 sign-in](/docs/automated_screenshots/mcp-servers-adding_remote.webp)
 

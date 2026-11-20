@@ -3,7 +3,59 @@
   "@id": "https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json",
   "author": "Archestra (https://archestra.ai)",
   "role": "Document Creator",
-  "timestamp": "2026-11-19T00:00:00Z",
-  "version": 1,
-  "statements": []
+  "timestamp": "2026-11-20T01:35:32Z",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-47917"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libmbedcrypto7@2.28.3-1?arch=amd64&distro=debian-12.15&upstream=mbedtls"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-20T01:35:32Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The vulnerable function mbedtls_x509_string_to_names() belongs to Mbed TLS's X.509 library (libmbedx509), which these images do not install; they ship only libmbedcrypto7, whose /usr/lib/x86_64-linux-gnu/libmbedcrypto.so.2.28.3 neither exports nor references that function (nm -D)."
+    }
+  ]
 }

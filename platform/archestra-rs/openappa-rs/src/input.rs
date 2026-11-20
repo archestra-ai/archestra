@@ -197,6 +197,15 @@ impl From<DeclaredReturn> for DeclaredArguments {
     }
 }
 
+/// The return as a spawn's own call declares it to the runtime. Always its arguments: the
+/// runtime hands a subagent's answer to its parent here, so Archestra never declares a
+/// deferred return.
+impl From<DeclaredReturn> for appa_runtime_api::DeclaredReturn {
+    fn from(declared: DeclaredReturn) -> Self {
+        appa_runtime_api::DeclaredReturn::Arguments(declared.into())
+    }
+}
+
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
 const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;

@@ -4,6 +4,7 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import { requireServiceAccountAccess } from "@/services/service-account-access";
+import { assertPublicIssuer } from "@/services/workload-identity/federated-token";
 import {
   ApiError,
   constructResponseSchema,
@@ -16,7 +17,6 @@ import {
   ServiceAccountFederatedCredentialResponseSchema,
   UpdateServiceAccountFederatedCredentialBodySchema,
 } from "@/types/service-account-federated-credential";
-import { isPrivateOrLoopbackHostname } from "@/utils/network";
 
 const BASE_PATH = "/api/service-accounts/:id/federated-credentials";
 const TAGS = ["Service Accounts"];
@@ -185,18 +185,6 @@ const serviceAccountFederatedCredentialRoutes: FastifyPluginAsyncZod = async (
 export default serviceAccountFederatedCredentialRoutes;
 
 // === Internal helpers
-
-/**
- * The server fetches the issuer's discovery document and keys, so an issuer
- * on a private or loopback address is refused here as well as at fetch time.
- */
-function assertPublicIssuer(issuer: string): void {
-  if (isPrivateOrLoopbackHostname(new URL(issuer).hostname))
-    throw new ApiError(
-      400,
-      "The issuer must be publicly reachable: private and loopback addresses are refused",
-    );
-}
 
 async function assertNameFree(params: {
   serviceAccountId: string;

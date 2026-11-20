@@ -124765,6 +124765,10 @@
                 "oauthClient.deleted",
                 "oauthClient.rotated",
                 "oauthClient.bulk_deleted",
+                "oauthClient.token_exchanged",
+                "oauthClientFederatedCredential.created",
+                "oauthClientFederatedCredential.updated",
+                "oauthClientFederatedCredential.deleted",
                 "llmProviderApiKey.created",
                 "llmProviderApiKey.updated",
                 "llmProviderApiKey.deleted",
@@ -125108,6 +125112,10 @@
                                   "oauthClient.deleted",
                                   "oauthClient.rotated",
                                   "oauthClient.bulk_deleted",
+                                  "oauthClient.token_exchanged",
+                                  "oauthClientFederatedCredential.created",
+                                  "oauthClientFederatedCredential.updated",
+                                  "oauthClientFederatedCredential.deleted",
                                   "llmProviderApiKey.created",
                                   "llmProviderApiKey.updated",
                                   "llmProviderApiKey.deleted",
@@ -126102,6 +126110,10 @@
                             "oauthClient.deleted",
                             "oauthClient.rotated",
                             "oauthClient.bulk_deleted",
+                            "oauthClient.token_exchanged",
+                            "oauthClientFederatedCredential.created",
+                            "oauthClientFederatedCredential.updated",
+                            "oauthClientFederatedCredential.deleted",
                             "llmProviderApiKey.created",
                             "llmProviderApiKey.updated",
                             "llmProviderApiKey.deleted",
@@ -167937,6 +167949,60 @@
                           ],
                           "additionalProperties": false
                         },
+                        "mcpRuntimeTiers": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "tiers": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32
+                                  },
+                                  "cpuRequest": {
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 256
+                                  },
+                                  "cpuLimit": {
+                                    "nullable": true,
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 256
+                                  },
+                                  "memoryRequestMiB": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "memoryLimitMiB": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "cpuRequest",
+                                  "cpuLimit"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "tiers"
+                          ],
+                          "additionalProperties": false
+                        },
                         "agentRuntimeTiers": {
                           "nullable": true,
                           "type": "object",
@@ -168053,6 +168119,7 @@
                         "defaultEnvironmentNamespace",
                         "defaultEnvironmentDescription",
                         "defaultNetworkPolicy",
+                        "mcpRuntimeTiers",
                         "agentRuntimeTiers",
                         "defaultEnvironmentValidationRegex",
                         "defaultEnvironmentTrustedImageRegistries",
@@ -206798,7 +206865,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -207297,7 +207364,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -207811,7 +207878,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -251524,7 +251591,14 @@
                       "type": "string",
                       "enum": [
                         "connected",
-                        "disconnected"
+                        "disconnected",
+                        "not_checked"
+                      ]
+                    },
+                    "kubernetes": {
+                      "type": "string",
+                      "enum": [
+                        "starting"
                       ]
                     },
                     "openappa": {
@@ -254482,7 +254556,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy request logs in the active organization with pagination and sorting. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "List LLM Proxy request logs in the active organization with pagination and sorting. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -308476,7 +308550,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy request log metadata without request and response payloads. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "List LLM Proxy request log metadata without request and response payloads. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -309197,7 +309271,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy log sessions with aggregated usage and cost. [`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions; [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions. [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the active organization.",
+        "description": "List LLM Proxy log sessions with aggregated usage and cost. [`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions; [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions. [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -310014,7 +310088,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -310307,7 +310381,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -310776,7 +310850,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own runs; [`log:admin`](/docs/reference/permissions#log:admin) covers every run in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own runs; [`log:admin`](/docs/reference/permissions#log:admin) covers every run in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -311181,7 +311255,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get external agent IDs from visible logs in the active organization. [`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's attributed rows; [`log:admin`](/docs/reference/permissions#log:admin) returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes identifiers from every row in the active organization.",
+        "description": "Get external agent IDs from visible logs in the active organization. [`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's attributed rows; [`log:admin`](/docs/reference/permissions#log:admin) returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes identifiers from every row in the active organization.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -311457,7 +311531,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. [`log:read`](/docs/reference/permissions#log:read) returns only the caller; [`log:admin`](/docs/reference/permissions#log:admin) returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's identity. [`log:admin`](/docs/reference/permissions#log:admin) includes every represented user in the active organization.",
+        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. [`log:read`](/docs/reference/permissions#log:read) returns only the caller; [`log:admin`](/docs/reference/permissions#log:admin) returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's identity. [`log:admin`](/docs/reference/permissions#log:admin) includes every represented user in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -311767,7 +311841,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get the saved auto-routing decision for an LLM Proxy log. Null means no decision was retained, not that routing was disabled. Does not re-score the request.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Get the saved auto-routing decision for an LLM Proxy log. Null means no decision was retained, not that routing was disabled. Does not re-score the request.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -312349,7 +312423,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get an LLM Proxy request log by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller; [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
+        "description": "Get an LLM Proxy request log by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller; [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -366874,6 +366948,9 @@
                               "IfNotPresent",
                               "Never"
                             ]
+                          },
+                          "runtimeTier": {
+                            "type": "string"
                           }
                         },
                         "additionalProperties": false
@@ -367986,6 +368063,11 @@
                           "IfNotPresent",
                           "Never"
                         ]
+                      },
+                      "runtimeTier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
                       }
                     }
                   },
@@ -368775,6 +368857,9 @@
                             "IfNotPresent",
                             "Never"
                           ]
+                        },
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -372620,6 +372705,9 @@
                             "IfNotPresent",
                             "Never"
                           ]
+                        },
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -373669,6 +373757,11 @@
                           "IfNotPresent",
                           "Never"
                         ]
+                      },
+                      "runtimeTier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
                       }
                     }
                   },
@@ -374313,6 +374406,9 @@
                             "IfNotPresent",
                             "Never"
                           ]
+                        },
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -377161,6 +377257,9 @@
                               "IfNotPresent",
                               "Never"
                             ]
+                          },
+                          "runtimeTier": {
+                            "type": "string"
                           }
                         },
                         "additionalProperties": false
@@ -378204,6 +378303,9 @@
                             "IfNotPresent",
                             "Never"
                           ]
+                        },
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -442935,7 +443037,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. [`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. [`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -443528,7 +443630,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get an MCP tool call in the active organization by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
+        "description": "Get an MCP tool call in the active organization by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -466258,6 +466360,10 @@
                             ],
                             "additionalProperties": false
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "scopes": {
                             "type": "array",
                             "items": {
@@ -466301,6 +466407,7 @@
                           "updatedAt",
                           "billingTeam",
                           "spendCap",
+                          "icon",
                           "scopes",
                           "allowedGatewayIds",
                           "includeFutureProviders"
@@ -466614,6 +466721,12 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "icon": {
+                    "description": "An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.",
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
                   },
                   "serviceAccountId": {
                     "nullable": true,
@@ -467209,6 +467322,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -467255,6 +467372,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
@@ -467507,6 +467625,563 @@
       }
     },
     "/api/oauth-clients/{id}": {
+      "get": {
+        "operationId": "getOauthClient",
+        "tags": [
+          "OAuth Clients"
+        ],
+        "description": "Get one OAuth client and its enabled API capabilities\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
+                    "providerApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "kimi-code",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage",
+                              "jev"
+                            ]
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerApiKeyId",
+                          "providerApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "autoRouterIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage",
+                        "estimatedUsage"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "mcp",
+                          "a2a",
+                          "llm:proxy"
+                        ]
+                      }
+                    },
+                    "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "clientId",
+                    "serviceAccountId",
+                    "name",
+                    "organizationId",
+                    "grantType",
+                    "providerApiKeys",
+                    "redirectUris",
+                    "disabled",
+                    "authorId",
+                    "authorName",
+                    "createdBy",
+                    "labels",
+                    "modelPoolIds",
+                    "autoRouterIds",
+                    "createdAt",
+                    "updatedAt",
+                    "billingTeam",
+                    "spendCap",
+                    "icon",
+                    "scopes",
+                    "allowedGatewayIds",
+                    "includeFutureProviders"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
       "put": {
         "operationId": "updateOauthClient",
         "tags": [
@@ -467524,6 +468199,12 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "icon": {
+                    "description": "An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.",
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
                   },
                   "serviceAccountId": {
                     "nullable": true,
@@ -467970,6 +468651,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -468013,6 +468698,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders"
@@ -468799,6 +469485,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "scopes": {
                       "type": "array",
                       "items": {
@@ -468845,6 +469535,7 @@
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
+                    "icon",
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
@@ -488599,7 +489290,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. [`log:read`](/docs/reference/permissions#log:read) returns the records of the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) returns every record in the organization. A consult is served as the consults export serves it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. Consults need [`log:read`](/docs/reference/permissions#log:read), which returns the consults of the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) returns every consult in the organization. Yells need [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read), which returns the yells of the caller's own sessions; [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) returns every yell in the organization. A kind the caller may not read is left out, and a caller who may read neither is refused. A consult is served as the consults export serves it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read) or [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read). Consults are returned with [`log:read`](/docs/reference/permissions#log:read), scoped to the caller's sessions unless the caller also holds [`log:admin`](/docs/reference/permissions#log:admin). Yells are returned with [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read), scoped to the caller's sessions unless the caller also holds [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin).",
         "parameters": [
           {
             "schema": {
@@ -489351,10 +490042,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "log:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `log:read` or `guardrailsYell:read`. Consults are returned with `log:read`, scoped to the caller's sessions unless the caller also holds `log:admin`. Yells are returned with `guardrailsYell:read`, scoped to the caller's sessions unless the caller also holds `guardrailsYell:admin`.",
+          "permissions": []
         }
       }
     },
@@ -489364,7 +490054,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. [`log:read`](/docs/reference/permissions#log:read) returns the consults of the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without [`member:read`](/docs/reference/permissions#member:read). Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. [`log:read`](/docs/reference/permissions#log:read) returns the consults of the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without [`member:read`](/docs/reference/permissions#member:read). Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -489946,7 +490636,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -497389,7 +498079,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
+        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -502205,11 +502895,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsYell:read` returns the caller's yells. `guardrailsYell:admin` includes every yell in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsYell:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) returns the caller's yells. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) includes every yell in the active organization."
       }
     },
     "/api/openappa/yells/summary": {
@@ -502477,11 +503168,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsYell:read` counts the caller's yells. `guardrailsYell:admin` counts every yell in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsYell:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) counts the caller's yells. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) counts every yell in the active organization."
       }
     },
     "/api/openappa/yells/{id}": {
@@ -502928,11 +503620,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsYell:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) permits a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) permits any yell in the active organization."
       },
       "patch": {
         "operationId": "updateOpenAppaYell",
@@ -503395,11 +504088,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsYell:read` resolves a yell of the caller's sessions. `guardrailsYell:admin` resolves any yell in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsYell:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) resolves a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) resolves any yell in the active organization."
       }
     },
     "/api/openappa/yells/{id}/archive": {
@@ -503427,11 +504121,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsYell:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) permits a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) permits any yell in the active organization."
       }
     },
     "/v1/openrouter/chat/completions": {
@@ -506496,6 +507191,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -506612,6 +507361,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -508227,6 +508977,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -508343,6 +509147,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -509703,6 +510508,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -509819,6 +510678,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -510787,6 +511647,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -510903,6 +511817,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -511868,6 +512783,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -511984,6 +512953,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -511991,6 +512961,713 @@
                     "mcpIdleHibernationEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/organization/mcp-runtime-tiers": {
+      "get": {
+        "operationId": "getMcpRuntimeTiers",
+        "tags": [
+          "Organization"
+        ],
+        "description": "The organization's independent MCP CPU/RAM tiers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "cpuRequest": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "memoryRequestMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "cpuRequest",
+                          "cpuLimit",
+                          "memoryRequestMiB",
+                          "memoryLimitMiB"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tiers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "patch": {
+        "operationId": "updateMcpRuntimeTiers",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Manage independent MCP CPU/RAM tiers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "tiers": {
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32
+                        },
+                        "cpuRequest": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 256
+                        },
+                        "cpuLimit": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 256
+                        },
+                        "memoryRequestMiB": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "memoryLimitMiB": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "previousName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "cpuRequest",
+                        "cpuLimit"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "tiers"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "cpuRequest": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "memoryRequestMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "cpuRequest",
+                          "cpuLimit",
+                          "memoryRequestMiB",
+                          "memoryLimitMiB"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tiers"
                   ],
                   "additionalProperties": false
                 }
@@ -513726,6 +515403,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -513842,6 +515573,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -514942,6 +516674,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -515058,6 +516844,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -516218,6 +518005,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -516334,6 +518175,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -517369,6 +519211,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -517485,6 +519381,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -518464,6 +520361,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -518580,6 +520531,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -519590,6 +521542,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -519706,6 +521712,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -520653,6 +522660,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -520769,6 +522830,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -522920,6 +524982,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -523036,6 +525152,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -609688,6 +611805,1360 @@
           "permissions": [
             "identityProvider:delete"
           ]
+        }
+      }
+    },
+    "/api/oauth-clients/{id}/federated-credentials": {
+      "get": {
+        "operationId": "getOauthClientFederatedCredentials",
+        "tags": [
+          "OAuth Clients"
+        ],
+        "description": "List an OAuth client's federated credentials: the OIDC issuers, audiences, subjects and claims whose tokens authenticate as the client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "oauthClientId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "issuer": {
+                        "type": "string"
+                      },
+                      "audience": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      },
+                      "claimConditions": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        }
+                      },
+                      "lastUsedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "oauthClientId",
+                      "name",
+                      "issuer",
+                      "audience",
+                      "subject",
+                      "claimConditions",
+                      "lastUsedAt",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "post": {
+        "operationId": "createOauthClientFederatedCredential",
+        "tags": [
+          "OAuth Clients"
+        ],
+        "description": "Add a federated credential to an OAuth client that signs in as itself. A token from the issuer whose audience, subject and listed claims all match exactly can then be sent as the client_assertion of a client credentials grant at /api/auth/oauth2/token.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "issuer": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "audience": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "claimConditions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "issuer",
+                  "audience",
+                  "subject"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "oauthClientId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "audience": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "claimConditions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "oauthClientId",
+                    "name",
+                    "issuer",
+                    "audience",
+                    "subject",
+                    "claimConditions",
+                    "lastUsedAt",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/oauth-clients/{id}/federated-credentials/{credentialId}": {
+      "patch": {
+        "operationId": "updateOauthClientFederatedCredential",
+        "tags": [
+          "OAuth Clients"
+        ],
+        "description": "Update an OAuth client's federated credential. Changing its issuer, audience, subject or claims revokes the access tokens it already issued.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "issuer": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "audience": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "claimConditions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "credentialId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "oauthClientId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "audience": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "claimConditions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "oauthClientId",
+                    "name",
+                    "issuer",
+                    "audience",
+                    "subject",
+                    "claimConditions",
+                    "lastUsedAt",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "delete": {
+        "operationId": "deleteOauthClientFederatedCredential",
+        "tags": [
+          "OAuth Clients"
+        ],
+        "description": "Delete an OAuth client's federated credential. Access tokens it issued stop working at once.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "credentialId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

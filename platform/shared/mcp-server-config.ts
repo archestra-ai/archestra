@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ImagePullPolicySchema } from "./mcp-image-pull-policy";
+import type { McpRuntimeTierSize } from "./mcp-runtime-tiers";
 
 export const OAuthConfigSchema = z
   .object({
@@ -138,6 +139,12 @@ export const EnvFromSchema = z.object({
   prefix: z.string().optional(),
 });
 
+/** The CPU/RAM portion of a resolved runtime tier; never agent disk or pooling settings. */
+export type McpServerResources = Pick<
+  McpRuntimeTierSize,
+  "cpuRequest" | "cpuLimit" | "memoryRequestMiB" | "memoryLimitMiB"
+>;
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
@@ -152,6 +159,7 @@ export const LocalConfigSchema = z
     serviceAccount: z.string().optional(),
     imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
     imagePullPolicy: ImagePullPolicySchema.optional(),
+    runtimeTier: z.string().trim().min(1).max(32).optional(),
   })
   .refine((data) => data.command || data.dockerImage, {
     message:
@@ -171,4 +179,5 @@ export const LocalConfigFormSchema = z.object({
   serviceAccount: z.string().optional(),
   imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
   imagePullPolicy: ImagePullPolicySchema.optional(),
+  runtimeTier: z.string().trim().min(1).max(32).optional(),
 });

@@ -1583,3 +1583,64 @@ describe("team access levels", () => {
     expect(data).not.toHaveProperty("scope");
   });
 });
+
+describe("local MCP runtime tiers", () => {
+  const item = {
+    id: "resource-catalog",
+    name: "Resource server",
+    serverType: "local",
+    localConfig: {
+      dockerImage: "example/server:1",
+      runtimeTier: "Small",
+    },
+    labels: [],
+    teams: [],
+  } as unknown as Parameters<typeof transformCatalogItemToFormValues>[0];
+
+  it("retains tiers across edit and clone, and lets clearing restore defaults", () => {
+    const values = transformCatalogItemToFormValues(item);
+    expect(values.localConfig?.runtimeTier).toBe("Small");
+    expect(transformFormToApiData(values).localConfig?.runtimeTier).toBe(
+      "Small",
+    );
+    expect(
+      transformFormToApiData(buildCloneFormValues(item)).localConfig
+        ?.runtimeTier,
+    ).toBe("Small");
+
+    const cleared = transformFormToApiData({
+      ...values,
+      localConfig: {
+        arguments: "",
+        environment: [],
+        ...values.localConfig,
+        runtimeTier: undefined,
+      },
+    });
+    expect(cleared.localConfig?.runtimeTier).toBeUndefined();
+    expect(
+      transformCatalogItemToFormValues({
+        ...item,
+        localConfig: { dockerImage: "example/server:1" },
+      }).localConfig?.runtimeTier,
+    ).toBeUndefined();
+  });
+
+  it("does not send local runtime tiers for remote or desktop servers", () => {
+    const values = transformCatalogItemToFormValues(item);
+    expect(
+      transformFormToApiData({
+        ...values,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      }).localConfig,
+    ).toBeUndefined();
+    expect(
+      transformFormToApiData({
+        ...values,
+        serverType: "desktop_mcp",
+        desktopConfig: { kind: "command", value: "node server.js" },
+      }).localConfig,
+    ).toBeUndefined();
+  });
+});

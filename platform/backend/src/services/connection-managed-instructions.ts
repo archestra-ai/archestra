@@ -23,7 +23,36 @@ export async function getConnectionManagedInstructions(token: string) {
   });
   if (!setupId) throw new ApiError(401, "Invalid instruction credential");
   const setup = await ConnectionSetupModel.findById(setupId);
-  if (!setup?.consumedAt || !setup.mcpGatewayId)
+  if (!setup) throw new ApiError(403, "Connection is no longer available");
+  await verifyLiveConnectionInstallation(setup);
+  const organization = await OrganizationModel.getById(setup.organizationId);
+  if (!organization)
+    throw new ApiError(403, "Connection is no longer available");
+  const instructions = organization.connectionRuntimeHandoffEnabled
+    ? resolveRuntimeHandoffInstructions({
+        stored: organization.connectionRuntimeHandoffInstructions,
+        appName: organization.appName ?? DEFAULT_APP_NAME,
+      })
+    : null;
+  return {
+    instructions,
+    version: createHash("sha256")
+      .update(JSON.stringify(instructions))
+      .digest("hex"),
+  };
+}
+
+/**
+ * An installation stays live while its setup was approved, its owner is still
+ * a member, and the owner can still read the gateway it connected.
+ */
+export async function verifyLiveConnectionInstallation(setup: {
+  consumedAt: Date | null;
+  mcpGatewayId: string | null;
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  if (!setup.consumedAt || !setup.mcpGatewayId)
     throw new ApiError(403, "Connection is no longer available");
   const members = await MemberModel.findByUserIdsInOrganization({
     organizationId: setup.organizationId,
@@ -51,19 +80,4 @@ export async function getConnectionManagedInstructions(token: string) {
     !GATEWAY_CAPABLE_AGENT_TYPES.some((type) => type === gateway.agentType)
   )
     throw new ApiError(403, "Connection is no longer available");
-  const organization = await OrganizationModel.getById(setup.organizationId);
-  if (!organization)
-    throw new ApiError(403, "Connection is no longer available");
-  const instructions = organization.connectionRuntimeHandoffEnabled
-    ? resolveRuntimeHandoffInstructions({
-        stored: organization.connectionRuntimeHandoffInstructions,
-        appName: organization.appName ?? DEFAULT_APP_NAME,
-      })
-    : null;
-  return {
-    instructions,
-    version: createHash("sha256")
-      .update(JSON.stringify(instructions))
-      .digest("hex"),
-  };
 }

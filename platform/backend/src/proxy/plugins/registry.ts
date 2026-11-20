@@ -1,6 +1,7 @@
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
+import { recordedCallId } from "@/openappa/call-id";
 import {
   stripChildTrajectoryReceipts,
   verifyChildTrajectoryReceipt,
@@ -18,7 +19,6 @@ import {
   verifyRuntimeToolProof,
 } from "@/openappa/runtime-tool-claims";
 import type { OpenAppaSession } from "@/openappa/service";
-import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { canonicalJson } from "@/openappa/wire";
 import type { CommonToolResult, HostedToolCall } from "@/types";
 import { ApiError } from "@/types";
@@ -926,7 +926,7 @@ function addsOnlyRuntimeProof(params: {
   });
   return (
     verified !== null &&
-    verified.toolCallId === withoutTrajectoryStamp(attachment.id) &&
+    verified.toolCallId === recordedCallId(attachment.id) &&
     verified.spawn === attachment.spawn &&
     verified.session.session_id === attachment.session.session_id &&
     verified.session.parent_id === attachment.session.parent_id

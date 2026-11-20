@@ -192,6 +192,23 @@ export function isK8sConfigured(): boolean {
 }
 
 /**
+ * True when the orchestrator reads a kubeconfig file that does not exist yet.
+ * The Docker quickstart writes its file once the embedded KinD cluster
+ * answers, after the backend has started, so callers wait or check again
+ * instead of treating this as a permanent failure.
+ */
+export function isKubeconfigFilePending(): boolean {
+  const kubernetes = config.orchestrator.kubernetes;
+  const path = kubernetes.kubeconfig?.trim();
+  return (
+    config.orchestrator.enabled !== false &&
+    !kubernetes.loadKubeconfigFromCurrentCluster &&
+    !!path &&
+    !fs.existsSync(path)
+  );
+}
+
+/**
  * Returns the resolved K8s namespace from configuration.
  * @public — exported for testability
  */

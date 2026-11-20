@@ -158,6 +158,7 @@ export function PluginContentFields({
           );
         }}
         readOnly={readOnly || locked}
+        downloadName={pluginSlug || displayName}
         className="h-[calc(100vh-26rem)] min-h-[28rem]"
       />
     </div>

@@ -1022,6 +1022,35 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
   });
 
+  test("uses resolved tier CPU/RAM while retaining ephemeral storage governance", () => {
+    const deployment = createMockK8sDeployment({
+      id: "tier-id",
+      name: "tier-server",
+    } as McpServer);
+    const tier = {
+      cpuRequest: 0.25,
+      cpuLimit: 0.5,
+      memoryRequestMiB: 64,
+      memoryLimitMiB: 256,
+    };
+    const generate = (cpuLimit: number | null) =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", runtimeTier: "Small" },
+        false,
+        8080,
+        undefined,
+        undefined,
+        undefined,
+        { ...tier, cpuLimit },
+      ).spec?.template.spec?.containers[0]?.resources;
+    expect(generate(0.5)).toEqual({
+      requests: { cpu: "250m", memory: "64Mi", "ephemeral-storage": "256Mi" },
+      limits: { cpu: "500m", memory: "256Mi", "ephemeral-storage": "1Gi" },
+    });
+    expect(generate(null)?.limits).not.toHaveProperty("cpu");
+  });
+
   test("generates deploymentSpec with empty arguments array when not provided", () => {
     const mcpServer: McpServer = {
       id: "no-args-id",

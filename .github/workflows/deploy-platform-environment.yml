@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 1
 
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
         with:
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

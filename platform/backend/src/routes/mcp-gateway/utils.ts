@@ -158,6 +158,7 @@ import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import { cursorFormSchema } from "./cursor-forms";
 import { grokCanonicalToolName, grokToolName } from "./grok-tool-names";
 import {
   buildInputRequiredResult,
@@ -763,6 +764,8 @@ export async function buildAgentMcpToolList(params: {
  */
 export async function createAgentServer(params: {
   grokToolNames?: boolean;
+  /** The client is Cursor, whose forms label a checkbox by its description. */
+  cursorForms?: boolean;
   openappaSession?: import("@/openappa/service").OpenAppaSession;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
@@ -1218,11 +1221,13 @@ export async function createAgentServer(params: {
                     clientCapabilities: mrtr?.clientCapabilities,
                     round: mrtr?.round,
                   },
+                  inspectableReviewForm: params.cursorForms === true,
                   elicitation: {
                     elicit: createGatewayUserElicit({
                       extra,
                       mrtr,
                       mrtrEnabled,
+                      cursorForms: params.cursorForms === true,
                       agentId,
                       toolName: name,
                       requestMeta: request.params._meta as
@@ -2867,6 +2872,7 @@ function createGatewayUserElicit(params: {
     clientCapabilities?: unknown;
   };
   mrtrEnabled: boolean;
+  cursorForms?: boolean;
   agentId: string;
   toolName: string;
   requestMeta?: Record<string, unknown>;
@@ -2877,7 +2883,10 @@ function createGatewayUserElicit(params: {
 }) => Promise<ArchestraElicitationOutcome> {
   const { extra, mrtr, mrtrEnabled, agentId, toolName, requestMeta } = params;
 
-  return async ({ message, requestedSchema }) => {
+  return async ({ message, requestedSchema: schema }) => {
+    const requestedSchema = params.cursorForms
+      ? cursorFormSchema(schema)
+      : schema;
     const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
     if (supplied !== undefined) {
       return formAnswer({

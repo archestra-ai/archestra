@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
-import type { admin_directory_v1 } from "googleapis/build/src/apis/admin/directory_v1.js";
-import type { drive_v3 } from "googleapis/build/src/apis/drive/v3.js";
+import type { admin_directory_v1 } from "@googleapis/admin";
+import type { drive_v3 } from "@googleapis/drive";
 import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import type {
   ConnectorContentTruncation,

@@ -356,6 +356,18 @@ describe("isEnterpriseOnlyRoute", () => {
     );
   });
 
+  it("gates an OAuth client's federated credentials but not the client itself", () => {
+    expect(
+      isEnterpriseOnlyRoute("/api/oauth-clients/c-1/federated-credentials"),
+    ).toBe(true);
+    expect(
+      isEnterpriseOnlyRoute(
+        "/api/oauth-clients/c-1/federated-credentials/cred-1",
+      ),
+    ).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/oauth-clients/c-1")).toBe(false);
+  });
+
   it("should return false for regular team routes", () => {
     expect(isEnterpriseOnlyRoute("/api/teams")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/teams/team-123")).toBe(false);

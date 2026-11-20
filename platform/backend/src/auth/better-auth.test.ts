@@ -1233,9 +1233,14 @@ describe("handleBeforeHook", () => {
       const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
       const assignment = handleBeforeHook(escalate);
       await expect(assignment).rejects.toThrow(APIError);
-      // Platform administrators cannot grant access to other users' logs.
+      // Platform administrators cannot grant access to other users' logs,
+      // yells, or audit records.
       await expect(assignment).rejects.toMatchObject({
-        body: { message: expect.stringContaining("log:admin, auditLog:admin") },
+        body: {
+          message: expect.stringContaining(
+            "log:admin, guardrailsYell:admin, auditLog:admin",
+          ),
+        },
       });
 
       // Managing users within their own permission set still works.

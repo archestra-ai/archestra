@@ -54,6 +54,7 @@ import {
   runtimeBindingAuthorizes,
   runtimeSessionConflicts,
 } from "@/services/agent-runtime/runtime-identity";
+import { disconnectReferenceInBody } from "@/services/connection-disconnect-reference";
 import {
   carriesConnectionSetupReference,
   connectionProxySetupContext,
@@ -131,6 +132,47 @@ export async function resolveInstallerSetupBypass(params: {
 }
 
 /**
+ * Whether this request belongs to the conversation that is disconnecting a
+ * client, which OpenAPPA lets through ungoverned as it does the installer's.
+ * The cleanup removes the gateway, and with it the remedy tools a blocked
+ * step would need. The Connect page hands the signed-in person a reference
+ * with the cleanup prompt; the first well-formed native conversation of that
+ * person to present it owns the exemption until the reference expires.
+ */
+export async function resolveDisconnectBypass(params: {
+  request: FastifyRequest;
+  body: unknown;
+  agent: { id: string; organizationId: string };
+  /** The person a credential of this request proved, if any. */
+  authenticatedUserId: string | undefined;
+  appaActive: boolean;
+}): Promise<boolean> {
+  const { agent, authenticatedUserId } = params;
+  if (!params.appaActive || !authenticatedUserId) return false;
+  const reference = disconnectReferenceInBody({
+    body: params.body,
+    organizationId: agent.organizationId,
+    userId: authenticatedUserId,
+    secret: config.auth.secret,
+  });
+  if (!reference) return false;
+  const disconnecting = await claimConnectionSetupConversation({
+    organizationId: agent.organizationId,
+    setupId: `disconnect:${authenticatedUserId}:${reference.reference}`,
+    expiresAt: reference.expiresAt,
+    headers: params.request.headers,
+    requestBody: params.body,
+  });
+  logger.info(
+    { profileId: agent.id },
+    disconnecting
+      ? "OpenAPPA bypass active for a client disconnect"
+      : "OpenAPPA disconnect reference outside its conversation; Guardrails apply",
+  );
+  return disconnecting;
+}
+
+/**
  * Decides whether OpenAPPA governs this request, only observes it, or leaves
  * it alone, and binds the session it governs. Throws the refusals of an
  * enforced deployment. Fills the APPA session headers in `request.headers`
@@ -200,7 +242,8 @@ async function governedAdmission(params: {
   inProcessRequest: boolean;
   /** A guardrail call: the platform's own annotator or review model. */
   internalCall: boolean;
-  installerSetupBypass: boolean;
+  /** The installer's own conversation, or the one disconnecting a client. */
+  connectionProcedureBypass: boolean;
   ingress: OpenappaIngress;
   toolIdentity: GatewayToolIdentity;
   runtimeSnapshot?: RuntimeIdentitySnapshot;
@@ -217,7 +260,7 @@ async function governedAdmission(params: {
     virtualKeyId,
     passthroughVirtualKeyId,
   } = principal;
-  const { installerSetupBypass } = params;
+  const { connectionProcedureBypass } = params;
   const isInternalChat = chatSource !== undefined;
   // Captures raw client headers before conversion to X-Appa-* headers.
   // Child trajectory validation checks against these original claims.
@@ -287,7 +330,7 @@ async function governedAdmission(params: {
       : { status: "unbound" as const };
   if (
     appaActive &&
-    !installerSetupBypass &&
+    !connectionProcedureBypass &&
     runtimeLookup.status === "conflict"
   ) {
     throw new ApiError(
@@ -310,7 +353,7 @@ async function governedAdmission(params: {
   const presentedRuntimeSession = claims.sessionId;
   if (
     appaActive &&
-    !installerSetupBypass &&
+    !connectionProcedureBypass &&
     runtimeIdentity &&
     runtimeSessionConflicts({
       workloadName: runtimeIdentity.workloadName,
@@ -334,7 +377,7 @@ async function governedAdmission(params: {
     });
   if (
     appaActive &&
-    !installerSetupBypass &&
+    !connectionProcedureBypass &&
     runtimeIdentity &&
     !runtimeBindingMatches
   ) {
@@ -417,7 +460,7 @@ async function governedAdmission(params: {
     !virtualKeyId;
   const unsupportedClient =
     appaActive &&
-    !installerSetupBypass &&
+    !connectionProcedureBypass &&
     !isInternalChat &&
     !delegatedRun &&
     headers[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -471,7 +514,7 @@ async function governedAdmission(params: {
   });
   if (
     appaActive &&
-    !installerSetupBypass &&
+    !connectionProcedureBypass &&
     !delegatedRun &&
     !params.internalCall &&
     !unsupportedClient

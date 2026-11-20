@@ -56,14 +56,22 @@ function readSaved(clientId: string): Saved | null {
 
 export function readConnectChoices(clientId: string): ConnectChoices {
   const saved = readSaved(clientId);
-  if (!saved) return ALL_INCLUDED;
+  const routedByDefault = !KEEPS_OWN_MODELS_BY_DEFAULT.has(clientId);
+  if (!saved) return { ...ALL_INCLUDED, proxy: routedByDefault };
   return {
     tools: saved.tools !== false,
     skills: saved.skills !== false,
-    proxy: saved.proxy !== false,
+    proxy: routedByDefault ? saved.proxy !== false : saved.proxy === true,
     plugins: saved.plugins !== false,
   };
 }
+
+/**
+ * Agents whose model routing starts switched off. Cursor's API key setting
+ * covers every model and its own models refuse a custom key, so routing its
+ * models replaces the person's Cursor plan instead of passing it through.
+ */
+const KEEPS_OWN_MODELS_BY_DEFAULT: ReadonlySet<string> = new Set(["cursor"]);
 
 export function readConnectPicks(clientId: string): ConnectPicks {
   const saved = readSaved(clientId);

@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   type QueryClient,
+  queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
@@ -60,18 +61,17 @@ export function useEffectivePolicy(
   enabled = true,
   refetchInterval: number | false = false,
 ) {
-  return useQuery({
-    queryKey: effectivePolicyQueryKey,
-    enabled,
-    refetchInterval,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getOpenappaEffectivePolicy();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-  });
+  return useQuery({ ...effectivePolicyQuery, enabled, refetchInterval });
 }
+
+export const effectivePolicyQuery = queryOptions({
+  queryKey: effectivePolicyQueryKey,
+  queryFn: async () => {
+    const { data, error } = await archestraApiSdk.getOpenappaEffectivePolicy();
+    throwOnApiError(error, { toastOnError: false });
+    return data ?? null;
+  },
+});
 
 /** The source TOML of one exact include in the current organization policy. */
 export function useBatteryPolicySource(
@@ -82,8 +82,16 @@ export function useBatteryPolicySource(
    */
   options: { serverRules?: boolean } = {},
 ) {
+  return useQuery(batteryPolicySourceQuery(entry, options));
+}
+
+/** One include's source TOML, for a caller that fetches it on demand. */
+export function batteryPolicySourceQuery(
+  entry: string,
+  options: { serverRules?: boolean } = {},
+) {
   const serverRules = options.serverRules === true;
-  return useQuery({
+  return queryOptions({
     queryKey: [
       ...batteriesQueryKey,
       serverRules ? "server-rules-source" : "policy-source",

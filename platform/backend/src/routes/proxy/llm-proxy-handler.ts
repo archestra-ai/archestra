@@ -130,6 +130,7 @@ import { appaWireFamily } from "@/openappa/wire";
 import {
   admitOpenappaRequest,
   type OpenappaAdmission,
+  resolveDisconnectBypass,
   resolveInstallerSetupBypass,
 } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
@@ -1925,13 +1926,23 @@ async function handleObservedLLMProxy<
     let admission: OpenappaAdmission = { kind: "ungoverned" };
     let governedThread: GovernedThread | undefined;
     let appaReceipts: OpenappaReceipts | undefined;
-    const installerSetupBypass = await resolveInstallerSetupBypass({
-      request,
-      body,
-      agent: resolvedAgent,
-      virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
-      appaActive,
-    });
+    // The conversation that runs a connect installer, or that disconnects
+    // a client, is let through ungoverned.
+    const connectionProcedureBypass =
+      (await resolveInstallerSetupBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+        appaActive,
+      })) ||
+      (await resolveDisconnectBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        authenticatedUserId,
+        appaActive,
+      }));
     if (hasProxyPlugins) {
       admission = await admitOpenappaRequest({
         request,
@@ -1960,7 +1971,7 @@ async function handleObservedLLMProxy<
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,
-        installerSetupBypass,
+        connectionProcedureBypass,
         ingress: appaIngress,
         toolIdentity,
         runtimeSnapshot: requestContext.runtimeSnapshot,

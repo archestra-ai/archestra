@@ -143,6 +143,10 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p "test_*.py"
 
+      # The rules each release applies when it attests these statements.
+      - name: Validate the VEX document
+        uses: archestra-ai/.github/actions/validate-vex@v1.33.0
+
   migration-kit-checks:
     name: Migration Kit Checks
     if: github.event_name == 'merge_group'
@@ -508,7 +512,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-deny@0.20.2
 
@@ -672,7 +676,7 @@ jobs:
       # credentials unpersisted and scope the read-only job token to this
       # pinned action via Git's runtime configuration.
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.16.0
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.25.2
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -777,7 +781,7 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.16.0
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.25.2
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -1303,7 +1307,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

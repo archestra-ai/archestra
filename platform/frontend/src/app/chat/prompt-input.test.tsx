@@ -1260,19 +1260,20 @@ describe("ArchestraPromptInput", () => {
       expect(onEncryptedChatChange).toHaveBeenLastCalledWith(true);
     });
 
-    it("leaves the handshake event unclaimed while chatting in a conversation", () => {
+    it("leaves the handshake event unclaimed in a conversation that cannot become encrypted", () => {
       mockFeatureState.encryptedChatEnabled = true;
-      const onEncryptedChatChange = vi.fn();
 
       render(
         <ArchestraPromptInput
           {...defaultProps}
           conversationId="conversation-1"
           allowFileUploads={true}
-          onEncryptedChatChange={onEncryptedChatChange}
         />,
       );
 
+      expect(
+        screen.queryByTestId(E2eTestId.EncryptedChatToggle),
+      ).not.toBeInTheDocument();
       let unclaimed: boolean | undefined;
       act(() => {
         unclaimed = window.dispatchEvent(
@@ -1282,7 +1283,24 @@ describe("ArchestraPromptInput", () => {
 
       // Unclaimed → the global handler proceeds to navigate to a fresh draft.
       expect(unclaimed).toBe(true);
-      expect(onEncryptedChatChange).not.toHaveBeenCalled();
+    });
+
+    it("offers the lock in a conversation the page can still reopen encrypted", () => {
+      mockFeatureState.encryptedChatEnabled = true;
+      const onEncryptedChatChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+          encryptedChat={false}
+          onEncryptedChatChange={onEncryptedChatChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId(E2eTestId.EncryptedChatToggle));
+      expect(onEncryptedChatChange).toHaveBeenCalledWith(true);
     });
   });
 

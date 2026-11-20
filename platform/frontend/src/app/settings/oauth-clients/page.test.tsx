@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -161,11 +161,7 @@ describe("OauthClientsPage", () => {
       }),
     );
     renderPage();
-    expect(
-      await screen.findByText(
-        "No OAuth clients yet. Register one for an application that authenticates with OAuth.",
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText("No OAuth clients yet")).toBeVisible();
     expect(Number(query?.get("limit"))).toBeLessThanOrEqual(100);
     expect(screen.queryByText("Types")).not.toBeInTheDocument();
     expect(
@@ -173,46 +169,33 @@ describe("OauthClientsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows all enabled capabilities and opens the combined edit flow", async () => {
+  it("lists each client's APIs, opens its page on a row click, and its edit page from Edit", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
-        HttpResponse.json(page([client])),
+        HttpResponse.json(page([{ ...client, icon: "🧪" }])),
       ),
     );
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
     const user = userEvent.setup();
     renderPage();
     const row = (await screen.findByText("Combined bot")).closest("tr");
     if (!row) throw new Error("Missing row");
-    for (const label of [
-      "MCP Gateway",
-      "A2A",
-      "LLM Proxy",
-      "1 target",
-      "1 agent",
-      "1 key",
-      "Main OpenAI",
-    ])
-      expect(await within(row).findByText(label)).toBeVisible();
-    expect(
-      screen.queryByRole("columnheader", { name: "Budget" }),
-    ).not.toBeInTheDocument();
-    await user.click(within(row).getByText("Combined bot"));
-    expect(
-      await screen.findByRole("dialog", { name: /Combined bot/ }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Budget" }));
-    expect(
-      screen.getByRole("textbox", { name: "Spend cap in dollars" }),
-    ).toHaveValue("200");
-    expect(
-      await screen.findByRole("combobox", {
-        name: "Who pays for this client?",
-      }),
-    ).toHaveTextContent("Platform");
-    await user.click(screen.getByRole("button", { name: "Access" }));
-    for (const label of [/MCP Gateway/, /A2A/, /LLM Proxy/])
-      expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
-    await waitFor(() => expect(requested).toContain("oauthClient/client-1"));
+    for (const label of ["MCP Gateway", "A2A", "LLM Proxy", "As itself"])
+      expect(within(row).getByText(label)).toBeVisible();
+    // The client's own icon replaces the sign-in mark.
+    expect(within(row).getByText("🧪")).toBeVisible();
+
+    await user.click(within(row).getByText("A2A"));
+    expect(push).toHaveBeenLastCalledWith("/settings/oauth-clients/client-1");
+
+    await user.click(within(row).getByRole("button", { name: /Edit/ }));
+    // From the list, the edit page's back link returns to the list.
+    expect(push).toHaveBeenLastCalledWith(
+      "/settings/oauth-clients/client-1/edit?from=list",
+    );
   });
 
   it("loads a capability filter from the URL and keeps combined clients visible", async () => {
@@ -243,9 +226,7 @@ describe("OauthClientsPage", () => {
       headerAction = node;
     });
     renderPage();
-    await screen.findByText(
-      "No OAuth clients yet. Register one for an application that authenticates with OAuth.",
-    );
+    await screen.findByText("No OAuth clients yet");
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

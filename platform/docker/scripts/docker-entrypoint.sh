@@ -4,15 +4,34 @@ set -e
 # Runtime initialization for the unified platform image.
 # This script:
 # - bootstraps a persistent auth secret when one is not provided
-# - optionally provisions and wires up an embedded KinD cluster for quickstart mode
+# - in quickstart mode, hands the backend its Kubernetes settings up front and
+#   resumes or creates the embedded KinD cluster in the background; the
+#   backend starts at once and attaches to the cluster when its kubeconfig
+#   appears at KUBECONFIG_PATH
 # - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
-# - injects the resolved DATABASE_URL and optional ngrok programs into supervisord config
+# - injects the resolved DATABASE_URL into supervisord's environment
 # - starts supervisord in the background so container signals can trigger graceful cleanup
-# - tears down the embedded KinD cluster on shutdown when this container created it
+# - stops the embedded KinD cluster on shutdown but keeps it, so the next start
+#   resumes it in seconds instead of creating a new one
 
-# Track if we created a KinD cluster for cleanup
-KIND_CLUSTER=""
-# Track supervisord PID for cleanup
+# Written when the background cluster setup fails, so cleanup exits non-zero.
+QUICKSTART_FAILED_FILE=/run/archestra/quickstart.failed
+CLUSTER_NAME="archestra-mcp"
+CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+# Appears only once the cluster's API answers: the backend waits for it.
+KUBECONFIG_PATH="/app/data/.kubeconfig"
+# Put the cluster on an IPv4-only network of our own instead of KinD's
+# default `kind` network, which is dual-stack. This container joins that
+# network, and with an IPv6 address on it, Docker runtimes such as OrbStack
+# forward host `localhost` (::1) to our IPv4-only servers and the
+# connection is reset.
+KIND_NETWORK="archestra-kind"
+# Pin a known-good node image to avoid compatibility issues with newer K8s versions.
+# Must match a version supported by the KinD binary version compiled in the builder stage.
+# See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
+KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
+# Track the background cluster setup and supervisord for cleanup
+PROVISION_PID=""
 SUPERVISOR_PID=""
 
 # Cleanup function for graceful shutdown
@@ -20,27 +39,345 @@ SUPERVISOR_PID=""
 # If exit_code not provided, defaults to 0 (signal-triggered cleanup)
 cleanup() {
     CLEANUP_EXIT_CODE="${1:-0}"
+    if [ -f "$QUICKSTART_FAILED_FILE" ]; then
+        CLEANUP_EXIT_CODE=1
+    fi
 
     echo "Shutting down..."
 
-    # Stop supervisord gracefully before cleaning up KinD cluster
+    if [ -n "$PROVISION_PID" ]; then
+        kill "$PROVISION_PID" 2>/dev/null || true
+    fi
+
+    # Stop supervisord gracefully before stopping the KinD cluster
     if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
         echo "Stopping services..."
         kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
         wait "$SUPERVISOR_PID" 2>/dev/null || true
     fi
 
-    # Delete KinD cluster if we created one in quickstart mode
-    if [ -n "$KIND_CLUSTER" ]; then
-        echo "Deleting KinD cluster '${KIND_CLUSTER}'..."
-        if kind delete cluster --name "${KIND_CLUSTER}" 2>/dev/null; then
-            echo "KinD cluster deleted successfully"
-        else
-            echo "Warning: Failed to delete KinD cluster"
-        fi
+    # Stop the embedded KinD node but keep it: the next start resumes it in
+    # seconds, with the Dagger Engine image and the cluster's volumes in place.
+    # A graceful node shutdown takes longer than `docker stop` waits for this
+    # container, so the node gets 3 seconds before it is killed; it resumes
+    # from that like from a power cut.
+    if [ "$ARCHESTRA_QUICKSTART" = "true" ] \
+        && docker ps -q --filter "name=^${CONTROL_PLANE_CONTAINER}$" 2>/dev/null | grep -q .; then
+        echo "Stopping KinD cluster '${CLUSTER_NAME}' (kept for the next start; remove it with: docker rm -f ${CONTROL_PLANE_CONTAINER})"
+        docker stop --time 3 "${CONTROL_PLANE_CONTAINER}" >/dev/null 2>&1 || echo "Warning: Failed to stop KinD cluster"
     fi
 
     exit "$CLEANUP_EXIT_CODE"
+}
+
+# Ends the container from the background cluster setup: the entrypoint's trap
+# runs cleanup, which exits 1 because of QUICKSTART_FAILED_FILE.
+quickstart_fail() {
+    : > "$QUICKSTART_FAILED_FILE"
+    kill -TERM $$ 2>/dev/null || true
+    exit 1
+}
+
+# Creates the KinD cluster, or prints troubleshooting steps and ends the container.
+create_cluster() {
+    echo "Creating KinD cluster '${CLUSTER_NAME}'..."
+    # Drop KinD's lines that do not apply inside this container: the
+    # "Here be dragons" warning KIND_EXPERIMENTAL_DOCKER_NETWORK triggers
+    # (the override is intentional, see above), host kubectl hints, and
+    # sign-off tips. pipefail keeps a failed create visible to the `if`.
+    if (
+        set -o pipefail
+        kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s 2>&1 \
+            | grep -v \
+                -e "Overriding docker network due to KIND_EXPERIMENTAL_DOCKER_NETWORK" \
+                -e "Here be dragons" \
+                -e "You can now use your cluster with" \
+                -e "kubectl cluster-info --context" \
+                -e "Not sure what to do next" \
+                -e "Have a question, bug, or feature request" \
+                -e "Have a nice day" \
+                -e "Thanks for using kind" \
+                -e "^$"
+    ); then
+        echo "KinD cluster created successfully"
+        return 0
+    fi
+
+    echo ""
+    echo "=== KinD cluster creation failed ==="
+    echo ""
+
+    # Detect Docker environment
+    DOCKER_SERVER_OS=$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || echo "unknown")
+    DOCKER_SERVER_PLATFORM=$(docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "unknown")
+    DOCKER_MEMORY_BYTES=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo "0")
+    DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES:-0} / 1073741824}")
+
+    echo "Docker environment:"
+    echo "  Server OS: ${DOCKER_SERVER_OS}"
+    echo "  Platform:  ${DOCKER_SERVER_PLATFORM}"
+    echo "  Memory:    ${DOCKER_MEMORY_GB} GB"
+    echo ""
+
+    IS_DOCKER_DESKTOP=false
+    if echo "${DOCKER_SERVER_OS}" | grep -qi "docker desktop"; then
+        IS_DOCKER_DESKTOP=true
+    fi
+
+    echo "Troubleshooting steps:"
+    if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
+        echo "  1. Increase Docker Desktop memory to at least 4 GB"
+        echo "     (Settings > Resources > Memory)"
+        if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "amd64"; then
+            echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
+            echo "     (Settings > General > Use the WSL 2 based engine)"
+        fi
+        echo "  3. Restart Docker Desktop and try again"
+        echo "  4. Ensure Docker has sufficient disk space"
+        echo "     Run: docker system prune -f"
+    else
+        echo "  1. Ensure Docker has at least 4 GB of memory available"
+        echo "  2. Ensure Docker has sufficient disk space"
+        echo "     Run: docker system prune -f"
+        echo "  3. Restart Docker and try again"
+    fi
+    echo ""
+    echo "NOTE: You do NOT need to enable Kubernetes in Docker Desktop settings."
+    echo "      Archestra uses KinD (Kubernetes in Docker) which manages its own cluster."
+    echo ""
+    echo "For help: https://github.com/archestra-ai/archestra/issues"
+
+    quickstart_fail
+}
+
+# Writes the kubeconfig for the running cluster, joins this container to the
+# KinD network and waits up to $1 seconds for the API server. Returns 1 when
+# the API does not answer in time.
+connect_cluster() {
+    # Built under another name and moved into place once the API answers: the
+    # backend attaches to the cluster as soon as KUBECONFIG_PATH exists.
+    staged="${KUBECONFIG_PATH}.staged"
+    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${staged}" >/dev/null 2>&1; then
+        echo "Could not export the kubeconfig for KinD cluster '${CLUSTER_NAME}'"
+        return 1
+    fi
+    chmod 600 "${staged}"
+
+    # The node's address can change when it restarts, so read it every time.
+    CONTROL_PLANE_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "${CONTROL_PLANE_CONTAINER}")
+    if [ -z "$CONTROL_PLANE_IP" ]; then
+        echo "Could not get KinD control plane IP address"
+        return 1
+    fi
+    echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
+
+    # Update kubeconfig to use control plane IP and skip TLS verification
+    # TLS verification is disabled here because:
+    # 1. This is ONLY for local development with embedded KinD cluster
+    # 2. Traffic never leaves the host machine (container-to-container communication)
+    # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
+    # 4. Production deployments use external K8s clusters with proper TLS certificates
+    # Use targeted approach to avoid duplicates and only modify KinD cluster entries.
+    # certificate-authority-data is dropped alongside enabling insecure-skip-tls-verify:
+    # strict clients (kubectl, and the Dagger kube-pod:// transport) reject a kubeconfig
+    # that sets both, so keeping the CA would break the bundled Dagger Engine connection.
+    cat "${staged}" | \
+        sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+        awk '
+            /^    server: https:\/\/.*:6443$/ {
+                print
+                if (!insecure_added) {
+                    print "    insecure-skip-tls-verify: true"
+                    insecure_added = 1
+                }
+                next
+            }
+            /^    insecure-skip-tls-verify:/ { next }
+            /^    certificate-authority-data:/ { next }
+            { print }
+        ' > "${staged}.tmp"
+    mv "${staged}.tmp" "${staged}"
+    chmod 600 "${staged}"
+
+    waited=0
+    until kubectl --kubeconfig "${staged}" get --raw=/readyz >/dev/null 2>&1; do
+        if [ "$waited" -ge "$1" ]; then
+            echo "The KinD cluster's API did not answer within ${1}s"
+            return 1
+        fi
+        waited=$((waited + 1))
+        sleep 1
+    done
+    mv "${staged}" "${KUBECONFIG_PATH}"
+}
+
+# Joins the KinD network and exports the backend's Kubernetes settings, none
+# of which depend on the cluster existing yet. Fast, so it runs before
+# supervisord: the backend reads these once at startup.
+configure_quickstart_backend() {
+    # From a previous run, in the data volume: the backend must not attach to
+    # the cluster before this run's API answers.
+    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged"
+
+    if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
+        docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null || exit 1
+    fi
+    # Connect this container to the KinD network for direct communication
+    # SECURITY WARNING: This grants the container privileged access to manipulate
+    # host Docker networks. This is acceptable ONLY for local development.
+    CONTAINER_ID=$(hostname)
+    if ! docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+        if ! docker network connect "${KIND_NETWORK}" "$CONTAINER_ID"; then
+            echo "ERROR: Failed to connect container to KinD network"
+            exit 1
+        fi
+    fi
+
+    # Agent Runtime pods call back into the platform (MCP gateway, LLM
+    # proxy). The internal URL is this container's loopback, which inside a
+    # pod is the pod itself, so hand them this container's address on the
+    # KinD network instead. Given as an IP, the run's egress policy allows
+    # exactly that address.
+    if [ -z "${ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL:-}" ]; then
+        KIND_NETWORK_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "$CONTAINER_ID")
+        PLATFORM_PORT=$(printf '%s' "${ARCHESTRA_INTERNAL_API_BASE_URL:-}" | sed -n 's#^[a-z]*://[^/]*:\([0-9][0-9]*\).*#\1#p')
+        if [ -n "$KIND_NETWORK_IP" ]; then
+            export ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL="http://${KIND_NETWORK_IP}:${PLATFORM_PORT:-9000}"
+        else
+            echo "WARNING: Could not read this container's KinD network IP; Agent Runtime runs cannot reach the platform"
+        fi
+    fi
+
+    export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+    export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+    # The node's address can change when it restarts; Docker's DNS on the
+    # KinD network resolves its name to the current one.
+    export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_CONTAINER}"
+    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
+        # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
+        # the engine pod for the kube-pod:// transport.
+        export KUBECONFIG="${KUBECONFIG_PATH}"
+        # Setting the Dagger runner host is what turns the code sandbox on.
+        # The engine may still be starting when the backend boots; the
+        # backend retries the connection on the first sandbox use.
+        export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
+    fi
+}
+
+# Brings up the embedded cluster, publishes its kubeconfig, then the Dagger
+# Engine and the Agent Sandbox controller. Runs in the background while
+# supervisord starts PostgreSQL, the backend and the frontend.
+provision_cluster() {
+    # Failures are handled explicitly: under set -e a stray failing command
+    # would end this background job silently and leave the backend waiting.
+    set +e
+    export KIND_EXPERIMENTAL_DOCKER_NETWORK="${KIND_NETWORK}"
+
+    # A cluster created by an older image sits on KinD's dual-stack `kind`
+    # network. Joining it would bring the localhost reset back, so recreate it
+    # on KIND_NETWORK. MCP servers are redeployed from the database; files in
+    # the old cluster's volumes are lost.
+    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$" \
+        && ! docker inspect -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' "${CONTROL_PLANE_CONTAINER}" 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+        echo "KinD cluster '${CLUSTER_NAME}' is on the dual-stack 'kind' network; recreating it on '${KIND_NETWORK}'..."
+        if ! kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to delete the old KinD cluster. Remove it with: docker rm -f ${CONTROL_PLANE_CONTAINER}"
+            quickstart_fail
+        fi
+    fi
+
+    # Resume the cluster an earlier run stopped. One that does not come back
+    # (stopped mid-creation, or broken) is replaced with a new one.
+    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+        echo "Resuming KinD cluster '${CLUSTER_NAME}'..."
+        if ! docker start "${CONTROL_PLANE_CONTAINER}" >/dev/null 2>&1 || ! connect_cluster 90; then
+            echo "KinD cluster '${CLUSTER_NAME}' did not come back; recreating it..."
+            kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1 || true
+            create_cluster
+            connect_cluster 120 || quickstart_fail
+        fi
+    else
+        create_cluster
+        connect_cluster 120 || quickstart_fail
+    fi
+
+    echo "Kubernetes orchestrator configured with embedded KinD cluster"
+
+    # Agent Runtime runs each task as a Sandbox resource of the upstream Agent
+    # Sandbox controller. Real deployments install it as a cluster
+    # prerequisite; the quickstart installs the version pinned in the
+    # Dockerfile. Agent Runtime turns on once the backend detects it; until
+    # then, or on failure, the UI reports the controller as missing.
+    # Installed alongside the Dagger Engine below.
+    (
+        echo "Installing Agent Sandbox controller for Agent Runtime..."
+        if [ ! -f /app/agent-sandbox.quickstart.yaml ]; then
+            echo "WARNING: Agent Sandbox controller manifest missing from this image; Agent Runtime runs will fail"
+        elif kubectl --kubeconfig "${KUBECONFIG_PATH}" apply --server-side -f /app/agent-sandbox.quickstart.yaml >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" wait --for=condition=Established --timeout=60s \
+                crd/sandboxes.agents.x-k8s.io \
+                crd/sandboxtemplates.extensions.agents.x-k8s.io \
+                crd/sandboxwarmpools.extensions.agents.x-k8s.io \
+                crd/sandboxclaims.extensions.agents.x-k8s.io >/dev/null \
+            && SANDBOX_CONFIG_RESULT=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" create configmap agent-sandbox-config -n agent-sandbox-system \
+                --from-literal=allowed-label-domains=sandbox.users.io,archestra.io \
+                --dry-run=client -o yaml \
+                | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -) \
+            && {
+                # A resumed cluster already runs the controller with this
+                # configuration; restart it only when the configuration changed.
+                case "$SANDBOX_CONFIG_RESULT" in
+                    *unchanged*) : ;;
+                    *) kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout restart deployment/agent-sandbox-controller -n agent-sandbox-system >/dev/null ;;
+                esac
+            } \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s >/dev/null; then
+            echo "Agent Sandbox controller ready - Agent Runtime enabled"
+        else
+            echo "WARNING: Agent Sandbox controller did not become ready; Agent Runtime runs will fail until it is installed"
+        fi
+    ) &
+
+    # Bundle the Dagger Engine that backs the skill sandbox / code runtime
+    # (archestra__run_command and friends). It runs as a privileged pod in the embedded KinD
+    # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
+    # dial-stdio), so no Service or TCP port is needed. Real deployments have the
+    # backend provision engines in code; the quickstart runs this one instead.
+    # The manifest is docker/dagger-engine.quickstart.yaml, sized for a laptop.
+    # Opt out with ARCHESTRA_CODE_RUNTIME_ENABLED=false.
+    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
+        echo "Deploying embedded Dagger Engine for code runtime..."
+        echo "NOTE: the engine is privileged and memory-hungry; ensure Docker has at least 6 GB."
+
+        # Pre-load the engine image straight into the node's containerd, whose
+        # cache the host Docker image cache does not reach. The image is baked
+        # into this image as a docker-archive at build time, so the engine
+        # starts offline (manifest uses imagePullPolicy: IfNotPresent). A
+        # resumed cluster already has it. Slim image variants (CI e2e shards,
+        # Dockerfile target unified-slim) omit the archive; they fall back to a
+        # registry pull if the engine is needed.
+        ENGINE_IMAGE=$(sed -n 's#^ *image: *\(registry\.dagger\.io/engine:[^ ]*\).*#\1#p' /app/dagger-engine.quickstart.yaml | head -n 1)
+        if [ -n "$ENGINE_IMAGE" ] \
+            && docker exec "${CONTROL_PLANE_CONTAINER}" crictl inspecti "$ENGINE_IMAGE" >/dev/null 2>&1; then
+            echo "Dagger Engine image already in KinD"
+        elif [ -f /app/dagger-engine.tar ]; then
+            echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
+            kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
+                || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+        else
+            echo "No bundled Dagger Engine archive in this image (slim variant); the engine will be pulled from the registry"
+        fi
+
+        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+                statefulset/dagger-runtime-engine -n default --timeout=180s >/dev/null; then
+            echo "Dagger Engine ready - code runtime enabled"
+        else
+            echo "WARNING: Dagger Engine did not become ready; code runtime commands fail until it does"
+        fi
+    fi
+
+    wait
 }
 
 # Generate and persist ARCHESTRA_AUTH_SECRET if not set
@@ -69,7 +406,7 @@ fi
 # For production, use external Kubernetes clusters without mounting the Docker socket.
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
-    echo "Quickstart mode enabled - initializing embedded KinD cluster..."
+    echo "Quickstart mode enabled - starting the embedded KinD cluster in the background..."
 
     # Quickstart is meant for humans tailing `docker logs`, so default the
     # backend log format to pretty. User-set values win.
@@ -116,270 +453,19 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         echo "ERROR: KinD binary not found in this image."
         exit 1
     fi
+fi
 
-    # Quickstart mode always uses embedded KinD cluster
-    CLUSTER_NAME="archestra-mcp"
-    KUBECONFIG_PATH="/app/data/.kubeconfig"
-    # Pin a known-good node image to avoid compatibility issues with newer K8s versions.
-    # Must match a version supported by the KinD binary version compiled in the builder stage.
-    # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
-    KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
+rm -f "$QUICKSTART_FAILED_FILE"
+mkdir -p "$(dirname "$QUICKSTART_FAILED_FILE")"
 
-    # Put the cluster on an IPv4-only network of our own instead of KinD's
-    # default `kind` network, which is dual-stack. This container joins that
-    # network, and with an IPv6 address on it, Docker runtimes such as OrbStack
-    # forward host `localhost` (::1) to our IPv4-only servers and the
-    # connection is reset.
-    KIND_NETWORK="archestra-kind"
-    export KIND_EXPERIMENTAL_DOCKER_NETWORK="${KIND_NETWORK}"
-    if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
-        docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null
-    fi
+# Set up signal handlers before any background work, so Ctrl+C at any point
+# stops what has started.
+trap cleanup SIGTERM SIGINT
 
-    CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-
-    # A cluster created by an older image sits on KinD's dual-stack `kind`
-    # network. Joining it would bring the localhost reset back, so recreate it
-    # on KIND_NETWORK. MCP servers are redeployed from the database; files in
-    # the old cluster's volumes are lost.
-    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$" \
-        && ! docker inspect -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' "${CONTROL_PLANE_CONTAINER}" 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
-        echo "KinD cluster '${CLUSTER_NAME}' is on the dual-stack 'kind' network; recreating it on '${KIND_NETWORK}'..."
-        if ! kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1; then
-            echo "ERROR: Failed to delete the old KinD cluster. Remove it with: docker rm -f ${CONTROL_PLANE_CONTAINER}"
-            exit 1
-        fi
-    fi
-
-    # Check if cluster already exists
-    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
-        echo "KinD cluster '${CLUSTER_NAME}' already exists"
-    else
-        echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        # Drop KinD's lines that do not apply inside this container: the
-        # "Here be dragons" warning KIND_EXPERIMENTAL_DOCKER_NETWORK triggers
-        # (the override is intentional, see above), host kubectl hints, and
-        # sign-off tips. pipefail keeps a failed create visible to the `if`.
-        if ! (
-            set -o pipefail
-            kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s 2>&1 \
-                | grep -v \
-                    -e "Overriding docker network due to KIND_EXPERIMENTAL_DOCKER_NETWORK" \
-                    -e "Here be dragons" \
-                    -e "You can now use your cluster with" \
-                    -e "kubectl cluster-info --context" \
-                    -e "Not sure what to do next" \
-                    -e "Have a question, bug, or feature request" \
-                    -e "Have a nice day" \
-                    -e "Thanks for using kind" \
-                    -e "^$"
-        ); then
-            echo ""
-            echo "=== KinD cluster creation failed ==="
-            echo ""
-
-            # Detect Docker environment
-            DOCKER_SERVER_OS=$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || echo "unknown")
-            DOCKER_SERVER_PLATFORM=$(docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "unknown")
-            DOCKER_MEMORY_BYTES=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo "0")
-            DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES:-0} / 1073741824}")
-
-            echo "Docker environment:"
-            echo "  Server OS: ${DOCKER_SERVER_OS}"
-            echo "  Platform:  ${DOCKER_SERVER_PLATFORM}"
-            echo "  Memory:    ${DOCKER_MEMORY_GB} GB"
-            echo ""
-
-            IS_DOCKER_DESKTOP=false
-            if echo "${DOCKER_SERVER_OS}" | grep -qi "docker desktop"; then
-                IS_DOCKER_DESKTOP=true
-            fi
-
-            echo "Troubleshooting steps:"
-            if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
-                echo "  1. Increase Docker Desktop memory to at least 4 GB"
-                echo "     (Settings > Resources > Memory)"
-                if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "amd64"; then
-                    echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
-                    echo "     (Settings > General > Use the WSL 2 based engine)"
-                fi
-                echo "  3. Restart Docker Desktop and try again"
-                echo "  4. Ensure Docker has sufficient disk space"
-                echo "     Run: docker system prune -f"
-            else
-                echo "  1. Ensure Docker has at least 4 GB of memory available"
-                echo "  2. Ensure Docker has sufficient disk space"
-                echo "     Run: docker system prune -f"
-                echo "  3. Restart Docker and try again"
-            fi
-            echo ""
-            echo "NOTE: You do NOT need to enable Kubernetes in Docker Desktop settings."
-            echo "      Archestra uses KinD (Kubernetes in Docker) which manages its own cluster."
-            echo ""
-            echo "For help: https://github.com/archestra-ai/archestra/issues"
-
-            exit 1
-        fi
-        echo "KinD cluster created successfully"
-        # Mark for cleanup on shutdown
-        KIND_CLUSTER="${CLUSTER_NAME}"
-    fi
-
-    # Export kubeconfig
-    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"; then
-        echo "ERROR: Failed to export kubeconfig for KinD cluster"
-        exit 1
-    fi
-    chmod 600 "${KUBECONFIG_PATH}"
-
-    # Get the KinD control plane container IP address
-    CONTROL_PLANE_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "${CONTROL_PLANE_CONTAINER}")
-
-    if [ -z "$CONTROL_PLANE_IP" ]; then
-        echo "ERROR: Could not get KinD control plane IP address"
-        exit 1
-    else
-        echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
-
-        # Update kubeconfig to use control plane IP and skip TLS verification
-        # TLS verification is disabled here because:
-        # 1. This is ONLY for local development with embedded KinD cluster
-        # 2. Traffic never leaves the host machine (container-to-container communication)
-        # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
-        # 4. Production deployments use external K8s clusters with proper TLS certificates
-        # Use targeted approach to avoid duplicates and only modify KinD cluster entries.
-        # certificate-authority-data is dropped alongside enabling insecure-skip-tls-verify:
-        # strict clients (kubectl, and the Dagger kube-pod:// transport) reject a kubeconfig
-        # that sets both, so keeping the CA would break the bundled Dagger Engine connection.
-        cat "${KUBECONFIG_PATH}" | \
-            sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
-            awk '
-                /^    server: https:\/\/.*:6443$/ {
-                    print
-                    if (!insecure_added) {
-                        print "    insecure-skip-tls-verify: true"
-                        insecure_added = 1
-                    }
-                    next
-                }
-                /^    insecure-skip-tls-verify:/ { next }
-                /^    certificate-authority-data:/ { next }
-                { print }
-            ' > "${KUBECONFIG_PATH}.tmp"
-        mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
-        chmod 600 "${KUBECONFIG_PATH}"
-
-        # Connect this container to the KinD network for direct communication
-        # SECURITY WARNING: This grants the container privileged access to manipulate
-        # host Docker networks. This is acceptable ONLY for local development.
-        CONTAINER_ID=$(hostname)
-        if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
-            echo "Container already connected to KinD network"
-        else
-            echo "Connecting container to KinD network..."
-            if ! docker network connect "${KIND_NETWORK}" "$CONTAINER_ID"; then
-                echo "ERROR: Failed to connect container to KinD network"
-                exit 1
-            fi
-            echo "Connected to KinD network successfully"
-        fi
-
-        # Agent Runtime pods call back into the platform (MCP gateway, LLM
-        # proxy). The internal URL is this container's loopback, which inside a
-        # pod is the pod itself, so hand them this container's address on the
-        # KinD network instead. Given as an IP, the run's egress policy allows
-        # exactly that address.
-        if [ -z "${ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL:-}" ]; then
-            KIND_NETWORK_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "$CONTAINER_ID")
-            PLATFORM_PORT=$(printf '%s' "${ARCHESTRA_INTERNAL_API_BASE_URL:-}" | sed -n 's#^[a-z]*://[^/]*:\([0-9][0-9]*\).*#\1#p')
-            if [ -n "$KIND_NETWORK_IP" ]; then
-                export ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL="http://${KIND_NETWORK_IP}:${PLATFORM_PORT:-9000}"
-            else
-                echo "WARNING: Could not read this container's KinD network IP; Agent Runtime runs cannot reach the platform"
-            fi
-        fi
-
-        # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
-        export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
-        export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
-        export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_IP}"
-        echo "Kubernetes orchestrator configured with embedded KinD cluster"
-    fi
-
-    # Bundle the Dagger Engine that backs the skill sandbox / code runtime
-    # (archestra__run_command and friends). It runs as a privileged pod in the embedded KinD
-    # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
-    # dial-stdio), so no Service or TCP port is needed. Real deployments have the
-    # backend provision engines in code; the quickstart runs this one instead, so a
-    # demo container never waits on an engine coming up at first use. The manifest
-    # is docker/dagger-engine.quickstart.yaml, sized for a laptop.
-    # Opt out with ARCHESTRA_CODE_RUNTIME_ENABLED=false.
-    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
-        echo "Deploying embedded Dagger Engine for code runtime..."
-        echo "NOTE: the engine is privileged and memory-hungry; ensure Docker has at least 6 GB."
-
-        # Pre-load the engine image straight into the node's containerd. KinD is
-        # recreated each run and its containerd cannot see the host Docker image
-        # cache, so without this every boot would pull ~352MB from the registry.
-        # The image is baked into this image as a docker-archive at build time, so
-        # the engine starts offline (manifest uses imagePullPolicy: IfNotPresent).
-        # Slim image variants (CI e2e shards, Dockerfile target unified-slim) omit
-        # the archive; they fall back to a registry pull if the engine is needed.
-        if [ -f /app/dagger-engine.tar ]; then
-            echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
-            kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
-                || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
-        else
-            echo "No bundled Dagger Engine archive in this image (slim variant); the engine will be pulled from the registry"
-        fi
-
-        # Gate the runtime on the engine actually being Ready: kubectl apply only
-        # proves the API accepted the manifest, not that the pod scheduled and
-        # passed its probe. With the image pre-loaded, 60s is ample on the happy
-        # path; on timeout we leave the feature off rather than advertise a pod
-        # that never came up.
-        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml \
-            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
-                statefulset/dagger-runtime-engine -n default --timeout=60s; then
-            # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
-            # the engine pod for the kube-pod:// transport.
-            export KUBECONFIG="${KUBECONFIG_PATH}"
-            # Setting the Dagger runner host is what turns the code sandbox on;
-            # the backend enables the sandbox when a Dagger host is present.
-            export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
-            echo "Dagger Engine ready - code runtime enabled"
-        else
-            echo "WARNING: Dagger Engine did not become ready; code runtime stays disabled"
-        fi
-    fi
-
-    # Agent Runtime runs each task as a Sandbox resource of the upstream Agent
-    # Sandbox controller. Real deployments install it as a cluster
-    # prerequisite; the quickstart installs the version pinned in the
-    # Dockerfile. Agent Runtime turns on once the backend detects it; until
-    # then, or on failure, the UI reports the controller as missing.
-    # Installed in the background so it never delays startup.
-    (
-        echo "Installing Agent Sandbox controller for Agent Runtime..."
-        if [ ! -f /app/agent-sandbox.quickstart.yaml ]; then
-            echo "WARNING: Agent Sandbox controller manifest missing from this image; Agent Runtime runs will fail"
-        elif kubectl --kubeconfig "${KUBECONFIG_PATH}" apply --server-side -f /app/agent-sandbox.quickstart.yaml >/dev/null \
-            && kubectl --kubeconfig "${KUBECONFIG_PATH}" wait --for=condition=Established --timeout=60s \
-                crd/sandboxes.agents.x-k8s.io \
-                crd/sandboxtemplates.extensions.agents.x-k8s.io \
-                crd/sandboxwarmpools.extensions.agents.x-k8s.io \
-                crd/sandboxclaims.extensions.agents.x-k8s.io >/dev/null \
-            && kubectl --kubeconfig "${KUBECONFIG_PATH}" create configmap agent-sandbox-config -n agent-sandbox-system \
-                --from-literal=allowed-label-domains=sandbox.users.io,archestra.io \
-                --dry-run=client -o yaml \
-                | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - >/dev/null \
-            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout restart deployment/agent-sandbox-controller -n agent-sandbox-system >/dev/null \
-            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s >/dev/null; then
-            echo "Agent Sandbox controller ready - Agent Runtime enabled"
-        else
-            echo "WARNING: Agent Sandbox controller did not become ready; Agent Runtime runs will fail until it is installed"
-        fi
-    ) &
+if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
+    configure_quickstart_backend
+    provision_cluster &
+    PROVISION_PID=$!
 fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)
@@ -517,9 +603,6 @@ unset keep_alive_ms keep_alive_invalid
 # ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
 # handled in-process by the backend via the ngrok agent SDK — no binary download
 # or supervisord program is needed. See backend/src/ngrok-tunnel-manager.ts.
-
-# Set up signal handlers now that all initialization is complete
-trap cleanup SIGTERM SIGINT
 
 # Derive the supervisor limit from the same durations as the backend.
 ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS="$(node /app/shutdown-budget.mjs)"

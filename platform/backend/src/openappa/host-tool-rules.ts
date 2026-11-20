@@ -160,6 +160,7 @@ const HOST_CLIENT_CODING_ALIASES: Readonly<
   shell: [
     { name: "host/archestra/exec_command", args: { command: "cmd" } },
     { name: "host/archestra/shell", args: { command: "command" } },
+    { name: "host/archestra/Shell", args: { command: "command" } },
     { name: "host/archestra/bash", args: { command: "command" } },
     {
       name: "host/archestra/mcp__workspace__bash",
@@ -177,7 +178,10 @@ const HOST_CLIENT_CODING_ALIASES: Readonly<
     { name: "host/archestra/write", args: { file_path: "filePath" } },
     { name: "host/archestra/create", args: { file_path: "file_path" } },
   ],
-  edit_file: [{ name: "host/archestra/edit", args: { file_path: "filePath" } }],
+  edit_file: [
+    { name: "host/archestra/edit", args: { file_path: "filePath" } },
+    { name: "host/archestra/StrReplace", args: { file_path: "file_path" } },
+  ],
   fetch_url: [
     { name: "host/archestra/webfetch", args: { url: "url" } },
     {

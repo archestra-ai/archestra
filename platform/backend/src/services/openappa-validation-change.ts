@@ -192,6 +192,7 @@ export async function publishOpenAppaValidationChange(
         sourceVersion: saved.version,
         directory: proposal.collection.directory,
         partial: request.changes.upsert.length < proposal.files.length,
+        requireCurrentPolicy: true,
       });
     } catch (error) {
       runError = classifyPostSaveRunFailure(error, organizationId);

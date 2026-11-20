@@ -307,6 +307,49 @@ describe("source-aware validation proposals", () => {
     );
   });
 
+  test("a policy change during the immediate replay preserves the saved files without recording a stale run", async () => {
+    const native = await import("@archestra/openappa-rs");
+    const replay = native.replayOpenappaPolicy;
+    const spy = vi
+      .spyOn(native, "replayOpenappaPolicy")
+      .mockImplementationOnce(async (input, onProgress) => {
+        // Replay already captured revision 1; replace the policy while it runs.
+        await GuardrailsPolicyModel.save({
+          ...caller(),
+          content: proposedPolicy,
+          contentHash: hash(proposedPolicy),
+          updatedBy: ctx.user.id,
+          expectedRevision: 1,
+        });
+        return replay(input, onProgress);
+      });
+    try {
+      const saved = await publishOpenAppaValidationChange(publish());
+      const savedVersion = (
+        await OpenAppaPolicyTestsModel.find(ctx.organizationId)
+      )?.version;
+      expect(saved).toMatchObject({
+        delivery: "revision",
+        revision: 1,
+        version: savedVersion,
+        run: null,
+        runError: expect.stringContaining("changed before the run was saved"),
+        savedPaths: [added.path],
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
+    ).toEqual([existing, added]);
+    expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
+      [],
+    );
+    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
+      { revision: 2, content: proposedPolicy },
+    );
+  });
+
   test.each([
     {
       name: "replay_busy",

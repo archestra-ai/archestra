@@ -132,7 +132,11 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("allow_call"),
       spawn_binding: z.string().min(1).optional(),
+      // The spawn was released under the deferred return its call declared.
+      defers_return: z.literal(true).optional(),
     }),
+    // A subagent's answer the runtime kept for its parent's decision; no body.
+    z.object({ decision: z.literal("defer_return") }),
     z.object({ decision: z.literal("pass_control") }),
     z.object({ decision: z.literal("held"), running: z.array(z.string()) }),
     z.object({
@@ -251,6 +255,9 @@ type ProcessedToolResult = {
  * is not among the stopping request's answered calls. Nothing was recorded.
  */
 type HeldStop = { decision: "held"; running: string[] };
+
+/** The child's answer crossed nothing; the session that spawned it decides. */
+type DeferredStop = { decision: "deferred" };
 
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -1890,7 +1897,19 @@ export async function endChild(params: {
   childNativeId?: string;
   answeredCallIds?: readonly string[];
 }): Promise<ChildEndOutcome | HeldStop> {
-  return crossChildValue({ ...params, event: "child_end" });
+  return undeferred(await crossChildValue({ ...params, event: "child_end" }));
+}
+
+/** Only an in-process subagent's own stop is declared deferred. */
+function undeferred<Outcome extends { decision: string }>(
+  outcome: Outcome | DeferredStop,
+): Outcome {
+  if (outcome.decision === "deferred") {
+    throw openappaFailure(
+      new Error("OpenAPPA deferred a return no spawn declared deferred"),
+    );
+  }
+  return outcome as Outcome;
 }
 
 /**
@@ -1908,12 +1927,37 @@ export async function returnRuntimeValue(params: {
   | { kind: "admitted"; value: string }
   | { kind: "held"; reason: string; busy?: true }
 > {
+  const outcome = await returnSubagentValue(params);
+  if (outcome.kind === "deferred") {
+    throw openappaFailure(
+      new Error("OpenAPPA deferred a return no spawn declared deferred"),
+    );
+  }
+  return outcome;
+}
+
+/**
+ * The stop of an in-process subagent: its final answer, offered to the
+ * session that spawned it. `deferred` when that spawn declared a deferred
+ * return and the answer would narrow its parent: nothing crossed, the
+ * subagent's errand is over, and the parent decides.
+ */
+export async function returnSubagentValue(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  value: string;
+}): Promise<
+  | { kind: "admitted"; value: string }
+  | { kind: "held"; reason: string; busy?: true }
+  | { kind: "deferred" }
+> {
   const outcome = await crossChildValue({
     session: params.session,
     operationId: params.operationId,
     output: params.value,
     event: "child_return",
   });
+  if (outcome.decision === "deferred") return { kind: "deferred" };
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
   }
@@ -2026,13 +2070,13 @@ function runtimeToolResult(decision: NativeDecision): CallToolResult {
 /** How a delegation call's child may return, when the platform declares it. */
 export type SpawnReturnDeclaration =
   | { kind: "as_spoken" }
-  | { kind: "attested"; schema: Record<string, unknown> };
+  | { kind: "attested"; schema: Record<string, unknown> }
+  | { kind: "deferred" };
 
 /** The `declares` a spawn's tool call carries, as the runtime reads it. */
-type SpawnReturnDeclares = {
-  label: Record<string, never>;
-  return_schema?: unknown;
-};
+type SpawnReturnDeclares =
+  | { label: Record<string, never>; return_schema?: unknown }
+  | { deferred: true };
 
 function spawnReturnDeclares(
   declaration: SpawnReturnDeclaration,
@@ -2045,6 +2089,8 @@ function spawnReturnDeclares(
         label: {},
         return_schema: normalizeReturnSchemaNode(declaration.schema),
       };
+    case "deferred":
+      return { deferred: true };
   }
 }
 
@@ -2275,6 +2321,67 @@ export async function loadChildReturns(params: {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
       "OpenAPPA could not load child returns",
+    );
+    throw openappaFailure(error);
+  }
+}
+
+/**
+ * A decision on a deferred return, as the runtime's notice quotes it for the
+ * control call's `offer_id`. No offer id is spelled this way.
+ */
+export function isDeferredReturnReference(offerId: string): boolean {
+  return /^ret-[0-9a-f]{16}$/.test(offerId);
+}
+
+/**
+ * What a session reads as the result of a spawn whose subagent's answer was
+ * deferred: the runtime's notice, with the two references the session's
+ * control call quotes to take the answer or drop it. `null` for a spawn with
+ * no deferred return. The notice stands in for the answer from the subagent's
+ * stop on, before and after the decision; the answer itself arrives only as
+ * the result of the control call that takes it.
+ */
+export async function loadDeferredReturn(params: {
+  session: OpenAppaSession;
+  spawnCallId: string;
+  controlToolName?: string;
+}): Promise<string | null> {
+  const { session } = params;
+  try {
+    const module = await binding();
+    const presentation = nativePresentation(params.controlToolName, true);
+    const deferred = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(session.organization_id);
+        return withNativeStorageRetry(() =>
+          withOpenappaContentEncryption(
+            session.organization_id,
+            session.session_id,
+            (encryption) =>
+              module.loadDeferredReturn(
+                {
+                  organizationId: session.organization_id,
+                  sessionId: session.session_id,
+                  spawnCallId: params.spawnCallId,
+                  controlTool: presentation.control_tool,
+                  supportsDelegation: presentation.supports_delegation,
+                  ...(presentation.yell_tool
+                    ? { yellTool: presentation.yell_tool }
+                    : {}),
+                },
+                policy,
+                encryption,
+              ),
+          ),
+        );
+      },
+    });
+    return deferred?.notice ?? null;
+  } catch (error) {
+    logger.warn(
+      { err: error, sessionId: session.session_id },
+      "OpenAPPA could not load a deferred return",
     );
     throw openappaFailure(error);
   }
@@ -2661,13 +2768,14 @@ function validateReturnContract(text: string): void {
 
 async function crossChildValue(
   params: Parameters<typeof governedCrossChildValue>[0],
-): Promise<ChildEndOutcome | HeldStop> {
+): Promise<ChildEndOutcome | HeldStop | DeferredStop> {
   try {
     if (await isUnenforcedSession(params.session))
       return { decision: "release", crossed: true };
     const result = await governedCrossChildValue(params);
-    // A held end is not a ruling, so it is never waived.
-    if (result.decision === "held") return result;
+    // Neither a held end nor a deferred return is a ruling, so neither is waived.
+    if (result.decision === "held" || result.decision === "deferred")
+      return result;
     if (
       !result.crossed &&
       (await waiveSoftBlock(params.session, params.event, result.content))
@@ -2692,7 +2800,7 @@ async function governedCrossChildValue(params: {
   spawnCallId?: string;
   childNativeId?: string;
   answeredCallIds?: readonly string[];
-}): Promise<ChildEndOutcome | HeldStop> {
+}): Promise<ChildEndOutcome | HeldStop | DeferredStop> {
   if (!params.session.parent_id) {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
   }
@@ -2727,6 +2835,9 @@ async function governedCrossChildValue(params: {
   }
   if (decision.decision === "ack") {
     return { decision: "release", crossed: true };
+  }
+  if (decision.decision === "defer_return") {
+    return { decision: "deferred" };
   }
   if (decision.decision === "block") {
     return {

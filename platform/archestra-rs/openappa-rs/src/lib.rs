@@ -10,6 +10,7 @@ mod batteries;
 pub mod child_returns;
 mod consults;
 mod declarations;
+pub mod deferred_returns;
 mod deployments;
 mod errors;
 mod input;
@@ -72,8 +73,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId,
+    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
+    SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -957,10 +958,7 @@ impl State {
                     spawn: input.spawn.then_some(SpawnKind::Single),
                     prompt: None,
                     ruling: None,
-                    declares: input
-                        .declares
-                        .clone()
-                        .map(appa_runtime_api::DeclaredReturn::from),
+                    declares: input.declares.clone().map(DeclaredReturn::from),
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
@@ -1016,7 +1014,12 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            wire(&outcome.decision)?
+            self.decided(
+                &actor,
+                &operation,
+                input.declares.as_ref(),
+                &outcome.decision,
+            )?
         };
         finish_operation(
             &self.store,
@@ -1328,6 +1331,30 @@ impl State {
         Ok(response)
     }
 
+    /// The runtime's decision as the host reads it. The release of a spawn that declared a
+    /// deferred return says whether that is the return it was released under: a
+    /// declaration made ahead of the spawn can release it under another, and the host
+    /// runs the subagent by the recorded one.
+    fn decided(
+        &self,
+        actor: &Actor,
+        call_id: &str,
+        declares: Option<&crate::input::DeclaredReturn>,
+        decision: &HookDecision,
+    ) -> napi::Result<Value> {
+        let mut response = wire(decision)?;
+        if let (HookDecision::AllowCall { .. }, Some(crate::input::DeclaredReturn::Deferred)) =
+            (decision, declares)
+            && self
+                .runtime
+                .defers_return(actor, call_id)
+                .map_err(deferred_returns::read_failure)?
+        {
+            response["defers_return"] = json!(true);
+        }
+        Ok(response)
+    }
+
     /// Re-drives a call whose receipt an interrupted dispatch left pending,
     /// then completes that receipt with the answer. The runtime replays a
     /// decision it committed and decides afresh one it never recorded, so the
@@ -1342,6 +1369,7 @@ impl State {
         context: Option<Value>,
     ) -> napi::Result<CompletedOperation> {
         let call = recorded_call(context.clone(), recorded.clone())?;
+        let declares = recorded_declaration(&recorded)?;
         let event = HookEvent::ToolCall {
             actor: actor.clone(),
             call: proposed_recorded_call(&call)?,
@@ -1349,7 +1377,7 @@ impl State {
             spawn: call.spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
-            declares: recorded_declaration(&recorded)?.map(appa_runtime_api::DeclaredReturn::from),
+            declares: declares.clone().map(DeclaredReturn::from),
         };
         let outcome = hooks::handle_embedded_with_options(
             &self.runtime,
@@ -1357,7 +1385,12 @@ impl State {
             result_presentation_options(input, &call),
         )
         .await;
-        let decision = wire(&outcome.decision)?;
+        let decision = self.decided(
+            actor,
+            &operation.operation_id,
+            declares.as_ref(),
+            &outcome.decision,
+        )?;
         self.store
             .complete_operation(operation.clone(), decision.clone(), receipts.owner())
             .map_err(receipt_failure)?;

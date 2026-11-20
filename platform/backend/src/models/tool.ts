@@ -2749,6 +2749,40 @@ class ToolModel {
       );
   }
 
+  static async findProxyToolNames(params: {
+    organizationId: string;
+    userId: string;
+    isAgentAdmin: boolean;
+  }): Promise<Array<{ name: string }>> {
+    return db
+      .selectDistinct({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(visibleProxyToolNamesCondition(params));
+  }
+
+  static async findDescribedProxyToolsByNames(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    names: string[];
+  }): Promise<
+    Array<{ name: string; description: string | null; parameters: unknown }>
+  > {
+    if (params.names.length === 0) return [];
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          visibleProxyToolsCondition(params),
+          inArray(schema.toolsTable.name, params.names),
+        ),
+      );
+  }
+
   /**
    * Get basic tool info (name and catalogId) for multiple catalogs in a single query.
    * Used for batch loading tools across multiple catalogs.
@@ -4343,5 +4377,75 @@ function coverageCatalogCondition(params: {
     params.catalogIds ? inArray(table.id, params.catalogIds) : undefined,
     isNull(table.parentCatalogItemId),
     notDeleted(table),
+  );
+}
+
+function proxyToolBaseCondition() {
+  return and(
+    isNull(schema.toolsTable.agentId),
+    isNull(schema.toolsTable.delegateToAgentId),
+    isNull(schema.toolsTable.delegateToA2aConnectionId),
+    eq(schema.toolsTable.clonedPendingDiscovery, false),
+    notDeleted(schema.toolsTable),
+  );
+}
+
+function observedByUserCondition(userId: string) {
+  return exists(
+    db
+      .select({ id: schema.toolObservationsTable.id })
+      .from(schema.toolObservationsTable)
+      .where(
+        and(
+          eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+          eq(schema.toolObservationsTable.userId, userId),
+        ),
+      ),
+  );
+}
+
+function visibleProxyToolNamesCondition(params: {
+  organizationId: string;
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  // Proxy ingestion deduplicates names globally against existing catalog rows
+  // and attributes observations to the reused row. Include caller/org proxy
+  // observations for name recognition even when catalogId is non-null, while
+  // keeping metadata reads restricted to uncataloged proxy rows below.
+  const visibility = params.isAgentAdmin
+    ? or(
+        isNull(schema.toolsTable.catalogId),
+        exists(
+          db
+            .select({ id: schema.toolObservationsTable.id })
+            .from(schema.toolObservationsTable)
+            .innerJoin(
+              schema.membersTable,
+              eq(
+                schema.membersTable.userId,
+                schema.toolObservationsTable.userId,
+              ),
+            )
+            .where(
+              and(
+                eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+                eq(schema.membersTable.organizationId, params.organizationId),
+              ),
+            ),
+        ),
+      )
+    : observedByUserCondition(params.userId);
+  return and(proxyToolBaseCondition(), visibility);
+}
+
+function visibleProxyToolsCondition(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  return and(
+    isNull(schema.toolsTable.catalogId),
+    proxyToolBaseCondition(),
+    params.isAgentAdmin ? undefined : observedByUserCondition(params.userId),
   );
 }

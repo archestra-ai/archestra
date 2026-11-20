@@ -12,7 +12,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
@@ -68,11 +68,7 @@ import {
   reviewedCallArguments,
   reviewedToolLabel,
 } from "@/openappa/review-display";
-import {
-  type RuleTarget,
-  ruleTargetWarning,
-  touchedToolMetadata,
-} from "@/openappa/rule-targets";
+import { type RuleTarget, touchedToolMetadata } from "@/openappa/rule-targets";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -871,8 +867,15 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, its warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
-    schema: ProposedGuardrailsPolicySchema,
+      'Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. If an added or changed MCP tool rule names a tool absent from the MCP registry and observed LLM proxy traffic, preview stops and returns `stage: "confirmation_required"` with `unknownTools` instead of a diff. Explain the issue with that list and ask the user via ask_user first. Call preview_guardrails_policy_change again with `allowUnknownTools: true` only if they approve. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, any warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.',
+    schema: ProposedGuardrailsPolicySchema.extend({
+      allowUnknownTools: z
+        .boolean()
+        .nullish()
+        .describe(
+          "Set true only after the user approves rules for tools absent from the MCP registry and observed LLM proxy traffic.",
+        ),
+    }),
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
         const { organizationId, userId } = organizationUser(
@@ -895,11 +898,41 @@ const registry = defineArchestraTools([
           before: before.content,
           after,
         });
-        // Tool targets are classified once below, for warnings and metadata alike.
         const validation = await guardrailsPolicyService.validate(after, {
           organizationId,
           previous: before.content,
         });
+        const targets = validation.valid
+          ? await guardrailsPolicyService.touchedRuleTargets({
+              organizationId,
+              userId,
+              content: after,
+              previous: before.content,
+            })
+          : [];
+        const unknownTargets = targets.filter(
+          (
+            target,
+          ): target is Extract<
+            RuleTarget,
+            { kind: "unknown_tool" | "unknown_server" }
+          > =>
+            target.kind === "unknown_tool" || target.kind === "unknown_server",
+        );
+        if (unknownTargets.length > 0 && args.allowUnknownTools !== true) {
+          return result({
+            stage: "confirmation_required",
+            valid: true,
+            unknownTools: unknownTargets.map((target) => ({
+              rule: target.rule,
+              reason: target.kind,
+              prefix: target.server,
+              closest: target.closest,
+            })),
+            warnings: validation.warnings,
+            instruction: UNKNOWN_TOOLS_CONFIRMATION_INSTRUCTION,
+          });
+        }
         const [sync, validations] = await Promise.all([
           getAppaGithubSync(organizationId),
           // Replay the saved validations against the unsaved policy, so the
@@ -916,18 +949,6 @@ const registry = defineArchestraTools([
             : null,
         ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
-        const targets = validation.valid
-          ? await guardrailsPolicyService.touchedRuleTargets({
-              organizationId,
-              userId,
-              content: after,
-              previous: before.content,
-            })
-          : [];
-        const targetWarnings = targets.flatMap(
-          (target) => ruleTargetWarning(target) ?? [],
-        );
-        const unresolvedTargets = targetWarnings.length > 0;
         return policyChangeResult({
           stage: "preview",
           validations,
@@ -945,15 +966,12 @@ const registry = defineArchestraTools([
           before: before.content,
           after,
           ...validation,
-          warnings: [...validation.warnings, ...targetWarnings],
           // A model that only read the skill ends its turn on the preview;
           // the next step is repeated here, where it decides what to do next.
           ...(validation.valid &&
           (after !== before.content || before.revision === 0)
             ? {
-                instruction: unresolvedTargets
-                  ? `${UNRESOLVED_TOOL_INSTRUCTION} ${PREVIEW_APPROVAL_INSTRUCTION}`
-                  : PREVIEW_APPROVAL_INSTRUCTION,
+                instruction: PREVIEW_APPROVAL_INSTRUCTION,
               }
             : {}),
           touchedTools: await touchedToolsMetadata({
@@ -1696,8 +1714,8 @@ function organization(context: ArchestraContext): string {
   return context.organizationId;
 }
 
-const UNRESOLVED_TOOL_INSTRUCTION =
-  "`warnings` says a tool rule names a tool that does not exist, so that rule governs nothing. Before anything else, tell the user plainly and kindly which rule names a missing tool and that it will not protect anything as written, offer the suggested existing names, and ask whether they meant one of them or are preparing for a server that is not installed yet. Do not present the change as covering that tool.";
+const UNKNOWN_TOOLS_CONFIRMATION_INSTRUCTION =
+  "No preview was created yet because one or more rules name MCP tools that are neither in the MCP registry nor observed in LLM proxy traffic. Explain the issue to the user, list every tool in `unknownTools` (and any close matches in `closest`), and ask with the ask_user tool (or the client's own question tool) whether they really want to create rules for these tools first. Do not claim they cover registered server tools. Only if the user approves creating rules for them, call preview_guardrails_policy_change again with the same edits or content, expectedRevision, and `allowUnknownTools: true` to proceed to the preview flow. If the user picks existing tool names instead, update the edits to use those names and call preview_guardrails_policy_change.";
 
 const PREVIEW_APPROVAL_INSTRUCTION =
   "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
@@ -2179,8 +2197,8 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
 }
 
 /**
- * The stored metadata of the existing tools a previewed change names, from
- * the catalogs the caller can read; null when it names none.
+ * The stored metadata of the known tools a previewed change names, from
+ * readable catalogs and visible proxy tools; null when none is readable.
  */
 async function touchedToolsMetadata(params: {
   userId: string;
@@ -2199,17 +2217,23 @@ async function touchedToolsMetadata(params: {
     params.userId,
     params.organizationId,
   );
-  const described = await ToolModel.findDescribedByNames({
-    catalogIds: visibleCatalogIds,
-    names,
-  });
-  const byName = new Map(described.map((tool) => [tool.name, tool]));
-  return touchedToolMetadata(
-    names.flatMap((name) => {
-      const tool = byName.get(name);
-      return tool ? [tool] : [];
+  const isAgentAdmin = await hasAnyAgentTypeAdminPermission(params);
+  const [described, proxyTools] = await Promise.all([
+    ToolModel.findDescribedByNames({ catalogIds: visibleCatalogIds, names }),
+    ToolModel.findDescribedProxyToolsByNames({
+      userId: params.userId,
+      isAgentAdmin,
+      names,
     }),
+  ]);
+  const byName = new Map(
+    [...proxyTools, ...described].map((tool) => [tool.name, tool]),
   );
+  const resolved = names.flatMap((name) => {
+    const tool = byName.get(name);
+    return tool ? [tool] : [];
+  });
+  return resolved.length > 0 ? touchedToolMetadata(resolved) : null;
 }
 
 /** Assigned and Auto-discovered rows allowed by RBAC and conversation selection. */

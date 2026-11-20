@@ -34,7 +34,12 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { appaGitHost, isAccessRefusal, shownFailure } from "./appa-git-host";
+import {
+  appaGitHost,
+  isAccessRefusal,
+  shownFailure,
+  UNEXPLAINED_REFUSAL,
+} from "./appa-git-host";
 
 type Step = "app" | "folder" | "enable";
 type Grants = AppaGithubAppPermissions;
@@ -892,6 +897,20 @@ function SourceRows() {
       ) : null}
     </span>
   ) : null;
+  // A refusal is explained while the permissions row names what is missing.
+  const syncFailure = shownFailure(
+    source,
+    source.lastSyncError,
+    missing.length > 0,
+  );
+  const filesFailure = shownFailure(source, files?.detail, missing.length > 0);
+  // Asked only where no permission is missing: nothing explains a refusal.
+  const checkDetail = status.check?.detail;
+  const checkFailure = !checkDetail
+    ? null
+    : app && isAccessRefusal(checkDetail)
+      ? UNEXPLAINED_REFUSAL
+      : `${checkDetail}.`;
   const checked = source.lastSyncedAt
     ? ` · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
     : "";
@@ -901,14 +920,11 @@ function SourceRows() {
         state={source.lastSyncError ? "failed" : waiting ? "action" : "done"}
       >
         {source.lastSyncError ? (
-          // GitHub refusing the App is said by the permissions row below.
+          // GitHub refusing the App for a permission it lacks is said by the
+          // permissions row below.
           <span>
             Could not sync the policy
-            {shownFailure(source, source.lastSyncError) ? (
-              <span>: {source.lastSyncError}</span>
-            ) : (
-              <span>.</span>
-            )}
+            {syncFailure ? <span>: {syncFailure}</span> : <span>.</span>}
           </span>
         ) : waiting && source.setupPullRequestNumber ? (
           <span>
@@ -967,8 +983,8 @@ function SourceRows() {
               The {status.check.name} check is not posted
               {missing.length > 0 ? (
                 <span>: it waits for the App's permissions.</span>
-              ) : shownFailure(source, status.check.detail) ? (
-                <span>: {status.check.detail}.</span>
+              ) : checkFailure ? (
+                <span>: {checkFailure}</span>
               ) : (
                 <span>.</span>
               )}
@@ -991,7 +1007,7 @@ function SourceRows() {
           ) : files.state === "unavailable" ? (
             <span>
               Could not compare the files beside the policy
-              {shownFailure(source, files.detail) ? `: ${files.detail}` : "."}
+              {filesFailure ? `: ${filesFailure}` : "."}
             </span>
           ) : (
             <span>

@@ -413,6 +413,47 @@ test("the pull requests step marks a merge in place without a toast, then moves 
   expect(toast.success).not.toHaveBeenCalled();
 });
 
+test("the pull requests step says why a sync failed while a pull request waits, such as one closed without a merge", async () => {
+  state = {
+    ...state,
+    source: {
+      ...source,
+      githubAppConfigId: "app-1",
+      setupPullRequestNumber: 7,
+    },
+    check: { name: "Check OpenAPPA Guardrails", state: "posted" },
+  };
+  const closed =
+    "Pull request #7 was closed without merging. Reopen it and merge it, or stop the sync.";
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+    // The sync the step runs finds the pull request closed, not merged.
+    http.patch(url, () => {
+      state = {
+        ...state,
+        source: state.source && { ...state.source, lastSyncError: closed },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Finish setup" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Merge the pull request",
+  });
+  expect(await within(dialog).findByText("Could not sync")).toBeVisible();
+  expect(within(dialog).getByText(closed)).toBeVisible();
+});
+
 test("opening Finish setup syncs, and what that sync finds joins the wizard: a pull request opened since adds the pull requests step", async () => {
   // Only the ruleset waits: the wizard opens on its Finish step alone.
   state = {
@@ -2489,8 +2530,9 @@ test("a permission taken away on GitHub shows with the next Sync now, named as G
     fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
     expect(await screen.findByText("Sync failed")).toBeVisible();
     expect(screen.queryByText("Could not sync policy")).toBeNull();
-    // Once the grant has settled, a sync that fails is a failure of its own,
-    // but GitHub refusing the App is never shown as an error card.
+    // Once the grant has settled, a sync that fails is a failure of its
+    // own. GitHub refusing an App that holds every permission has nothing
+    // on the page to explain it: it shows in plain words, never GitHub's.
     await act(async () => {
       vi.advanceTimersByTime(121_000);
     });
@@ -2513,7 +2555,9 @@ test("a permission taken away on GitHub shows with the next Sync now, named as G
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Sync now" })).toBeEnabled(),
     );
-    expect(screen.queryByText("Could not sync policy")).toBeNull();
+    expect(await screen.findByText(PLAIN_REFUSAL)).toBeVisible();
+    expect(screen.getByText("Could not sync policy")).toBeVisible();
+    expect(document.body).not.toHaveTextContent("HTTP 403");
     state = {
       ...state,
       source: state.source && {
@@ -2530,6 +2574,76 @@ test("a permission taken away on GitHub shows with the next Sync now, named as G
   } finally {
     vi.useRealTimers();
   }
+});
+
+const PLAIN_REFUSAL =
+  "GitHub refused the App. Check that it is installed on the repository, then sync again.";
+
+test("a failed sync that no permission explains shows beside the Finish setup notice, and a refusal with every permission held shows in plain words", async () => {
+  // Workflows is missing, which the Finish setup notice says. The sync
+  // failed for something else: an invalid policy file.
+  state = {
+    ...state,
+    source: {
+      ...source,
+      githubAppConfigId: "app-1",
+      lastSyncError: "The policy file is not valid TOML.",
+    },
+  };
+  let workflows = false;
+  let readable = true;
+  server.use(
+    http.get(`${url}/app-permissions`, () =>
+      readable
+        ? HttpResponse.json({
+            name: "Policy App",
+            url: "https://github.com/apps/policy-app",
+            settingsUrl:
+              "https://github.com/settings/apps/policy-app/permissions",
+            installationUrl: "https://github.com/settings/installations/7",
+            permissions: [
+              { name: "contents", granted: true },
+              { name: "pull_requests", granted: true },
+              { name: "checks", granted: true },
+              { name: "workflows", granted: workflows },
+            ],
+          })
+        : HttpResponse.json(
+            { error: { message: "GitHub did not answer" } },
+            { status: 502 },
+          ),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByText("Grant the App's Workflows permission."),
+  ).toBeVisible();
+  expect(await screen.findByText("Could not sync policy")).toBeVisible();
+  expect(screen.getByText("The policy file is not valid TOML.")).toBeVisible();
+  cleanup();
+
+  // Every permission held, and GitHub refuses the App all the same (a
+  // limit, an access rule): nothing else on the page says why.
+  workflows = true;
+  state = {
+    ...state,
+    source: state.source && {
+      ...state.source,
+      lastSyncError:
+        "GitHub returned HTTP 403. Check repository access and the source path.",
+    },
+  };
+  show();
+  expect(await screen.findByText(PLAIN_REFUSAL)).toBeVisible();
+  expect(screen.getByText("Could not sync policy")).toBeVisible();
+  expect(document.body).not.toHaveTextContent("HTTP 403");
+  expect(screen.queryByText("Finish the Git sync setup")).toBeNull();
+  cleanup();
+
+  // The permissions cannot be read at all: the refusal still shows.
+  readable = false;
+  show();
+  expect(await screen.findByText(PLAIN_REFUSAL)).toBeVisible();
 });
 
 test("asks for the GitHub and the organization, each error in place of its hint", async () => {

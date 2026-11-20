@@ -25,7 +25,15 @@ export function OverviewSetupCards() {
   if (isFresh) return <PolicyStep />;
   // A failed sync, or a setup that still waits on something.
   const source = sync.data?.source;
-  if (!shownFailure(source, source?.lastSyncError) && !pieces) return null;
+  if (
+    !shownFailure(
+      source,
+      source?.lastSyncError,
+      !!pieces?.permissions.length,
+    ) &&
+    !pieces
+  )
+    return null;
   return <GithubManagedPolicyNotice />;
 }
 

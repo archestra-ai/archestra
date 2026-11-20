@@ -27,9 +27,11 @@ export function GithubManagedPolicyNotice({
   const pieces = useFinishSetupPieces();
   const git = appaGitHost(data);
   const source = data?.source;
-  // GitHub refusing the App is not a failure of its own to announce: the
-  // Finish setup notice says what the App lacks.
-  const failed = Boolean(shownFailure(source, source?.lastSyncError));
+  // GitHub refusing the App for a permission it lacks is not a failure of
+  // its own to announce: the Finish setup notice says what the App lacks.
+  const failed = Boolean(
+    shownFailure(source, source?.lastSyncError, !!pieces?.permissions.length),
+  );
   const validations = validationDirectory !== undefined;
   const href = managedSourceUrl(data, validationDirectory);
 

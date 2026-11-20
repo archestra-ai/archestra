@@ -9,24 +9,38 @@ import {
 /**
  * Whether a failure GitHub reported is GitHub refusing the App: a 403, or a
  * token its installation would not grant. The server reports a failure as
- * its message only, so the message is what tells. For a source that syncs
- * through an App such a failure is never printed: what the App lacks is the
- * Finish setup notice's to say, and a second notice would only repeat it.
+ * its message only, so the message is what tells.
  */
 export function isAccessRefusal(error: string | null | undefined): boolean {
   return !!error && /\bHTTP 403\b|^The GitHub App cannot act on /.test(error);
 }
 
 /**
+ * What a page prints for a refusal that nothing else on it explains: the
+ * App holds every permission as far as GitHub says, so something else turns
+ * it away (the App is not installed on the repository, a limit, an
+ * organization's access rule).
+ */
+export const UNEXPLAINED_REFUSAL =
+  "GitHub refused the App. Check that it is installed on the repository, then sync again.";
+
+/**
  * A failure's message as a page prints it for this source: nothing when
- * there is none, and nothing when GitHub refused the source's App.
+ * there is none, and never GitHub's own words for refusing the source's
+ * App. While the Finish setup notice names a permission the App lacks
+ * (`explained`), that refusal is the notice's to say and a second notice
+ * would only repeat it. With nothing to explain it, a plain sentence stands
+ * in, so a failed sync is never left without a reason on screen. Any other
+ * failure is printed as it is.
  */
 export function shownFailure(
   source: { githubAppConfigId?: string | null } | null | undefined,
   error: string | null | undefined,
+  explained: boolean,
 ): string | null {
   if (!error) return null;
-  return source?.githubAppConfigId && isAccessRefusal(error) ? null : error;
+  if (!source?.githubAppConfigId || !isAccessRefusal(error)) return error;
+  return explained ? null : UNEXPLAINED_REFUSAL;
 }
 
 /**

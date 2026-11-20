@@ -60,7 +60,7 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { appaGitHost, isAccessRefusal } from "./appa-git-host";
+import { appaGitHost, isAccessRefusal, shownFailure } from "./appa-git-host";
 import {
   FinishSetupHost,
   FinishSetupNotice,
@@ -86,7 +86,7 @@ export function AppaGithubSyncPanel() {
     organizationSettings: ["update"],
   });
   const pieces = useFinishSetupPieces();
-  const showSyncError = useShowSyncError(query.data?.source, pieces);
+  const syncError = useShownSyncError(query.data?.source, pieces);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -264,10 +264,10 @@ export function AppaGithubSyncPanel() {
                     <FinishSetupNotice pieces={pieces} />
                   </GitSourceNotice>
                 ) : null}
-                {source.lastSyncError && showSyncError ? (
+                {syncError ? (
                   <GitSourceError
                     title="Could not sync policy"
-                    message={source.lastSyncError}
+                    message={syncError}
                   />
                 ) : null}
                 {connected &&
@@ -546,24 +546,28 @@ function AutoMergeStatus({
 }
 
 /**
- * Whether the card shows a failed sync's error. Around the App's
- * permissions the Finish setup notice is the one notice, so for a source
- * that syncs through an App a failure shows only once GitHub has said,
- * after the failure was seen, what the App holds, and only if it holds
- * everything. The order the two answers arrive in therefore never puts the
- * error on screen first. The syncs that fail right after a grant are held
- * back too, since GitHub takes a moment to honour it. A sync that fails
- * once that moment has passed is a failure of its own, and shows.
+ * The failed sync's message as the card prints it, or null for nothing.
+ *
+ * A failure that is not GitHub refusing the App (a policy that does not
+ * validate, a missing file) always shows: no setup step explains it.
+ *
+ * GitHub refusing the App is never printed in GitHub's words. While a
+ * permission the App lacks waits, the Finish setup notice is the one notice
+ * and the refusal is its to say; until GitHub's answer on the permissions
+ * is in, nothing is known and nothing shows, so no error flashes ahead of
+ * that notice. The syncs that fail right after a grant are held back too,
+ * since GitHub takes a moment to honour it. A refusal past all of that has
+ * no explanation on the page, and shows as a plain sentence.
  */
-function useShowSyncError(
+function useShownSyncError(
   source: Source | null | undefined,
   pieces: ReturnType<typeof useFinishSetupPieces>,
-): boolean {
+): string | null {
   const connected = !!source?.interval;
   const viaApp = connected && !!source?.githubAppConfigId;
   const grants = useAppaGithubAppGrants(viaApp);
   const waitsForPermissions = connected && !!pieces?.permissions.length;
-  // When the permissions stopped waiting: failures stay held for a while.
+  // When the permissions stopped waiting: refusals stay held for a while.
   const [waited, setWaited] = useState(waitsForPermissions);
   const [settlesAt, setSettlesAt] = useState(0);
   if (waited !== waitsForPermissions) {
@@ -579,7 +583,9 @@ function useShowSyncError(
     return () => window.clearTimeout(timer);
   }, [settlesAt]);
   const settling = settlesAt > 0;
-  const failedAt = source?.lastSyncError ? (source.lastSyncedAt ?? "") : null;
+  const error = source?.lastSyncError ?? null;
+  const failedAt = error ? (source?.lastSyncedAt ?? "") : null;
+  const refusal = viaApp && isAccessRefusal(error);
   // When this failure was first seen here.
   const [seen, setSeen] = useState<{ failedAt: string; at: number } | null>(
     null,
@@ -589,31 +595,30 @@ function useShowSyncError(
   // GitHub's answer on the permissions, read after the failure was seen;
   // a read that failed counts, since nothing more can be learned.
   const answeredAt = Math.max(grants.dataUpdatedAt, grants.errorUpdatedAt);
-  const stale = viaApp && failedAt !== null && !!seen && answeredAt < seen.at;
+  const stale = refusal && failedAt !== null && !!seen && answeredAt < seen.at;
   const { refetch, isFetching } = grants;
   useEffect(() => {
     if (stale && !isFetching) void refetch();
   }, [stale, isFetching, refetch]);
-  // The failed sync seen while permissions waited or settled, by when it
+  // The refusal seen while permissions waited or settled, by when its sync
   // ran: it stays unshown afterwards, until a later sync reports.
   const [excused, setExcused] = useState<string | null>(null);
   if (
+    refusal &&
     (waitsForPermissions || settling) &&
     failedAt !== null &&
     excused !== failedAt
   )
     setExcused(failedAt);
-  // GitHub refusing the App is never shown as an error here, whenever it
-  // arrives: what the App lacks is the Finish setup notice's to say.
-  if (viaApp && isAccessRefusal(source?.lastSyncError)) return false;
-  return (
-    failedAt !== null &&
-    !stale &&
-    !(viaApp && isFetching) &&
-    !waitsForPermissions &&
-    !settling &&
-    excused !== failedAt
-  );
+  if (failedAt === null) return null;
+  if (!refusal) return error;
+  const explained =
+    waitsForPermissions ||
+    settling ||
+    excused === failedAt ||
+    stale ||
+    isFetching;
+  return shownFailure(source, error, explained);
 }
 
 /** How long after a grant GitHub may still refuse the App's calls. */

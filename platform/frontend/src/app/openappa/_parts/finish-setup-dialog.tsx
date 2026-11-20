@@ -33,7 +33,7 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { appaGitHost } from "./appa-git-host";
+import { appaGitHost, shownFailure } from "./appa-git-host";
 import {
   type AppPermission,
   appPermissionList,
@@ -587,6 +587,7 @@ function PullRequestsStep({
   const protection = useAppaRepositoryProtection(
     query.data?.selfService?.enabled === true,
   );
+  const missingPermissions = useFinishSetupPieces()?.permissions.length;
   const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   const { mutate } = update;
@@ -649,6 +650,14 @@ function PullRequestsStep({
   const checked = query.data?.source?.lastSyncedAt
     ? formatRelativeTimeFromNow(query.data.source.lastSyncedAt).toLowerCase()
     : null;
+  // What holds a pull request can be the sync itself: one closed without a
+  // merge, a policy that does not validate. GitHub refusing the App for a
+  // permission it lacks is the App step's to say, not this one's.
+  const syncFailure = shownFailure(
+    query.data?.source,
+    query.data?.source?.lastSyncError,
+    !!missingPermissions,
+  );
   const failures = (
     <>
       {include.error ? (
@@ -660,6 +669,13 @@ function PullRequestsStep({
           <InlineNoticeText className="flex-1">
             {include.error}
           </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
+      {syncFailure ? (
+        <InlineNotice variant="error">
+          <AlertTriangle aria-hidden />
+          <span className="font-medium">Could not sync</span>
+          <InlineNoticeText className="flex-1">{syncFailure}</InlineNoticeText>
         </InlineNotice>
       ) : null}
     </>

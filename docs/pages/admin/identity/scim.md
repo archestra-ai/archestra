@@ -68,11 +68,7 @@ All users get access through one Entra group, and team membership is managed in 
 
 4. Run `terraform apply`. The users are members of **Engineering Team** before their first sign-in.
 
-Notes:
-
-- `archestra_user` fails with **User Not Found** until Entra has provisioned the email. Run Terraform after the provisioning cycle.
-- Don't set `external_group_ids` on teams managed by Terraform. Each apply removes members added by Team Sync, the next sign-in adds them back, and every plan shows changes.
-- Sign-in never removes members added by Terraform.
+Don't turn on [Team Sync](/docs/admin/identity/sso#team-sync) (`external_group_ids`) for a team that Terraform manages. Terraform and Team Sync would keep overwriting each other's members.
 
 ## Troubleshooting
 

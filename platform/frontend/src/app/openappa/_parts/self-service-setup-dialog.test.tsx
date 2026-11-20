@@ -1,11 +1,9 @@
-import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
+import type { AppaGithubAppPermissions } from "@/lib/openappa-github-sync.query";
 import { GithubAppPermissionsStep } from "./self-service-setup-dialog";
 
-type Grants = NonNullable<
-  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
->;
+type Grants = AppaGithubAppPermissions;
 
 /** A click path, by its whole text: its labels are separate elements. */
 function clickPath(text: string) {

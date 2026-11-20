@@ -207,7 +207,7 @@ test("one Finish setup notice names what still waits, and its wizard takes the p
   // the wizard starts with the grant, then the pull requests.
   let lacking: string[] = ["workflows"];
   server.use(
-    http.get(`${url}/app-grants`, () =>
+    http.get(`${url}/app-permissions`, () =>
       HttpResponse.json({
         name: "Policy App",
         url: "https://github.com/apps/policy-app",
@@ -597,7 +597,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
         branchRules: { state: "needs_permission" },
       }),
     ),
-    http.get(`${url}/app-grants`, () =>
+    http.get(`${url}/app-permissions`, () =>
       HttpResponse.json({
         name: "Policy App",
         url: "https://github.com/apps/policy-app",
@@ -669,7 +669,7 @@ test("Finish setup opened before GitHub has answered on the App's permissions mo
         },
       }),
     ),
-    http.get(`${url}/app-grants`, async () => {
+    http.get(`${url}/app-permissions`, async () => {
       // GitHub answers on the permissions after the card is up.
       await delay(150);
       answered = true;
@@ -764,7 +764,7 @@ test("Enable walks through the App's permission, the folder, the include pull re
   });
   const actions: unknown[] = [];
   server.use(
-    http.get(`${url}/app-grants`, () =>
+    http.get(`${url}/app-permissions`, () =>
       HttpResponse.json({
         name: "Policy App",
         url: "https://github.com/apps/policy-app",
@@ -950,7 +950,7 @@ test("Enable with auto-merge unticked turns self-service on and leaves auto-merg
   };
   const actions: unknown[] = [];
   server.use(
-    http.get(`${url}/app-grants`, () =>
+    http.get(`${url}/app-permissions`, () =>
       HttpResponse.json({
         name: "Policy App",
         url: "https://github.com/apps/policy-app",
@@ -2344,7 +2344,7 @@ test("a permission taken away on GitHub shows with the next Sync now, named as G
         },
       }),
     ),
-    http.get(`${url}/app-grants`, async () => {
+    http.get(`${url}/app-permissions`, async () => {
       reads += 1;
       // GitHub's answer on the permissions comes after the sync's.
       await delay(40);
@@ -2696,7 +2696,7 @@ test("links the pull request that includes the servers' folder while it waits, a
         },
       }),
     ),
-    http.get(`${url}/app-grants`, () =>
+    http.get(`${url}/app-permissions`, () =>
       HttpResponse.json({
         name: "Policy App",
         url: "https://github.com/apps/policy-app",

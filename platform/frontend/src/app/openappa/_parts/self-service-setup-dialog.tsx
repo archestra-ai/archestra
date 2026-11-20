@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  type AppaGithubAppPermissions,
   useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
@@ -36,9 +37,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost, isAccessRefusal, shownFailure } from "./appa-git-host";
 
 type Step = "app" | "folder" | "enable";
-type Grants = NonNullable<
-  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
->;
+type Grants = AppaGithubAppPermissions;
 type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;

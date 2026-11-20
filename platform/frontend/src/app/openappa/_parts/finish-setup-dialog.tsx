@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  type AppaGithubAppPermissions,
   useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
@@ -47,7 +48,7 @@ type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;
 type Permission = AppPermission;
-type Grants = archestraApiTypes.GetAppaGithubAppGrantsResponses["200"];
+type Grants = AppaGithubAppPermissions | null;
 
 /** A pull request setup waits on, by what it carries. */
 export type SetupPull = {

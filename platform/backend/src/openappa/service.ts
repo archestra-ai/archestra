@@ -891,7 +891,7 @@ async function startSession(params: {
   session: OpenAppaSession;
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
-  principal?: { principal?: string };
+  principal: { principal?: string };
   lineage?: { spawnCallId?: string; childNativeId?: string };
 }): Promise<string | undefined> {
   const event = {
@@ -903,14 +903,12 @@ async function startSession(params: {
       ? { child_native_id: params.lineage.childNativeId }
       : {}),
   };
-  const decision = params.principal
-    ? await dispatchWithPrincipal({
-        session: params.session,
-        event,
-        policy: params.policy,
-        principal: params.principal,
-      })
-    : await dispatch(params.session, event, params.policy);
+  const decision = await dispatchWithPrincipal({
+    session: params.session,
+    event,
+    policy: params.policy,
+    principal: params.principal,
+  });
   if (decision.decision === "context") {
     const text = decision.text;
     if (

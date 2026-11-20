@@ -4,7 +4,7 @@ import {
   userIsCatalogAdmin,
 } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
-import { ToolModel } from "@/models";
+import { InternalMcpCatalogModel, ToolModel } from "@/models";
 import type { Tool } from "@/types";
 
 /**
@@ -21,7 +21,9 @@ import type { Tool } from "@/types";
  * assigned tools (always, no dynamic-access gate) plus — only when the agent has
  * "access all tools" — the tools the user can otherwise reach; assigned rows win
  * over discoverable ones, and among discoverable rows the newest wins
- * (`getMcpToolsAccessibleToUser` returns them newest-first).
+ * (`getMcpToolsAccessibleToUser` returns them newest-first). When the same name
+ * exists in the app's environment and in Default, the app's environment wins:
+ * both are legal, and a call from this app must reach its own server.
  *
  * Discoverable candidates follow catalog visibility, not installs — a visible
  * catalog whose server the user has not connected yet stays assignable, and the
@@ -68,16 +70,35 @@ export async function resolveAppAssignableToolRows(params: {
       })
     : [];
 
-  const byName = new Map<string, Tool>();
+  const candidates: Tool[] = [];
+  const seen = new Set<string>();
   for (const tool of assignedTools) {
-    if (assignedAssignableIds.has(tool.id) && !byName.has(tool.name)) {
-      byName.set(tool.name, tool);
+    if (assignedAssignableIds.has(tool.id) && !seen.has(tool.id)) {
+      seen.add(tool.id);
+      candidates.push(tool);
     }
   }
   for (const tool of discoverableTools) {
-    if (isAppAssignable(tool) && !byName.has(tool.name)) {
-      byName.set(tool.name, tool);
+    if (isAppAssignable(tool) && !seen.has(tool.id)) {
+      seen.add(tool.id);
+      candidates.push(tool);
     }
+  }
+  // Within one source (assigned, then discoverable) the lists are already
+  // newest-first. A tool in the app's own environment still beats a Default
+  // tool of the same name, whichever list it came from.
+  const environments = await catalogEnvironments(
+    candidates.map((tool) => tool.catalogId),
+  );
+  const byName = new Map<string, Tool>();
+  const preferred = candidates.filter(
+    (tool) =>
+      environmentId !== null &&
+      tool.catalogId !== null &&
+      environments.get(tool.catalogId) === environmentId,
+  );
+  for (const tool of [...preferred, ...candidates]) {
+    if (!byName.has(tool.name)) byName.set(tool.name, tool);
   }
 
   const permitted = await filterToolNamesByPermission(
@@ -92,6 +113,18 @@ export async function resolveAppAssignableToolRows(params: {
   }
 
   return byName;
+}
+
+/** Catalog id to its environment (null is Default). Missing ids stay absent. */
+async function catalogEnvironments(
+  catalogIds: Array<string | null>,
+): Promise<Map<string, string | null>> {
+  const ids = [
+    ...new Set(catalogIds.filter((id): id is string => id !== null)),
+  ];
+  if (ids.length === 0) return new Map();
+  const rows = await InternalMcpCatalogModel.findEnvironmentIdsByIds(ids);
+  return new Map(rows.map((row) => [row.id, row.environmentId]));
 }
 
 function isAppAssignable(tool: Tool): boolean {

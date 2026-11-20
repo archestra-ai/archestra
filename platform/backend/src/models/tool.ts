@@ -2238,14 +2238,7 @@ class ToolModel {
           notDeleted(schema.toolsTable),
         ),
       )
-      .orderBy(
-        desc(
-          ToolModel.hasHealthyMcpServerInstall(
-            schema.appToolsTable.mcpServerId,
-          ),
-        ),
-        asc(schema.toolsTable.id),
-      );
+      .orderBy(...ToolModel.appAssignedToolOrder(appId));
   }
 
   /** App-owner counterpart of {@link getMcpToolsAssignedToAgentBySuffix}. */
@@ -2286,14 +2279,7 @@ class ToolModel {
           notDeleted(schema.toolsTable),
         ),
       )
-      .orderBy(
-        desc(
-          ToolModel.hasHealthyMcpServerInstall(
-            schema.appToolsTable.mcpServerId,
-          ),
-        ),
-        asc(schema.toolsTable.id),
-      )
+      .orderBy(...ToolModel.appAssignedToolOrder(appId))
       .limit(1);
   }
 
@@ -4309,6 +4295,33 @@ class ToolModel {
    * same-named candidates prefer a working connection over one that needs
    * re-authentication, was never installed, or is pinned to a broken one.
    */
+  /**
+   * Order for an app's assigned tools when one name exists twice: the app's
+   * own environment (its backing catalog's environment) before Default, then
+   * a healthy install, then a stable id. An app in Default has no preference,
+   * so the environment term is false for every row and the older order stands.
+   */
+  private static appAssignedToolOrder(appId: string) {
+    const appEnvironment = sql`(
+      select app_catalog.environment_id
+      from ${schema.appsTable} app
+      inner join ${schema.mcpServersTable} app_server
+        on app_server.id = app.mcp_server_id
+      inner join ${schema.internalMcpCatalogTable} app_catalog
+        on app_catalog.id = app_server.catalog_id
+      where app.id = ${appId}
+    )`;
+    return [
+      desc(
+        sql`${schema.internalMcpCatalogTable.environmentId} is not distinct from ${appEnvironment}`,
+      ),
+      desc(
+        ToolModel.hasHealthyMcpServerInstall(schema.appToolsTable.mcpServerId),
+      ),
+      asc(schema.toolsTable.id),
+    ];
+  }
+
   private static hasHealthyMcpServerInstall(
     assignmentMcpServerId: AnyPgColumn,
   ) {

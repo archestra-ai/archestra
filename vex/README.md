@@ -23,13 +23,18 @@ that affects an image is fixed in a release, or announced as an advisory.
 ## How Statements Get Here
 
 1. The **VEX Triage** agent (`.github/workflows/vex-triage.yml`, weekly)
-   scans the latest stable release's images, investigates each untriaged
-   Critical and High finding, and opens or updates the pull request from
-   `automation/vex-triage` with its evidence.
+   scans the images of the latest stable release and of the newest release
+   candidate ahead of it, investigates each untriaged Critical and High
+   finding, and opens or updates the pull request from `automation/vex-triage`
+   with its evidence. One document serves every release line: a statement names
+   the exact package version it covers, so it applies wherever that version
+   ships.
 2. A person checks the evidence and merges it. A statement is a claim we sign:
    when the evidence does not convince you, ask for more or drop the statement.
 3. Each release attests every image's statements, pinned to its digest, next to
-   its SBOMs (`docs/pages/admin/deployment/verify-releases.md`).
+   its SBOMs (`docs/pages/admin/deployment/verify-releases.md`). Releases from
+   `release/*` read this document from `main`, so a merged statement needs no
+   backport.
 
 To write one by hand, use `vex.py` from archestra-ai/.github
 (`actions/attest-release-image/vex.py`), the same tool the agent, the pull

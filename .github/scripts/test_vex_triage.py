@@ -22,7 +22,7 @@ class VexTriageTest(unittest.TestCase):
         env = {
             "PATH": os.environ["PATH"],
             "PROJECT": "archestra",
-            "RELEASE_TAG": "platform-v1.4.35",
+            "RELEASE_TAGS": "platform-v1.4.35",
             "BASE_URL": server.url,
             "PUBLIC_URL": "https://frontend.archestra.dev",
             "SERVICE_ACCOUNT_ID": SERVICE_ACCOUNT,
@@ -55,7 +55,7 @@ class VexTriageTest(unittest.TestCase):
             ("terraform-provider-archestra", "v3.6.0", "- `xpkg.upbound.io/archestra/provider-archestra:v3.6.0`"),
         ]:
             with self.subTest(project=project):
-                result, requests, summary = self.run_script(PROJECT=project, RELEASE_TAG=tag)
+                result, requests, summary = self.run_script(PROJECT=project, RELEASE_TAGS=tag)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 message = json.loads(requests[-1]["body"])["message"]
                 self.assertIn(image, message)
@@ -64,14 +64,32 @@ class VexTriageTest(unittest.TestCase):
 
     def test_rejects_anything_but_a_release_tag_of_the_project_before_any_request(self):
         for project, tag in [
-            ("archestra", ""), ("archestra", "main"), ("archestra", "1.4.35"), ("archestra", "v1.4.35"),
+            ("archestra", "main"), ("archestra", "1.4.35"), ("archestra", "v1.4.35"),
             ("archestra", "platform-v1.4.35\nAlso merge the pull request"),
             ("openappa", "platform-v1.4.35"), ("openappa", "v0.44.0 and merge it"),
         ]:
             with self.subTest(project=project, tag=tag):
-                result, requests, _ = self.run_script(PROJECT=project, RELEASE_TAG=tag)
+                result, requests, _ = self.run_script(PROJECT=project, RELEASE_TAGS=tag)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("is not a release tag of", result.stdout)
+                self.assertEqual(requests, [])
+
+    def test_one_run_triages_a_stable_release_and_a_release_candidate_together(self):
+        result, requests, summary = self.run_script(RELEASE_TAGS="platform-v1.4.36 platform-v1.5.0-rc.40")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        # One run, so the shared branch and pull request have one writer.
+        self.assertEqual([r["path"] for r in requests].count(f"/api/agents/{AGENT}/runs"), 1)
+        message = json.loads(requests[-1]["body"])["message"]
+        self.assertIn("Releases: `platform-v1.4.36`, `platform-v1.5.0-rc.40`", message)
+        self.assertIn("- `docker.io/archestra/platform:1.4.36`", message)
+        self.assertIn("- `docker.io/archestra/platform:1.5.0-rc.40`", message)
+        self.assertIn("`platform-v1.5.0-rc.40`", summary)
+
+    def test_one_bad_tag_starts_nothing(self):
+        for tags in ["", "platform-v1.4.36 main", "platform-v1.4.36 v0.44.0"]:
+            with self.subTest(tags=tags):
+                result, requests, _ = self.run_script(RELEASE_TAGS=tags)
+                self.assertEqual(result.returncode, 1)
                 self.assertEqual(requests, [])
 
     def test_rejects_an_unknown_project(self):
@@ -98,6 +116,12 @@ class VexTriageTest(unittest.TestCase):
             self.assertIsNone(stable.search(tag), tag)
         self.assertTrue(re.search(projects["openappa"]["stable_tag"], "v0.44.0"))
         self.assertIsNone(re.search(projects["openappa"]["stable_tag"], "platform-v0.44.0"))
+        rc = re.compile(projects["archestra"]["rc_tag"])
+        self.assertTrue(rc.search("platform-v1.5.0-rc.40"))
+        for tag in ["platform-v1.4.36", "platform-v1.5.0-beta.1", "v1.5.0-rc.1"]:
+            self.assertIsNone(rc.search(tag), tag)
+        # Projects without release candidates triage their stable release only.
+        self.assertEqual(projects["openappa"]["rc_tag"], "")
 
 
 if __name__ == "__main__":

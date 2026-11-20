@@ -52,8 +52,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
@@ -94,8 +94,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
     go get github.com/go-git/go-git/v5@v5.19.2 && \
@@ -172,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS dagger-engine-image
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -221,7 +221,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
 # The script uses paths relative to / so that
 # .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
 # of its own.
-FROM --platform=$BUILDPLATFORM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS archestra-cli-release
+FROM --platform=$BUILDPLATFORM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS archestra-cli-release
 WORKDIR /
 COPY archestra-cli/release.lock.json ./release.lock.json
 RUN <<'ARCHESTRA_CLI_RELEASE'
@@ -286,7 +286,7 @@ rm "$sums"
 printf '{ "version": "%s" }\n' "$version" > manifest.json
 ARCHESTRA_CLI_RELEASE
 
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS base
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"

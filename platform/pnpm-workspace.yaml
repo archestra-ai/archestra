@@ -296,7 +296,6 @@ patchedDependencies:
   # Settle reconnect failures and cancellation; do not reopen after disconnect.
   # Remove after an upstream upgrade passes the real Socket Mode lifecycle tests.
   '@slack/socket-mode@2.0.5': patches/@slack__socket-mode@2.0.5.patch
-  better-auth@1.7.7: patches/better-auth@1.7.7.patch
   # Better Auth 1.7 accepts a native client's custom-scheme redirect URI only
   # in RFC 8252 reverse-domain form without an authority (`com.example.app:/cb`).
   # Shipping MCP clients register authority-form URIs such as Cursor's

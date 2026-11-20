@@ -7,7 +7,8 @@ import pluginRoutes from "./plugin.routes";
 describe("plugins with beta disabled", () => {
   const ctx = useRouteTestApp(pluginRoutes);
 
-  test("lists plugins while beta is off", async () => {
+  test("lists plugins while beta is off", async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     config.beta = false;
     const response = await ctx.app.inject({
       method: "GET",

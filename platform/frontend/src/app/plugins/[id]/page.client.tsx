@@ -152,7 +152,8 @@ function PluginDetailView({
   );
   const { data: canUpdate, isPending: isUpdatePermissionPending } =
     useHasPermissions({ plugin: ["update"] }, plugin.id);
-  const isReadOnly = !isUpdatePermissionPending && canUpdate === false;
+  const isReadOnly = isUpdatePermissionPending || canUpdate !== true;
+  const showReadOnlyNotice = !isUpdatePermissionPending && canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
 
   const isGithubPlugin = plugin.sourceKind === "github";
@@ -163,7 +164,7 @@ function PluginDetailView({
   const installAction = pluginAction(actionModel, "install");
   const updatesAction = pluginAction(actionModel, "updates");
   const deleteAction = pluginAction(actionModel, "delete");
-  const updateReason = isReadOnly
+  const updateReason = showReadOnlyNotice
     ? formatPermissionConstraint(updatesAction.permissions)
     : undefined;
   const deleteReason =
@@ -421,7 +422,7 @@ function PluginDetailView({
             </AlertDescription>
           </Alert>
         ) : (
-          isReadOnly &&
+          showReadOnlyNotice &&
           activeSection === "general" && (
             <Alert>
               <Info className="h-4 w-4" />

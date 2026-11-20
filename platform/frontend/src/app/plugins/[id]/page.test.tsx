@@ -332,6 +332,26 @@ describe("PluginDetailPage", () => {
     ).toBeVisible();
   });
 
+  it("keeps the General form read-only without flashing the notice while update permission is loading", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByLabelText("Display name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Description")).toHaveAttribute("readonly");
+    expect(
+      screen.getByRole("textbox", { name: "File contents" }),
+    ).toHaveAttribute("readonly");
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/view this plugin's configuration but not change it/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("reviews a pending update from the source card", async () => {
     const user = userEvent.setup();
     renderPage({

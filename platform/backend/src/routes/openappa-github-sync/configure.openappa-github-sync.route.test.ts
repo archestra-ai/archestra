@@ -2137,6 +2137,15 @@ describe("APPA GitHub sync", () => {
     });
     expect(include.statusCode, include.body).toBe(200);
     expect(opened).toHaveLength(1);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows.map((row) => row.after)).toContainEqual({
+        includeServersRequested: true,
+      });
+    });
     // The minute's round checks the setup pull request like any other: the
     // policy it carries is judged, with or without a rule that requires
     // the check, so it can merge once the check passes.

@@ -388,6 +388,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         request.auditAfter = { syncRequested: true };
       }
       if (request.body.action === "include_servers") {
+        // The request opens a pull request and leaves the settings as they were.
+        request.auditBefore = { includeServersRequested: false };
+        request.auditAfter = { includeServersRequested: true };
         await ensureSelfServiceInclude({
           organizationId: request.organizationId,
           userId: request.user.id,

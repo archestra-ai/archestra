@@ -646,9 +646,18 @@ describe("CompactToolGroup", () => {
         }),
       );
       expect(screen.getByText(`· ${detail} ·`)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "View Validations" }),
+      ).toHaveAttribute(
+        "href",
+        "/openappa/policy?entry=validation%3Atraces%2Fcheck.appa",
+      );
     }
     rerender(show({ structuredContent: { ...publication, run: null } }));
     expect(screen.getByText("· saved ·")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Validations" }),
+    ).toHaveAttribute("href", "/openappa/policy");
     rerender(
       show({
         structuredContent: {

@@ -31,6 +31,7 @@ import {
   type PolicyDeclarations,
   useEffectivePolicy,
 } from "@/lib/openappa-batteries.query";
+import { validationEntry } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
 import { BatteryEditDialog } from "./_parts/batteries-panel";
 import { BATTERY_PROBLEM } from "./_parts/battery-status";
@@ -65,10 +66,7 @@ import {
   type PolicyWorkspace,
   usePolicyWorkspace,
 } from "./_parts/use-policy-workspace";
-import {
-  ValidationProvider,
-  validationEntry,
-} from "./_parts/validation-context";
+import { ValidationProvider } from "./_parts/validation-context";
 
 /**
  * The Policy page, laid out as an editor: the policy's files in an explorer,

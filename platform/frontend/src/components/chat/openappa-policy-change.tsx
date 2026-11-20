@@ -13,6 +13,7 @@ import {
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { validationPolicyHref } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
 import {
   isPolicyPreviewTool,
@@ -358,7 +359,7 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
     detail: run.detail,
     action: {
       label: "View Validations",
-      href: "/openappa/policy",
+      href: validationPolicyHref(run.targetPath),
       external: false,
     },
     local: true,
@@ -367,45 +368,68 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
 
 function validationRunResult(
   run: unknown,
-): Pick<SaveResult, "tone" | "detail"> {
-  if (run === undefined) return { tone: "success", detail: "not run yet" };
-  if (run === null) return { tone: "success", detail: "saved" };
+): Pick<SaveResult, "tone" | "detail"> & { targetPath: string | null } {
+  if (run === undefined)
+    return { tone: "success", detail: "not run yet", targetPath: null };
+  if (run === null)
+    return { tone: "success", detail: "saved", targetPath: null };
   if (!run || typeof run !== "object") {
-    return { tone: "warning", detail: "could not run" };
+    return { tone: "warning", detail: "could not run", targetPath: null };
   }
   const { files, executionError, validation } = run as {
     files?: unknown;
     executionError?: unknown;
     validation?: { valid?: unknown } | null;
   };
+  const fileEntries = Array.isArray(files)
+    ? files.map((file) => ({
+        path:
+          file &&
+          typeof file === "object" &&
+          "path" in file &&
+          typeof file.path === "string" &&
+          file.path.length > 0
+            ? file.path
+            : null,
+        status:
+          file && typeof file === "object" && "status" in file
+            ? file.status
+            : null,
+      }))
+    : [];
+  const targetPath =
+    fileEntries.find((file) => file.status === "failed" && file.path)?.path ??
+    fileEntries.find((file) => file.status !== "passed" && file.path)?.path ??
+    fileEntries.find((file) => file.path)?.path ??
+    null;
   if (
     executionError ||
     validation?.valid === false ||
-    !Array.isArray(files) ||
-    files.length === 0
+    fileEntries.length === 0
   ) {
-    return { tone: "warning", detail: "could not run" };
+    return { tone: "warning", detail: "could not run", targetPath };
   }
-  const statuses = files.map((file) =>
-    file && typeof file === "object" && "status" in file ? file.status : null,
-  );
-  const failed = statuses.filter((status) => status === "failed").length;
+  const failed = fileEntries.filter((file) => file.status === "failed").length;
   if (failed > 0) {
     return {
       tone: "warning",
       detail:
-        files.length === 1 ? "failed" : `${failed} of ${files.length} failed`,
+        fileEntries.length === 1
+          ? "failed"
+          : `${failed} of ${fileEntries.length} failed`,
+      targetPath,
     };
   }
-  if (statuses.some((status) => status !== "passed")) {
-    return { tone: "warning", detail: "could not run" };
+  if (fileEntries.some((file) => file.status !== "passed")) {
+    return { tone: "warning", detail: "could not run", targetPath };
   }
   return {
     tone: "success",
     detail:
-      files.length === 1
+      fileEntries.length === 1
         ? "passed"
-        : `${files.length} of ${files.length} passed`,
+        : `${fileEntries.length} of ${fileEntries.length} passed`,
+    targetPath,
   };
 }
 

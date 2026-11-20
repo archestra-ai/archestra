@@ -374,64 +374,89 @@ test.each([
     run: validationRun(["passed"]),
     tone: "success",
     detail: "passed",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "several passed files",
     run: validationRun(["passed", "passed"]),
     tone: "success",
     detail: "2 of 2 passed",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "one failed file",
     run: validationRun(["failed"]),
     tone: "warning",
     detail: "failed",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "a failure among mixed results",
     run: validationRun(["passed", "failed", "cannot_run"]),
     tone: "warning",
     detail: "1 of 3 failed",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-1.appa",
+  },
+  {
+    name: "a file that cannot run after a passing file",
+    run: validationRun(["passed", "cannot_run"]),
+    tone: "warning",
+    detail: "could not run",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-1.appa",
   },
   {
     name: "a file that cannot run",
     run: validationRun(["cannot_run"]),
     tone: "warning",
     detail: "could not run",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "an execution error",
     run: validationRun(["passed"], { executionError: "Replay failed" }),
     tone: "warning",
     detail: "could not run",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "an invalid policy",
     run: validationRun(["passed"], { validation: { valid: false } }),
     tone: "warning",
     detail: "could not run",
+    href: "/openappa/policy?entry=validation%3Atraces%2Fcheck-0.appa",
   },
   {
     name: "a deletion-only save",
     run: null,
     tone: "success",
     detail: "saved",
+    href: "/openappa/policy",
   },
   {
     name: "a legacy save without a run",
     run: undefined,
     tone: "success",
     detail: "not run yet",
+    href: "/openappa/policy",
   },
-])("shows $name in the saved-validation result", ({ run, tone, detail }) => {
+])("shows $name in the saved-validation result", ({
+  run,
+  tone,
+  detail,
+  href,
+}) => {
   const output = { structuredContent: { ...validationPublication, run } };
-  expect(getValidationSaveResult(output)).toMatchObject({ tone, detail });
+  expect(getValidationSaveResult(output)).toMatchObject({
+    tone,
+    detail,
+    action: { href },
+  });
   render(<OpenAppaValidationCompletion output={output} />);
   expect(screen.getByText("Saved validations")).toBeInTheDocument();
   expect(screen.getByText(`· ${detail} ·`)).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "View Validations" }),
-  ).toHaveAttribute("href", "/openappa/policy");
+  ).toHaveAttribute("href", href);
 });
 
 test("keeps a validation pull request reviewable in the completion card", () => {

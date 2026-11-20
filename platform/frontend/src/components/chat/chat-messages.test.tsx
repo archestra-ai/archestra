@@ -1843,6 +1843,43 @@ describe("ChatMessages", () => {
     });
   });
 
+  it("shows a run_tool target's arguments for approval when they arrive as JSON text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__run_tool",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: {
+              tool_name: "workspace__export_records",
+              // run_tool takes its target's arguments in this form too.
+              tool_args: '{"destination":"external"}',
+            },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Approval required")).toBeInTheDocument();
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
+  });
+
   it("renders target approval details for a branded run_tool before identity data resolves", () => {
     const messages = [
       {

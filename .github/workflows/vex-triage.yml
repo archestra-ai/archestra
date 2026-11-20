@@ -41,6 +41,10 @@ on:
         description: "Published releases, separated by spaces, such as platform-v1.4.36 platform-v1.5.0-rc.40. Empty: the latest stable release (and release candidate)."
         type: string
         default: ""
+      test_alert:
+        description: Post a test message to #alerts and start nothing.
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -54,7 +58,7 @@ concurrency:
 jobs:
   plan:
     name: Choose the projects
-    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && !inputs.test_alert
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -165,3 +169,32 @@ jobs:
           SERVICE_ACCOUNT_ID: ${{ vars.VEX_TRIAGE_SERVICE_ACCOUNT_ID }}
           AGENT_ID: ${{ vars.VEX_TRIAGE_AGENT_ID }}
         run: python3 .github/scripts/vex-triage.py
+
+  # A failure here means no agent run started, so the Grafana runtime alerts
+  # (archestra-ai/infra services/runtime-alert-context) never see it.
+  notify:
+    name: Report a failure to start
+    needs: [plan, start]
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (needs.plan.result == 'failure' || needs.start.result == 'failure' || inputs.test_alert) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      contents: read # Check out the alert action.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Checkout the alert action
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/post-failure-alert
+          persist-credentials: false
+
+      - name: Post to #alerts
+        uses: ./.github/actions/post-failure-alert
+        with:
+          summary: "VEX Triage did not start for the projects below, so their releases were not triaged this time."
+          test: ${{ inputs.test_alert || 'false' }}
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

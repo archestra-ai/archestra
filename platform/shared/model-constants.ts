@@ -83,6 +83,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
+  "github-copilot:messages",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
   "voyage:embeddings",
@@ -170,6 +171,38 @@ export const ProviderEndpointSchema = z.enum([
   "/responses",
 ]);
 export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
+
+/**
+ * The `reasoning_effort` values a client can send on the OpenAI wire, from the
+ * shallowest to the deepest. Which of them a model accepts differs per model
+ * and per provider (GitHub Copilot answers an unlisted level with a 400), so
+ * the model catalogue reports the accepted subset per model.
+ */
+export const ReasoningEffortLevelSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+export type ReasoningEffortLevel = z.infer<typeof ReasoningEffortLevelSchema>;
+
+/**
+ * The known levels among `values`, deduplicated and in
+ * {@link ReasoningEffortLevelSchema} order. A provider's own spelling is kept
+ * only when it is one of ours: an unknown level is something no client of
+ * this catalogue can send.
+ */
+export function toReasoningEffortLevels(
+  values: readonly unknown[],
+): ReasoningEffortLevel[] {
+  const present = new Set(values);
+  return ReasoningEffortLevelSchema.options.filter((level) =>
+    present.has(level),
+  );
+}
 
 /**
  * True for providers that serve one model catalog over more than one wire
@@ -1040,7 +1073,7 @@ export const PROVIDER_FAST_MODEL_PATTERNS: Partial<
   bedrock: ["claude-haiku-5-5"],
   openai: ["gpt-6-luna", "gpt-5.6-luna"],
   openrouter: ["anthropic/claude-haiku-5.5", "openai/gpt-6-luna"],
-  gemini: ["gemini-3.5-flash-lite"],
+  gemini: ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
 };
 
 /**

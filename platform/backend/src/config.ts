@@ -1723,6 +1723,33 @@ export function parseReleaseImageDigests(params: {
   return parsed.version === params.appVersion ? parsed : null;
 }
 
+/**
+ * Parse `ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`: a JSON array of service
+ * accounts to create on startup (the Helm chart renders it from
+ * `archestra.bootstrap.serviceAccounts`). Only the JSON shape is checked here;
+ * the bootstrap validates each entry against the service account schemas.
+ * Unset or `[]` declares nothing. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseServiceAccountBootstrap(
+  rawValue: string | undefined,
+): unknown[] | null {
+  const raw = rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP must be JSON");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      "ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP must be a JSON array of service accounts",
+    );
+  }
+  return parsed.length > 0 ? parsed : null;
+}
+
 const releaseImageDigests = parseReleaseImageDigests({
   rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
   appVersion,
@@ -2221,24 +2248,6 @@ export const isCodeRuntimeEnabled = ({
   return codeRuntimeEnabledEnv === "true" && k8sConfigured;
 };
 
-/**
- * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
- * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
- * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
- * this helper while a per-feature flag keeps its own opt-out. Backs *product*
- * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
- * Azure/Vertex Entra).
- *
- * @public — the shared gate for a product feature that ships off by default; also exported for testability
- */
-export function betaFeatureEnabled(envValue: string | undefined): boolean {
-  if (envValue === undefined || envValue === "") {
-    return process.env.ARCHESTRA_BETA === "true";
-  }
-  return envValue === "true";
-}
-
 const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
 
@@ -2727,13 +2736,6 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
       0,
     ),
-    /**
-     * Both directions of the draft MCP Skills extension: publishing local
-     * Skills through gateways and projecting external Skills from installed
-     * servers. Deployment-global; follows the ARCHESTRA_BETA master switch,
-     * with no flag of its own.
-     */
-    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpBridge: {
     /**
@@ -3010,6 +3012,10 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /** Service accounts to create on startup; see parseServiceAccountBootstrap. */
+    serviceAccountBootstrap: parseServiceAccountBootstrap(
+      process.env.ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP,
+    ),
     /**
      * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
      * scope cookies to the host without the port, so parallel local instances
@@ -3962,13 +3968,6 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
-    // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Unified Model API from resolving a model name to a pool. Off
-    // by default; a blank value falls back to the ARCHESTRA_BETA master switch
-    // (see betaFeatureEnabled).
-    modelPoolsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
-    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3989,8 +3988,6 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Unified Model API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
@@ -4008,15 +4005,11 @@ const config = {
       undefined,
     // BETA gate for the M-Files connector: hides the connector type in the
     // frontend, rejects creating connectors of the type, and disables the VAF
-    // Add On distribution endpoints. Off by default; a blank value falls back
-    // to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-    mfilesConnectorEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED,
-    ),
+    // Add On distribution endpoints. Off unless set to "true".
+    mfilesConnectorEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED === "true",
     // Gate for the M-Files Application Account (OAuth client-credentials)
-    // auth method. Deliberately NOT wired through betaFeatureEnabled: the
-    // method stays hidden until this flag is set explicitly, even on
-    // deployments running with the ARCHESTRA_BETA master switch on.
+    // auth method. The method stays hidden until this flag is set explicitly.
     // Intentionally undocumented while the method is being validated.
     mfilesOauthEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
@@ -4389,12 +4382,6 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
-  /**
-   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
-   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
-   * the new connection page the default Connect destination — can key off it.
-   */
-  beta: process.env.ARCHESTRA_BETA === "true",
   /**
    * Internal UI feedback overlay for the team's own deployments: pin a comment
    * on an element and post it, with a screenshot and an optional screen clip,

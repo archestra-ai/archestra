@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CircleAlert,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -18,10 +17,15 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { FederatedCredentialsTab } from "@/components/federated-credentials-section";
 import { OverviewSummary } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -35,7 +39,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -46,13 +49,10 @@ import {
   useServiceAccount,
   useUpdateServiceAccount,
 } from "@/lib/service-account.query";
+import { getAccountHealth } from "@/lib/service-account-status";
 import { useTeam } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { FederatedCredentialsSection } from "./federated-credentials-section";
 // SPDX-SnippetEnd
 import { ServiceAccountApiKeys } from "./service-account-api-keys";
 
@@ -282,7 +282,7 @@ export function ServiceAccountDetailPage({
           SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
       {activeTab === "federated-credentials" && (
         <FederatedCredentialsTab
-          serviceAccountId={account.id}
+          owner={{ kind: "serviceAccount", id: account.id }}
           canUpdate={!!canUpdate}
           createOpen={addCredentialOpen}
           onCreateOpenChange={setAddCredentialOpen}
@@ -322,44 +322,6 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: "federated-credentials", label: "Federated Credentials" },
 ];
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-/** Federated credentials need an enterprise license; without one, say so. */
-function FederatedCredentialsTab({
-  serviceAccountId,
-  canUpdate,
-  createOpen,
-  onCreateOpenChange,
-}: {
-  serviceAccountId: string;
-  canUpdate: boolean;
-  createOpen: boolean;
-  onCreateOpenChange: (open: boolean) => void;
-}) {
-  const federationAvailable = useEnterpriseFeature("core");
-  if (!federationAvailable) {
-    return (
-      <InlineNotice variant="info">
-        <CircleAlert />
-        <InlineNoticeText>
-          Federated credentials need an enterprise license. They let a CI job
-          sign in with its own OIDC token instead of an API key.
-        </InlineNoticeText>
-      </InlineNotice>
-    );
-  }
-  return (
-    <FederatedCredentialsSection
-      serviceAccountId={serviceAccountId}
-      canUpdate={canUpdate}
-      createOpen={createOpen}
-      onCreateOpenChange={onCreateOpenChange}
-    />
-  );
-}
-// SPDX-SnippetEnd
-
 function Overview({ account }: { account: ServiceAccountDetail }) {
   const roles = account.role
     .split(",")
@@ -368,10 +330,16 @@ function Overview({ account }: { account: ServiceAccountDetail }) {
 
   return (
     <SettingsSectionGroup>
-      {/* Only what the account has: an empty team, no labels or "never used"
-          say nothing a reader needs, so those facts fall out. */}
+      {/* What the account is for leads; then only what the account has: an
+          empty team, no labels or "never used" say nothing a reader needs, so
+          those facts fall out. */}
       <OverviewSummary
+        description={account.description}
         facts={[
+          {
+            label: "Status",
+            value: <AccountHealthBadge health={getAccountHealth(account)} />,
+          },
           {
             label: roles.length === 1 ? "Role" : "Roles",
             value: (

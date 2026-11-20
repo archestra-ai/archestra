@@ -22,6 +22,7 @@ export const NATIVE_SESSION_CLIENT_LABELS = {
   "copilot-cli": "Copilot CLI",
   pi: "Pi",
   "kimi-code": "Kimi Code",
+  cursor: "Cursor",
   opencode: OPENCODE_FAMILY.opencode.label,
   kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
@@ -256,6 +257,30 @@ export function startupGuardDisconnectCommand(
 }
 
 /**
+ * Cursor's disconnect command: runs the cleanup helper the Cursor setup
+ * leaves beside its Guardrails hook, which removes everything that setup
+ * added. Like a startup check's, it succeeds when the helper has already
+ * removed itself, and a real failure still fails.
+ *
+ * Cursor's settings change only while Cursor is closed. With `wait`, for a
+ * person in a terminal, the helper waits two minutes for them to quit it.
+ * Without, for a chat inside Cursor, it leaves a copy of itself that makes
+ * the change when Cursor next closes.
+ */
+export function cursorDisconnectCommand(
+  platform: "bash" | "windows",
+  options: { wait: boolean },
+): string {
+  const wait = options.wait ? " --wait" : "";
+  if (platform === "windows") {
+    const script = "$HOME\\.cursor\\archestra\\disconnect.cjs";
+    return `if (Test-Path -LiteralPath "${script}" -PathType Leaf) { node "${script}"${wait}; if ($LASTEXITCODE -ne 0) { throw "Local cleanup failed (exit $LASTEXITCODE)." } } else { Write-Host 'No local cleanup script remains.'; $global:LASTEXITCODE=0 }`;
+  }
+  const script = "$HOME/.cursor/archestra/disconnect.cjs";
+  return `if [ -f "${script}" ]; then node "${script}"${wait}; else printf '%s\\n' 'No local cleanup script remains.'; fi`;
+}
+
+/**
  * What a setup leaves on the user's machine, one short line each, as the
  * Connect page's disconnect dialogs list it. Kept in line with the
  * inventories in frontend/src/app/disconnect.md/route.ts.
@@ -272,7 +297,15 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "~/.claude/settings.json (model routing)",
     "Startup check in your shell profile",
   ],
-  cursor: ["~/.cursor/mcp.json", "~/.cursor/skills/"],
+  cursor: [
+    "~/.cursor/mcp.json (gateway, and web search and fetch tools)",
+    "~/.cursor/hooks.json (Guardrails hooks)",
+    "~/.cursor/permissions.json (MCP allowlist entries)",
+    "~/.cursor/archestra/ (Guardrails helper, web tools and cleanup script)",
+    "~/.cursor/skills/",
+    "Cursor settings: Web Search Tool and Web Fetch Tool switched off",
+    "Cursor's command-line agent: its sign-in to the gateway",
+  ],
   codex: [
     "~/.codex/config.toml (gateway, model provider, skills marketplace)",
     "Plugins from the skills marketplace",
@@ -378,10 +411,16 @@ export const OAUTH_AGENTS = {
       { clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata" },
     ],
   },
-  // DCR with Cursor's own URL scheme as the redirect.
+  // DCR as "Cursor". The app and the command-line agent of Cursor 3.30
+  // register the same pair of redirects, one on cursor.com and one on a
+  // loopback port; older apps registered Cursor's own URL scheme.
   cursor: {
     label: "Cursor",
     identities: [
+      {
+        clientNamePattern: "^Cursor$",
+        redirectUri: "https://www.cursor.com/agents/mcp/oauth/callback",
+      },
       { redirectUri: "cursor://anysphere.cursor-mcp/oauth/callback" },
     ],
   },

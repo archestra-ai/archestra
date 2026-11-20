@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   type QueryClient,
+  queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
@@ -51,8 +52,8 @@ export const batteryMatchesQueryKey = (catalogId: string) => [
  * included battery with its status, servers and credential rows, the aliases
  * no battery declares, the composition's last error and a held GitHub pull.
  */
-export function usePolicyDeclarations() {
-  return useQuery(policyDeclarationsQuery);
+export function usePolicyDeclarations(enabled = true) {
+  return useQuery({ ...policyDeclarationsQuery, enabled });
 }
 
 /** The composed document the runtime enforces: the root text with its batteries. */
@@ -60,28 +61,48 @@ export function useEffectivePolicy(
   enabled = true,
   refetchInterval: number | false = false,
 ) {
-  return useQuery({
-    queryKey: effectivePolicyQueryKey,
-    enabled,
-    refetchInterval,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getOpenappaEffectivePolicy();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-  });
+  return useQuery({ ...effectivePolicyQuery, enabled, refetchInterval });
 }
 
+export const effectivePolicyQuery = queryOptions({
+  queryKey: effectivePolicyQueryKey,
+  queryFn: async () => {
+    const { data, error } = await archestraApiSdk.getOpenappaEffectivePolicy();
+    throwOnApiError(error, { toastOnError: false });
+    return data ?? null;
+  },
+});
+
 /** The source TOML of one exact include in the current organization policy. */
-export function useBatteryPolicySource(entry: string) {
-  return useQuery({
-    queryKey: [...batteriesQueryKey, "policy-source", entry],
+export function useBatteryPolicySource(
+  entry: string,
+  /**
+   * Read through the MCP server's own route, which takes access to the
+   * server in the registry rather than a Guardrails permission.
+   */
+  options: { serverRules?: boolean } = {},
+) {
+  return useQuery(batteryPolicySourceQuery(entry, options));
+}
+
+/** One include's source TOML, for a caller that fetches it on demand. */
+export function batteryPolicySourceQuery(
+  entry: string,
+  options: { serverRules?: boolean } = {},
+) {
+  const serverRules = options.serverRules === true;
+  return queryOptions({
+    queryKey: [
+      ...batteriesQueryKey,
+      serverRules ? "server-rules-source" : "policy-source",
+      entry,
+    ],
     queryFn: async (): Promise<BatteryPolicySource> => {
-      const { data, error } =
-        await archestraApiSdk.getOpenappaBatteryPolicySource({
-          query: { entry },
-        });
+      const { data, error } = await (serverRules
+        ? archestraApiSdk.getOpenappaServerRulesSource
+        : archestraApiSdk.getOpenappaBatteryPolicySource)({
+        query: { entry },
+      });
       throwOnApiError(error, { toastOnError: false });
       return answered(data);
     },

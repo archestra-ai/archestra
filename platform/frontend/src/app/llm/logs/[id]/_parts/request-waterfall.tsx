@@ -1,6 +1,10 @@
 "use client";
 
-import { CornerDownRight, MessageSquareText } from "lucide-react";
+import {
+  CornerDownRight,
+  MessageSquareText,
+  MessageSquareWarning,
+} from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -125,6 +129,7 @@ export function RequestWaterfall({
   onOpenRequest,
   ranOn = null,
   poolKeyNames,
+  chatErrorsByRowId,
 }: {
   /**
    * Where the session's work ran, when it was handed to Agent Runtime: its
@@ -133,6 +138,11 @@ export function RequestWaterfall({
   ranOn?: { view: RanOnView; parties: RanOnParties } | null;
   /** Pool members' key names by provider key id, to name a pooled row's key. */
   poolKeyNames?: Map<string, string>;
+  /**
+   * How many chat errors followed each request id: the request was the last
+   * one logged before the chat showed the error.
+   */
+  chatErrorsByRowId?: Map<string, number>;
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
   /** The consult open in the details pane below, if any. */
@@ -655,6 +665,7 @@ export function RequestWaterfall({
                           ? poolKeyNames?.get(span.row.providerApiKeyId)
                           : undefined
                       }
+                      chatErrorCount={chatErrorsByRowId?.get(span.row.id) ?? 0}
                       {...rowProps}
                     />
                   ) : (
@@ -1102,9 +1113,12 @@ function RequestRow({
   isConversation,
   joinsRowAbove,
   poolKeyName,
+  chatErrorCount,
   ...rowProps
 }: RowProps & {
   span: RequestSpan;
+  /** Chat errors shown right after this request, the last one before them. */
+  chatErrorCount: number;
   profileName: string | null;
   isConversation: boolean;
   /** A pool retry of the failed attempt in the row right above it. */
@@ -1129,13 +1143,22 @@ function RequestRow({
   const failedOver = row.attemptOutcome === "failed_over";
   const failure = failedOver ? poolFailureLabel(row.failureReason) : null;
   const retry = Boolean(row.modelPoolId) && (row.attempt ?? 0) > 1;
+  // A failed-over attempt already says so; anything else that stored an
+  // error response failed outright.
+  const failed = row.failed && !failedOver;
 
   return (
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
-      barClassName={failedOver ? FAILED_ATTEMPT_BAR : undefined}
+      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${failed ? ", failed" : ""}${chatErrorCount > 0 ? ", then the turn failed" : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
+      barClassName={
+        failedOver
+          ? FAILED_ATTEMPT_BAR
+          : failed
+            ? FAILED_REQUEST_BAR
+            : undefined
+      }
       edge={joinsRowAbove ? <RetryBracket /> : null}
       name={
         <>
@@ -1154,6 +1177,25 @@ function RequestRow({
               title={`Failed over to the next pool member${row.failureReason ? `: ${row.failureReason}` : ""}`}
             >
               {failure ? poolFailureText(failure) : "Failed over"}
+            </span>
+          ) : null}
+          {failed ? (
+            <span
+              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 dark:text-red-400"
+              title="The request failed. The Response tab has the error."
+            >
+              Failed
+            </span>
+          ) : null}
+          {chatErrorCount > 0 ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 tabular-nums dark:text-red-400"
+              title="The turn failed after this request, the last one logged before the error the user saw. See Failed turns above."
+            >
+              <MessageSquareWarning className="size-2.5" aria-hidden="true" />
+              {chatErrorCount === 1
+                ? "Turn failed"
+                : `${chatErrorCount} turns failed`}
             </span>
           ) : null}
           {retry ? (
@@ -1266,6 +1308,9 @@ function requestAbove(
 /** A failed pool attempt's bar: hatched, so its retry below reads as the answer. */
 const FAILED_ATTEMPT_BAR =
   "bg-red-500/20 bg-[repeating-linear-gradient(135deg,rgb(239_68_68/0.7)_0_2px,transparent_2px_4px)] dark:bg-red-400/20 dark:bg-[repeating-linear-gradient(135deg,rgb(248_113_113/0.7)_0_2px,transparent_2px_4px)]";
+
+/** A request that failed outright: solid red, with no retry to answer it. */
+const FAILED_REQUEST_BAR = "bg-red-500/70 dark:bg-red-400/70";
 
 /** Joins a pool retry to the failed attempt in the row above it. */
 function RetryBracket() {

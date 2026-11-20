@@ -2,7 +2,7 @@
 title: Amazon Bedrock
 description: Connect Amazon Bedrock with an API key, AWS access keys, or the IAM identity of your Archestra deployment.
 order: 1
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -93,6 +93,16 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 ## Model Discovery
 
 Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS) to a comma-separated list such as `anthropic,amazon` to limit discovered model vendors. [`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS) limits inference-region prefixes such as `us,global`. Empty values allow all.
+
+## Structured Output
+
+Get JSON that matches your schema from a Bedrock model through the OpenAI-compatible endpoints. Send `response_format` with `type: "json_schema"` to `/v1/bedrock/openai/chat/completions` or the [Unified Model API](/docs/llm-proxy/unified-model). Archestra passes the schema to Bedrock as a native [structured output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) constraint.
+
+What to know:
+
+- Bedrock enforces a schema only on models that support structured output. For other models, Archestra sends the request without the schema, and the answer is not constrained.
+- Bedrock has no JSON mode. Archestra accepts `type: "json_object"` and sends the request without a constraint, so ask for JSON in the prompt.
+- Bedrock returns a 400 error for a schema it cannot use. The AWS page lists the supported JSON Schema features.
 
 ## Prompt Caching
 

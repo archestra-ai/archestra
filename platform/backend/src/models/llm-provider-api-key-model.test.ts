@@ -151,12 +151,21 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       ]);
       const flagshipOnly = await linkedKey("anthropic", ["claude-opus-5"]);
       const noFastTier = await linkedKey("groq", ["openai/gpt-oss-120b"]);
+      const gemini = await linkedKey("gemini", [
+        "gemini-3.8-pro",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash-lite",
+        "gemini-3.8-flash",
+      ]);
+      const geminiWithoutFast = await linkedKey("gemini", ["gemini-3-pro"]);
 
       expect(await fastModelOf(openai)).toBe("gpt-6-luna");
       expect(await fastModelOf(anthropic)).toBe("claude-haiku-5-5-20261001");
       expect(await fastModelOf(proOverFast)).toBeNull();
       expect(await fastModelOf(flagshipOnly)).toBeNull();
       expect(await fastModelOf(noFastTier)).toBeNull();
+      expect(await fastModelOf(gemini)).toBe("gemini-3.8-flash");
+      expect(await fastModelOf(geminiWithoutFast)).toBeNull();
     });
   });
 

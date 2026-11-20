@@ -42,11 +42,17 @@ export function EnvSiteNotificationBar() {
 interface SiteNotificationBarProps {
   content: string;
   notificationId: string;
+  /**
+   * When false the bar has no close button and shows even if this browser
+   * dismissed it while it was still dismissible.
+   */
+  dismissible?: boolean;
 }
 
 export function SiteNotificationBar({
   content,
   notificationId,
+  dismissible = true,
 }: SiteNotificationBarProps) {
   // Hydration starts from the server's answer (not dismissed: it cannot read
   // storage) and switches to the stored one right after. Until then the head
@@ -57,7 +63,7 @@ export function SiteNotificationBar({
     () => false,
   );
 
-  if (dismissed) {
+  if (dismissible && dismissed) {
     return null;
   }
 
@@ -65,8 +71,9 @@ export function SiteNotificationBar({
 
   return (
     <div
-      // Matched by HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT.
-      data-site-notification-id={notificationId}
+      // Matched by HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT, so a bar that
+      // cannot be dismissed leaves it out.
+      data-site-notification-id={dismissible ? notificationId : undefined}
       className="sticky top-0 z-40 border-b border-primary bg-primary text-primary-foreground shadow-sm"
     >
       <div className="flex items-start gap-3 px-6 py-2">
@@ -77,16 +84,18 @@ export function SiteNotificationBar({
             <siteNotificationMarkdown.Component content={content} />
           </Suspense>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="shrink-0 text-primary-foreground hover:bg-primary-foreground hover:text-primary"
-          onClick={handleDismiss}
-          aria-label="Dismiss notification"
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        {dismissible && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="shrink-0 text-primary-foreground hover:bg-primary-foreground hover:text-primary"
+            onClick={handleDismiss}
+            aria-label="Dismiss notification"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import {
   keepPreviousData,
   useMutation,
@@ -37,6 +41,8 @@ export type AgentAdoptionUsage =
 const connectedClientKeys = {
   all: ["connected-clients"] as const,
   mine: () => [...connectedClientKeys.all, "mine"] as const,
+  disconnectReference: () =>
+    [...connectedClientKeys.all, "disconnect-reference"] as const,
   log: (query: ConnectionLogQuery) =>
     [...connectedClientKeys.all, "log", query] as const,
   adoption: (window: AdoptionWindow) =>
@@ -62,6 +68,35 @@ export function useConnectedClients() {
       const response = await getConnectedClients();
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
+    },
+  });
+}
+
+/** A reference lives ten minutes; one on screen is replaced well before. */
+const DISCONNECT_REFERENCE_REFRESH_MS = 4 * 60 * 1000;
+
+/**
+ * The reference that goes into the cleanup prompt while its dialog is open.
+ * Guardrails leave the conversation that presents it unchecked, so the
+ * cleanup can remove the gateway without depending on it. Null until it
+ * loads and when it cannot be issued: the prompt then works without one,
+ * under Guardrails.
+ */
+export function useDisconnectReference() {
+  return useQuery({
+    queryKey: connectedClientKeys.disconnectReference(),
+    // A dialog opened again gets a reference with its whole lifetime left.
+    gcTime: 0,
+    staleTime: 0,
+    refetchInterval: DISCONNECT_REFERENCE_REFRESH_MS,
+    retry: false,
+    queryFn: async () => {
+      // The endpoint is not in the API reference yet, so the generated
+      // client has no function for it.
+      const response = await archestraApiClient.get<{
+        200: { reference: string; expiresAt: string };
+      }>({ url: "/api/connected-clients/disconnect-reference" });
+      return response.data?.reference ?? null;
     },
   });
 }

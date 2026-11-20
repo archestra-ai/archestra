@@ -64,7 +64,7 @@ Use a service-account API key for automation; keep personal tokens for calls act
 
 ## Identity Provider JWT
 
-Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
+Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Pricing](/pricing).
 
 The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/idp-token-exchange) for a token each MCP server accepts.
 

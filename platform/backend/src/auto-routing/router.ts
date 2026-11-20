@@ -23,7 +23,6 @@ import { coreVersion, decide } from "@archestra/router-rs";
 import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
 import {
   LimitValidationService,
@@ -116,8 +115,7 @@ type AutoModelResolution =
 
 /**
  * The model a Unified Model API request should be resolved as. Anything but
- * an auto router's name — and those while the feature is off — is returned as
- * is. For a router the caller may use, picks the session's sticky tier
+ * an auto router's name is returned as is. For a router the caller may use, picks the session's sticky tier
  * (deciding it on first sight), records the decision on `request` for the
  * interaction write, and returns the tier's provider-qualified id.
  */
@@ -131,7 +129,7 @@ export async function resolveAutoModel(params: {
   body: unknown;
 }): Promise<AutoModelResolution> {
   const { request, auth, endpoint, body } = params;
-  if (!config.autoRouting.enabled || !isAutoModel(params.requestedModel)) {
+  if (!isAutoModel(params.requestedModel)) {
     return { kind: "as_requested", model: params.requestedModel };
   }
   const { settings, trio } = await loadEnabledTrio(
@@ -364,14 +362,13 @@ export async function routeInternalAutoSession(params: {
 }
 
 /**
- * The names of the auto routers offered to `auth`: the feature is on, the
- * organization enabled it, the caller may use the router, and every tier
+ * The names of the auto routers offered to `auth`: the organization enabled
+ * auto routing, the caller may use the router, and every tier
  * passes the inference-time checks on at least one endpoint they all share.
  */
 export async function availableAutoRouterNames(
   auth: ModelRouterAuth,
 ): Promise<string[]> {
-  if (!config.autoRouting.enabled) return [];
   const routers = await AutoRouterModel.list(auth.organizationId);
   const names: string[] = [];
   for (const settings of routers) {
@@ -397,14 +394,22 @@ export async function availableAutoRouterNames(
   return names;
 }
 
-/** Native provider routes cannot serve an auto router; only the Unified Model API translates between tiers. */
-export function assertNotAutoOnNativeRoute(model: string): void {
-  if (config.autoRouting.enabled && isAutoModel(model)) {
-    throw new ApiError(
-      400,
-      `"${model.trim()}" is only available through the Unified Model API.`,
-    );
-  }
+/**
+ * Native provider routes cannot serve an auto router; only the Unified Model
+ * API translates between tiers. Without an enabled router in the organization,
+ * `auto` is the provider's own model name (Fireworks has one) and passes through.
+ */
+export async function assertNotAutoOnNativeRoute(params: {
+  model: string;
+  organizationId: string;
+}): Promise<void> {
+  if (!isAutoModel(params.model)) return;
+  const routers = await AutoRouterModel.list(params.organizationId);
+  if (!routers.some((router) => router.enabled)) return;
+  throw new ApiError(
+    400,
+    `"${params.model.trim()}" is only available through the Unified Model API.`,
+  );
 }
 
 /** The tier a scored session gets from the active plan; null `plan` unless planned. */

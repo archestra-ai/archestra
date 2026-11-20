@@ -12,7 +12,7 @@ import {
 } from "./session-timeline";
 
 describe("buildGuardrails", () => {
-  it("ties each check to the tool call it was raised for, through a trajectory stamp", () => {
+  it("ties each check to the tool call it was raised for, through a trajectory stamp and a signed id", () => {
     const guardrails = buildGuardrails({
       timeline: timeline(),
       consults: [
@@ -226,8 +226,9 @@ function timeline() {
       toolCall({
         id: "read",
         createdAt: at(7_000),
-        // A stamped id: `appat1` + base64url("<session>\0<call id>") + tag.
-        llmToolCallId: `appat1${btoa("session\u0000toolu_read").replace(/=+$/, "")}${"t".repeat(22)}`,
+        // A stamped id: `appat1` + base64url("<session>\0<call id>") + tag,
+        // around a Gemini call id that carries its thought signature.
+        llmToolCallId: `appat1${btoa("session\u0000gemsig-c2ln.toolu_read").replace(/=+$/, "")}${"t".repeat(22)}`,
       }),
       toolCall({
         id: "write",
@@ -338,6 +339,7 @@ function row(overrides: Partial<InteractionSummary> = {}): InteractionSummary {
     baselineModel: null,
     billingMode: "metered",
     autoRouted: false,
+    failed: false,
     inputTokens: 10,
     inputTokensEstimated: false,
     outputTokens: 5,
@@ -374,6 +376,7 @@ function toolCall(overrides: Partial<SessionToolCall> = {}): SessionToolCall {
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
     credentialActorClientId: null,

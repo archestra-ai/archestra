@@ -31,7 +31,10 @@ import {
 } from "vitest";
 import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -662,7 +665,7 @@ describe("ConnectPage guardrails chip", () => {
   });
 
   it("does not mark an unsupported client as supporting guardrails", () => {
-    setup("cursor", { active: true, unsupportedClientAction: "block" });
+    setup("n8n", { active: true, unsupportedClientAction: "block" });
     expect(
       screen.queryByRole("img", { name: "Supports LLM proxy guardrails" }),
     ).not.toBeInTheDocument();
@@ -691,7 +694,7 @@ describe("ConnectPage guardrails chip", () => {
     "block",
     "bypass",
   ] as const)("lists the supported clients for an unrecognized agent (%s)", async (unsupportedClientAction) => {
-    setup("cursor", { active: true, unsupportedClientAction });
+    setup("n8n", { active: true, unsupportedClientAction });
     await userEvent.hover(
       screen.getByRole("button", { name: "What the guardrails do" }),
     );
@@ -716,7 +719,7 @@ describe("ConnectPage guardrails chip", () => {
 
   it("says guardrails are not enforced for an allowed unrecognized agent", () => {
     expect(
-      setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
+      setup("n8n", { active: true, unsupportedClientAction: "bypass" }),
     ).toHaveTextContent("Not enforced");
   });
 
@@ -731,9 +734,60 @@ describe("ConnectPage guardrails chip", () => {
     ).toBeNull();
   });
 
-  it("says an unrecognized agent is blocked", () => {
+  it("says Cursor is enforced while it keeps its own models", async () => {
+    // Cursor's model routing starts off: setup's hooks check its chats. The
+    // hooks come with the gateway.
+    const gateway = {
+      id: "default-gateway",
+      name: "Default gateway",
+      slug: "default-gateway",
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    };
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateway,
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: params.ids.includes(gateway.id) ? [gateway] : [],
+          isPending: false,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    vi.mocked(useProfile).mockReturnValue({
+      data: gateway,
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Enforced");
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Each of Cursor's tool calls is checked against your organization's policy, through hooks that setup adds to Cursor. Cursor keeps its own models and your Cursor plan.",
+    );
+  });
+
+  it("says Cursor is not enforced when its setup has no gateway, and so adds no hooks", async () => {
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    expect(
+      setup("cursor", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Not enforced");
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Guardrails reach Cursor through hooks that setup adds together with the MCP gateway, and the gateway is left out",
+    );
+  });
+
+  it("says an unrecognized agent is blocked", () => {
+    expect(
+      setup("n8n", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Blocked");
   });
 });
@@ -1500,6 +1554,17 @@ describe("ConnectPage plugins", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: "*",
+          action: "use",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useConfig).mockReturnValue({
       data: { features: { plugins: true } },
     } as unknown as ReturnType<typeof useConfig>);
@@ -1811,7 +1876,7 @@ describe("ConnectPage after copying the command", () => {
 
   it("starts waiting when the command text is copied by hand", () => {
     show(["cursor"]);
-    fireEvent.copy(screen.getByText(/--client cursor$/));
+    fireEvent.copy(screen.getByText(/--client cursor --exclude proxy$/));
     expect(status()).toHaveTextContent("Waiting for approval");
   });
 

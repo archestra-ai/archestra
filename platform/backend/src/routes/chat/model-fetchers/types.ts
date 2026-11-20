@@ -1,6 +1,7 @@
 import type {
   ModelInputModality,
   ModelOutputModality,
+  ReasoningEffortLevel,
   SupportedProvider,
   SupportedProviderEndpoint,
 } from "@archestra/shared";
@@ -51,12 +52,27 @@ export interface FetchedModelCapabilities {
   inputModalities?: ModelInputModality[] | null;
   outputModalities?: ModelOutputModality[] | null;
   /**
+   * Whether the model accepts image input, when the provider says only that
+   * (GitHub Copilot's `supports.vision`) rather than listing modalities. Sync
+   * adds or removes `image` on the modalities the other tiers resolve, so a
+   * registry's richer list (`pdf`, …) survives. `undefined` means unknown.
+   */
+  supportsVision?: boolean | null;
+  /**
    * The fetcher classified this model from its id (OpenAI's media, audio
    * chat and search models), so sync overwrites what an earlier sync stored
    * instead of keeping it: a realtime model synced as a chat model by an
    * older build would otherwise stay one.
    */
   authoritative?: boolean;
+  /**
+   * The fetcher's `contextLength` is the provider's current limit for this
+   * model, so sync replaces the stored window instead of only filling an empty
+   * one. GitHub Copilot sets it: its windows grow with the API version and plan,
+   * and a window from an older sync would otherwise stay forever. An
+   * administrator's custom context window is a separate column and stays.
+   */
+  authoritativeContextLength?: boolean;
   promptPricePerToken?: string | null;
   completionPricePerToken?: string | null;
   /** Per-token cache-read price (USD), when the provider reports one. */
@@ -95,6 +111,14 @@ export interface FetchedModelCapabilities {
    * families use bare ids. `undefined` means the provider said nothing.
    */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
+  /**
+   * The `reasoning_effort` levels the provider says this model accepts
+   * (GitHub Copilot's `supports.reasoning_effort`, the Codex catalog's
+   * `supported_reasoning_levels`, LiteLLM's `supports_*_reasoning_effort`).
+   * An empty array is the provider saying the model takes none; `undefined`
+   * means it said nothing.
+   */
+  supportedReasoningEfforts?: ReasoningEffortLevel[] | null;
 }
 
 export interface ModelInfo {

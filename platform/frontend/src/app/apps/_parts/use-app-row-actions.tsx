@@ -19,8 +19,8 @@ import {
   useAppAccessContext,
 } from "@/lib/apps/use-app-access";
 import { useFeature } from "@/lib/config/config.query";
+import { useOpenApp } from "@/lib/hooks/use-open-app";
 import { AppDeleteDialog } from "./app-delete-dialog";
-import { useOpenApp } from "./use-open-app";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;

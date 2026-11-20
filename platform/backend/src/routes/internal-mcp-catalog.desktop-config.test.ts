@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import DesktopDeviceModel from "@/models/desktop-device";
@@ -18,11 +17,8 @@ describe("/api/internal_mcp_catalog — command for devices", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  const betaAtStart = config.beta;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    // Desktop MCP is in alpha, behind the beta flag.
-    config.beta = true;
     vi.spyOn(betterAuth.api, "getSession").mockImplementation(
       async () => ({ user: { id: user.id } }) as never,
     );
@@ -43,7 +39,6 @@ describe("/api/internal_mcp_catalog — command for devices", () => {
   });
 
   afterEach(async () => {
-    config.beta = betaAtStart;
     vi.restoreAllMocks();
     await app.close();
   });
@@ -227,32 +222,5 @@ describe("/api/internal_mcp_catalog — command for devices", () => {
 
     expect(created.statusCode).toBe(200);
     expect(await takeSyncMessages(own.device.id)).toEqual([]);
-  });
-
-  test("without the beta flag, a server cannot become a desktop MCP server, and one that is keeps working", async () => {
-    const remote = await create({
-      name: "remote",
-      serverType: "remote",
-      serverUrl: "https://mcp.example.com/mcp",
-    });
-    const desktop = await create({
-      name: "matlab",
-      serverType: "desktop_mcp",
-      desktopConfig: { command: "/opt/matlab-mcp" },
-    });
-    expect(remote.statusCode).toBe(200);
-    expect(desktop.statusCode).toBe(200);
-
-    config.beta = false;
-
-    const switched = await update(remote.json().id, {
-      serverType: "desktop_mcp",
-    });
-    const edited = await update(desktop.json().id, {
-      desktopConfig: { command: "/opt/matlab-mcp serve" },
-    });
-
-    expect(switched.statusCode).toBe(403);
-    expect(edited.statusCode).toBe(200);
   });
 });

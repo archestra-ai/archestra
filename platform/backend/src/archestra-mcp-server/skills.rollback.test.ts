@@ -523,8 +523,6 @@ describe("skill tool execution", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "remote",
@@ -549,26 +547,20 @@ describe("skill tool execution", () => {
       ],
     });
 
-    try {
-      const result = await executeArchestraTool(
-        TOOL_LIST_SKILLS_FULL_NAME,
-        {},
-        context,
-      );
-      expect(textOf(result)).toContain('name="release"');
-      expect(textOf(result)).toContain("Release safely.");
-      expect(textOf(result)).toContain('trust="untrusted"');
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    const result = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(result)).toContain('name="release"');
+    expect(textOf(result)).toContain("Release safely.");
+    expect(textOf(result)).toContain('trust="untrusted"');
   });
 
   test("load_skill counts an external activation but not a supporting-file read", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
     await seedSkill({
       skill: {
         name: "release",
@@ -636,43 +628,39 @@ describe("skill tool execution", () => {
     );
     const projectedName = "release-from-mcp";
 
-    try {
-      const listed = await executeArchestraTool(
-        TOOL_LIST_SKILLS_FULL_NAME,
-        {},
-        context,
-      );
-      expect(textOf(listed)).toContain(`name="${projectedName}"`);
+    const listed = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(listed)).toContain(`name="${projectedName}"`);
 
-      const activation = await executeArchestraTool(
-        TOOL_LOAD_SKILL_FULL_NAME,
-        { name: projectedName },
-        context,
-      );
-      expect(activation.isError).toBe(false);
-      expect(textOf(activation)).toContain(`name="${projectedName}"`);
-      expect(textOf(activation)).toContain("Release carefully.");
-      await drainBackgroundWork();
-      let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
-        { mcpServerId: server.id, uri },
-      ]);
-      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: projectedName },
+      context,
+    );
+    expect(activation.isError).toBe(false);
+    expect(textOf(activation)).toContain(`name="${projectedName}"`);
+    expect(textOf(activation)).toContain("Release carefully.");
+    await drainBackgroundWork();
+    let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+      { mcpServerId: server.id, uri },
+    ]);
+    expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
 
-      const fileRead = await executeArchestraTool(
-        TOOL_LOAD_SKILL_FULL_NAME,
-        { name: projectedName, path: "guide.md" },
-        context,
-      );
-      expect(fileRead.isError).toBe(false);
-      expect(textOf(fileRead)).toContain(`name="${projectedName}"`);
-      await drainBackgroundWork();
-      usage = await ExternalMcpSkillUsageEventModel.getSummaries([
-        { mcpServerId: server.id, uri },
-      ]);
-      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    const fileRead = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: projectedName, path: "guide.md" },
+      context,
+    );
+    expect(fileRead.isError).toBe(false);
+    expect(textOf(fileRead)).toContain(`name="${projectedName}"`);
+    await drainBackgroundWork();
+    usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+      { mcpServerId: server.id, uri },
+    ]);
+    expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
   });
 
   test("list_skills reports when the org has no skills", async () => {
@@ -704,7 +692,6 @@ describe("skill tool execution", () => {
   });
 
   test("list_skills and load_skill activate a plugin skill without copying it", async () => {
-    config.beta = false;
     const input: CreatePlugin = {
       displayName: "Portable bundle",
       description: "Portable skills",
@@ -865,7 +852,6 @@ describe("skill tool execution", () => {
   });
 
   test("suffixes a plugin skill name when a native skill uses it", async () => {
-    config.beta = false;
     await seedSkill({
       skill: {
         name: "release-guide",
@@ -920,7 +906,6 @@ describe("skill tool execution", () => {
   });
 
   test("uses the XML-safe listed name to load a projected skill", async () => {
-    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -980,7 +965,6 @@ describe("skill tool execution", () => {
   });
 
   test("assigns duplicate projected names by stable source identity", async () => {
-    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -1023,7 +1007,6 @@ describe("skill tool execution", () => {
   });
 
   test("keeps legacy references ahead of colliding projected names", async () => {
-    config.beta = false;
     const original = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,

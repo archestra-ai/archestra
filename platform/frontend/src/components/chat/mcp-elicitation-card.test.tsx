@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 
+vi.mock("@/lib/hooks/use-app-name");
+
 // The markdown renderer is a lazy chunk; once loaded it renders in one pass.
 beforeAll(() => preloadResponseMarkdown());
 
@@ -142,11 +144,16 @@ describe("McpElicitationCard", () => {
 
   it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
     const user = userEvent.setup();
+    const coverage = [
+      "after this, the agent can't use `archestra__list_skills` or `archestra__load_skill` in this conversation",
+      "the readers must be the public audience",
+      "other tools may also need approval, decided call by call",
+    ];
     render(
       <McpElicitationCard
         requests={[
           openappaReview({
-            coverage: ["the readers must be the public audience"],
+            coverage,
           }),
         ]}
         onRespond={vi.fn()}
@@ -157,11 +164,130 @@ describe("McpElicitationCard", () => {
     expect(card).toHaveTextContent("Approving also accepts:");
     expect(card).toHaveTextContent("the readers must be the public audience");
     expect(card).not.toHaveTextContent("APPA asks you to rule");
+    const consequences = screen.getByRole("list", {
+      name: "Approval consequences",
+    });
+    expect(
+      within(consequences)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(coverage.map((line) => line.replaceAll("`", "")));
+    expect(
+      within(consequences)
+        .getAllByRole("code")
+        .map((code) => code.textContent),
+    ).toEqual(["archestra__list_skills", "archestra__load_skill"]);
     await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();
     expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(consequences).toBeVisible();
     expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+  });
+
+  it("shows skill fields and Markdown instructions while retaining the exact copyable request", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const raw = JSON.stringify(
+      {
+        content:
+          "---\nname: example-skill\ndescription: >-\n  Review the complete\n  skill request.\n---\n\n# Review steps\n\nCheck the proposed changes.",
+        files: [
+          { path: "references/checklist.md", content: "Keep this file." },
+        ],
+      },
+      null,
+      4,
+    );
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...openappaReview(),
+            reviewedTool: "archestra__create_skill",
+            reviewedArguments: raw,
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const definitions = screen.getAllByRole("definition");
+    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+      ["Name", "Description", "Instructions", "Additional arguments"],
+    );
+    expect(definitions[0]).toHaveTextContent("example-skill");
+    expect(definitions[1]).toHaveTextContent(
+      "Review the complete skill request.",
+    );
+    expect(
+      within(definitions[2]).getByRole("heading", { name: "Review steps" }),
+    ).toBeVisible();
+    expect(definitions[3]).toHaveTextContent("references/checklist.md");
+    expect(
+      screen.queryByRole("button", { name: "Copy original request" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Original request" }));
+    await user.click(
+      screen.getByRole("button", { name: "Copy original request" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(raw);
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "review-1",
+      action: "accept",
+      content: { action: "approve" },
+    });
+  });
+
+  it("keeps a grouped skill review pending when copying the original request", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const raw = JSON.stringify({
+      content:
+        "---\nname: example-skill\ndescription: Review changes.\n---\nCheck the proposed changes.",
+    });
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-visibility",
+            message: "Who should see the skill?",
+            options: ["Only me", "My team"],
+          }),
+          {
+            ...openappaReview(),
+            reviewedTool: "archestra__create_skill",
+            reviewedArguments: raw,
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+    expect(onRespond).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Original request" }));
+    await user.click(
+      screen.getByRole("button", { name: "Copy original request" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(raw);
+    expect(onRespond).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onRespond).toHaveBeenCalledTimes(2);
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "review-1",
+      action: "accept",
+      content: { action: "approve" },
+    });
   });
 
   it.each([
@@ -1245,11 +1371,38 @@ describe("McpElicitationCard", () => {
     ).getAllByRole("listitem");
     expect(picked).toHaveTextContent("Pick a colorBlue");
     expect(picked).not.toHaveTextContent("Typed answer");
-    expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
+    expect(typed).toHaveTextContent("Which site?Google·Typed answer");
   });
 
-  it("folds the offered options under an answered question until expanded", async () => {
-    const user = userEvent.setup();
+  it("marks multi-select answers with custom text as typed", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Which checks should run?",
+            { status: "answered", selected: ["Run tests"], text: "lint" },
+            ["Run tests", "Type check"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [item] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(item).toHaveTextContent(
+      "Which checks should run?Run tests, lint·Typed answer",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Show .* option/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits offered options under an already-answered question", () => {
     render(
       <McpElicitationCard
         groupId="assistant-1-ask-user-1"
@@ -1266,20 +1419,71 @@ describe("McpElicitationCard", () => {
       />,
     );
 
+    const [item] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(item).toHaveTextContent("Stricter or looser?Stricter");
+    expect(
+      screen.queryByRole("button", { name: /Show .* option/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("list", { name: "Offered options" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
+  });
 
-    const options = within(
-      screen.getByRole("list", { name: "Offered options" }),
+  it("shows a settled approval answer under its question, not as a button", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Apply this policy?",
+            { status: "answered", selected: ["Approve"] },
+            ["Approve", "Not now"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [item] = within(
+      screen.getByRole("list", { name: "Answers" }),
     ).getAllByRole("listitem");
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Stricter",
-      "Looser",
-    ]);
-    expect(options[0]).toHaveAttribute("aria-current", "true");
-    expect(options[1]).not.toHaveAttribute("aria-current");
+    // The answer reads as part of the question's own row without redundant
+    // option toggles or a button-like pill after it.
+    expect(item).toHaveTextContent("Apply this policy?Approve");
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show 2 options" })).toBeNull();
+  });
+
+  it("shows an unanswered outcome with the options it was offered", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Apply this policy?", { status: "dismissed" }, [
+            "Approve",
+            "Not now",
+          ]),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
+      "Apply this policy?Dismissed·Show 2 options",
+    );
+    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
+    for (const option of within(
+      screen.getByRole("list", { name: "Offered options" }),
+    ).getAllByRole("listitem")) {
+      expect(option).not.toHaveAttribute("aria-current");
+    }
+    expect(screen.getByRole("button", { name: "Hide options" })).toBeVisible();
   });
 
   it("folds a long answered question until the user expands it", async () => {

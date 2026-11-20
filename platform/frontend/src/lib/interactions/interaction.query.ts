@@ -23,6 +23,7 @@ const {
   getLlmProxyLog,
   getLlmProxyLogSummaries,
   getLlmProxyLogs,
+  getLlmProxyLogSessionChatErrors,
   getLlmProxyLogSessionLineage,
   getLlmProxyLogSessionHandoffs,
   getLlmProxyLogAutoRouting,
@@ -421,6 +422,30 @@ export function useSessionLineage({
 }
 
 /**
+ * The errors Archestra Chat showed for a session's conversation (the error
+ * card in the chat), oldest first. Empty for sessions that are not chats.
+ */
+export function useSessionChatErrors({
+  sessionId,
+  enabled = true,
+}: {
+  sessionId: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["interactions", "sessions", sessionId, "chat-errors"],
+    queryFn: async () => {
+      const response = await getLlmProxyLogSessionChatErrors({
+        path: { sessionId },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data?.chatErrors ?? [];
+    },
+    enabled,
+  });
+}
+
+/**
  * Where a session's work moved between its client and Agent Runtime: the runs
  * it started, or the run whose own session it is, and the moves between them.
  */
@@ -650,7 +675,21 @@ export function useExportSessionInteractions() {
         }
         offset += EXPORT_PAGE_SIZE;
       }
-      downloadSessionInteractionsFile(sessionId, interactions);
+      // The chat's error cards are stored per conversation, not on a request
+      // row, so a request that died in Archestra's own code would otherwise
+      // leave the export ending on a healthy-looking row.
+      const chatErrorsResponse = await getLlmProxyLogSessionChatErrors({
+        path: { sessionId },
+      });
+      if (chatErrorsResponse.error) {
+        handleApiError(chatErrorsResponse.error);
+        throw toApiError(chatErrorsResponse.error);
+      }
+      downloadSessionInteractionsFile({
+        sessionId,
+        interactions,
+        chatErrors: chatErrorsResponse.data?.chatErrors ?? [],
+      });
       return interactions.length;
     },
     onSuccess: (count) => {
@@ -666,15 +705,24 @@ export function useExportSessionInteractions() {
 // The API caps page size at 100, so the export pages at that cap.
 const EXPORT_PAGE_SIZE = 100;
 
-function downloadSessionInteractionsFile(
-  sessionId: string,
-  interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"],
-) {
+function downloadSessionInteractionsFile({
+  sessionId,
+  interactions,
+  chatErrors,
+}: {
+  sessionId: string;
+  interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"];
+  chatErrors: archestraApiTypes.GetLlmProxyLogSessionChatErrorsResponses["200"]["chatErrors"];
+}) {
   const payload = {
     sessionId,
     exportedAt: new Date().toISOString(),
     interactionCount: interactions.length,
+    failedInteractionCount: interactions.filter((row) => row.failed === true)
+      .length,
     interactions,
+    chatErrorCount: chatErrors.length,
+    chatErrors,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",

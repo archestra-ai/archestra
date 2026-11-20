@@ -3,7 +3,7 @@ import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -451,7 +451,13 @@ describe("NewPluginPage", () => {
     expect(
       screen.getByText("Preview of a plugin that has not been imported yet."),
     ).toBeVisible();
-    expect(screen.getByText("hooks/hooks.json")).toBeVisible();
+    // The payload's one file is open in the workspace's explorer.
+    expect(
+      within(screen.getByRole("navigation", { name: "Files" })).getByRole(
+        "button",
+        { name: "hooks.json" },
+      ),
+    ).toHaveAttribute("aria-current", "page");
     expect(
       screen.getByRole("textbox", { name: "File contents" }),
     ).toHaveAttribute("readonly");
@@ -548,7 +554,7 @@ describe("NewPluginPage", () => {
     await user.click(
       screen.getByRole("combobox", { name: "Permission for Member" }),
     );
-    await user.click(screen.getByRole("option", { name: "Can update" }));
+    await user.click(screen.getByRole("option", { name: "Can edit" }));
     expect(create).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create plugin" }));
     expect(create).toHaveBeenCalledWith(
@@ -576,7 +582,13 @@ describe("NewPluginPage", () => {
     expect(screen.getByTestId("plugin-platforms")).toHaveTextContent(
       "posix,windows",
     );
-    expect(screen.getByText("hooks/hooks.json")).toBeVisible();
+    // The payload's one file is open in the workspace's explorer.
+    expect(
+      within(screen.getByRole("navigation", { name: "Files" })).getByRole(
+        "button",
+        { name: "hooks.json" },
+      ),
+    ).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();
     expect(

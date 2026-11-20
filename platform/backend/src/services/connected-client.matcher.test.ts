@@ -107,6 +107,22 @@ describe("isOAuthClientForConnectClient", () => {
         redirectUris: ["cursor://anysphere.cursor-mcp/oauth/callback"],
       }),
     ).toBe(true);
+    // Cursor 3.30, app and command-line agent alike.
+    const cursorNow = {
+      ...dcr,
+      name: "Cursor",
+      redirectUris: [
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+        "http://localhost:8787/callback",
+      ],
+    };
+    expect(isOAuthClientForConnectClient("cursor", cursorNow)).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("cursor", {
+        ...cursorNow,
+        name: "Cursor Helper",
+      }),
+    ).toBe(false);
     expect(
       isOAuthClientForConnectClient("opencode", {
         ...dcr,
@@ -210,6 +226,16 @@ describe("isOAuthClientForConnectClient", () => {
         clientId: "dcr-2",
         name: "Cursor",
         redirectUris: ["cursor://anysphere.cursor-mcp/oauth/callback"],
+      }),
+    ).toBe("cursor");
+    expect(
+      await agentOf({
+        clientId: "dcr-2b",
+        name: "Cursor",
+        redirectUris: [
+          "https://www.cursor.com/agents/mcp/oauth/callback",
+          "http://localhost:8787/callback",
+        ],
       }),
     ).toBe("cursor");
     expect(

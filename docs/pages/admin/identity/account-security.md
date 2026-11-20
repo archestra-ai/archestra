@@ -9,7 +9,7 @@ lastUpdated: 2026-11-09
 
 Enforce two-factor authentication (2FA) and session expiration for email/password accounts, and recover locked-out users from the command line.
 
-Two-factor authentication and organization session policies are enterprise features. See [Pricing Model](/docs/get-started/pricing-model).
+Two-factor authentication and organization session policies are enterprise features. See [Pricing](/pricing).
 
 ## Two-Factor Authentication
 

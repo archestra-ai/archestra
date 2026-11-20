@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   makeLlmProviderApiKey,
   makeVirtualKey,
@@ -51,6 +51,7 @@ const pool: ModelPool = {
   id: "pool-fast-chat",
   organizationId: "test-org",
   name: POOL_NAME,
+  routingStrategy: "weighted" as const,
   streamTimeoutSeconds: null,
   timeoutSeconds: null,
   cooldownSeconds: null,
@@ -126,6 +127,7 @@ function oauthClient(overrides: Partial<OauthClient>): OauthClient {
     clientId: "client-id",
     serviceAccountId: null,
     name: "OAuth client",
+    icon: null,
     organizationId: "test-org",
     grantType: "client_credentials",
     providerApiKeys: [],
@@ -173,25 +175,12 @@ const oauthClients = [
 
 async function mockPool({
   mswControl,
-  request,
   poolOverrides = {},
 }: {
   mswControl: MswControl;
-  request: APIRequestContext;
   poolOverrides?: Partial<ModelPool>;
 }) {
-  const config = await (
-    await request.get("/internal-test/api/api/config")
-  ).json();
   await mswControl.registerMany([
-    {
-      method: "get",
-      url: "/api/config",
-      body: {
-        ...config,
-        features: { ...config.features, llmModelPoolsEnabled: true },
-      },
-    },
     {
       method: "get",
       url: "/api/model-pools",
@@ -240,9 +229,8 @@ test.describe("Model pool Connect tab", () => {
   test("offers only explicitly granted virtual keys and asks for the pool by name", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await mockPool({ mswControl, request });
+    await mockPool({ mswControl });
     const dialog = await openConnectTab(page);
     await expect(
       dialog.getByRole("heading", { name: "Choose a virtual key" }),
@@ -272,9 +260,8 @@ test.describe("Model pool Connect tab", () => {
   test("shows the granted pool request without visible provider keys", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await mockPool({ mswControl, request });
+    await mockPool({ mswControl });
     await mswControl.use({
       method: "get",
       url: "/api/llm-provider-api-keys",
@@ -299,11 +286,9 @@ test.describe("Model pool Connect tab", () => {
   test("explains how to grant access when no virtual key has the pool", async ({
     page,
     mswControl,
-    request,
   }) => {
     await mockPool({
       mswControl,
-      request,
       poolOverrides: { virtualApiKeyIds: [] },
     });
     const dialog = await openConnectTab(page);
@@ -323,9 +308,8 @@ test.describe("LLM Proxy pool discovery", () => {
   test("defaults a pool-only app OAuth client to its pool rather than the viewer catalog", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await mockPool({ mswControl, request });
+    await mockPool({ mswControl });
     // These personal keys are visible to the viewer but cannot become the
     // client's automatic shared-primary provider mappings.
     await mswControl.registerMany([
@@ -367,9 +351,8 @@ test.describe("LLM Proxy pool discovery", () => {
   test("keeps shared-primary model examples for an automatic app OAuth client", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await mockPool({ mswControl, request });
+    await mockPool({ mswControl });
     const sharedKey = makeLlmProviderApiKey({
       ...openaiKey,
       id: "shared-openai",
@@ -463,11 +446,9 @@ test.describe("LLM Proxy pool discovery", () => {
     test(`does not count a disabled pool as provider access for a ${label}`, async ({
       page,
       mswControl,
-      request,
     }) => {
       await mockPool({
         mswControl,
-        request,
         poolOverrides: {
           members: pool.members.map((member) => ({
             ...member,
@@ -497,9 +478,8 @@ test.describe("LLM Proxy pool discovery", () => {
       test(`shows granted pools for an automatic ${label} without stored mappings and ${visibleProviderKeys ? "visible" : "no visible"} provider keys`, async ({
         page,
         mswControl,
-        request,
       }) => {
-        await mockPool({ mswControl, request });
+        await mockPool({ mswControl });
         if (!visibleProviderKeys) {
           await mswControl.use({
             method: "get",

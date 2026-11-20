@@ -4,7 +4,6 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -429,7 +428,6 @@ describe("POST /api/llm-virtual-keys", () => {
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.modelPoolsEnabled = true;
     const member = user;
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: "admin" });
@@ -516,9 +514,6 @@ describe("POST /api/llm-virtual-keys", () => {
     expect((await create({ modelPoolIds: [foreignPool.id] })).statusCode).toBe(
       400,
     );
-    config.llmProxy.modelPoolsEnabled = false;
-    expect((await create()).statusCode).toBe(400);
-    config.llmProxy.modelPoolsEnabled = true;
     user = member;
     expect((await create()).statusCode).toBe(403);
   });

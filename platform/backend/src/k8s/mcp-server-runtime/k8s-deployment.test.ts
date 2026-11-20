@@ -1022,6 +1022,35 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
   });
 
+  test("uses resolved tier CPU/RAM while retaining ephemeral storage governance", () => {
+    const deployment = createMockK8sDeployment({
+      id: "tier-id",
+      name: "tier-server",
+    } as McpServer);
+    const tier = {
+      cpuRequest: 0.25,
+      cpuLimit: 0.5,
+      memoryRequestMiB: 64,
+      memoryLimitMiB: 256,
+    };
+    const generate = (cpuLimit: number | null) =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", runtimeTier: "Small" },
+        false,
+        8080,
+        undefined,
+        undefined,
+        undefined,
+        { ...tier, cpuLimit },
+      ).spec?.template.spec?.containers[0]?.resources;
+    expect(generate(0.5)).toEqual({
+      requests: { cpu: "250m", memory: "64Mi", "ephemeral-storage": "256Mi" },
+      limits: { cpu: "500m", memory: "256Mi", "ephemeral-storage": "1Gi" },
+    });
+    expect(generate(null)?.limits).not.toHaveProperty("cpu");
+  });
+
   test("generates deploymentSpec with empty arguments array when not provided", () => {
     const mcpServer: McpServer = {
       id: "no-args-id",
@@ -7747,6 +7776,54 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
         }),
       }),
     });
+  });
+
+  // Other backend processes read the transport from the Deployment, not from
+  // their own copy of the catalog row, so creation has to record it.
+  test.each([
+    { needsHttp: false, transport: "stdio" },
+    { needsHttp: true, transport: "streamable-http" },
+  ])("records the $transport transport on a created deployment", async ({
+    needsHttp,
+    transport,
+  }) => {
+    const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound),
+      readNamespacedDeployment: vi.fn().mockRejectedValue(notFound),
+      createNamespacedDeployment,
+    });
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(needsHttp);
+    vi.spyOn(deployment, "generateDeploymentSpec").mockReturnValue({
+      metadata: { name: "mcp-test-server", annotations: { kept: "yes" } },
+    } as k8s.V1Deployment);
+    vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(undefined);
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+
+    await deployment.startOrCreateDeployment();
+
+    expect(createNamespacedDeployment).toHaveBeenCalledWith({
+      namespace: "default",
+      body: expect.objectContaining({
+        metadata: expect.objectContaining({
+          annotations: {
+            kept: "yes",
+            "archestra.ai/mcp-transport": transport,
+          },
+        }),
+      }),
+    });
+    expect(await deployment.usesStreamableHttp()).toBe(needsHttp);
   });
 
   // A concurrent reconcile (another orchestrator replica) can create the Deployment

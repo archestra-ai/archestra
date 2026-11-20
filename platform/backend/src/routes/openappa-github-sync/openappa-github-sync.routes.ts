@@ -1,11 +1,13 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
 import logger from "@/logging";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
+  getAppaGithubAppPermissions,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -13,9 +15,12 @@ import {
 } from "@/services/openappa-github-sync";
 import {
   ensureSelfServiceInclude,
+  listServerRulesFiles,
+  readServerRulesFile,
   selfServiceIncludeState,
 } from "@/services/openappa-server-rules";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
+import { BatteryPolicySourceSchema } from "@/types/openappa-batteries";
 import {
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
@@ -30,6 +35,7 @@ import {
 } from "@/types/openappa-github-app-setup";
 import {
   AppaGithubAppGrantsSchema,
+  AppaGithubAppPermissionsSchema,
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
@@ -37,6 +43,7 @@ import {
   AppaRepositoryProtectionSchema,
   AppaSelfServiceAvailabilitySchema,
   CreateAppaGithubRepositorySchema,
+  ServerRulesFilesSchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -91,6 +98,26 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       ),
   );
   app.get(
+    "/api/openappa/github-sync/app-permissions",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppPermissions,
+        // Listed in the API reference once the docs for it ship.
+        hide: true,
+        description:
+          "The GitHub App's permissions against what self-service needs: which its installation holds, and which its settings ask for now",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(
+          AppaGithubAppPermissionsSchema.nullable(),
+        ),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        (await getAppaGithubAppPermissions(request.organizationId)) ?? null,
+      ),
+  );
+  app.get(
     "/api/openappa/github-sync/self-service",
     {
       schema: {
@@ -103,6 +130,46 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(await getAppaSelfService(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/server-rules/files",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaServerRulesFiles,
+        description:
+          "The MCP servers' Guardrails rules files the caller may open: those of servers they may open in the MCP registry",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(ServerRulesFilesSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send({
+        files: await listServerRulesFiles({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        }),
+      }),
+  );
+  app.get(
+    "/api/openappa/server-rules/source",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaServerRulesSource,
+        description:
+          "One MCP server's Guardrails rules file, for a caller who may open that server in the MCP registry",
+        tags: ["OpenAPPA"],
+        querystring: z.object({ entry: z.string().min(1).max(512) }),
+        response: constructResponseSchema(BatteryPolicySourceSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await readServerRulesFile({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          path: request.query.entry,
+        }),
+      ),
   );
   app.put(
     "/api/openappa/github-sync",
@@ -325,7 +392,21 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           organizationId: request.organizationId,
           userId: request.user.id,
         });
-        return reply.send(await getAppaGithubSync(request.organizationId));
+        // The request opens a pull request and usually leaves the settings as
+        // they were, so the record marks it beside whatever a first pull
+        // changed, read once for the response and the record.
+        const status = await getAppaGithubSync(request.organizationId);
+        request.auditBefore = {
+          ...request.auditBefore,
+          includeServersRequested: false,
+        };
+        request.auditAfter = {
+          ...(status.source
+            ? { ...status.source, hasPolicy: status.hasPolicy }
+            : {}),
+          includeServersRequested: true,
+        };
+        return reply.send(status);
       }
       // The switch's dialog opens the pull request that includes the
       // servers' folder as its own step, with include_servers.

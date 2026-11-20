@@ -1,10 +1,21 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { archestraApiClient } from "@archestra/shared";
+import {
+  hashKey,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { appLifecycle } from "@/lib/app-lifecycle";
-import { seedShellQueries, useSession } from "@/lib/auth/auth.query";
+import {
+  authQueryKeys,
+  seedShellQueries,
+  useAllPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
 import type { ShellSeed } from "@/lib/auth/shell-seed.server";
+import { signedOutRefusal } from "@/lib/auth/signed-out-refusal";
 import {
   clearPersistedQueryCache,
   DEFAULT_STALE_TIME,
@@ -58,15 +69,50 @@ export const ArchestraQueryClientProvider = ({
   }, [queryClient]);
 
   useEffect(() => startPersistingQueryCache(queryClient), [queryClient]);
+  useSessionRecheckOnRefusal(queryClient);
   useEffect(() => appLifecycle.markRendered(), []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <PersistedQueryCacheScope client={queryClient} />
+      <PermissionScopedCache client={queryClient} />
       {children}
     </QueryClientProvider>
   );
 };
+
+/**
+ * A request refused as signed out, on a page that believes it is signed in,
+ * means the session ended since it was last checked: it expired, or was
+ * revoked. The session is asked again at once, so the shell follows (to the
+ * sign-in page) instead of staying up with every action failing. A burst of
+ * refusals shares one check.
+ *
+ * The refusal is read where the response arrives, not where a query fails:
+ * a mutation that answers `false` for its error never rejects, and its 401
+ * counts all the same.
+ */
+function useSessionRecheckOnRefusal(client: QueryClient) {
+  useEffect(() => {
+    const interceptor = archestraApiClient.interceptors.response.use(
+      (response) => {
+        if (response.status === 401) signedOutRefusal.report();
+        return response;
+      },
+    );
+    const unsubscribe = signedOutRefusal.subscribe(() => {
+      if (!client.getQueryData(authQueryKeys.session())) return;
+      void client.refetchQueries(
+        { queryKey: authQueryKeys.session(), exact: true },
+        { cancelRefetch: false },
+      );
+    });
+    return () => {
+      unsubscribe();
+      archestraApiClient.interceptors.response.eject(interceptor);
+    };
+  }, [client]);
+}
 
 /**
  * Binds the refresh snapshot to whoever is signed in. A snapshot belonging to
@@ -86,6 +132,35 @@ function PersistedQueryCacheScope({ client }: { client: QueryClient }) {
     }
     syncPersistedQueryCacheScope(client, `${userId}:${organizationId}`);
   }, [client, isPending, userId, organizationId]);
+
+  return null;
+}
+
+/**
+ * Marks everything else in the cache outdated once the viewer's permissions
+ * change. The lists and details held there were answered for the previous
+ * role, and each would otherwise stay on screen until its own stale time ran
+ * out. A refetch that returns the same map keeps the same object, so only a
+ * real change gets here.
+ */
+function PermissionScopedCache({ client }: { client: QueryClient }) {
+  const { data: permissions } = useAllPermissions();
+  const previousPermissions = useRef(permissions);
+
+  useEffect(() => {
+    const previous = previousPermissions.current;
+    previousPermissions.current = permissions;
+    if (!previous || !permissions || previous === permissions) return;
+    void client.invalidateQueries(
+      {
+        // All but the map itself, which is what just answered.
+        predicate: (query) =>
+          query.queryHash !== hashKey(authQueryKeys.userPermissions()),
+      },
+      // A request already on its way is answered for the new role.
+      { cancelRefetch: false },
+    );
+  }, [client, permissions]);
 
   return null;
 }

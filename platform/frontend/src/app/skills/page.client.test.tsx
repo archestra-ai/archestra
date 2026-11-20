@@ -342,10 +342,7 @@ describe("SkillsPage rows", () => {
   });
 
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {
-    mockUseFeature.mockImplementation(
-      (name: string) =>
-        name === "plugins" || name === "mcpGatewaySkillsEnabled",
-    );
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(useExternalMcpSkills).mockReturnValue({
       data: [
         {
@@ -418,6 +415,17 @@ describe("SkillsPage rows", () => {
       isFetching: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: PLUGIN_SKILL.pluginId,
+          action: "read",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
 
     render(<SkillsPage />);
 
@@ -452,12 +460,54 @@ describe("SkillsPage rows", () => {
     );
   });
 
-  it("shows plugin sources without a detail link for readers", async () => {
+  it("fetches and shows plugin skills when a member holds a per-plugin read grant without plugin:read", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions: Record<string, string[]>) =>
-        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-        ({ data: !permissions.plugin?.includes("update") }) as any,
+        ({
+          data: !permissions.plugin?.includes("read"),
+          // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+        }) as any,
     );
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: PLUGIN_SKILL.pluginId,
+          action: "read",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [PLUGIN_SKILL],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+
+    expect(usePluginSkills).toHaveBeenCalledWith({ enabled: true });
+    expect(screen.getByText("ste-writing")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "STE bundle · Plugin" }),
+    ).toHaveAttribute("href", `/plugins/${PLUGIN_SKILL.pluginId}`);
+  });
+
+  it("shows plugin sources without a detail link when the plugin is not readable", async () => {
+    // A read grant on another plugin does not open this one.
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: "another-plugin",
+          action: "read",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(usePluginSkills).mockReturnValue({
       data: [PLUGIN_SKILL],
@@ -521,10 +571,6 @@ describe("SkillsPage rows", () => {
   });
 
   it("lists skills without their SKILL.md bodies in both the complete and paged views", () => {
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
-
     render(<SkillsPage />);
 
     // The default view walks every page; the table never shows a body.
@@ -539,9 +585,6 @@ describe("SkillsPage rows", () => {
   });
 
   it("uses one server page and its total for a standalone-only active view", () => {
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("kind=standalone&pageSize=10") as ReturnType<
         typeof useSearchParams
@@ -576,9 +619,6 @@ describe("SkillsPage rows", () => {
       push: vi.fn(),
       replace,
     } as unknown as ReturnType<typeof useRouter>);
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("kind=standalone&openEdit=pdf-tools") as ReturnType<
         typeof useSearchParams

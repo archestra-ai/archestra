@@ -43,6 +43,18 @@ const oauthClient = pgTable("oauth_client", {
   public: boolean("public"),
   type: text("type"),
   requirePKCE: boolean("require_pkce"),
+  clientDiscoveryId: text("client_discovery_id"),
+  clientCredentialsScopes: text("client_credentials_scopes")
+    .array()
+    .default([]),
+  backchannelLogoutUri: text("backchannel_logout_uri"),
+  backchannelLogoutSessionRequired: boolean(
+    "backchannel_logout_session_required",
+  ),
+  applicationType: text("application_type"),
+  jwks: text("jwks"),
+  jwksUri: text("jwks_uri"),
+  dpopBoundAccessTokens: boolean("dpop_bound_access_tokens").default(false),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")

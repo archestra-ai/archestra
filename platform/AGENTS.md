@@ -1,6 +1,7 @@
 # Individual Preferences
 
 - Read `CLAUDE_LOCAL.md` in this directory if it exists (untracked individual preferences).
+- Before running pnpm, cargo, tilt, kubectl or tests, check `echo $ARCHESTRA_DEV_MODE`. If it is `2`, the stack runs in the dev VM: use the `archestra-dev-vm` skill instead of the commands below.
 
 ## Working Directory
 
@@ -18,7 +19,7 @@
      stack as plain processes:
      `scripts/dev-lite.sh up` (PostgreSQL 18, backend :9000, frontend :3000;
      `status`, `logs <component>`, `up --e2e` then `e2e` for the Playwright
-     lite projects, `down`). Inside an Agent Runtime both servers run builds,
+     lite projects, `down`). Inside an Agent Runtime or an Amp orb both servers run builds,
      not dev servers: nothing watches files, so after a change and before you
      run tests against the stack or share a preview, run
      `scripts/dev-lite.sh reload backend` (about 15 s) or
@@ -66,6 +67,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
 - `archestra-dev-resource-cleanup` - use for reclaiming unused local worktrees, branches, development processes, and OrbStack resources while preserving the active Tilt setup.
 - `archestra-docs-writer` - use for writing or editing docs pages under `../docs/pages`: new feature docs, page rewrites, tone/copy fixes, and screenshots.
+- `archestra-upgrade-guide` - use for writing the upgrade guide a new stable line ships (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), or when a release PR fails for a missing one.
 
 ## Key URLs
 

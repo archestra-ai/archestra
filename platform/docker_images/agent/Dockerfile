@@ -20,7 +20,7 @@ RUN apt-get update -qq \
 
 # Upstream gh 2.103.2 and 2.103.3 embed x/net 0.60.0 (CVE-2026-78661).
 # Rebuild the existing CLI release with the fixed module until upstream ships it.
-FROM golang:1.27.3-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0 AS gh-build
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS gh-build
 WORKDIR /src
 RUN curl -fsSL --retry 3 \
       https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
@@ -231,7 +231,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.165.0 \
+RUN pnpm add --global @openai/codex@0.169.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -272,18 +272,40 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.5 \
- && hermes_commit=bf0203a794a07aac3ff764972ab9087baa4e4f4e \
+    hermes_version=0.23.1 \
+ && hermes_commit=3b421578588243f920886e6fe79a6faa87ea026e \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
- && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["python"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ # Python itself is pinned here, not taken from Hermes' lock: the lock's
+ # CPython 3.14.9 lacks the 3.14.10 fix to the ssl module's denylist of
+ # compromised intermediate certificates. Same python-build-standalone
+ # install_only build, a newer release. Digests from its SHA256SUMS.
+ && case "${TARGETARCH}" in \
+      amd64) set -- x86_64 3fe0d7c0538eb5d190c34582992d26230532551355cbd789fabc6591621cfc07 ;; \
+      arm64) set -- aarch64 e59f83159984a55e719bb3805a0b2b5b281f645769222218084b78b92eedc07f ;; \
+    esac \
+ && set -- "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.14.10+20261110-$1-unknown-linux-gnu-install_only.tar.gz" "$2" \
  && curl -fsSL "$1" -o /tmp/hermes-python.tgz \
  && echo "$2  /tmp/hermes-python.tgz" | sha256sum -c - \
  && mkdir -p /opt/hermes-python \
  && tar -xzf /tmp/hermes-python.tgz -C /opt/hermes-python --strip-components=1 \
  && rm /tmp/hermes-python.tgz \
- && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
+ # Hermes builds and runs its TUI on the Node and pnpm its lock pins, which
+ # are newer than the image's own; both stay private to Hermes.
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["node"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-node.tar.xz \
+ && echo "$2  /tmp/hermes-node.tar.xz" | sha256sum -c - \
+ && mkdir -p /opt/hermes-node \
+ && tar -xJf /tmp/hermes-node.tar.xz -C /opt/hermes-node --strip-components=1 \
+ && rm -rf /tmp/hermes-node.tar.xz /opt/hermes-node/include /opt/hermes-node/share \
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["pnpm"]["artifacts"][sys.argv[1]][0]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-pnpm.tgz \
+ && echo "$2  /tmp/hermes-pnpm.tgz" | sha256sum -c - \
+ && mkdir -p /tmp/hermes-pnpm \
+ && tar -xzf /tmp/hermes-pnpm.tgz -C /tmp/hermes-pnpm --strip-components=1 \
+ && rm /tmp/hermes-pnpm.tgz \
+ && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:3] >= (3, 14, 10); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
  # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
  && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
@@ -291,9 +313,10 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
       --python /opt/hermes-python/bin/python3 --compile-bytecode \
  && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
       Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
- && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
- && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
- && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
+ && PATH="/tmp/hermes-pnpm:/opt/hermes-node/bin:$PATH" LEFTHOOK=0 npm_config_install_links=false \
+      node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
+ && PATH="/opt/hermes-node/bin:$PATH" node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
+ && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache /tmp/hermes-pnpm \
       website apps tests tests-js evals \
  && .venv/bin/python scripts/write_install_stamp.py --output install-stamp.json \
       --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
@@ -309,7 +332,7 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && hermes --version \
  && chown -R 1000:1000 /home/node
 ENV HERMES_TUI_DIR=/opt/hermes-tui
-ENV HERMES_NODE=/usr/local/bin/node
+ENV HERMES_NODE=/opt/hermes-node/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
@@ -362,14 +385,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=b2ff08ca31abc28407286fb03a8ce2502e810ab62471d7f5c2b8bf9bda5153b1 ;; \
-      arm64) grok_arch=arm64; checksum=12e6d37a622c7dbaceab524a90cd69c5aee4f16975dd1a98635f8af07e55357a ;; \
+      amd64) grok_arch=x64; checksum=aa32f87a8e487f80487e75b294943f93a7dce747acde366d3f11baf88381ffa0 ;; \
+      arm64) grok_arch=arm64; checksum=29bba0ee6618fe6fe158602a5649f4659aa4a9f7c2dd99e82932932c96e9ac9b ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.70" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.70.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.84" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.84.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -397,8 +420,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
- && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.3)" kimi-code.tgz \
+ && echo "403ad8e450362d05d09b785c045edeb9efc02cc7adeca1aadb9bb0cab800214969e6ebe7e21e75e35c58d9449efa6f767ffaabe64ed3e37c07c5f19274b07693  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -408,7 +431,8 @@ RUN apt-get update \
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
- && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py \
+ && python3 /tmp/agent-image-patches/kimi-late-mcp-tools.py
 USER 1000:1000
 
 RUN --network=none \
@@ -422,13 +446,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=dedae5ca2b104009e5372dc2bd85510d5582fd62bed027c321dedd0f035bc53149f4880cddaa023f283e41b18f0547ae60db38b2382d4ea167e65e727f21d50e ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=2fbff84aad626de51d0fc684fbe72e6c18ebda859f00519ed322a3b98e687b41c3670f101d800fad9841da9efd36483694807cf1112772c7fea96b9554354f8c ;; \
+      amd64) copilot_arch=x64; copilot_checksum=5e82d04da0b22fdaf710b3b0e35a613f365b4ca8e54e02eb3200b3f19e5176fb7c957cb7591b290b5baaefee3e9802605b54f63ab65a727bc981eeaf47841c60 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=80c0dd5e0b699b12926f9e437f18adcf030748d26fa0106d6c4c3578268dcdfd430944190bd29fb5d40996231fa57a8d241bcbdcd1d812a985f9991933d28783 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.105)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.111)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

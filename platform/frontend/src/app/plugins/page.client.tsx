@@ -62,7 +62,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import {
   usePluginLabelKeys,
   usePluginLabelValues,
@@ -112,10 +113,8 @@ function PluginsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { data: canViewPluginDetails } = useHasPermissions(
-    { plugin: ["read", "update"] },
-    "*",
-  );
+  // Bulk actions are offered only when every selected plugin allows them.
+  const { data: pluginGrants } = useScopedCapabilities();
 
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const client = searchParams.get("client") ?? "all";
@@ -265,6 +264,19 @@ function PluginsList() {
     rangeSelection,
   });
   const bulkInstall = resolvePluginInstallSelection(bulkSelection.selected);
+  const allSelectedAllow = (action: "use" | "manage-permissions" | "delete") =>
+    bulkSelection.selected.length > 0 &&
+    bulkSelection.selected.every((plugin) =>
+      holdsItemGrant({
+        grants: pluginGrants,
+        resource: "plugin",
+        action,
+        id: plugin.id,
+      }),
+    );
+  const canInstallSelected = allSelectedAllow("use");
+  const canShareSelected = allSelectedAllow("manage-permissions");
+  const canDeleteSelected = allSelectedAllow("delete");
   const [installingPlugin, setInstallingPlugin] =
     useState<PluginListItem | null>(null);
 
@@ -457,8 +469,7 @@ function PluginsList() {
           <div className="flex items-center gap-2">
             {!showEmptyState && !isInitialPluginsLoad && (
               <PermissionButton
-                permissions={{ plugin: ["create", "update"] }}
-                permissionScope="*"
+                permissions={{ plugin: ["create"] }}
                 size="sm"
                 asChild
               >
@@ -625,32 +636,45 @@ function PluginsList() {
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
                 <PermissionButton
-                  permissions={{ plugin: ["read", "update"] }}
-                  permissionScope="*"
+                  permissions={{}}
                   variant="outline"
                   size="sm"
-                  disabled={!!bulkInstall.error}
-                  tooltip={bulkInstall.error ?? undefined}
+                  disabled={!canInstallSelected || !!bulkInstall.error}
+                  tooltip={
+                    !canInstallSelected
+                      ? "You do not have permission to install every selected plugin"
+                      : (bulkInstall.error ?? undefined)
+                  }
                   onClick={() => setBulkInstallOpen(true)}
                 >
                   <PackagePlus className="h-4 w-4" />
                   <span>Install</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["update"] }}
-                  permissionScope="*"
+                  permissions={{}}
                   variant="outline"
                   size="sm"
+                  disabled={!canShareSelected}
+                  tooltip={
+                    canShareSelected
+                      ? undefined
+                      : "You do not have permission to manage access to every selected plugin"
+                  }
                   onClick={() => setBulkVisibilityOpen(true)}
                 >
                   <Pencil className="h-4 w-4" />
                   <span>Add access</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["delete", "update"] }}
-                  permissionScope="*"
+                  permissions={{}}
                   variant="destructive"
                   size="sm"
+                  disabled={!canDeleteSelected}
+                  tooltip={
+                    canDeleteSelected
+                      ? undefined
+                      : "You do not have permission to delete every selected plugin"
+                  }
                   onClick={() => setBulkDeleteOpen(true)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -675,27 +699,19 @@ function PluginsList() {
                         icon={<PluginSourceIcon plugin={plugin} />}
                         title={
                           <span className="flex min-w-0 items-center gap-1.5">
-                            {canViewPluginDetails ? (
-                              <Link
-                                href={pluginDetailHref(plugin.id)}
-                                className="truncate"
-                              >
-                                {plugin.displayName}
-                              </Link>
-                            ) : (
-                              <span className="truncate">
-                                {plugin.displayName}
-                              </span>
-                            )}
+                            <Link
+                              href={pluginDetailHref(plugin.id)}
+                              className="truncate"
+                            >
+                              {plugin.displayName}
+                            </Link>
                             <LabelTags labels={plugin.labels ?? []} />
                           </span>
                         }
                         description={plugin.description}
                         actions={renderPluginActions(plugin)}
-                        onNavigate={
-                          canViewPluginDetails
-                            ? () => router.push(pluginDetailHref(plugin.id))
-                            : undefined
+                        onNavigate={() =>
+                          router.push(pluginDetailHref(plugin.id))
                         }
                         {...cardSelection(plugin)}
                         selectionLabel={`Select ${plugin.displayName}`}
@@ -746,11 +762,8 @@ function PluginsList() {
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={setSorting}
-                    onRowClick={
-                      canViewPluginDetails
-                        ? (row) => router.push(pluginDetailHref(row.id))
-                        : undefined
-                    }
+                    // The list holds only plugins the caller can read.
+                    onRowClick={(row) => router.push(pluginDetailHref(row.id))}
                     rowSelection={bulkSelection.rowSelection}
                     onRowSelectionChange={bulkSelection.setRowSelection}
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
@@ -836,8 +849,7 @@ function PluginsEmptyState() {
       description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
       action={
         <PermissionButton
-          permissions={{ plugin: ["create", "update"] }}
-          permissionScope="*"
+          permissions={{ plugin: ["create"] }}
           size="sm"
           asChild
         >

@@ -137,6 +137,7 @@ import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { seedRequiredStartingData } from "@/services/seed";
+import { bootstrapServiceAccounts } from "@/services/service-account-bootstrap";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -177,18 +178,12 @@ import * as routes from "./routes";
 import { msTeamsWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
-import {
-  CONNECTION_SETUP_SCRIPT_PREFIX,
-  HEALTH_PATH,
-  MCP_GATEWAY_PREFIX,
-  MS_TEAMS_SIGN_IN_PATH,
-  READY_PATH,
-  SKILL_MARKETPLACE_PREFIX,
-} from "./routes/route-paths";
+import { HEALTH_PATH } from "./routes/route-paths";
 import {
   beginLlmProxyDrain,
   drainLlmProxyRequests,
 } from "./server/llm-proxy-drain";
+import { registerRequestLogging } from "./server/request-logging";
 import {
   drainBackgroundWork,
   trackBackgroundWork,
@@ -847,51 +842,7 @@ const startWebServer = async () => {
   const fastify = createFastifyInstance();
   const startupHealth = createStartupHealthServer();
 
-  /**
-   * Custom request logging hook that excludes noisy endpoints:
-   * - /health: Kubernetes liveness probe
-   * - /ready: Kubernetes readiness probe (checks database connectivity)
-   * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
-   * - /skills/m/*: public marketplace git endpoint — URL contains raw share token
-   */
-  const shouldSkipRequestLogging = (url: string, method: string): boolean => {
-    if (url === HEALTH_PATH || url === READY_PATH) return true;
-    // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
-    if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
-      return true;
-    // token is embedded in the URL path; never log it
-    if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
-    // one-time setup token is embedded in the URL path; never log it
-    if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
-    // Teams sign-in key and OAuth code are in the query string; never log them
-    if (url.startsWith(MS_TEAMS_SIGN_IN_PATH)) return true;
-    return false;
-  };
-
-  fastify.addHook("onRequest", (request, _reply, done) => {
-    if (!shouldSkipRequestLogging(request.url, request.method)) {
-      request.log.info(
-        { url: request.url, method: request.method },
-        "incoming request",
-      );
-    }
-    done();
-  });
-
-  fastify.addHook("onResponse", (request, reply, done) => {
-    if (!shouldSkipRequestLogging(request.url, request.method)) {
-      request.log.info(
-        {
-          url: request.url,
-          method: request.method,
-          statusCode: reply.statusCode,
-          responseTime: reply.elapsedTime,
-        },
-        "request completed",
-      );
-    }
-    done();
-  });
+  registerRequestLogging(fastify);
 
   /**
    * Setup Sentry error handler for Fastify
@@ -1013,6 +964,9 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // Runtimes locked before runtime permissions become those permissions.
     await ensureAgentRuntimeLockUpgrade();
+    // Service accounts the deployment declares (Helm bootstrap), after the
+    // license is known so federated credentials can be created.
+    await bootstrapServiceAccounts();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
@@ -1157,7 +1111,7 @@ const startWebServer = async () => {
     // Agent Runtime is available once the cluster serves the Agent Sandbox
     // API. The loops below start regardless and idle until it does, so
     // installing the controller later needs no restart.
-    void agentSandboxApi.refresh();
+    agentSandboxApi.checkAtStartup();
     // A missing RuntimeClass would leave every unprivileged run waiting for a
     // pod Kubernetes refuses to create; say so at startup, not per run.
     void agentRuntimeClassDetector.checkAtStartup();

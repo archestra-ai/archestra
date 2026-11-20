@@ -1,44 +1,85 @@
 "use client";
 
-import { ArrowUpRight, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, ChevronDown, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import {
-  TRUNCATED_CONTENT_MAX_LINES,
-  TruncatedContent,
-} from "@/components/ai-elements/truncated-content";
+import { ToolInput, type ToolInputProps } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { validationPolicyHref } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
-import { getPolicyDiffRows, type PolicyDiffRow } from "./policy-diff-rows";
+import {
+  isPolicyPreviewTool,
+  isPolicySaveTool,
+  parsePolicyChange,
+  parsePolicyDelivery,
+  parsePolicyOutput,
+} from "./openappa-policy-change.utils";
+import { PolicyDiff } from "./policy-diff";
+import { getPolicyDiffRows } from "./policy-diff-rows";
 
-type PolicyChange = {
-  stage?: "preview";
-  delivery: "revision" | "pull_request";
-  before: string;
-  after: string;
-  /** The backend's unified diff, trimmed to the changed hunks. */
-  diff?: string;
-  path?: string;
-  revision?: number;
-  number?: number;
-  url?: string;
-  warnings?: string[];
-  errors?: string[];
-  enforcement?: { enabled: boolean; reason?: string };
-  effective?: { error: string | null; batteries: { status: string }[] };
-};
+/**
+ * A completed preview of a Guardrails change. The operator is asked to approve
+ * what it shows: the policy's diff, or a validation change's replay results.
+ */
+export function isOpenAppaPreview({
+  shortName,
+  output,
+  input,
+}: {
+  shortName: string | null;
+  output: unknown;
+  /** What the call sent: a result stored without its texts is read with it. */
+  input?: unknown;
+}): boolean {
+  if (isPolicyPreviewTool(shortName))
+    return isOpenAppaPolicyChange(output, false, input);
+  return (
+    shortName === "preview_guardrails_validation_change" &&
+    parsePolicyOutput(output) !== null
+  );
+}
+
+/**
+ * What the model sent, under a diff or a save result and closed until asked
+ * for: the card above it is what the reader came for.
+ */
+export function OpenAppaPolicyArguments({
+  input,
+}: Pick<ToolInputProps, "input">) {
+  return (
+    <Collapsible className="border-t">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="group m-3">
+          <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
+          <span>Arguments</span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ToolInput input={input} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export function OpenAppaPolicyChange({
   output,
   validationChange = false,
+  input,
 }: {
   output: unknown;
   validationChange?: boolean;
+  /** What the call sent: a result stored without its texts is read with it. */
+  input?: unknown;
 }) {
-  const change = parsePolicyChange(output, validationChange);
+  const change = parsePolicyChange(output, validationChange, input);
   if (!change) return null;
   const path = change.path ?? "organization.appa.toml";
   // Previewing the unsaved starter changes no line.
@@ -57,12 +98,16 @@ export function OpenAppaPolicyChange({
           </Button>
         </div>
       )}
-      {/* A validation change can touch any of several files; name it. The
-          policy is always the one file, so its name says nothing. */}
-      {validationChange && (
+      {/* A validation change can touch any of several files, and a server's
+          rules are one file of many; name it. The policy is always the one
+          file, so its name says nothing. */}
+      {(validationChange || change.mcpServer) && (
         <p className="font-mono text-xs text-muted-foreground">{path}</p>
       )}
       <PolicyDiff
+        before={unchanged ? "" : change.before}
+        after={change.after}
+        path={path}
         rows={getPolicyDiffRows({
           before: change.before,
           after: change.after,
@@ -72,13 +117,17 @@ export function OpenAppaPolicyChange({
             : change.diff || policyDiff(change.before, change.after, path),
         })}
       />
-      {change.warnings?.map((warning) => (
-        <InlineNotice key={warning} variant="warning">
-          <TriangleAlert />
-          <span className="font-medium">Policy warning</span>
-          <InlineNoticeText>{warning}</InlineNoticeText>
-        </InlineNotice>
-      ))}
+      {change.rootChange ? (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">
+            The pull request also adds the servers&apos; folder to the
+            organization policy&apos;s include list:
+          </p>
+          <pre className="overflow-x-auto rounded-md border bg-muted/40 p-2 font-mono text-xs">
+            {change.rootChange}
+          </pre>
+        </div>
+      ) : null}
       {change.errors?.map((error) => (
         <InlineNotice key={error} variant="error">
           <TriangleAlert />
@@ -86,74 +135,6 @@ export function OpenAppaPolicyChange({
           <InlineNoticeText>{policyErrorText(error)}</InlineNoticeText>
         </InlineNotice>
       ))}
-    </div>
-  );
-}
-
-/**
- * The proposed policy as numbered lines: new lines green, removed lines red,
- * unchanged runs folded. Long views cut off like a tool's Input and Output.
- */
-function PolicyDiff({ rows }: { rows: PolicyDiffRow[] }) {
-  return (
-    <TruncatedContent lineCount={rows.length}>
-      {(showAll) => (
-        <section
-          aria-label="Policy diff"
-          className="overflow-hidden rounded-md border border-border/50 bg-background py-1 font-mono text-[0.6875rem] leading-4"
-        >
-          {(showAll ? rows : rows.slice(0, TRUNCATED_CONTENT_MAX_LINES)).map(
-            (row, index) => (
-              <PolicyDiffLine
-                // biome-ignore lint/suspicious/noArrayIndexKey: static, ordered rows
-                key={index}
-                row={row}
-              />
-            ),
-          )}
-        </section>
-      )}
-    </TruncatedContent>
-  );
-}
-
-function PolicyDiffLine({ row }: { row: PolicyDiffRow }) {
-  if (row.kind === "gap") {
-    return (
-      <div className="bg-muted/40 pl-11 font-sans leading-5 text-muted-foreground">
-        <span aria-hidden>···</span>
-        <span className="sr-only">Unchanged lines hidden</span>
-      </div>
-    );
-  }
-  return (
-    <div
-      className={cn(
-        // Long lines wrap under their own text instead of scrolling sideways.
-        "flex whitespace-pre-wrap [overflow-wrap:anywhere]",
-        row.kind === "add" && "bg-emerald-500/10",
-        row.kind === "remove" && "bg-destructive/10",
-      )}
-    >
-      <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/70">
-        {row.line ?? ""}
-      </span>
-      <span
-        className={cn(
-          "min-w-0 flex-1 border-l-[3px] border-transparent pl-2",
-          row.kind === "add" &&
-            "border-emerald-600 text-emerald-800 dark:text-emerald-300",
-          row.kind === "remove" &&
-            "border-destructive text-destructive line-through decoration-destructive/40",
-        )}
-      >
-        {row.kind === "add" ? (
-          <span className="sr-only">Added: </span>
-        ) : row.kind === "remove" ? (
-          <span className="sr-only">Removed: </span>
-        ) : null}
-        <span>{row.text || " "}</span>
-      </span>
     </div>
   );
 }
@@ -173,7 +154,7 @@ type SaveResult = {
  * result that is neither.
  */
 export function getPolicySaveResult(output: unknown): SaveResult | null {
-  const change = parsePolicyChange(output);
+  const change = parsePolicyDelivery(output);
   const url =
     change?.stage !== "preview" && change?.delivery === "pull_request"
       ? changeRequestUrl(change.url)
@@ -182,7 +163,9 @@ export function getPolicySaveResult(output: unknown): SaveResult | null {
     return {
       tone: "success",
       title: `Opened ${changeRequestShort(url)} #${change.number}`,
-      detail: "merge it to apply",
+      detail: change.autoMerge
+        ? "it merges once its checks pass"
+        : "merge it to apply",
       action: {
         label: `Review ${changeRequestNoun(url)}`,
         href: url,
@@ -232,7 +215,7 @@ export function getOpenAppaSaveResult({
   shortName: string | null;
   output: unknown;
 }): "policy" | "validation" | null {
-  if (shortName === "update_guardrails_policy") {
+  if (isPolicySaveTool(shortName)) {
     return getPolicySaveResult(output) ? "policy" : null;
   }
   if (shortName === "update_guardrails_validation") {
@@ -327,12 +310,11 @@ function GithubSyncTip() {
 }
 
 /**
- * What saved validations report: an opened pull request, or a local save.
- * Saving runs nothing; the agent runs the saved files separately. Null for a
- * preview or an unreadable result.
+ * What saved validations report: an opened pull request, or a local save and
+ * its recorded run when present. Null for a preview or an unreadable result.
  */
 export function getValidationSaveResult(output: unknown): SaveResult | null {
-  const change = parseOutput(output);
+  const change = parsePolicyOutput(output);
   if (!change || change.stage === "preview") return null;
   const pullUrl =
     change.delivery === "pull_request" &&
@@ -360,19 +342,110 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
       local: false,
     };
   }
+  const run = validationRunResult(
+    change.run,
+    change.runError,
+    change.savedPaths,
+  );
   return {
-    tone: "success",
+    tone: run.tone,
     title:
       change.policyChanged === true
         ? "Saved policy and validations"
         : "Saved validations",
-    detail: "not run yet",
+    detail: run.detail,
     action: {
       label: "View Validations",
-      href: "/openappa/validation",
+      href: validationPolicyHref(run.targetPath),
       external: false,
     },
     local: true,
+  };
+}
+
+function firstSavedPath(savedPaths: unknown): string | null {
+  if (!Array.isArray(savedPaths)) return null;
+  return (
+    savedPaths.find(
+      (path): path is string => typeof path === "string" && path.length > 0,
+    ) ?? null
+  );
+}
+
+function validationRunResult(
+  run: unknown,
+  runError?: unknown,
+  savedPaths?: unknown,
+): Pick<SaveResult, "tone" | "detail"> & { targetPath: string | null } {
+  if (run === undefined)
+    return { tone: "success", detail: "not run yet", targetPath: null };
+  if (run === null) {
+    if (typeof runError === "string" && runError.length > 0) {
+      return {
+        tone: "warning",
+        detail: "could not run",
+        targetPath: firstSavedPath(savedPaths),
+      };
+    }
+    return { tone: "success", detail: "saved", targetPath: null };
+  }
+  if (!run || typeof run !== "object") {
+    return { tone: "warning", detail: "could not run", targetPath: null };
+  }
+  const { files, executionError, validation } = run as {
+    files?: unknown;
+    executionError?: unknown;
+    validation?: { valid?: unknown } | null;
+  };
+  const fileEntries = Array.isArray(files)
+    ? files.map((file) => ({
+        path:
+          file &&
+          typeof file === "object" &&
+          "path" in file &&
+          typeof file.path === "string" &&
+          file.path.length > 0
+            ? file.path
+            : null,
+        status:
+          file && typeof file === "object" && "status" in file
+            ? file.status
+            : null,
+      }))
+    : [];
+  const targetPath =
+    fileEntries.find((file) => file.status === "failed" && file.path)?.path ??
+    fileEntries.find((file) => file.status !== "passed" && file.path)?.path ??
+    fileEntries.find((file) => file.path)?.path ??
+    null;
+  if (
+    executionError ||
+    validation?.valid === false ||
+    fileEntries.length === 0
+  ) {
+    return { tone: "warning", detail: "could not run", targetPath };
+  }
+  const failed = fileEntries.filter((file) => file.status === "failed").length;
+  if (failed > 0) {
+    return {
+      tone: "warning",
+      detail:
+        fileEntries.length === 1
+          ? "failed"
+          : `${failed} of ${fileEntries.length} failed`,
+      targetPath,
+    };
+  }
+  if (fileEntries.some((file) => file.status !== "passed")) {
+    return { tone: "warning", detail: "could not run", targetPath };
+  }
+  return {
+    tone: "success",
+    detail:
+      fileEntries.length === 1
+        ? "passed"
+        : `${fileEntries.length} of ${fileEntries.length} passed`,
+    targetPath,
   };
 }
 
@@ -385,55 +458,9 @@ export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
 export function isOpenAppaPolicyChange(
   output: unknown,
   validationChange = false,
+  input?: unknown,
 ): boolean {
-  return parsePolicyChange(output, validationChange) !== null;
-}
-
-function parseOutput(output: unknown): Record<string, unknown> | null {
-  let candidate = output;
-  if (candidate && typeof candidate === "object") {
-    if ("isError" in candidate && candidate.isError === true) return null;
-    if ("structuredContent" in candidate) {
-      candidate = candidate.structuredContent;
-    } else if ("content" in candidate) {
-      candidate = candidate.content;
-    }
-  }
-  if (Array.isArray(candidate)) {
-    candidate = candidate.find(
-      (item) => item && typeof item === "object" && item.type === "text",
-    )?.text;
-  }
-  if (typeof candidate === "string") {
-    try {
-      candidate = JSON.parse(candidate);
-    } catch {
-      return null;
-    }
-  }
-  if (!candidate || typeof candidate !== "object") return null;
-  return candidate as Record<string, unknown>;
-}
-
-function parsePolicyChange(
-  output: unknown,
-  validationChange = false,
-): PolicyChange | null {
-  const value = parseOutput(output);
-  if (!value) return null;
-  // A validation preview never changes the policy, so it has no diff card.
-  if (
-    validationChange &&
-    (value.stage === "preview" || value.before === value.after)
-  )
-    return null;
-  if (
-    (value.delivery !== "revision" && value.delivery !== "pull_request") ||
-    typeof value.before !== "string" ||
-    typeof value.after !== "string"
-  )
-    return null;
-  return value as PolicyChange;
+  return parsePolicyChange(output, validationChange, input) !== null;
 }
 
 /**

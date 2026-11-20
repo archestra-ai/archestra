@@ -25,6 +25,7 @@ import {
   createSortingQuerySchema,
   InteractionSummarySchema,
   SelectInteractionSchema,
+  SessionChatErrorsSchema,
   SessionHandoffsSchema,
   SessionLineageSchema,
   SessionSummarySchema,
@@ -131,7 +132,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           userId: user.id,
           email: user.email,
@@ -164,7 +165,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           resultCount: result.data.length,
           hasNext: result.pagination.hasNext,
@@ -336,7 +337,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           userId: user.id,
           email: user.email,
@@ -369,7 +370,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           resultCount: result.data.length,
           hasNext: result.pagination.hasNext,
@@ -407,6 +408,35 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(canSeeAllLogs ? {} : { callerId: `user:${user.id}` }),
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy-logs/sessions/:sessionId/chat-errors",
+    {
+      schema: {
+        operationId: RouteId.GetLlmProxyLogSessionChatErrors,
+        description:
+          "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.",
+        tags: ["LLM Proxy Logs"],
+        params: z.object({ sessionId: z.string().min(1).max(1024) }),
+        response: constructResponseSchema(SessionChatErrorsSchema),
+      },
+    },
+    async ({ params: { sessionId }, user, organizationId }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      return reply.send({
+        chatErrors: await InteractionModel.findSessionChatErrors({
+          sessionId,
+          organizationId,
+          ...(canSeeAllLogs ? {} : { userId: user.id }),
+        }),
+      });
     },
   );
 
@@ -509,7 +539,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!canSeeAllLogs) {
         // Own-logs view: the only user to filter by is the caller — anything
         // more would enumerate the org roster through a side door.
-        return reply.send([{ id: user.id, name: user.name }]);
+        return reply.send([
+          { id: user.id, name: user.name, email: user.email },
+        ]);
       }
 
       return reply.send(

@@ -7,7 +7,9 @@ import {
   guardrailCallHeader,
   internalCallHeader,
 } from "@/clients/internal-call";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -33,14 +35,21 @@ describe("service-account A2A private model grants over HTTP", () => {
   let baseUrl: string;
   let appUrl: string;
   let requests: IncomingHttpHeaders[];
+  let mcpCalls: string[];
 
   beforeEach(async () => {
     requests = [];
+    mcpCalls = [];
     upstream = createServer(async (request, response) => {
       requests.push(request.headers);
-      for await (const _part of request) {
-        /* Drain the real SDK request. */
-      }
+      let body = "";
+      for await (const part of request) body += part;
+      const input = JSON.parse(body);
+      const callTool =
+        input.tools?.length &&
+        !input.messages.some(
+          (message: { role: string }) => message.role === "tool",
+        );
       const common = {
         id: "synthetic",
         created: 1,
@@ -48,8 +57,14 @@ describe("service-account A2A private model grants over HTTP", () => {
         object: "chat.completion.chunk",
       };
       response.writeHead(200, { "content-type": "text/event-stream" });
+      if (callTool) {
+        response.end(
+          `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "synthetic-tool-call", type: "function", function: { name: input.tools.find((tool: { function: { name: string } }) => tool.function.name.endsWith("__echo")).function.name, arguments: "{}" } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`,
+        );
+        return;
+      }
       response.end(
-        `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: "assistant", content: "Private model answered." }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+        `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: "assistant", content: "Private model answered." }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`,
       );
     });
     await new Promise<void>((resolve) =>
@@ -66,6 +81,7 @@ describe("service-account A2A private model grants over HTTP", () => {
   });
 
   afterEach(async () => {
+    await mcpClient.disconnectAll();
     await app?.close();
     await new Promise<void>((resolve) => upstream?.close(() => resolve()));
   });
@@ -81,10 +97,15 @@ describe("service-account A2A private model grants over HTTP", () => {
         makeUser,
         makeMember,
         makeCustomRole,
+        makeTeam,
         makeServiceAccountToken,
         makeInternalAgent,
         makeSecret,
         makeLlmProviderApiKey,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+        makeTool,
+        makeAgentTool,
       }) => {
         const fireworks = credential === "fireworks-alias";
         if (fireworks)
@@ -94,7 +115,7 @@ describe("service-account A2A private model grants over HTTP", () => {
               async ({ request }) => {
                 requests.push(Object.fromEntries(request.headers));
                 return new HttpResponse(
-                  `data: ${JSON.stringify({ id: "synthetic", created: 1, model: "accounts/fireworks/models/synthetic-model", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: "Private model answered." }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "synthetic", created: 1, model: "accounts/fireworks/models/synthetic-model", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+                  `data: ${JSON.stringify({ id: "synthetic", created: 1, model: "accounts/fireworks/models/synthetic-model", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: "Private model answered." }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "synthetic", created: 1, model: "accounts/fireworks/models/synthetic-model", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`,
                   { headers: { "content-type": "text/event-stream" } },
                 );
               },
@@ -104,9 +125,11 @@ describe("service-account A2A private model grants over HTTP", () => {
         const owner = await makeUser();
         await makeMember(owner.id, org.id, { role: "admin" });
         const role = await makeCustomRole(org.id, { permission: {} });
+        const team = await makeTeam(org.id, owner.id);
         const { serviceAccount, value } = await makeServiceAccountToken({
           organizationId: org.id,
           role: role.role,
+          teamId: team.id,
         });
         const key = await makeLlmProviderApiKey(
           org.id,
@@ -161,6 +184,78 @@ describe("service-account A2A private model grants over HTTP", () => {
           llmApiKeyId: version === "v1" ? key.id : null,
           modelId: version === "v1" ? model.id : null,
         });
+        if (!fireworks) {
+          const mcpUrl = "https://synthetic-attribution.example/mcp";
+          network.use(
+            http.get(mcpUrl, () => new HttpResponse(null, { status: 405 })),
+            http.delete(mcpUrl, () => new HttpResponse(null, { status: 200 })),
+            http.post(mcpUrl, async ({ request }) => {
+              const input = (await request.json()) as {
+                id?: number;
+                method: string;
+                params?: { name: string };
+              };
+              if (input.id === undefined)
+                return new HttpResponse(null, { status: 202 });
+              let result: unknown = {};
+              if (input.method === "initialize") {
+                result = {
+                  protocolVersion: "2025-03-26",
+                  capabilities: { tools: {} },
+                  serverInfo: { name: "synthetic", version: "1" },
+                };
+              } else if (input.method === "tools/list") {
+                result = {
+                  tools: [
+                    {
+                      name: "echo",
+                      inputSchema: { type: "object", properties: {} },
+                    },
+                  ],
+                };
+              } else if (input.method === "tools/call") {
+                mcpCalls.push(input.params?.name ?? "");
+                result = {
+                  content: [{ type: "text", text: "Synthetic tool answered." }],
+                };
+              }
+              return HttpResponse.json({
+                jsonrpc: "2.0",
+                id: input.id,
+                result,
+              });
+            }),
+          );
+          const catalog = await makeInternalMcpCatalog({
+            organizationId: org.id,
+            name: "synthetic-attribution",
+            serverType: "remote",
+            serverUrl: mcpUrl,
+          });
+          const server = await makeMcpServer({
+            catalogId: catalog.id,
+            name: "synthetic-org-install",
+            serverType: "remote",
+            scope: "org",
+          });
+          await makeMcpServer({
+            catalogId: catalog.id,
+            name: "synthetic-team-install",
+            serverType: "remote",
+            scope: "team",
+            teamId: team.id,
+          });
+          const tool = await makeTool({
+            name: "synthetic-attribution__echo",
+            rawName: "echo",
+            catalogId: catalog.id,
+            parameters: { type: "object", properties: {} },
+          });
+          await makeAgentTool(agent.id, tool.id, {
+            mcpServerId: server.id,
+            credentialResolutionMode: "dynamic",
+          });
+        }
         network.use(
           http.post(`${appUrl}/${version}/a2a/${agent.id}`, () =>
             passthrough(),
@@ -194,6 +289,9 @@ describe("service-account A2A private model grants over HTTP", () => {
           ],
         });
         let bearer = value;
+        let expectedApp:
+          | { id: string; name: string; clientId: string }
+          | undefined;
         if (credential === "bound-oauth") {
           const { oauthClient } = await ManagedOauthClientModel.create({
             organizationId: org.id,
@@ -204,6 +302,7 @@ describe("service-account A2A private model grants over HTTP", () => {
             serviceAccountId: serviceAccount.id,
             allowedGatewayIds: [agent.id],
           });
+          expectedApp = oauthClient;
           bearer = crypto.randomUUID();
           await OAuthAccessTokenModel.createClientCredentialsToken({
             tokenHash: OAuthAccessTokenModel.hashTokenForLookup(bearer),
@@ -327,7 +426,37 @@ describe("service-account A2A private model grants over HTTP", () => {
         }
         const allowed = await ask();
         expect(JSON.stringify(allowed)).toContain("Private model answered.");
-        expect(requests).toHaveLength(1);
+        expect(requests).toHaveLength(fireworks ? 1 : 2);
+        const interactions = await db.select().from(schema.interactionsTable);
+        const successful = interactions.filter(
+          (row) => row.outputTokens !== null,
+        );
+        expect(successful).toHaveLength(fireworks ? 1 : 2);
+        for (const row of successful) {
+          expect(row).toMatchObject({
+            serviceAccountId: serviceAccount.id,
+            userId: null,
+            authenticatedAppId: expectedApp?.id ?? null,
+            authenticatedAppName: expectedApp?.name ?? null,
+          });
+        }
+        if (!fireworks) {
+          expect(mcpCalls).toEqual(["echo"]);
+          const toolLogs = await db.select().from(schema.mcpToolCallsTable);
+          expect(toolLogs).toHaveLength(1);
+          expect(toolLogs[0]).toMatchObject({
+            method: "tools/call",
+            mcpServerName:
+              credential === "service-account"
+                ? "synthetic-org-install"
+                : "synthetic-team-install",
+            serviceAccountId: serviceAccount.id,
+            userId: null,
+            oauthClientId: expectedApp?.clientId ?? null,
+            isError: false,
+            llmToolCallId: "synthetic-tool-call",
+          });
+        }
         for (const headers of requests) {
           expect(headers).not.toHaveProperty("x-archestra-internal-call");
           expect(headers).not.toHaveProperty(
@@ -338,7 +467,7 @@ describe("service-account A2A private model grants over HTTP", () => {
         expect(JSON.stringify(await ask())).not.toContain(
           "Private model answered.",
         );
-        expect(requests).toHaveLength(1);
+        expect(requests).toHaveLength(fireworks ? 1 : 2);
       });
     }
   }

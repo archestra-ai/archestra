@@ -4406,12 +4406,15 @@ class McpClient {
               : Math.max(0, Math.round(performance.now() - params.startedAt)),
           toolCall: storedToolCall,
           toolResult: storedToolResult,
-          userId: authInfo?.userId ?? null,
+          userId: authInfo?.serviceAccountId
+            ? null
+            : (authInfo?.userId ?? null),
           runId: authInfo?.runId ?? null,
           sessionId: authInfo?.llmSessionId ?? null,
           llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          serviceAccountId: authInfo?.serviceAccountId ?? null,
           source: authInfo?.source ?? null,
           credentialClientId: authInfo?.credentialClientId ?? null,
           credentialClientType: authInfo?.credentialClientType ?? null,
@@ -4568,10 +4571,7 @@ class McpClient {
           // A Skills-only server may intentionally expose neither tools/list
           // nor resources/list. Its declared extension is enough to keep the
           // installation; the companion metadata pass will call skills/list.
-          if (
-            config.mcpGateway.skillsEnabled &&
-            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
-          ) {
+          if (Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)) {
             tools = [];
           } else {
             throw error;
@@ -6917,9 +6917,7 @@ function mcpClientExtensionCapabilities() {
   return {
     ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...(config.mcpGateway.skillsEnabled
-      ? MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES
-      : {}),
+    ...MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
   } as const;
 }
 

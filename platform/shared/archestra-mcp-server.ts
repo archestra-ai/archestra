@@ -169,7 +169,7 @@ export const TOOL_CREATE_SKILL_SHORT_NAME = "create_skill";
 export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_EDIT_SKILL_SHORT_NAME = "edit_skill";
 // Plugins — client-native hook/skill bundles delivered to developer machines.
-// Executable opaque bytes, so only list is readable without plugin:admin.
+// Access to one plugin is a grant on it; creating one takes plugin:create.
 export const TOOL_LIST_PLUGINS_SHORT_NAME = "list_plugins";
 export const TOOL_GET_PLUGIN_SHORT_NAME = "get_plugin";
 export const TOOL_CREATE_PLUGIN_SHORT_NAME = "create_plugin";
@@ -915,6 +915,23 @@ export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
   "preview_guardrails_validation_change",
   "update_guardrails_validation",
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The tools that preview or propose a change to one MCP server's own rules
+ * file. A chat shows their result as a diff, like the policy's.
+ */
+export const OPENAPPA_SERVER_RULES_CHANGE_TOOL_SHORT_NAMES = [
+  "preview_guardrails_server_rules_change",
+  "propose_guardrails_server_rules_change",
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The call that opens a pull request on the policy repository in a member's
+ * name. A chat asks the person to approve it before it runs, every time:
+ * nothing reaches the repository on the model's word alone.
+ */
+export const OPENAPPA_SERVER_RULES_PROPOSE_TOOL_SHORT_NAME =
+  "propose_guardrails_server_rules_change" as const satisfies ArchestraToolShortName;
 
 export function isImplicitOpenAppaReadToolShortName(
   shortName: string | null | undefined,

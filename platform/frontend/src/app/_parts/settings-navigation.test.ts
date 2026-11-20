@@ -115,7 +115,7 @@ describe("canSeeSettingsArea", () => {
     credentialId,
     organizationCredentialId,
   ]);
-  // Can update on one credential; Full access adds delete and sharing.
+  // Can edit on one credential; Full access adds delete and sharing.
   const canEdit = (scope: string): ScopedPermission[] =>
     (["read", "use", "update"] as const).map((action) => ({
       organizationId,
@@ -208,7 +208,7 @@ describe("canSeeSettingsArea", () => {
     ).toBe(false);
   });
 
-  it("keeps Settings hidden for Can update on someone else's personal credential", () => {
+  it("keeps Settings hidden for Can edit on someone else's personal credential", () => {
     expect(
       canSee(predefinedPermissionsMap.member, [
         ...sharedCredential,

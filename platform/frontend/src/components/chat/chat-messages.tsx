@@ -1,12 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
-  APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   type archestraApiTypes,
   type ChatMessageFeedback,
   ChatMessageMetadataSchema,
   extractMcpExecutedAs,
-  getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
@@ -94,7 +92,6 @@ import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
   desktopAddPromptCopy,
   hasToolPartsWithAuthErrors,
-  isAuthInstructionText,
   isInstallAuthAction,
   isInstallAuthResolved,
   isNoDeviceError,
@@ -125,6 +122,7 @@ import {
   collectSubagentToolCalls,
   extractFileAttachments,
   filterOptimisticToolCalls,
+  getApprovalToolDisplay,
   getToolCardTitle,
   hasTextPart,
   identifyCompactToolGroups,
@@ -133,7 +131,10 @@ import {
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
-import { CompactToolGroup } from "./compact-tool-call";
+import {
+  CompactToolGroup,
+  findLatestPolicyChangeKey,
+} from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -143,13 +144,23 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { NoDeviceToolCard } from "./no-device-tool-card";
 import {
   isOpenAppaPolicyChange,
+  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
+import { isPolicyChangeTool } from "./openappa-policy-change.utils";
 import {
   RemedyChainCard,
   RemedyGuardrailsSteps,
 } from "./openappa-remedy-chain-card";
 import type { RemedyChain } from "./openappa-remedy-chains";
+import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
+import {
+  collectPreviewedChanges,
+  PreviewedChangeReview,
+  PreviewedChangesProvider,
+  proposalApprovalText,
+  usePreviewedChange,
+} from "./previewed-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -315,12 +326,6 @@ export function ChatMessages({
         // A question renders as its own answer summary, not a circle.
         TOOL_ASK_USER_FULL_NAME,
         getToolName(TOOL_ASK_USER_SHORT_NAME),
-        // Owned-app management tools render the app inline; compact grouping
-        // would swallow their parts before MessageTool sees them.
-        ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
-          getArchestraToolFullName(shortName),
-          getToolName(shortName),
-        ]),
       ]),
     [getToolName],
   );
@@ -404,6 +409,18 @@ export function ChatMessages({
           }),
         ]),
       ),
+    [messages, getToolShortName],
+  );
+  const policyDiffCollector = useMemo(
+    () => new PolicyDiffReferenceCollector(),
+    [],
+  );
+  const policyDiffReferences = useMemo(
+    () => policyDiffCollector.collect(messages, getToolShortName),
+    [messages, getToolShortName, policyDiffCollector],
+  );
+  const previewedChanges = useMemo(
+    () => collectPreviewedChanges(messages, getToolShortName),
     [messages, getToolShortName],
   );
   const groupedAskUserToolCallIds = useMemo(
@@ -602,6 +619,67 @@ export function ChatMessages({
     ],
   );
 
+  const renderCompactAuthCard = useCallback(
+    ({
+      toolName,
+      part,
+      toolResultPart,
+      errorText,
+    }: {
+      toolName: string;
+      part: ToolUIPart | DynamicToolUIPart;
+      toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+      errorText: string | undefined;
+    }) => {
+      const rawOutput = toolResultPart ? toolResultPart.output : part.output;
+      const toolAuthState = resolveToolAuthState({ errorText, rawOutput });
+      return (
+        renderToolAuthPart({
+          toolName,
+          authState: toolAuthState,
+          connectedCatalogIds: orchestrator.connectedCatalogIds,
+          onInstallMcp: orchestrator.triggerInstallByCatalogId,
+          onReauthMcp: orchestrator.triggerReauthByCatalogIdAndServerId,
+          className: "mt-0",
+        }) ??
+        (isNoDeviceError({ errorText, rawOutput }) ? (
+          <NoDeviceToolCard className="mt-0" />
+        ) : null)
+      );
+    },
+    [
+      orchestrator.connectedCatalogIds,
+      orchestrator.triggerInstallByCatalogId,
+      orchestrator.triggerReauthByCatalogIdAndServerId,
+    ],
+  );
+
+  const isStandalonePendingToolCall = useCallback(
+    (toolName: string) => {
+      if (nonCompactToolNames.has(toolName)) return true;
+      const shortName = getToolShortName(toolName);
+      return (
+        shortName === TOOL_TODO_WRITE_SHORT_NAME ||
+        shortName === TOOL_ASK_USER_SHORT_NAME
+      );
+    },
+    [nonCompactToolNames, getToolShortName],
+  );
+  const compactPendingToolCalls = useMemo(
+    () =>
+      pendingToolCalls.filter(
+        (toolCall) => !isStandalonePendingToolCall(toolCall.toolName),
+      ),
+    [pendingToolCalls, isStandalonePendingToolCall],
+  );
+  const nonCompactPendingToolCalls = useMemo(
+    () =>
+      pendingToolCalls.filter((toolCall) =>
+        isStandalonePendingToolCall(toolCall.toolName),
+      ),
+    [pendingToolCalls, isStandalonePendingToolCall],
+  );
+
   const timelineItems = useMemo(
     () =>
       buildMessageTimeline({
@@ -662,7 +740,7 @@ export function ChatMessages({
     -1,
   );
 
-  return (
+  const conversation = (
     <McpTaskProvider
       value={{
         byToolCallId: mcpTasksByToolCallId,
@@ -740,14 +818,59 @@ export function ChatMessages({
                       idx === messages.length - 1;
                     const { groupMap, consumedIndices, remedyChainCards } =
                       identifyCompactToolGroups(message.parts, {
+                        role: message.role,
                         nonCompactToolNames,
                         getToolShortName,
                         mcpAppToolCallIds: new Set(
                           Object.keys(earlyToolUiStarts),
                         ),
                       });
-                    // Thinking blocks left touching once the compact row hoists
-                    // the tools out from between them fold into one accordion.
+                    const compactEntriesByStartIndex = new Map(
+                      [...groupMap.entries()].map(([startIndex, group]) => [
+                        startIndex,
+                        group.entries.map((entry) =>
+                          entry.kind === "hook"
+                            ? {
+                                kind: "hook" as const,
+                                key: `${message.id}-hook-${entry.partIndex}`,
+                                data: entry.data,
+                              }
+                            : entry.kind === "app"
+                              ? {
+                                  kind: "app" as const,
+                                  key: getToolEntryKey(message.id, entry),
+                                  toolName: entry.toolName,
+                                  part: entry.part,
+                                  toolResultPart: entry.toolResultPart,
+                                  errorText: entry.errorText,
+                                  remedyChain: entry.remedyChain,
+                                }
+                              : {
+                                  kind: "tool" as const,
+                                  key: getToolEntryKey(message.id, entry),
+                                  toolName: entry.toolName,
+                                  part: entry.part,
+                                  toolResultPart: entry.toolResultPart,
+                                  errorText: entry.errorText,
+                                  remedyChain: entry.remedyChain,
+                                  nestedToolCalls: subagentCallsFor(
+                                    entryCallId(entry),
+                                  ),
+                                },
+                        ),
+                      ]),
+                    );
+                    // Only the latest Guardrails policy preview/save in this
+                    // message auto-opens so earlier rows stay compact.
+                    const autoOpenPolicyKey =
+                      findLatestPolicyChangeKey({
+                        entries: [
+                          ...compactEntriesByStartIndex.values(),
+                        ].flat(),
+                        getToolShortName,
+                      }) ?? null;
+                    // Thinking blocks left touching once compact rows fold
+                    // silent tool calls between them merge into one accordion.
                     const reasoningRuns = identifyReasoningRuns({
                       parts: message.parts,
                       role: message.role,
@@ -774,47 +897,21 @@ export function ChatMessages({
                       // Render compact group at its start index
                       if (groupMap.has(i)) {
                         const group = groupMap.get(i);
-                        if (!group) return null;
+                        const compactTools = compactEntriesByStartIndex.get(i);
+                        if (!group || !compactTools) return null;
                         return (
                           <CompactToolGroup
                             key={getCompactGroupKey(
                               message.id,
                               group.startIndex,
                             )}
-                            tools={group.entries.map((entry) =>
-                              entry.kind === "hook"
-                                ? {
-                                    kind: "hook" as const,
-                                    key: `${message.id}-hook-${entry.partIndex}`,
-                                    data: entry.data,
-                                  }
-                                : entry.kind === "app"
-                                  ? {
-                                      kind: "app" as const,
-                                      key: getToolEntryKey(message.id, entry),
-                                      toolName: entry.toolName,
-                                      part: entry.part,
-                                      toolResultPart: entry.toolResultPart,
-                                      errorText: entry.errorText,
-                                      remedyChain: entry.remedyChain,
-                                    }
-                                  : {
-                                      kind: "tool" as const,
-                                      key: getToolEntryKey(message.id, entry),
-                                      toolName: entry.toolName,
-                                      part: entry.part,
-                                      toolResultPart: entry.toolResultPart,
-                                      errorText: entry.errorText,
-                                      remedyChain: entry.remedyChain,
-                                      nestedToolCalls: subagentCallsFor(
-                                        entryCallId(entry),
-                                      ),
-                                    },
-                            )}
+                            tools={compactTools}
                             toolIconMap={toolIconMap}
                             canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
                             turnActive={turnActive}
+                            autoOpenPolicyKey={autoOpenPolicyKey}
+                            renderAuthCard={renderCompactAuthCard}
                             appContext={{
                               agentId,
                               earlyToolUiStarts,
@@ -971,32 +1068,29 @@ export function ChatMessages({
                             return null;
                           }
 
-                          const assistantAuthState =
-                            resolveAssistantTextAuthState(part.text);
-
                           // Use editable component for assistant messages
                           if (message.role === "assistant") {
-                            if (
-                              hasMessageAuthToolError(message) &&
-                              isAuthInstructionText(part.text)
-                            ) {
-                              return null;
-                            }
-
-                            const authToolPart = renderAssistantAuthPart({
-                              toolName: "authentication",
-                              authState: assistantAuthState,
-                              connectedCatalogIds:
-                                orchestrator.connectedCatalogIds,
-                              onInstallMcp:
-                                orchestrator.triggerInstallByCatalogId,
-                              onReauthMcp:
-                                orchestrator.triggerReauthByCatalogIdAndServerId,
-                            });
+                            // A failed tool call in this message already shows
+                            // the auth card. What the model then writes about
+                            // it is its answer, so it stays as text: only a
+                            // message with no such card turns auth text into one.
+                            const authToolPart = hasMessageAuthToolError(
+                              message,
+                            )
+                              ? null
+                              : renderAssistantAuthPart({
+                                  toolName: "authentication",
+                                  authState: resolveAssistantTextAuthState(
+                                    part.text,
+                                  ),
+                                  connectedCatalogIds:
+                                    orchestrator.connectedCatalogIds,
+                                  onInstallMcp:
+                                    orchestrator.triggerInstallByCatalogId,
+                                  onReauthMcp:
+                                    orchestrator.triggerReauthByCatalogIdAndServerId,
+                                });
                             if (authToolPart) {
-                              if (hasMessageAuthToolError(message)) {
-                                return null;
-                              }
                               return (
                                 <Fragment key={partKey}>
                                   {authToolPart}
@@ -1110,6 +1204,9 @@ export function ChatMessages({
                                         partIndex={i}
                                         partKey={partKey}
                                         text={parsedPart.text}
+                                        policyDiffReferences={policyDiffReferences
+                                          .get(message.id)
+                                          ?.get(i)}
                                         isEditing={editingPartKey === partKey}
                                         showActions={
                                           showActions && isLastParsedTextPart
@@ -1150,6 +1247,9 @@ export function ChatMessages({
                                   partIndex={i}
                                   partKey={partKey}
                                   text={part.text}
+                                  policyDiffReferences={policyDiffReferences
+                                    .get(message.id)
+                                    ?.get(i)}
                                   isEditing={editingPartKey === partKey}
                                   showActions={showActions}
                                   citationParts={citationParts}
@@ -1662,7 +1762,32 @@ export function ChatMessages({
                 onRetry={onChatErrorRetry}
               />
             )}
-            {pendingToolCalls.map((toolCall) => (
+            {compactPendingToolCalls.length > 0 && (
+              <CompactToolGroup
+                key="optimistic-compact-tools"
+                tools={compactPendingToolCalls.map((toolCall) => ({
+                  kind: "tool" as const,
+                  key: `optimistic-tool-${toolCall.toolCallId}`,
+                  toolName: toolCall.toolName,
+                  part: {
+                    type: "dynamic-tool",
+                    toolName: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                    state: "input-available",
+                    input: toolCall.input,
+                  },
+                  toolResultPart: null,
+                  errorText: undefined,
+                }))}
+                toolIconMap={toolIconMap}
+                canExpandToolCalls={canExpandToolCalls}
+                onToolApprovalResponse={onToolApprovalResponse}
+                turnActive={isResponseInProgress}
+                autoOpenPolicyKey={null}
+                renderAuthCard={renderCompactAuthCard}
+              />
+            )}
+            {nonCompactPendingToolCalls.map((toolCall) => (
               <MessageTool
                 part={{
                   type: "dynamic-tool",
@@ -1718,6 +1843,12 @@ export function ChatMessages({
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
     </McpTaskProvider>
+  );
+
+  return (
+    <PreviewedChangesProvider value={previewedChanges}>
+      {conversation}
+    </PreviewedChangesProvider>
   );
 }
 
@@ -1966,13 +2097,9 @@ const MessageTool = memo(
       "update_guardrails_validation",
     ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
-      (validationChange ||
-        [
-          "preview_guardrails_policy_change",
-          "update_guardrails_policy",
-        ].includes(policyToolName)) &&
+      (validationChange || isPolicyChangeTool(policyToolName)) &&
       !errorText &&
-      isOpenAppaPolicyChange(rawOutput, validationChange);
+      isOpenAppaPolicyChange(rawOutput, validationChange, part.input);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -1988,9 +2115,7 @@ const MessageTool = memo(
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
-    // The policy change card already shows the proposed policy.
-    const hasInput =
-      !policyChange && displayInput && Object.keys(displayInput).length > 0;
+    const hasInput = displayInput && Object.keys(displayInput).length > 0;
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
@@ -2017,6 +2142,17 @@ const MessageTool = memo(
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
+    // A proposal of a file this conversation previewed: the person approving
+    // it reads that preview's diff, not the raw file a second time.
+    const previewed = usePreviewedChange(part.toolCallId);
+    const previewedChange =
+      previewed &&
+      !policyChange &&
+      !errorText &&
+      !toolResultPart &&
+      !part.output
+        ? previewed
+        : null;
     const viewerUserId = session?.user?.id;
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
     const [userDenied, setUserDenied] = useState(false);
@@ -2160,7 +2296,16 @@ const MessageTool = memo(
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
-          {hasInput ? <ToolInput input={displayInput} /> : null}
+          {/* Under a policy change card the arguments go last, closed. */}
+          {hasInput && !policyChange && !previewedChange ? (
+            <ToolInput input={displayInput} />
+          ) : null}
+          {previewedChange ? (
+            <PreviewedChangeReview
+              previewed={previewedChange}
+              input={displayInput}
+            />
+          ) : null}
           {nestedToolCalls}
           {isApprovalRequested &&
             onToolApprovalResponse &&
@@ -2171,7 +2316,11 @@ const MessageTool = memo(
                   <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
                 }
                 title="Approval required"
-                description="Review this tool call before it can continue."
+                description={
+                  previewedChange
+                    ? proposalApprovalText(previewedChange)
+                    : "Review this tool call before it can continue."
+                }
                 actions={[
                   {
                     label: "Approve",
@@ -2253,6 +2402,7 @@ const MessageTool = memo(
             <OpenAppaPolicyChange
               output={rawOutput}
               validationChange={validationChange}
+              input={part.input}
             />
           )}
           {/* Show text output when NOT rendering a UI resource */}
@@ -2277,6 +2427,9 @@ const MessageTool = memo(
                 errorText={errorText}
               />
             )}
+          {hasInput && policyChange ? (
+            <OpenAppaPolicyArguments input={displayInput} />
+          ) : null}
         </ToolContent>
       </Tool>
     );
@@ -2305,54 +2458,6 @@ const MessageTool = memo(
     prev.toolIconMap === next.toolIconMap,
 );
 
-function getApprovalToolDisplay({
-  toolName,
-  input,
-  isApprovalRequested,
-  getToolShortName,
-}: {
-  toolName: string;
-  input: unknown;
-  isApprovalRequested: boolean;
-  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
-}): {
-  toolName: string;
-  input: Record<string, unknown> | undefined;
-} {
-  const displayInput = isPlainRecord(input) ? input : undefined;
-  const shortToolName =
-    getToolShortName(toolName) ?? parseFullToolName(toolName).toolName;
-
-  if (!isApprovalRequested || shortToolName !== TOOL_RUN_TOOL_SHORT_NAME) {
-    return {
-      toolName,
-      input: displayInput,
-    };
-  }
-
-  if (!displayInput) {
-    return {
-      toolName,
-      input: undefined,
-    };
-  }
-
-  const targetToolName = displayInput.tool_name;
-  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
-    return {
-      toolName,
-      input: displayInput,
-    };
-  }
-
-  return {
-    toolName: targetToolName,
-    input: isPlainRecord(displayInput.tool_args)
-      ? displayInput.tool_args
-      : undefined,
-  };
-}
-
 const getHeaderState = ({
   state,
   toolResultPart,
@@ -2364,10 +2469,6 @@ const getHeaderState = ({
 }) => {
   return getToolHeaderState({ state, toolResultPart, errorText });
 };
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */
 function synthesizeSubagentToolPart(
@@ -2647,6 +2748,7 @@ function renderToolAuthPart(params: {
   connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
+  className?: string;
 }) {
   const {
     authState,
@@ -2654,6 +2756,7 @@ function renderToolAuthPart(params: {
     connectedCatalogIds,
     onInstallMcp,
     onReauthMcp,
+    className,
   } = params;
   const actions = resolveAuthActions({ authState, onInstallMcp, onReauthMcp });
   const props = authCardProps({
@@ -2662,7 +2765,7 @@ function renderToolAuthPart(params: {
     connectedCatalogIds,
     ...actions,
   });
-  return props ? <AuthErrorTool {...props} /> : null;
+  return props ? <AuthErrorTool {...props} className={className} /> : null;
 }
 
 function renderAssistantAuthPart(params: {

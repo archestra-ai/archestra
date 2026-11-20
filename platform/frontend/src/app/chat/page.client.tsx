@@ -103,6 +103,7 @@ import { useApp } from "@/lib/app.query";
 import { afterNextPaint } from "@/lib/app-interactive";
 import {
   useHasPermissions,
+  usePermissionsRevalidatingOnMount,
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
@@ -185,6 +186,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOpenApp } from "@/lib/hooks/use-open-app";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
@@ -203,6 +205,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ViewTransition } from "@/lib/view-transition";
+import { appToReopenAsEncryptedChat } from "./app-chat-reopen";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -374,6 +377,10 @@ export function ChatPageContent({
     useHasPermissions({
       agent: ["read"],
     });
+  // The map this page opens on may have been cached under a role the viewer
+  // no longer holds: a refusal read from it stands only once the server has
+  // repeated it, and the page waits on a spinner until then.
+  const isPermissionsRevalidating = usePermissionsRevalidatingOnMount();
   // Unknown while the session and its permissions load: the page renders
   // optimistically (on a session cookie) before either answers, and assumes
   // the common case until told otherwise rather than flashing a refusal.
@@ -549,11 +556,7 @@ export function ChatPageContent({
   // runs on, which a new chat on an agent without a model of its own starts
   // on. While its router cannot route, a chat on one shows the normal tier it
   // runs on.
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
-  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
-  const organizationDefaultModel = useOrganizationDefaultModel({
-    enabled: autoRoutingEnabled,
-  });
+  const organizationDefaultModel = useOrganizationDefaultModel();
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -1050,13 +1053,9 @@ export function ChatPageContent({
     ? conversationAgent
     : initialAgent;
   const initialPoolSelected = Boolean(
-    modelPoolsEnabled &&
-      initialModelPoolId &&
-      !autoRouterIdOfChoice(initialModelPoolId),
+    initialModelPoolId && !autoRouterIdOfChoice(initialModelPoolId),
   );
-  const conversationPoolSelected = Boolean(
-    modelPoolsEnabled && conversation?.modelPoolId,
-  );
+  const conversationPoolSelected = Boolean(conversation?.modelPoolId);
   const activePoolSelected = conversationId
     ? conversationPoolSelected
     : initialPoolSelected;
@@ -1749,6 +1748,23 @@ export function ChatPageContent({
   // an oversight view never briefly flashes an editable composer before we know.
   const isResolvingOversightApp =
     oversightAppId !== null && oversightApp.isPending;
+  // Opening an app creates its chat at once, so the new-chat lock never shows
+  // for it. Until the user writes, the chat is only the app's opening render,
+  // so the composer keeps the lock and turning it on reopens the same app as a
+  // new encrypted chat. The unencrypted one is an app-open draft, which the
+  // sidebar hides until someone writes in it.
+  const appToReopenEncrypted = useMemo(
+    () => appToReopenAsEncryptedChat({ conversation, messages, apps: mcpApps }),
+    [conversation, messages, mcpApps],
+  );
+  const { open: openApp } = useOpenApp();
+  const reopenAppAsEncryptedChat = useStableCallback(
+    (encryptedChat: boolean) => {
+      if (encryptedChat && appToReopenEncrypted) {
+        void openApp(appToReopenEncrypted, { encryptedChat: true });
+      }
+    },
+  );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const isAwaitingScheduledStream =
@@ -3161,6 +3177,7 @@ export function ChatPageContent({
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
+    if (isPermissionsRevalidating) return <LoadingState variant="fill" />;
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -3220,6 +3237,11 @@ export function ChatPageContent({
     // A runtime agent chats without a key, and the config says whether the
     // runtime is on: until it does, an empty key list is not yet the answer.
     if (!config) return <LoadingState variant="fill" />;
+    // Without the grants the key lists are never asked for, so "no keys" is
+    // the permission map's answer, not the server's.
+    if (isPermissionsRevalidating && !canLoadApiKeys) {
+      return <LoadingState variant="fill" />;
+    }
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -3695,6 +3717,12 @@ export function ChatPageContent({
                               contextWindow={contextWindow}
                               lastCompaction={contextCompaction?.lastCompaction}
                               inputModalities={selectedModelInputModalities}
+                              encryptedChat={false}
+                              onEncryptedChatChange={
+                                appToReopenEncrypted
+                                  ? reopenAppAsEncryptedChat
+                                  : undefined
+                              }
                               agentLlmApiKeyId={
                                 conversation?.agent?.llmApiKeyId ?? null
                               }

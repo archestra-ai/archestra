@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import {
   CLAUDE_DESKTOP_PROFILE_ID,
+  cursorDisconnectCommand,
   INSTALLER_CLIENT_IDS,
   INSTALLER_CLIENT_LABELS,
   type InstallerClientId,
@@ -25,6 +26,14 @@ import {
  * backend/src/services/agent-connection-setup/agents/ and the startup guard's
  * own disconnect actions (agent-connection-setup/guard/clients/); for clients
  * with a guard, the guard runs them itself via ARCHESTRA_GUARD_ACTION=disconnect.
+ *
+ * The cleanup removes the gateway, and the tools Guardrails offer for a
+ * blocked step live there. So the Connect page puts a reference into the
+ * prompt that points here (the link's `ref`), and Guardrails leave the
+ * conversation that presents it unchecked, as they do the conversation that
+ * runs a connect installer. This page never reads the reference: it is in the
+ * conversation already. It tells the agent what to do when a step is blocked
+ * anyway, which means the reference was missing or has expired.
  */
 export function GET(request: Request) {
   const origin = requestOrigin(request);
@@ -57,13 +66,19 @@ For any other app, read ${origin}/disconnect.md?client=generic.
 `;
 }
 
-/** The plan → yes → back up → remove → verify flow every client shares. */
+/**
+ * The find → remove → verify flow every client shares. It has no step that
+ * waits for the user: sending the prompt is their decision, and a pause
+ * would also spend the few minutes the prompt's reference lasts.
+ */
 function instructions(params: {
   target: DeploymentTarget;
   label: string;
   inventory: string;
   remove: string;
   finish: string;
+  /** What the agent tells the user at the end, in place of the general report. */
+  report?: string;
 }): string {
   const { label } = params;
   const { origin, host } = params.target;
@@ -72,34 +87,43 @@ function instructions(params: {
 Remove what the ${origin} connect setup added to ${label} on this computer.
 Only touch entries that point at ${host}; leave everything else in ${label} as it is.
 
+The user decided this by sending you the prompt. Do not show a plan first and do not
+ask them to confirm: go through the steps and report at the end. Leave a part in place
+only if their message says to keep it.
+
 ## 1. Find what is installed
 
 ${params.inventory}
 
-## 2. Show the plan and wait
+## 2. Disconnect
 
-Before changing anything, show the user a short table: each item you found, what
-you will remove or change, and which config files you will edit.
-Then stop and wait for the user's explicit yes. Change nothing until they confirm;
-if they want to keep a part, leave it and skip its step below.
+Before you edit a config file by hand, copy it to <file>.before-disconnect (keep an
+existing one). A cleanup command these steps name edits the files itself: make no copies
+for it. Remove only what step 1 found; do not restore older .archestra-backup files
+wholesale, since they would undo the user's later changes.
 
-## 3. Disconnect
-
-Back up every config file before you edit it by copying it to <file>.before-disconnect
-(keep an existing one). Remove only the entries named in the plan; do not restore
-older .archestra-backup files wholesale, since they would undo the user's later changes.
+Guardrails do not check this conversation when the prompt that started it came from
+the Disconnect dialog on ${origin}/connection less than ten minutes ago: its link
+carries a reference (ref=). If Guardrails block a step anyway, the reference is missing
+or has expired. Do not accept a plan for it, and never put a removed entry back to get
+an approval. Stop, and tell the user to copy a fresh prompt from that dialog into a new
+conversation, or to run the cleanup command the dialog shows in a terminal.
+Remove the gateway's MCP entry last.
 
 ${params.remove}
 
-## 4. Verify and report
+## 3. Verify and report
 
-Repeat step 1 and confirm nothing that points at ${host} is left.
+Repeat step 1 and check that nothing that points at ${host} is left.
 ${params.finish}
-Report what was removed, the files you changed with their backups, and anything left
+${
+  params.report ??
+  `Report what was removed, the files you changed with their backups, and anything left
 for the user to do by hand.
 End by telling the user this only cleaned up this computer, and that the last step is
 to go back to ${origin}/connection and press Revoke access in the Disconnect dialog,
-so the deployment stops accepting this client.
+so the deployment stops accepting this client.`
+}
 
 Never ask the user to paste passwords, session cookies, tokens or provider keys into
 this conversation, and never print a secret.
@@ -151,8 +175,9 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
   Then claude plugin marketplace remove MARKETPLACE.
 - In the settings.json env block, remove ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN
   (Bedrock: CLAUDE_CODE_USE_BEDROCK, AWS_REGION, ANTHROPIC_BEDROCK_BASE_URL and
-  AWS_BEARER_TOKEN_BEDROCK) when they point at {{HOST}} or hold a ${ARCHESTRA_TOKEN_PREFIX} key. Remove only
-  the x-archestra-* lines from ANTHROPIC_CUSTOM_HEADERS, and drop the key if it ends up empty.`,
+  AWS_BEARER_TOKEN_BEDROCK) when they point at {{HOST}} or hold a ${ARCHESTRA_TOKEN_PREFIX} key, and remove
+  CLAUDE_CODE_GATEWAY_HINT_HEADERS. Remove only the x-archestra-* lines from ANTHROPIC_CUSTOM_HEADERS,
+  and drop the key if it ends up empty.`,
     finish:
       "Tell the user to open a new terminal and start a new Claude Code session; the current one keeps the old configuration.",
   },
@@ -273,7 +298,7 @@ ${startupGuardDisconnectCommand(client, "windows")}
 It prints one line per removed part. On success it also deletes itself and its
 profile blocks. Running the command again succeeds without errors when the script
 is already gone. If it reports "Could not disconnect", do that part by hand below,
-then run it again. If a part the plan keeps would be removed, use the manual steps instead.
+then run it again. If it would remove a part the user asked to keep, use the manual steps instead.
 
 ### Otherwise, by hand
 
@@ -286,27 +311,89 @@ ${withOrigin(details.manual)}
   });
 }
 
+/**
+ * Cursor has no startup check. Its setup leaves a cleanup helper beside the
+ * Guardrails hook instead (payloads/cursor-disconnect.ts), which removes
+ * every part by itself and needs neither the gateway nor Cursor to be closed
+ * for anything but Cursor's own settings.
+ */
 function cursorInstructions(target: DeploymentTarget): string {
-  const { base, host } = target;
+  const { base, host, origin } = target;
   return instructions({
     target,
     label: INSTALLER_CLIENT_LABELS.cursor,
-    inventory: `- MCP: the mcpServers entry in ~/.cursor/mcp.json whose URL starts with ${base}/mcp/.
+    inventory: `Paths start at the user's home folder.
+- Cleanup helper: ~/.cursor/archestra/disconnect.cjs. Setup wrote it, and it finds and
+  removes every item below by itself. When it is there, check nothing else: go to
+  step 2 and run it. An older setup did not write one, and the rest of this list is for
+  that case.
+- MCP servers in ~/.cursor/mcp.json: the gateway, whose URL starts with ${base}/mcp/,
+  and the web search and fetch tools, the entry that runs .cursor/archestra/web-tools.mjs
+  (named like the gateway, with -web).
+- Guardrails hooks: the entries in ~/.cursor/hooks.json whose command runs
+  .cursor/archestra/guardrails-hook.mjs.
+- MCP allowlist: the mcpAllowlist entries in ~/.cursor/permissions.json that start with
+  either server's name and a colon.
+- Helper folder: ~/.cursor/archestra/, with the hook helper, the web tools and a
+  credential in guardrails.json. Never print that file.
 - Skills: a folder in ~/.cursor/skills/ that is a git clone of ${host}/skills/
-  (check with git -C FOLDER remote get-url origin).
-- LLM proxy: Settings > Models > API Keys, with Override OpenAI Base URL pointing
-  at ${host}. Setup wrote it into Cursor's settings database and kept a copy of
-  that database as state.vscdb.archestra-backup beside it.
-- User Rules: Cursor keeps these in its settings UI, not in a file.`,
-    remove: `- Remove the gateway entry from ~/.cursor/mcp.json and keep the other servers.
-- Delete the skills folder found above.
-- Ask the user to open Settings > Models > API Keys, turn off Override OpenAI Base URL
-  if it points at ${host}, and remove the key in the API Key field. Do not restore
-  the database backup: it would undo every Cursor setting changed since setup.
-- If the user pasted runtime handoff instructions into Customize > Rules > User Rules,
-  ask them to delete that text. Do not change their other rules.`,
+  (check with git -C FOLDER remote get-url origin; the URL can hold a credential, so
+  do not print it).
+- Cursor settings: setup switched off Web Search Tool and Web Fetch Tool. If a setup
+  ever routed Cursor's models, Settings > Models > API Keys has Override OpenAI Base URL
+  pointing at ${host}, and a copy of the settings database from before is kept as
+  state.vscdb.archestra-backup beside it. The helper puts both back.
+- Cursor's command-line agent (cursor-agent): it holds a sign-in to the gateway per
+  folder, under the gateway's name in ~/.cursor/projects/FOLDER/mcp-auth.json, and an
+  approval in mcp-approvals.json beside it. Never print mcp-auth.json. Only these go.
+  The agent itself stays installed and signed in to Cursor, also when setup installed
+  it: never uninstall it and never run its logout.
+
+Not part of this connection: Cursor also lists skills, plugins and MCP servers that
+other apps installed, such as Claude Code's under ~/.claude/plugins/. Leave them as
+they are. If one was cloned from ${host}, name it in the report as part of that app's
+connection, which that app's own disconnect removes.`,
+    remove: `### If the cleanup helper is there
+
+Run it now, before you change anything by hand. macOS/Linux:
+${cursorDisconnectCommand("bash", { wait: false })}
+Windows PowerShell:
+${cursorDisconnectCommand("windows", { wait: false })}
+
+Add --keep-skills when the user asked to keep the shared skills. It prints one line per
+part it removed, and it does not need the gateway. Do not copy config files first for
+this path: the helper takes out only its own entries and leaves no copies behind.
+Cursor keeps a settings change only when it is made while Cursor is closed. When the
+helper says Cursor is running, it has removed everything else and left a copy of itself
+waiting: that copy puts the settings back when Cursor next closes, and then deletes the
+helper. Tell the user the two switches come back the next time they quit Cursor, and
+that they have nothing to run. Do not quit Cursor yourself, and do not wait for it.
+Only if the helper prints a command to run after quitting, pass that command on.
+If it prints "Could not disconnect", do that part by hand below, then run it again.
+
+### Otherwise, by hand
+
+- Remove the Guardrails hook entries from ~/.cursor/hooks.json and keep the user's own.
+- Remove the allowlist entries from ~/.cursor/permissions.json.
+- Delete the skills folder found above, and ~/.cursor/archestra.
+- In each ~/.cursor/projects/FOLDER/mcp-auth.json, delete the gateway's entry and keep
+  the others.
+- Last, remove the gateway and the web tools entries from ~/.cursor/mcp.json and keep
+  the other servers.
+- Ask the user to switch Web Search Tool and Web Fetch Tool back on in Cursor Settings
+  if they want them, and to open Settings > Models > API Keys, turn off Override OpenAI
+  Base URL if it points at ${host}, and remove the key in the API Key field. Do not
+  restore the database backup: it would undo every Cursor setting changed since setup.`,
     finish:
-      "Tell the user to reload Cursor and check that the gateway is gone from Customize > MCPs.",
+      "While the helper's copy waits for Cursor to close, ~/.cursor/archestra/ still holds disconnect.cjs and a file named finishing: that is expected, so leave both.",
+    report: `Keep the report short. First say what was removed, one line per part.
+Then say what is left for the user. It is these two steps, in these words, and nothing else:
+1. Quit and reopen Cursor.
+2. Open ${origin}/connection and press Revoke access in the Disconnect dialog.
+Do not ask the user to check a settings page, their rules or their plugins, and do not
+explain the steps. Add a third step only for something these instructions could not do:
+a line the helper printed with "Could not disconnect", a command it printed to run, or a
+setting the by-hand steps ask the user to change.`,
   });
 }
 

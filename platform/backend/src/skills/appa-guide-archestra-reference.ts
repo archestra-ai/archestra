@@ -82,7 +82,7 @@ Claude Code, Codex, and OpenCode can protect native CLI subagent returns through
 
 \`[policy.deployment] context_control = true\` declares that the integration controls child context and returns. It alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Confirm the deployment can issue signed lineage and verify returns against the durable child crossing without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
 
-This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
+This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. A delegation to another agent in Archestra Chat declares its return contract on the delegating call itself, so the parent takes no separate step. With a \`return_schema\` the answer is attested against that schema. Without one it crosses as spoken at the parent's label, and the subagent is refused any read that would narrow that label. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 
 ## The deployment hint
 
@@ -110,5 +110,5 @@ A yell's archive is a gzipped JSON file attached to the chat as \`openappa-yell-
    - \`runtime_events\` lists runtime events, ordered by \`seq\`, with the time in \`at\`.
 4. Check what is missing before you conclude. \`truncated_before_seq\` means older facts were left out. \`omitted_reason\` means the report has no trajectory. A tool that appears in no fact and no runtime event was not attempted in the recorded range.
 5. A name can appear as a token such as \`tool-3\`. A token stands for the same thing everywhere in one report and means nothing in another report.
-6. Without \`archestra__run_command\`, say that you cannot open the archive. Ask the operator to download it from the Yells tab and paste the facts to check. Do not guess what the trajectory holds.
+6. Without \`archestra__run_command\`, say that you cannot open the archive. Ask the operator to download it from the Guardrails log and paste the facts to check. Do not guess what the trajectory holds.
 `;

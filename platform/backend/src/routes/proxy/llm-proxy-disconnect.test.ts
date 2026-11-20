@@ -353,7 +353,6 @@ for (const provider of [
             makeSecret,
             makeLlmProviderApiKey,
           }) => {
-            config.llmProxy.modelPoolsEnabled = true;
             const agent = await AgentModel.findById(agentId);
             if (!agent) throw new Error("Expected proxy agent");
             const key = await makeLlmProviderApiKey(

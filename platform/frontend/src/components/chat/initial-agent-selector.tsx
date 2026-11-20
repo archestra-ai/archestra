@@ -274,10 +274,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // The roster omits large embedded icons and editing-only fields. Hydrate one
   // record after the composer's first paint, so the response never competes
   // with the first useful render; the trigger holds placeholders until then.
-  const { data: currentAgentDetail } = useProfile(
-    currentAgentSummary?.id ?? undefined,
-    { enabled: open || afterFirstPaint },
-  );
+  // The id is the one the chat already chose, not the roster row: a bootstrap
+  // seed writes `agentQueryKey(currentAgentId)` before the roster lands, and
+  // waiting for the summary would miss that cache and flash placeholders.
+  const {
+    data: currentAgentDetail,
+    isSuccess: profileLoaded,
+    isError: profileFailed,
+  } = useProfile(currentAgentId ?? undefined, {
+    enabled: open || afterFirstPaint,
+  });
   const currentAgent = currentAgentDetail;
   const displayAgent = currentAgentDetail ?? currentAgentSummary;
   const displayAgentName = displayAgent?.name ?? "Select agent";
@@ -294,10 +300,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE,
         )));
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
-  // The trigger's server and knowledge icons: wanted on screen, not for
-  // typing, so they wait for the page's first requests too.
-  const shouldLoadAgentManagementDetails =
-    open || !!editingAgentId || shellReady;
   const installer = useMcpInstallOrchestrator({
     enabled: open || !!editingAgentId,
   });
@@ -314,17 +316,42 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   );
   const canEditCurrentAgent = !!currentAgent && canEditAgent(currentAgent.id);
 
-  const { data: canReadMcpRegistry } = useHasPermissions({
-    mcpRegistry: ["read"],
-  });
-  const { data: canReadKnowledgeBase } = useHasPermissions({
-    knowledgeSource: ["read"],
-  });
-  // Names and icons only: the registry's directory, not the full catalog.
-  const { data: catalogItems = [], isSuccess: catalogLoaded } =
-    useMcpCatalogDirectory({
-      enabled: shouldLoadAgentManagementDetails && !!canReadMcpRegistry,
+  const { data: canReadMcpRegistry, isPending: mcpRegistryPermissionPending } =
+    useHasPermissions({
+      mcpRegistry: ["read"],
     });
+  const { data: canReadKnowledgeBase, isPending: knowledgePermissionPending } =
+    useHasPermissions({
+      knowledgeSource: ["read"],
+    });
+  // `useHasPermissions` reports `data: false` while the permission map is
+  // still loading. That is "not decided yet", not a denial: treating it as
+  // denied lets the trigger paint as loaded, then flip back to placeholders
+  // the moment the grant resolves.
+  const mcpRegistryDenied =
+    !mcpRegistryPermissionPending && canReadMcpRegistry === false;
+  const knowledgeDenied =
+    !knowledgePermissionPending && canReadKnowledgeBase === false;
+  // Names and icons only: the registry's directory, not the full catalog.
+  // Built-in tools draw their own icon, so only agents with other catalog
+  // tools need the directory. Start immediately with the trigger instead of
+  // waiting on `shellReady`, which would pulse the circles for the deferral.
+  const needsCatalogDirectory = useMemo(() => {
+    if (!currentAgentDetail || currentAgentDetail.accessAllTools) return false;
+    return (currentAgentDetail.tools ?? []).some(
+      (tool) => !!tool.catalogId && tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID,
+    );
+  }, [currentAgentDetail]);
+  const {
+    data: catalogItems = [],
+    isSuccess: catalogLoaded,
+    isError: catalogFailed,
+  } = useMcpCatalogDirectory({
+    enabled:
+      (open || !!editingAgentId || needsCatalogDirectory) &&
+      !mcpRegistryPermissionPending &&
+      canReadMcpRegistry === true,
+  });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
   // The agent detail already lists its tools' catalogs, so the server icons
   // need no separate tool-assignment request (which carries every tool's full
@@ -339,7 +366,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
         );
       }
     }
-    return catalogItems
+    const fromDirectory: SummaryServer[] = catalogItems
       .filter((catalog) => toolCounts.has(catalog.id))
       .map((catalog) => ({
         catalog,
@@ -349,12 +376,27 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             : catalog.name,
         toolCount: toolCounts.get(catalog.id) ?? 0,
       }));
+    const listed = new Set(fromDirectory.map((server) => server.catalog.id));
+    // The built-in catalog's icon does not come from the directory.
+    const builtInCount = toolCounts.get(ARCHESTRA_MCP_CATALOG_ID) ?? 0;
+    if (builtInCount > 0 && !listed.has(ARCHESTRA_MCP_CATALOG_ID)) {
+      fromDirectory.unshift({
+        catalog: { id: ARCHESTRA_MCP_CATALOG_ID, icon: null },
+        name: builtInCatalogName,
+        toolCount: builtInCount,
+      });
+    }
+    return fromDirectory;
   }, [currentAgentDetail, catalogItems, builtInCatalogName]);
 
   // Loaded with the composer, not deferred to the picker opening: the trigger
-  // shows these icons from the start, and a short id list is cheap.
-  const { data: triggerDelegations = [], isSuccess: delegationsLoaded } =
-    useAgentDelegations(effectiveAgentId ?? undefined);
+  // shows these icons from the start, and a short id list is cheap. A failed
+  // read settles as "no subagents" so the circles do not pulse forever.
+  const {
+    data: triggerDelegations = [],
+    isSuccess: delegationsLoaded,
+    isError: delegationsFailed,
+  } = useAgentDelegations(effectiveAgentId ?? undefined);
   const { data: triggerSubagents = [] } = useChatAgentReferences(
     triggerDelegations.map((agent) => agent.id),
   );
@@ -362,22 +404,41 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // The trigger reads exactly this agent's knowledge sources by id.
   const currentKnowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
   const currentConnectorIds = currentAgent?.connectorIds ?? [];
+  // Same as the catalog directory: the trigger shows these icons, so the
+  // lookups start with it instead of after the shell's deferred wave.
   const knowledgeLookupEnabled =
-    shouldLoadAgentManagementDetails && !!canReadKnowledgeBase;
+    (open || !!editingAgentId || currentKnowledgeBaseIds.length > 0) &&
+    !knowledgePermissionPending &&
+    canReadKnowledgeBase === true;
+  const connectorLookupEnabled =
+    (open || !!editingAgentId || currentConnectorIds.length > 0) &&
+    !knowledgePermissionPending &&
+    canReadKnowledgeBase === true;
   const {
     data: currentKnowledgeBases,
     isSuccess: currentKnowledgeBasesLoaded,
+    isError: currentKnowledgeBasesFailed,
   } = useKnowledgeBasesByIds(currentKnowledgeBaseIds, {
     enabled: knowledgeLookupEnabled,
   });
-  const { data: currentConnectors, isSuccess: currentConnectorsLoaded } =
-    useConnectorsByIds(currentConnectorIds, {
-      enabled: knowledgeLookupEnabled,
-    });
+  const {
+    data: currentConnectors,
+    isSuccess: currentConnectorsLoaded,
+    isError: currentConnectorsFailed,
+  } = useConnectorsByIds(currentConnectorIds, {
+    enabled: connectorLookupEnabled,
+  });
+  // Empty, loaded, or failed: a failure shows the icons that did resolve
+  // rather than leaving the placeholder pulsing. A lookup that is still
+  // disabled because the permission has not been decided stays pending.
   const knowledgeBasesLoaded =
-    currentKnowledgeBaseIds.length === 0 || currentKnowledgeBasesLoaded;
+    currentKnowledgeBaseIds.length === 0 ||
+    currentKnowledgeBasesLoaded ||
+    currentKnowledgeBasesFailed;
   const connectorsLoaded =
-    currentConnectorIds.length === 0 || currentConnectorsLoaded;
+    currentConnectorIds.length === 0 ||
+    currentConnectorsLoaded ||
+    currentConnectorsFailed;
   const knowledgeSources = useMemo(
     () => [
       ...(currentKnowledgeBases ?? []).map((kb) => ({
@@ -396,15 +457,23 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [currentKnowledgeBases, currentConnectors],
   );
 
-  // The icons are "known" once this agent's own data has arrived; until then
-  // the slot shows placeholders, never the previous agent's icons.
+  // The icons are ready once this agent's needed queries have settled (loaded,
+  // denied, not needed, or failed); until then, show placeholders rather than
+  // the previous agent's icons.
+  const catalogIconsReady =
+    !needsCatalogDirectory ||
+    mcpRegistryDenied ||
+    catalogLoaded ||
+    catalogFailed;
+  const profileUnavailable =
+    profileFailed || (profileLoaded && !currentAgentDetail);
   const triggerIconsLoaded =
-    !!currentAgentDetail &&
-    currentAgentDetail.id === effectiveAgentId &&
-    delegationsLoaded &&
-    (catalogLoaded || canReadMcpRegistry === false) &&
-    ((knowledgeBasesLoaded && connectorsLoaded) ||
-      canReadKnowledgeBase === false);
+    profileUnavailable ||
+    (!!currentAgentDetail &&
+      currentAgentDetail.id === effectiveAgentId &&
+      (delegationsLoaded || delegationsFailed) &&
+      catalogIconsReady &&
+      ((knowledgeBasesLoaded && connectorsLoaded) || knowledgeDenied));
   const missingCatalogIds = useMemo(() => {
     const gate = resolveAgentConnectionGate(
       readinessByAgent.get(effectiveAgentId ?? ""),
@@ -640,7 +709,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   descriptionId={toolSummaryId}
                   agentName={displayAgentName}
                 />
-              ) : !triggerIconsLoaded ? (
+              ) : !effectiveAgentId &&
+                !isAgentResolving ? null : !triggerIconsLoaded ? (
                 // Same footprint as the "All tools" circles, which most
                 // agents land on, so the controls beside it do not shift.
                 <span
@@ -651,7 +721,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   {ALL_TOOLS_ICONS.map(({ key }) => (
                     <span
                       key={key}
-                      className="size-5 shrink-0 animate-pulse rounded-full bg-muted ring-1 ring-background"
+                      className="size-5 shrink-0 animate-pulse rounded-full bg-muted ring-1 ring-background motion-reduce:animate-none"
                     />
                   ))}
                 </span>
@@ -671,14 +741,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   already says this agent starts a dedicated runtime. */}
             </PromptInputButton>
           </PopoverTrigger>
+          {/* Keep the panel steady as results change; shrink only the list
+              when the viewport limits the available space. */}
           <PopoverContent
             side="bottom"
             align="start"
             sideOffset={8}
             collisionPadding={12}
-            className="w-[calc(100vw-1.5rem)] rounded-xl p-0 sm:w-[360px]"
+            className="flex max-h-(--radix-popover-content-available-height) w-[calc(100vw-1.5rem)] flex-col rounded-xl p-0 sm:w-[360px]"
           >
-            <div className="px-2.5 pt-2.5 pb-1">
+            <div className="shrink-0 px-2.5 pt-2.5 pb-1">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input
@@ -751,7 +823,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               aria-busy={page.isFetching}
               role="listbox"
               aria-label="Agents"
-              className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
+              className="h-[320px] min-h-0 overflow-y-auto px-1.5 pb-1.5"
             >
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
@@ -822,7 +894,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            <div className="flex items-center justify-between border-t px-1.5 py-1.5">
+            <div className="flex shrink-0 items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>
                   <Plus />

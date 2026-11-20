@@ -5,7 +5,6 @@ import {
   isLogContentNotStored,
 } from "@archestra/shared";
 import { Semaphore } from "@/agents/chatops/utils";
-import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import AutoRouterModel from "@/models/auto-router";
@@ -141,10 +140,11 @@ export async function cancelBackfill(organizationId: string): Promise<void> {
 export async function describeBackfill(
   organizationId: string,
 ): Promise<AutoRoutingBackfillResponse> {
-  const [latest, scan, settings] = await Promise.all([
+  const [latest, scan, settings, history] = await Promise.all([
     RoutingBackfillModel.findLatest(organizationId),
     RoutingBackfillModel.findLatestScanned(organizationId),
     AutoRouterModel.findPastSessionsRouter(organizationId),
+    describeHistory(organizationId),
   ]);
   const scorer = await activeSourceVersion(settings?.scorerModel);
   const offerable = latest?.status === "running" ? null : scan;
@@ -185,7 +185,48 @@ export async function describeBackfill(
             latest,
           })
         : null,
+    history,
   };
+}
+
+/** Rows of the past-sessions history the router page lists. */
+const HISTORY_ROWS = 20;
+
+async function describeHistory(
+  organizationId: string,
+): Promise<AutoRoutingBackfillResponse["history"]> {
+  const rows = await RoutingBackfillModel.findHistory(
+    organizationId,
+    HISTORY_ROWS,
+  );
+  const scored = await RoutingHistoryModel.scoredByJob(
+    organizationId,
+    rows.flatMap((row) =>
+      row.phase === "score" && row.scorerVersionId
+        ? [
+            {
+              id: row.id,
+              scorerVersionId: row.scorerVersionId,
+              startedAt: row.createdAt,
+              endedAt: row.completedAt,
+            },
+          ]
+        : [],
+    ),
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    phase: row.phase,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
+    startedByName: row.startedByName,
+    foundSessions: row.populationSessions,
+    scoredSessions: row.phase === "score" ? (scored.get(row.id) ?? 0) : null,
+    spentCostUsd: Number(row.spentCostUsd),
+    maxCostUsd: row.maxCostUsd === null ? null : Number(row.maxCostUsd),
+    error: row.error,
+  }));
 }
 
 /**
@@ -195,7 +236,6 @@ export async function describeBackfill(
 export async function runBackfill(params?: {
   timeBudgetMs?: number;
 }): Promise<void> {
-  if (!config.autoRouting.enabled) return;
   const backfill = await RoutingBackfillModel.claimNext({
     owner: WORKER_ID,
     leaseTtlSeconds: LEASE_TTL_SECONDS,

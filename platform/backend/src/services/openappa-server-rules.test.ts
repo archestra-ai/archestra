@@ -1,4 +1,5 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -10,18 +11,22 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { packageContentHash } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
+import { getChatRosterBootstrap } from "@/routes/agent";
 import { secretManager } from "@/secrets-manager";
 import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubAppGrants,
+  getAppaGithubAppPermissions,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -37,9 +42,11 @@ import {
   ensureSelfServiceInclude,
   getServerRules,
   getServerRulesChangeStatus,
+  listServerRulesFiles,
   previewServerRulesChange,
   proposeSelfServiceInclude,
   proposeServerRulesChange,
+  readServerRulesFile,
   selfServiceIncludeState,
 } from "./openappa-server-rules";
 
@@ -1228,9 +1235,12 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     path: "mcp/payments_api.toml",
     before: "",
     after: REFUNDS,
-    // Without auto-merge, the user approves the pull request first.
+    // The person approves the proposing call itself, so the model is not
+    // told to ask in text as well.
     autoMerge: false,
-    instruction: expect.stringContaining("ask the user"),
+    instruction: expect.stringContaining(
+      "asked to approve that call before it runs",
+    ),
   });
   // The first server file brings every server's in, so no later one needs
   // its own line in appa.toml.
@@ -1347,16 +1357,21 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     ),
   );
   // With auto-merge on, the pull request merges by itself once its check
-  // passes: the preview asks for no approval, and the change is proposed.
+  // passes. The preview still sends the model to the proposing call, which
+  // the person approves in the chat: nothing is proposed on the model's word.
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
-  expect(
-    await previewServerRulesChange({ ...change, userId: pat.id }),
-  ).toMatchObject({
+  const previewed = await previewServerRulesChange({
+    ...change,
+    userId: pat.id,
+  });
+  expect(previewed).toMatchObject({
     autoMerge: true,
+    delivery: "pull_request",
     instruction: expect.stringContaining(
-      "Do not ask the user to approve it first",
+      "asked to approve that call before it runs",
     ),
   });
+  expect(previewed.instruction).not.toMatch(/Do not ask the user to approve/);
   expect(
     await proposeServerRulesChange({
       ...change,
@@ -1969,6 +1984,210 @@ test("Archestra reads the branch's rules and writes none: a missing rule comes w
   expect(tokens.map((token) => token.permissions)).not.toContainEqual(
     expect.objectContaining({ administration: expect.anything() }),
   );
+});
+
+test("turning self-service on shares the APPA Keeper with the organization for use, so a member finds it in chat; a share taken away stays away while self-service stays on, and the next turning on gives it back", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const member = await makeUser();
+  await makeMember(member.id, org.id, { role: "member" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    // As seeded: shared with nobody beyond its administrators.
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  const inMembersChat = async () =>
+    (
+      await getChatRosterBootstrap({
+        userId: member.id,
+        organizationId: org.id,
+      })
+    ).some((agent) => agent.id === keeper.id);
+  const organizationGrant = async () =>
+    (
+      await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "agent",
+        scope: keeper.id,
+      })
+    )?.grants.find((grant) => grant.subject.type === "organization");
+  const turn = (enabled: boolean) =>
+    updateAppaGithubSync({
+      organizationId: org.id,
+      action: "self_service",
+      enabled,
+    });
+
+  // Off, the Keeper is its administrators' alone.
+  expect(await inMembersChat()).toBe(false);
+
+  // On: everyone may read and use it, and nothing more.
+  await turn(true);
+  expect(await organizationGrant()).toEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  });
+  expect(await inMembersChat()).toBe(true);
+
+  // An administrator takes the share away: a save while self-service stays
+  // on does not bring it back.
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "agent",
+    scope: keeper.id,
+  });
+  await ResourcePermissionPolicyModel.replace({
+    organizationId: org.id,
+    resource: "agent",
+    scope: keeper.id,
+    revision: policy?.revision ?? 0,
+    grants: (policy?.grants ?? []).filter(
+      (grant) => grant.subject.type !== "organization",
+    ),
+  });
+  await turn(true);
+  expect(await organizationGrant()).toBeUndefined();
+  expect(await inMembersChat()).toBe(false);
+
+  // Off leaves the Keeper's sharing alone; on again shares it again.
+  await turn(false);
+  expect(await organizationGrant()).toBeUndefined();
+  await turn(true);
+  expect(await inMembersChat()).toBe(true);
+});
+
+test("saving a GitHub App source with self-service on shares the APPA Keeper as the switch does", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const member = await makeUser();
+  await makeMember(member.id, org.id, { role: "member" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  const row = await OpenAppaGithubSyncModel.find(org.id);
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: {
+      repo: "example/policies",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      validationDirectory: "",
+      githubPatId: null,
+      githubAppConfigId: row?.githubAppConfigId ?? null,
+      gitlabTokenId: null,
+      selfService: true,
+      selfServiceDirectory: "mcp",
+      selfServiceAutoMerge: false,
+    },
+  });
+  expect(
+    (
+      await getChatRosterBootstrap({
+        userId: member.id,
+        organizationId: org.id,
+      })
+    ).some((agent) => agent.id === keeper.id),
+  ).toBe(true);
+});
+
+test("a connection whose first pull fails is rolled back and shares nothing; one that works shares the APPA Keeper", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  const githubAppConfigId =
+    (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null;
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  const organizationGrant = async () =>
+    (
+      await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "agent",
+        scope: keeper.id,
+      })
+    )?.grants.find((grant) => grant.subject.type === "organization");
+  const connect = (path: string) =>
+    connectAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      source: {
+        repo: "example/policies",
+        ref: "main",
+        path,
+        interval: "1h",
+        validationDirectory: "",
+        githubPatId: null,
+        githubAppConfigId,
+        gitlabTokenId: null,
+        selfService: true,
+        selfServiceDirectory: "mcp",
+        selfServiceAutoMerge: false,
+      },
+    });
+
+  // No policy file at that path: the connection is refused and undone.
+  await expect(connect("missing/appa.toml")).rejects.toMatchObject({
+    statusCode: 400,
+  });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
+  expect(await organizationGrant()).toBeUndefined();
+
+  // The file is there: the pull works, and self-service is in force.
+  await connect("appa.toml");
+  expect(await organizationGrant()).toEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  });
 });
 
 test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({
@@ -4010,6 +4229,34 @@ test("a grants read lets a refused round of checks go once the App holds what th
     name: "workflows",
     granted: false,
   });
+  // The App as this test serves it lists no permissions of its own: nothing
+  // is asked for in its settings yet.
+  expect(
+    (await getAppaGithubAppPermissions(org.id))?.permissions,
+  ).toContainEqual({ name: "workflows", granted: false, requested: false });
+  // Workflows saved in the App's settings, its installation yet to accept:
+  // asked for and not granted, told apart from one never asked for.
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({
+        slug: "acme-guardrails",
+        name: "Policy App",
+        permissions: {
+          contents: "write",
+          pull_requests: "write",
+          checks: "write",
+          workflows: "write",
+          metadata: "read",
+        },
+      }),
+    ),
+  );
+  expect((await getAppaGithubAppPermissions(org.id))?.permissions).toEqual([
+    { name: "contents", granted: true, requested: true },
+    { name: "pull_requests", granted: true, requested: true },
+    { name: "checks", granted: true, requested: true },
+    { name: "workflows", granted: false, requested: true },
+  ]);
   await checkDueAppaGithubSyncs();
   expect(runs.length).toBeGreaterThan(0);
 });
@@ -5260,4 +5507,167 @@ test("a read lists every rule for the server's tools across the policy, the root
     },
   ]);
   expect(read.instruction).toContain("other files of the policy keep");
+});
+
+test("a member with no Guardrails permission lists and reads only the rules files of servers they may open, and learns which they may change", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  // Pat edits payments_api, Sam may only use it, Lee may open the helpdesk
+  // alone, and Kim, a member, may open neither.
+  const pat = await makeUser({ name: "Pat" });
+  await makeTeamMember(payments.id, pat.id);
+  const sam = await makeUser({ name: "Sam" });
+  await makeMember(sam.id, org.id);
+  const finance = await makeTeam(org.id, admin.id, { name: "Finance" });
+  const lee = await makeUser({ name: "Lee" });
+  await makeTeamMember(finance.id, lee.id);
+  const addServer = async (params: {
+    name: string;
+    editors: string;
+    everyone: boolean;
+  }) => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: params.name,
+        serverType: "remote",
+        serverUrl: `https://${params.name}.example.com/mcp`,
+        scope: "org",
+      },
+      {
+        organizationId: org.id,
+        initialPermissionGrants: [
+          {
+            subject: { type: "team", id: params.editors },
+            actions: ["read", "use", "update"],
+          },
+          ...(params.everyone
+            ? [
+                {
+                  subject: { type: "organization" as const, id: "*" as const },
+                  actions: ["read" as const, "use" as const],
+                },
+              ]
+            : []),
+        ],
+      },
+    );
+    await ToolModel.createToolIfNotExists({
+      name: `${params.name}__read`,
+      description: "read",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    return catalog;
+  };
+  const paymentsApi = await addServer({
+    name: "payments_api",
+    editors: payments.id,
+    everyone: true,
+  });
+  const helpdesk = await addServer({
+    name: "helpdesk",
+    editors: finance.id,
+    everyone: false,
+  });
+  const helpdeskRules = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "helpdesk__read"
+delta = { trust = "suspicious" }
+`;
+  await connectApp({ organizationId: org.id });
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
+        "mcp/payments_api.toml": REFUNDS,
+        "mcp/helpdesk.toml": helpdeskRules,
+      },
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(
+    (
+      await openappaBatteriesService.policyDeclarations(org.id)
+    ).repositoryFiles.map((file) => file.path),
+  ).toEqual(
+    expect.arrayContaining(["mcp/payments_api.toml", "mcp/helpdesk.toml"]),
+  );
+
+  const list = (userId: string) =>
+    listServerRulesFiles({ organizationId: org.id, userId });
+  const read = (userId: string, path: string) =>
+    readServerRulesFile({ organizationId: org.id, userId, path });
+  const paymentsFile = {
+    path: "mcp/payments_api.toml",
+    servers: [{ id: paymentsApi.id, name: "payments_api" }],
+  };
+
+  // The editor sees the file and may change it; the helpdesk stays hidden.
+  expect(await list(pat.id)).toEqual([{ ...paymentsFile, canEdit: true }]);
+  expect(await read(pat.id, "mcp/payments_api.toml")).toEqual({
+    entry: "mcp/payments_api.toml",
+    name: "mcp/payments_api.toml",
+    kind: "repository",
+    content: REFUNDS,
+  });
+  // A reader of the server reads its rules and may not change them.
+  expect(await list(sam.id)).toEqual([{ ...paymentsFile, canEdit: false }]);
+  // Lee may open both servers: one to edit, one to read.
+  expect(await list(lee.id)).toEqual(
+    expect.arrayContaining([
+      { ...paymentsFile, canEdit: false },
+      {
+        path: "mcp/helpdesk.toml",
+        servers: [{ id: helpdesk.id, name: "helpdesk" }],
+        canEdit: true,
+      },
+    ]),
+  );
+  expect((await read(lee.id, "mcp/helpdesk.toml")).content).toBe(helpdeskRules);
+
+  // Another server's file, the organization's own files and the root answer
+  // as a file that does not exist, to everyone without the registry's grant.
+  for (const path of [
+    "mcp/helpdesk.toml",
+    "shared/extra.toml",
+    "appa.toml",
+    "mcp/missing.toml",
+    "../appa.toml",
+  ])
+    await expect(read(sam.id, path)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  // Even an administrator reads only the servers' files here: the root has
+  // its own route, behind the Guardrails permission.
+  await expect(read(admin.id, "appa.toml")).rejects.toMatchObject({
+    statusCode: 404,
+  });
+  expect((await list(admin.id)).map((file) => file.path).sort()).toEqual([
+    "mcp/helpdesk.toml",
+    "mcp/payments_api.toml",
+  ]);
+
+  // Self-service off: the files are the organization's policy alone.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  expect((await getAppaSelfService(org.id)).enabled).toBe(false);
+  expect(await list(pat.id)).toEqual([]);
+  await expect(read(pat.id, "mcp/payments_api.toml")).rejects.toMatchObject({
+    statusCode: 404,
+  });
 });

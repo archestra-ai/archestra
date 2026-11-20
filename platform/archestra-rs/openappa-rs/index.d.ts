@@ -149,6 +149,26 @@ export interface CredentialDeclaration {
   line: number
 }
 
+export interface DeferredReturn {
+  /** The text the spawn's tool result carries in place of the subagent's answer. */
+  notice: string
+  /** What the session's control call quotes to take the answer, and to drop it. */
+  accept: string
+  discard: string
+}
+
+export interface DeferredReturnLookup {
+  organizationId: string
+  /** The session that proposed the spawn. */
+  sessionId: string
+  /** The provider's id of the spawn's tool call. */
+  spawnCallId: string
+  /** The control tool and reporting tool, spelled the way this session's model calls them. */
+  controlTool: string
+  supportsDelegation: boolean
+  yellTool?: string
+}
+
 export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
 /**
@@ -257,6 +277,13 @@ export declare function loadChildRejections(organizationId: string, parentSessio
  * nothing the client carries proves a return.
  */
 export declare function loadChildReturns(organizationId: string, parentSessionId: string, lookup?: ChildReturnLookup | undefined | null): Promise<Array<ChildReturnRecord>>
+
+/**
+ * The deferral notice of one spawn, from the stop that deferred its subagent's answer on,
+ * before and after the session decides. `None` for a spawn with no deferred return and for
+ * a session that never started.
+ */
+export declare function loadDeferredReturn(lookup: DeferredReturnLookup, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<DeferredReturn | null>
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.

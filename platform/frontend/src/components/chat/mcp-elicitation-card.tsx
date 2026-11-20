@@ -857,9 +857,10 @@ type CardQuestion = {
 };
 
 /**
- * Settled questions read as the exchange they were: the agent's question on
- * the left, in line with the thinking rows, and the answer on the right as a
- * small reply bubble. Questions without an answer show their outcome there.
+ * Settled questions read as the exchange they were: the agent's question in
+ * line with the thinking rows, and the outcome right beneath it in the same
+ * column. A picked answer carries a check rather than a filled pill, so it
+ * cannot pass for an unclicked button below an approval prompt.
  */
 function AnswerSummary({
   members,
@@ -871,101 +872,102 @@ function AnswerSummary({
   return (
     <ul aria-label={label} className="flex min-w-0 flex-col gap-4">
       {members.map((member) => (
-        <li key={member.toolCallId} className="flex min-w-0 flex-col gap-2">
-          <div className="flex min-w-0 max-w-[80%] items-start gap-2 pl-2">
-            <CircleHelpIcon
-              className="mt-1 size-4 shrink-0 text-muted-foreground"
-              aria-hidden
-            />
-            <div className="flex min-w-0 flex-col gap-2">
-              <AnsweredQuestionText question={member.question || "Question"} />
-              <OfferedOptions member={member} />
-            </div>
-          </div>
-          {member.outcome?.status === "answered" ? (
-            <div className="flex max-w-[80%] flex-col items-end gap-1 self-end">
-              <span className="whitespace-pre-wrap rounded-lg rounded-br-sm bg-primary/10 px-3 py-2 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
-                {getOutcomeSummary(member)}
-              </span>
-              {member.outcome.text !== undefined &&
-              member.outcome.selected.length === 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  Typed answer
-                </span>
-              ) : null}
-            </div>
-          ) : (
-            <span className="self-end text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {getOutcomeSummary(member)}
-            </span>
-          )}
-        </li>
+        <AnswerSummaryItem key={member.toolCallId} member={member} />
       ))}
     </ul>
   );
 }
 
 /**
- * The choices the agent offered, folded behind a link: the reply bubble
- * already shows the pick, so the full list is context on demand. Picked ones
- * carry a check; the rest stay muted.
+ * Answered questions show only the question and the chosen (or typed) answer.
+ * Unanswered outcomes (dismissed, declined, timed out, stopped) keep the
+ * offered choices folded behind a link as context on demand.
  */
-function OfferedOptions({ member }: { member: AskUserGroupMember }) {
+function AnswerSummaryItem({ member }: { member: AskUserGroupMember }) {
   const [expanded, setExpanded] = useState(false);
-  if (member.options.length === 0) return null;
-  const selected =
-    member.outcome?.status === "answered" ? member.outcome.selected : [];
+  const isAnswered = member.outcome?.status === "answered";
+  const summary = getOutcomeSummary(member);
+  const isTyped =
+    member.outcome?.status === "answered" && member.outcome.text !== undefined;
   const count = member.options.length;
+  const showOptionsToggle = !isAnswered && count > 0;
+  const separator = (
+    <span aria-hidden className="text-xs text-muted-foreground">
+      ·
+    </span>
+  );
+
   return (
-    <div className="flex min-w-0 flex-col items-start gap-1.5">
-      <Button
-        type="button"
-        variant="link"
-        size="xs"
-        className="h-auto px-0 text-muted-foreground"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <span>
-          {expanded
-            ? "Hide options"
-            : `Show ${count} ${count === 1 ? "option" : "options"}`}
-        </span>
-      </Button>
-      {expanded ? (
-        <OfferedOptionList member={member} selected={selected} />
-      ) : null}
-    </div>
+    <li className="flex min-w-0 max-w-[80%] items-start gap-2 pl-2">
+      <CircleHelpIcon
+        className="mt-1 size-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <AnsweredQuestionText question={member.question || "Question"} />
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          {isAnswered ? (
+            <span className="flex min-w-0 items-start gap-1.5">
+              <CheckIcon
+                className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                aria-hidden
+              />
+              <span className="whitespace-pre-wrap text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                {summary}
+              </span>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {summary}
+            </span>
+          )}
+          {isTyped ? (
+            <>
+              {separator}
+              <span className="text-xs text-muted-foreground">
+                Typed answer
+              </span>
+            </>
+          ) : null}
+          {showOptionsToggle ? (
+            <>
+              {separator}
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                className="h-auto px-0 text-muted-foreground"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((current) => !current)}
+              >
+                <span>
+                  {expanded
+                    ? "Hide options"
+                    : `Show ${count} ${count === 1 ? "option" : "options"}`}
+                </span>
+              </Button>
+            </>
+          ) : null}
+        </div>
+        {showOptionsToggle && expanded ? (
+          <OfferedOptionList options={member.options} />
+        ) : null}
+      </div>
+    </li>
   );
 }
 
-function OfferedOptionList({
-  member,
-  selected,
-}: {
-  member: AskUserGroupMember;
-  selected: string[];
-}) {
+function OfferedOptionList({ options }: { options: string[] }) {
   return (
     <ul aria-label="Offered options" className="flex flex-wrap gap-1.5">
-      {member.options.map((option) => {
-        const picked = selected.includes(option);
-        return (
-          <li
-            key={option}
-            aria-current={picked ? "true" : undefined}
-            className={cn(
-              "flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs [overflow-wrap:anywhere]",
-              picked
-                ? "border-primary/30 bg-primary/10 font-medium text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            {picked ? <CheckIcon className="size-3" aria-hidden /> : null}
-            {option}
-          </li>
-        );
-      })}
+      {options.map((option) => (
+        <li
+          key={option}
+          className="flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+        >
+          {option}
+        </li>
+      ))}
     </ul>
   );
 }

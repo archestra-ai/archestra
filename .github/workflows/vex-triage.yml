@@ -1,0 +1,192 @@
+name: VEX Triage
+run-name: Triage the vulnerabilities of ${{ inputs.project || 'every project' }} ${{ inputs.release_tags || '(latest releases)' }}
+
+# Starts the VEX Triage agent on staging for a release of each project in
+# .github/scripts/vex-triage.py: archestra, OpenAPPA and
+# terraform-provider-archestra (with its Crossplane package). The agent
+# (archestra-ai/infra, archestra/automation) scans the release's public images,
+# decides for each finding whether it affects the image as shipped, and opens
+# or updates one pull request from automation/vex-triage in that project's
+# repository, recording its decisions in vex/openvex.json. It never merges: a
+# person reviews every statement. Each project's releases then attest their
+# images' statements next to their SBOMs (archestra-ai/.github
+# release-publish.yml, vex-document).
+#
+# It runs from here for every project because the federated credential, the
+# Google account and the repository variables live here once.
+#
+# Weekly, for each project's latest stable release, because new advisories
+# arrive for images that did not change. archestra also triages its newest
+# release candidate when it is ahead of the stable line: main ships 1.N+1
+# release candidates while release/1.N ships patches, and customers run both.
+# One agent run covers both, since they share the document, branch and pull
+# request. Run it by hand for chosen releases.
+#
+# The job holds no Archestra API key and no GitHub credential beyond reading
+# public repositories. It trades its GitHub OIDC token for a one-hour token of
+# an Archestra service account that can only run that agent (workload identity
+# federation). The agent's own GitHub App token never leaves Archestra.
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Project whose release to triage.
+        type: choice
+        options: [archestra, openappa, terraform-provider-archestra]
+        default: archestra
+      release_tags:
+        description: "Published releases, separated by spaces, such as platform-v1.4.36 platform-v1.5.0-rc.40. Empty: the latest stable release (and release candidate)."
+        type: string
+        default: ""
+      test_alert:
+        description: Post a test message to #alerts and start nothing.
+        type: boolean
+        default: false
+
+permissions: {}
+
+# One triage per project at a time; a second waits instead of cancelling the
+# first. Only one run waits per group, so a group per project keeps a trigger
+# for one project from replacing a waiting trigger for another.
+concurrency:
+  group: vex-triage-${{ inputs.project || 'scheduled' }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Choose the projects
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && !inputs.test_alert
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Check out the script.
+    outputs:
+      projects: ${{ steps.projects.outputs.projects }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: List the projects
+        id: projects
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          projects="$(python3 .github/scripts/vex-triage.py projects)"
+          if [ -n "$PROJECT" ]; then
+            projects="$(jq -c --arg project "$PROJECT" 'map(select(.project == $project))' <<<"$projects")"
+          fi
+          jq -e 'length > 0' <<<"$projects" > /dev/null
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+
+  start:
+    name: Start the VEX Triage agent for ${{ matrix.project.project }}
+    needs: plan
+    # The Archestra service account and the Google account trust this file on
+    # main only; any other ref would be refused at sign-in.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out the scripts and read the releases.
+      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+    strategy:
+      fail-fast: false
+      # One run at a time: each run trades its own token, and the agent's
+      # spend cap is per run.
+      max-parallel: 1
+      matrix:
+        project: ${{ fromJSON(needs.plan.outputs.projects) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # A draft is not a release yet: its images are not published. The
+      # script checks the tag against the project's release tags.
+      - name: Choose the releases
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ matrix.project.repository }}
+          STABLE_TAG: ${{ matrix.project.stable_tag }}
+          RC_TAG: ${{ matrix.project.rc_tag }}
+          RELEASE_TAGS: ${{ inputs.release_tags }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_TAGS" ]; then
+            releases="$(gh release list --exclude-drafts --limit 200 --json tagName,isPrerelease)"
+            # The highest version, not the newest release: a patch to an older
+            # line (1.4.37 after 1.5.1) is published later but is not the latest.
+            highest='map(.tagName) | sort_by(sub("^[^0-9]*"; "") | [scan("[0-9]+") | tonumber]) | last // empty'
+            stable="$(jq -r --arg re "$STABLE_TAG" "[.[] | select(.isPrerelease | not) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
+            [ -n "$stable" ] || { echo "::error::No stable release of $GH_REPO."; exit 1; }
+            RELEASE_TAGS="$stable"
+            if [ -n "$RC_TAG" ]; then
+              rc="$(jq -r --arg re "$RC_TAG" "[.[] | select(.isPrerelease) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
+              # Only a candidate for a later version than the stable release:
+              # once 1.5.0 ships, 1.5.0-rc.N is behind it.
+              rc_version="${rc##*-v}"; rc_version="${rc_version%%-*}"; stable_version="${stable##*-v}"
+              if [ -n "$rc" ] && [ "$rc_version" != "$stable_version" ] \
+                && [ "$(printf '%s\n' "$rc_version" "$stable_version" | sort -V | tail -1)" = "$rc_version" ]; then
+                RELEASE_TAGS="$stable $rc"
+              fi
+            fi
+          fi
+          for tag in $RELEASE_TAGS; do
+            draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
+            [ "$draft" = false ] || { echo "::error::$tag of $GH_REPO is not published yet."; exit 1; }
+          done
+          echo "tags=$RELEASE_TAGS" >> "$GITHUB_OUTPUT"
+
+      # The staging API is private. This account can open the IAP tunnel to
+      # its TLS forwarder and nothing else.
+      - name: Authenticate to Google Cloud
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
+        with:
+          service_account: ${{ vars.VEX_TRIAGE_GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Open the staging API tunnel
+        run: .github/scripts/staging-api-tunnel.sh
+
+      - name: Start the agent run
+        env:
+          PROJECT: ${{ matrix.project.project }}
+          RELEASE_TAGS: ${{ steps.release.outputs.tags }}
+          BASE_URL: https://backend.archestra.dev
+          PUBLIC_URL: https://frontend.archestra.dev
+          SERVICE_ACCOUNT_ID: ${{ vars.VEX_TRIAGE_SERVICE_ACCOUNT_ID }}
+          AGENT_ID: ${{ vars.VEX_TRIAGE_AGENT_ID }}
+        run: python3 .github/scripts/vex-triage.py
+
+  # A failure here means no agent run started, so the Grafana runtime alerts
+  # (archestra-ai/infra services/runtime-alert-context) never see it.
+  notify:
+    name: Report a failure to start
+    needs: [plan, start]
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (needs.plan.result == 'failure' || needs.start.result == 'failure' || inputs.test_alert) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Post to #alerts
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: "VEX Triage did not start for the projects below, so their releases were not triaged this time."
+          test: ${{ inputs.test_alert || 'false' }}
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

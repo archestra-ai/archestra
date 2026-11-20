@@ -165,6 +165,22 @@ export const AppaGithubAppGrantsSchema = z.object({
 });
 
 /**
+ * The grants, each with whether the App's settings ask for it now. Asked
+ * for and not granted: the installation has still to accept the change.
+ * `requested` is absent when the settings were not read.
+ */
+export const AppaGithubAppPermissionsSchema = AppaGithubAppGrantsSchema.extend({
+  permissions: z.array(
+    AppaGithubAppGrantsSchema.shape.permissions.element.extend({
+      requested: z.boolean().optional(),
+    }),
+  ),
+});
+export type AppaGithubAppPermissions = z.infer<
+  typeof AppaGithubAppPermissionsSchema
+>;
+
+/**
  * The branch ruleset an administrator imports on the policy repository, as
  * GitHub's "Import a ruleset" takes it: one rule, the policy check required
  * from the GitHub App that posts it.
@@ -381,4 +397,21 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
 /** Whether the caller's organization lets server editors change their own rules now. */
 export const AppaSelfServiceAvailabilitySchema = z.object({
   enabled: z.boolean(),
+});
+
+/**
+ * The servers' rules files a member may open on the Policy page without a
+ * Guardrails permission.
+ */
+export const ServerRulesFilesSchema = z.object({
+  files: z.array(
+    z.object({
+      /** The file's include path, such as `mcp/payments_api.toml`. */
+      path: z.string(),
+      /** The MCP servers it governs that the member may open. */
+      servers: z.array(z.object({ id: z.string(), name: z.string() })),
+      /** Whether the member may change it from the MCP registry. */
+      canEdit: z.boolean(),
+    }),
+  ),
 });

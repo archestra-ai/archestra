@@ -110,15 +110,25 @@ describe("RoleCreatePage", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "QA" },
     });
-    const startFrom = await screen.findByRole("radiogroup", {
-      name: "Start from",
+    const howToStart = await screen.findByRole("radiogroup", {
+      name: "How to start",
+    });
+    // Copying is offered once the organization's custom roles have loaded.
+    const copy = within(howToStart).getByRole("radio", {
+      name: /Copy a custom role/,
+    });
+    await waitFor(() => expect(copy).toBeEnabled());
+    fireEvent.click(copy);
+    const customRoles = screen.getByRole("radiogroup", {
+      name: "Custom roles",
     });
     fireEvent.click(
-      await within(startFrom).findByRole("radio", { name: /Reviewer/ }),
+      within(customRoles).getByRole("radio", { name: /Reviewer/ }),
     );
     expect(
-      within(startFrom).getByRole("radio", { name: /Reviewer.*2 permissions/ }),
+      within(customRoles).getByRole("radio", { name: /Reviewer/ }),
     ).toBeChecked();
+    expect(screen.getByText(/starts with 2 of \d+ permissions/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Permissions" }));
     const agents = await screen.findByRole("region", { name: "Agents" });
@@ -142,7 +152,7 @@ describe("RoleCreatePage", () => {
 
   it("will not create a role without a name or without any permission", async () => {
     renderPage();
-    await screen.findByRole("radiogroup", { name: "Start from" });
+    await screen.findByRole("radiogroup", { name: "How to start" });
     fireEvent.click(screen.getByRole("button", { name: "Permissions" }));
     // The name is checked before the step changes.
     expect(await screen.findByText("Name is required")).toBeVisible();
@@ -156,22 +166,55 @@ describe("RoleCreatePage", () => {
     expect(screen.getByRole("button", { name: "Create role" })).toBeDisabled();
   });
 
-  it("preselects the role a deep link names", async () => {
+  it("opens on the preset a deep link names", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("from=member") as never,
     );
     renderPage();
-    const startFrom = await screen.findByRole("radiogroup", {
-      name: "Start from",
+    const presets = await screen.findByRole("radiogroup", {
+      name: "Preset roles",
     });
-    await waitFor(() =>
-      expect(
-        within(startFrom).getByRole("radio", { name: /member/i }),
-      ).toBeChecked(),
-    );
+    expect(
+      within(presets).getByRole("radio", { name: /Member/ }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: /Start from a preset/ }),
+    ).toBeChecked();
   });
 
-  it("keeps the first roles in view and reveals the rest on request", async () => {
+  it("starts blank until a custom role is picked, and offers no copy without any", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/roles`, () =>
+        HttpResponse.json({
+          data: [roles[0]],
+          pagination: {
+            currentPage: 1,
+            limit: 100,
+            total: 1,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }),
+      ),
+    );
+    renderPage();
+    const howToStart = await screen.findByRole("radiogroup", {
+      name: "How to start",
+    });
+    expect(
+      within(howToStart).getByRole("radio", { name: /Start blank/ }),
+    ).toBeChecked();
+    await screen.findByRole("radio", { name: /Start from a preset/ });
+    expect(
+      within(howToStart).getByRole("radio", {
+        name: /Copy a custom role.*No custom roles yet/,
+      }),
+    ).toBeDisabled();
+    expect(screen.getByText("0 permissions selected")).toBeVisible();
+  });
+
+  it("keeps the chosen custom role in view while a search filters the rest", async () => {
     const many = Array.from({ length: 9 }, (_, index) => ({
       id: `custom-${index}`,
       name: `Custom ${index}`,
@@ -195,23 +238,30 @@ describe("RoleCreatePage", () => {
         }),
       ),
     );
-    renderPage();
-    const startFrom = await screen.findByRole("radiogroup", {
-      name: "Start from",
-    });
-    // Built-in first, then three custom ones: Blank plus four fill the first
-    // five boxes, and the sixth counts the rest.
-    await within(startFrom).findByRole("radio", { name: /member/i });
-    expect(within(startFrom).getAllByRole("radio")).toHaveLength(5);
-    expect(
-      within(startFrom).queryByRole("radio", { name: /Custom 7/ }),
-    ).toBeNull();
-    fireEvent.click(
-      within(startFrom).getByRole("button", { name: /6 more roles/ }),
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("from=custom-7") as never,
     );
-    expect(within(startFrom).getAllByRole("radio")).toHaveLength(11);
+    renderPage();
+    const customRoles = await screen.findByRole("radiogroup", {
+      name: "Custom roles",
+    });
     expect(
-      within(startFrom).getByRole("radio", { name: /Custom 7/ }),
+      within(customRoles).getByRole("radio", { name: /Custom 7/ }),
+    ).toBeChecked();
+
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search custom roles" }),
+      { target: { value: "Custom 2" } },
+    );
+    expect(
+      within(customRoles).getByRole("radio", { name: /Custom 2/ }),
     ).toBeVisible();
+    expect(
+      within(customRoles).queryByRole("radio", { name: /Custom 3/ }),
+    ).toBeNull();
+    // Still listed, though it no longer matches: the selection never hides.
+    expect(
+      within(customRoles).getByRole("radio", { name: /Custom 7/ }),
+    ).toBeChecked();
   });
 });

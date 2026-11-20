@@ -292,6 +292,7 @@ export const RouteId = {
   GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
   GetLlmProxyLogSessions: "getLlmProxyLogSessions",
   GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionChatErrors: "getLlmProxyLogSessionChatErrors",
   GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
   GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
   GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
@@ -490,6 +491,12 @@ export const RouteId = {
 
   // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
   // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotMessagesWithDefaultAgent:
+    "githubCopilotMessagesWithDefaultAgent",
+  GithubCopilotMessagesWithAgent: "githubCopilotMessagesWithAgent",
+  GithubCopilotCountTokensWithDefaultAgent:
+    "githubCopilotCountTokensWithDefaultAgent",
+  GithubCopilotCountTokensWithAgent: "githubCopilotCountTokensWithAgent",
   GithubCopilotResponsesWithDefaultAgent:
     "githubCopilotResponsesWithDefaultAgent",
   GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
@@ -691,6 +698,11 @@ export const RouteId = {
 
   // Unified OAuth Client Routes
   GetOauthClients: "getOauthClients",
+  GetOauthClient: "getOauthClient",
+  GetOauthClientFederatedCredentials: "getOauthClientFederatedCredentials",
+  CreateOauthClientFederatedCredential: "createOauthClientFederatedCredential",
+  UpdateOauthClientFederatedCredential: "updateOauthClientFederatedCredential",
+  DeleteOauthClientFederatedCredential: "deleteOauthClientFederatedCredential",
   GetOauthClientLabelKeys: "oauthClientLabelKeys",
   GetOauthClientLabelValues: "oauthClientLabelValues",
   CreateOauthClient: "createOauthClient",
@@ -760,6 +772,8 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetMcpRuntimeTiers: "getMcpRuntimeTiers",
+  UpdateMcpRuntimeTiers: "updateMcpRuntimeTiers",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
   GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 
@@ -1023,7 +1037,10 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaGithubAppPermissions: "getAppaGithubAppPermissions",
   GetAppaSelfService: "getAppaSelfService",
+  GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
+  GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",
@@ -1069,6 +1086,7 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaGuardrailEvents: "getOpenappaGuardrailEvents",
   GetOpenappaExternalConsult: "getOpenappaExternalConsult",
   GetOpenappaLabelChanges: "getOpenappaLabelChanges",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
@@ -1190,11 +1208,13 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  ReportCursorHookEvent: "reportCursorHookEvent",
   GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
+  GetDisconnectReference: "getDisconnectReference",
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
   GetAgentAdoptionUsage: "getAgentAdoptionUsage",

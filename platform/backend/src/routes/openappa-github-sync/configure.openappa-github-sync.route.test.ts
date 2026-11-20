@@ -2137,6 +2137,25 @@ describe("APPA GitHub sync", () => {
     });
     expect(include.statusCode, include.body).toBe(200);
     expect(opened).toHaveLength(1);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      // The record keeps the sync settings and marks the request beside them.
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          before: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: false,
+          }),
+          after: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: true,
+          }),
+        }),
+      );
+    });
     // The minute's round checks the setup pull request like any other: the
     // policy it carries is judged, with or without a rule that requires
     // the check, so it can merge once the check passes.
@@ -2562,6 +2581,22 @@ describe("APPA GitHub sync", () => {
       .where(eq(schema.membersTable.userId, adminId));
     expect((await configure()).statusCode).toBe(403);
     expect((await action({ action: "disconnect" })).statusCode).toBe(403);
+  });
+
+  test("the App's permissions read answers null without a GitHub App source, and takes the permission to read organization settings", async () => {
+    const read = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/openappa/github-sync/app-permissions",
+      });
+    await configure();
+    const response = await read();
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toBeNull();
+    await db
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.userId, adminId));
+    expect((await read()).statusCode).toBe(403);
   });
 
   test("oversized or failed GitHub downloads preserve the active policy", async () => {

@@ -5,6 +5,7 @@ import config from "@/config";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { UnapprovableBlockMode } from "@/types/guardrails-policy";
 import type { OpenAppaSession } from "./service";
@@ -71,6 +72,9 @@ export async function softBlocksAllowed(): Promise<boolean> {
 }
 // SPDX-SnippetEnd
 
+// The runtime renders the missing marks as `requires attention: <mark>, …`;
+// the reserved mark is `blocked`, which an upstream OpenAPPA prototype renames
+// `hard-block` (653c7e3b0), and a miss here would let a hard block through.
 export function isHardBlock(message: string): boolean {
   return /requires attention: [^\n]*\b(?:blocked|hard-block)\b/.test(message);
 }
@@ -118,6 +122,7 @@ export async function waiveSoftBlock(
         ].join("\n\n"),
         superyell: true,
       });
+      observeOpenappaYell({ kind: "block_waived", superyell: true });
     } catch (error) {
       logger.warn(
         { err: error },

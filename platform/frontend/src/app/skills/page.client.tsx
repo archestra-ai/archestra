@@ -89,7 +89,7 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
   useSkillLabelKeys,
@@ -212,14 +212,20 @@ function SkillsList() {
     (searchParams.get("sortBy") as SkillSortBy | null) || "usageCount";
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
-  const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
-  const { data: canOpenPluginDetails } = useHasPermissions(
-    { plugin: ["read", "update"] },
-    "*",
-  );
-  const pluginSkillsEnabled = canReadPlugins === true;
+  const hasPluginReadGrant =
+    scopedCapabilities.data?.some(
+      (grant) => grant.resource === "plugin" && grant.action === "read",
+    ) ?? false;
+  const canOpenPluginDetails = (pluginId: string) =>
+    holdsItemGrant({
+      grants: scopedCapabilities.data,
+      resource: "plugin",
+      action: "read",
+      id: pluginId,
+    });
+  const pluginSkillsEnabled = canReadPlugins === true || hasPluginReadGrant;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind = hasImportFilter
     ? "standalone"
@@ -228,17 +234,13 @@ function SkillsList() {
         kindParam === "plugin"
       ? kindParam
       : "all";
-  const kind: SkillKind =
-    isDeletedView || (!mcpSkillsEnabled && !pluginSkillsEnabled)
-      ? "standalone"
-      : requestedKind === "mcp" && !mcpSkillsEnabled
-        ? "all"
-        : requestedKind === "plugin" && !pluginSkillsEnabled
-          ? "all"
-          : requestedKind;
+  const kind: SkillKind = isDeletedView
+    ? "standalone"
+    : requestedKind === "plugin" && !pluginSkillsEnabled
+      ? "all"
+      : requestedKind;
   const showStandaloneSkills = kind === "all" || kind === "standalone";
-  const showMcpSkills =
-    mcpSkillsEnabled && !isDeletedView && (kind === "all" || kind === "mcp");
+  const showMcpSkills = !isDeletedView && (kind === "all" || kind === "mcp");
   const showPluginSkills =
     pluginSkillsEnabled &&
     !isDeletedView &&
@@ -535,9 +537,7 @@ function SkillsList() {
     Boolean(labelsFilter) ||
     scopeFilter.hasActiveScopeFilters ||
     isDeletedView ||
-    ((mcpSkillsEnabled || pluginSkillsEnabled) &&
-      !isDeletedView &&
-      kind !== "all");
+    kind !== "all";
   const hasVisibleSkills =
     (showStandaloneSkills && totalStandaloneSkills > 0) ||
     (showMcpSkills && visibleExternalSkills.length > 0) ||
@@ -742,9 +742,8 @@ function SkillsList() {
               icon: <Puzzle className="h-4 w-4" />,
               label: "Manage plugin",
               href: `/plugins/${item.skill.pluginId}`,
-              // Managing a plugin needs `update` on every plugin.
               permissions: { plugin: ["update"] },
-              permissionScope: "*",
+              permissionScope: item.skill.pluginId,
             },
           ];
 
@@ -783,7 +782,10 @@ function SkillsList() {
       header: "Source",
       cell: ({ row }) => {
         const source = listedSkillSource(row.original);
-        if (row.original.source === "plugin" && canOpenPluginDetails) {
+        if (
+          row.original.source === "plugin" &&
+          canOpenPluginDetails(row.original.skill.pluginId)
+        ) {
           return (
             <RowClickShield className="min-w-0">
               <Link
@@ -970,38 +972,35 @@ function SkillsList() {
                   {!isDeletedView && (
                     <ResourceAccessFilter resource="skill" noun="skills" />
                   )}
-                  {(mcpSkillsEnabled || pluginSkillsEnabled) &&
-                    !isDeletedView && (
-                      <Select value={kind} onValueChange={setKindFilter}>
-                        <SelectTrigger
-                          size="sm"
-                          aria-label="Filter by skill source"
-                          className={filterControlClass({
-                            active: kind !== "all",
-                          })}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent
-                          position="popper"
-                          side="bottom"
-                          align="start"
-                        >
-                          <SelectItem value="all">All kinds</SelectItem>
-                          <SelectItem value="standalone">
-                            Standalone skills
+                  {!isDeletedView && (
+                    <Select value={kind} onValueChange={setKindFilter}>
+                      <SelectTrigger
+                        size="sm"
+                        aria-label="Filter by skill source"
+                        className={filterControlClass({
+                          active: kind !== "all",
+                        })}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        side="bottom"
+                        align="start"
+                      >
+                        <SelectItem value="all">All kinds</SelectItem>
+                        <SelectItem value="standalone">
+                          Standalone skills
+                        </SelectItem>
+                        <SelectItem value="mcp">MCP skills</SelectItem>
+                        {pluginSkillsEnabled && (
+                          <SelectItem value="plugin">
+                            Skills from plugins
                           </SelectItem>
-                          {mcpSkillsEnabled && (
-                            <SelectItem value="mcp">MCP skills</SelectItem>
-                          )}
-                          {pluginSkillsEnabled && (
-                            <SelectItem value="plugin">
-                              Skills from plugins
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
                     checker has no `skill:delete` boolean, so this shows the
@@ -1129,7 +1128,8 @@ function SkillsList() {
                             <ListedSkillSourceBadge
                               item={item}
                               canOpenPluginDetails={
-                                canOpenPluginDetails === true
+                                item.source === "plugin" &&
+                                canOpenPluginDetails(item.skill.pluginId)
                               }
                             />
                             {standalone ? (

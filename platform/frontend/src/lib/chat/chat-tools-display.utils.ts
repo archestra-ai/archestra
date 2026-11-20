@@ -14,11 +14,6 @@ import {
 } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
-const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
-  "preview_guardrails_policy_change",
-  "preview_guardrails_validation_change",
-]);
-
 /**
  * Compute the default set of enabled tool IDs for a conversation.
  * All tools assigned to the agent are enabled by default.
@@ -106,13 +101,20 @@ export function getToolHeaderState({
   return state;
 }
 
+export type CompactToolState =
+  | "running"
+  | "approval-requested"
+  | "completed"
+  | "error"
+  | "denied";
+
 export function getCompactToolState({
   part,
   toolResultPart,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
-}): "running" | "completed" | "error" | "denied" {
+}): CompactToolState {
   if (getToolErrorText({ part, toolResultPart })) {
     return "error";
   }
@@ -131,6 +133,10 @@ export function getCompactToolState({
   // "running" and render a blue pulsing dot forever. Surface it as "denied".
   if (part.state === "output-denied") {
     return "denied";
+  }
+
+  if (part.state === "approval-requested") {
+    return "approval-requested";
   }
 
   return "running";
@@ -153,63 +159,67 @@ export function getHumanRulingDisplay({
   return { ruling, label: HUMAN_RULING_LABELS[ruling] };
 }
 
+/**
+ * Whether a tool call renders as a circle in `CompactToolGroup` rather than
+ * a standalone interactive widget. Only `todo_write` stays outside the circle
+ * row (along with `ask_user` via `nonCompactToolNames`); approvals, auth
+ * prompts, and no-device prompts all render under their own circle.
+ */
 export function isCompactEligible(params: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
 }): boolean {
-  const { part, toolResultPart, toolName, getToolShortName } = params;
+  const { toolName, getToolShortName } = params;
 
   const shortName = getToolShortName?.(toolName);
   if (shortName === TOOL_TODO_WRITE_SHORT_NAME) {
     return false;
   }
 
-  if (part.state === "approval-requested") {
-    return false;
-  }
+  return true;
+}
 
+/**
+ * Whether a tool call carries an authentication or no-device prompt that must
+ * stay visible under its circle (and prevents an MCP App call from mounting as
+ * an app pill).
+ */
+export function hasToolAuthOrNoDevicePrompt(params: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+}): boolean {
+  const { part, toolResultPart } = params;
   const errorText = getToolErrorText({ part, toolResultPart });
-  const structuredError = extractMcpToolError(
-    toolResultPart?.output ?? part.output,
-  );
+  const rawOutput = toolResultPart?.output ?? part.output;
+  const structuredError = extractMcpToolError(rawOutput);
+
   if (errorText) {
     if (
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"
     ) {
-      return false;
+      return true;
     }
 
     if (isAuthErrorText(errorText, toolResultPart ?? part)) {
-      return false;
+      return true;
     }
 
-    // No device runs the MCP bridge: the card that sets it up stays open.
-    if (isNoDeviceError({ errorText })) {
-      return false;
+    if (isNoDeviceError({ errorText, rawOutput })) {
+      return true;
     }
-
-    return true;
   }
 
-  // A proposed policy is what the operator is asked to approve: its preview
-  // stays open in the reply instead of folding into a circle. A saved change
-  // folds as usual; its banner reports the save.
-  if (shortName && POLICY_PREVIEW_TOOL_SHORT_NAMES.has(shortName)) {
-    return false;
-  }
-
-  const rawOutput = toolResultPart?.output ?? part.output;
   if (typeof rawOutput === "string") {
     if (isAuthErrorText(rawOutput, toolResultPart ?? part)) {
-      return false;
+      return true;
     }
   }
 
-  return true;
+  return false;
 }
 
 /**

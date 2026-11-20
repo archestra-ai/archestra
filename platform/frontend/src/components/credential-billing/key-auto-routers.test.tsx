@@ -5,7 +5,6 @@ import { KeyAutoRouters } from "@/components/credential-billing/key-auto-routers
 import { useAutoRouters } from "@/lib/auto-routing.query";
 
 vi.mock("@/lib/auto-routing.query");
-vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
 
 const tier = (modelId: string) => ({
   id: modelId,

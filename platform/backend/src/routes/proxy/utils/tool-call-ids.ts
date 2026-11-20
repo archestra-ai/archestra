@@ -80,6 +80,54 @@ function openAiToolCallId(id: string): string {
 
 // `call_` and 32 hex digits: 37 characters, which also fits the 40-character
 // limit older reports give for Chat Completions.
-function digestToolCallId(id: string): string {
+export function digestToolCallId(id: string): string {
   return `call_${createHash("sha256").update(id).digest("hex").slice(0, 32)}`;
 }
+
+/**
+ * Gemini 3 rejects conversation history whose functionCall parts lack the
+ * thoughtSignature they were produced with. The OpenAI chat wire format has
+ * no field to carry one, but clients echo tool-call ids verbatim — so the
+ * signature rides inside the id on the way to the client and is unpacked
+ * (and stripped) on the way back upstream.
+ */
+export function encodeSignedToolCallId(params: {
+  id: string | undefined;
+  name: string | undefined;
+  thoughtSignature: string | undefined;
+}): string {
+  const base = params.id ?? `gemini-call-${params.name ?? "fn"}-${Date.now()}`;
+  if (!params.thoughtSignature) {
+    return base;
+  }
+  const encoded = Buffer.from(params.thoughtSignature, "utf8").toString(
+    "base64url",
+  );
+  return `${SIGNED_TOOL_CALL_ID_PREFIX}${encoded}.${base}`;
+}
+
+export function decodeSignedToolCallId(id: string | undefined): {
+  id: string | undefined;
+  thoughtSignature: string | undefined;
+} {
+  if (!id?.startsWith(SIGNED_TOOL_CALL_ID_PREFIX)) {
+    return { id, thoughtSignature: undefined };
+  }
+  const rest = id.slice(SIGNED_TOOL_CALL_ID_PREFIX.length);
+  const dot = rest.indexOf(".");
+  if (dot < 0) {
+    return { id, thoughtSignature: undefined };
+  }
+  try {
+    return {
+      id: rest.slice(dot + 1),
+      thoughtSignature: Buffer.from(rest.slice(0, dot), "base64url").toString(
+        "utf8",
+      ),
+    };
+  } catch {
+    return { id, thoughtSignature: undefined };
+  }
+}
+
+const SIGNED_TOOL_CALL_ID_PREFIX = "gemsig-";

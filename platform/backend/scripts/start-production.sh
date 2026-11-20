@@ -13,6 +13,7 @@ set -eu
 #   intended for targeted near-OOM investigations
 #
 # Node CLI references:
+# https://nodejs.org/api/cli.html#--enable-source-maps
 # https://nodejs.org/api/cli.html#--report-on-fatalerror
 # https://nodejs.org/api/cli.html#--report-uncaught-exception
 # https://nodejs.org/api/cli.html#--diagnostic-dirdirectory
@@ -37,10 +38,28 @@ node_max_old_space_size_mib=$(
 )
 
 set -- \
-  --enable-source-maps \
   --report-on-fatalerror \
   --report-uncaught-exception \
   --diagnostic-dir="$ARCHESTRA_NODE_DIAGNOSTIC_DIR"
+
+# Source maps put TypeScript files and lines in logged stack traces. Node keeps
+# every loaded chunk's decoded map in memory (about 250 MB), so the Docker
+# quickstart, where nobody reads those logs, runs without them. Error reports
+# are symbolicated from the maps uploaded at build time either way.
+source_maps_default=true
+if [ "${ARCHESTRA_QUICKSTART:-}" = "true" ]; then
+  source_maps_default=false
+fi
+case "${ARCHESTRA_NODE_SOURCE_MAPS:-$source_maps_default}" in
+  true) set -- --enable-source-maps "$@" ;;
+  false) ;;
+  *)
+    echo "WARNING: invalid ARCHESTRA_NODE_SOURCE_MAPS value '${ARCHESTRA_NODE_SOURCE_MAPS}', using ${source_maps_default}" >&2
+    if [ "$source_maps_default" = "true" ]; then
+      set -- --enable-source-maps "$@"
+    fi
+    ;;
+esac
 
 if [ -n "$node_max_old_space_size_mib" ]; then
   echo "Configuring Node old-space limit: ${node_max_old_space_size_mib} MiB"

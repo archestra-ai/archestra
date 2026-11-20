@@ -416,6 +416,54 @@ describe("chat model routes", () => {
     expect(freeById("google/lyria-3-pro-preview")).toBe(false);
   });
 
+  test("GET /api/llm-models/available gives a member each model's limits, reasoning levels and endpoints", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: user.id,
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-5.4",
+      provider: "openai",
+      modelId: "gpt-5.4",
+      contextLength: 1_000_000,
+      customContextLength: 1_050_000,
+      outputLength: 128_000,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [{ id: model.id, modelId: model.modelId }],
+      "openai",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const listed = (
+      response.json() as Array<{ id: string; capabilities: unknown }>
+    ).find((entry) => entry.id === "gpt-5.4");
+    expect(listed?.capabilities).toMatchObject({
+      contextLength: 1_050_000,
+      outputLength: 128_000,
+      inputModalities: ["text", "image"],
+      supportsToolCalling: true,
+      supportsReasoningEffort: true,
+      supportedReasoningEfforts: ["low", "medium", "high"],
+      supportedEndpoints: ["/chat/completions", "/responses"],
+    });
+  });
+
   test("GET /api/llm-models/available disambiguates stored names that still collide", async ({
     makeSecret,
     makeLlmProviderApiKey,

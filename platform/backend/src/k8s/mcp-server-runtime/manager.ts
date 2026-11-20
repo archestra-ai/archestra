@@ -11,6 +11,7 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   isK8sNotFoundError,
+  isKubeconfigFilePending,
   loadKubeConfig,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -347,6 +348,12 @@ export class McpServerRuntimeManager {
   private resolveDeploymentNamesAdopted!: () => void;
   private rejectDeploymentNamesAdopted!: (error: Error) => void;
 
+  // Set when the kubeconfig did not exist yet at construction; settled once
+  // start() has loaded the clients, failed to, or given up.
+  private clientsDeferred = false;
+  private clientsSettled: Promise<void> = Promise.resolve();
+  private settleClients: () => void = () => {};
+
   // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
@@ -360,48 +367,17 @@ export class McpServerRuntimeManager {
     // surface as an unhandled rejection.
     this.deploymentNamesAdopted.catch(() => {});
 
-    try {
-      const { kubeConfig, namespace } = loadKubeConfig();
-      const clients = createK8sClients(kubeConfig, namespace);
-
-      // Retained for the deployment-state watch streams (k8s.Watch takes the
-      // config, not a generated API client).
-      this.kubeConfig = kubeConfig;
-      this.k8sApi = clients.coreApi;
-      this.k8sAppsApi = clients.appsApi;
-      this.k8sAuthApi = clients.authApi;
-      this.k8sRbacApi = clients.rbacApi;
-      this.k8sNetworkingApi = clients.networkingApi;
-      this.k8sCustomObjectsApi = clients.customObjectsApi;
-      this.k8sAttach = clients.attach;
-      this.k8sExec = clients.exec;
-      this.k8sLog = clients.log;
-      this.namespace = clients.namespace;
-    } catch (error) {
-      if (config.orchestrator.enabled !== false) {
-        logger.error({ err: error }, "Failed to load Kubernetes config");
-      } else {
-        logger.info(
-          "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
-        );
-      }
-      this.rejectDeploymentNamesAdopted(
-        new Error(
-          "Kubernetes runtime failed to initialize; deployment names were not adopted",
-        ),
-      );
-      this.status = "error";
-      this.k8sApi = undefined;
-      this.k8sAppsApi = undefined;
-      this.k8sAuthApi = undefined;
-      this.k8sRbacApi = undefined;
-      this.k8sNetworkingApi = undefined;
-      this.k8sCustomObjectsApi = undefined;
-      this.k8sAttach = undefined;
-      this.k8sLog = undefined;
-      this.namespace = "";
-      return; // graceful fallback: constructor completes with runtime disabled
+    // A kubeconfig that another process writes once its cluster answers (the
+    // Docker quickstart's embedded KinD cluster) may not exist yet. The runtime
+    // stays enabled, and start() waits for the file.
+    if (isKubeconfigFilePending()) {
+      this.clientsDeferred = true;
+      this.clientsSettled = new Promise((resolve) => {
+        this.settleClients = resolve;
+      });
+      return;
     }
+    this.loadClients();
   }
 
   /**
@@ -418,6 +394,7 @@ export class McpServerRuntimeManager {
   }
 
   async validateNamespace(namespaceName: string): Promise<void> {
+    await this.waitForClients();
     if (!this.k8sAuthApi) {
       throw new Error("Kubernetes API client not initialized");
     }
@@ -434,6 +411,19 @@ export class McpServerRuntimeManager {
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
+    if (!this.k8sApi && this.status === "not_initialized") {
+      try {
+        if (
+          isKubeconfigFilePending() &&
+          !(await this.waitForKubeconfigFile())
+        ) {
+          return;
+        }
+        if (!this.loadClients()) return;
+      } finally {
+        this.settleClients();
+      }
+    }
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
@@ -864,6 +854,7 @@ export class McpServerRuntimeManager {
       resolvedCredentials?: Awaited<ReturnType<typeof resolveMcpCredentials>>;
     },
   ): Promise<void> {
+    await this.waitForClients();
     if (
       mcpServer.catalogId === PLAYWRIGHT_MCP_CATALOG_ID &&
       !(await PlaywrightRuntimeModel.isEnabled())
@@ -2547,13 +2538,17 @@ export class McpServerRuntimeManager {
           // Priority & Fairness throttling (429s).
           deployments,
           K8S_API_FANOUT_CONCURRENCY,
-          async ([, deployment]) => {
+          async ([mcpServerId, deployment]) => {
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
             const before = deployment.statusSummary;
             // SPDX-SnippetEnd
             await deployment.refreshState();
+            await this.reloadIfReplacedByAnotherProcess(
+              mcpServerId,
+              deployment,
+            );
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -4600,6 +4595,30 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Another process restarted this install: the Deployment under its name is
+   * a new one. The cached object still holds the catalog row, install row and
+   * endpoint it was built from, so rebuild it from the current rows — the same
+   * load a process does the first time it meets an install.
+   */
+  private async reloadIfReplacedByAnotherProcess(
+    mcpServerId: string,
+    deployment: K8sDeployment,
+  ): Promise<void> {
+    if (
+      !deployment.wasReplacedByAnotherProcess ||
+      this.mcpServerIdToDeploymentMap.get(mcpServerId) !== deployment
+    ) {
+      return;
+    }
+    logger.info(
+      { mcpServerId },
+      "MCP server deployment was replaced by another process; reloading it",
+    );
+    this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+    await this.getOrLoadDeployment(mcpServerId);
+  }
+
+  /**
    * Coalesce bursts of watch events (a rollout emits many per pod) into one
    * refreshAllStates() sweep, then notify listeners so fresh states are
    * pushed to websocket subscribers immediately.
@@ -4713,6 +4732,95 @@ export class McpServerRuntimeManager {
       ? { coreApi: this.k8sApi, namespace: this.namespace }
       : undefined;
   }
+
+  /**
+   * Builds the Kubernetes clients from the configured kubeconfig. On failure
+   * the runtime is disabled (status `error`) and the method returns false.
+   */
+  private loadClients(): boolean {
+    try {
+      const { kubeConfig, namespace } = loadKubeConfig();
+      const clients = createK8sClients(kubeConfig, namespace);
+
+      // Retained for the deployment-state watch streams (k8s.Watch takes the
+      // config, not a generated API client).
+      this.kubeConfig = kubeConfig;
+      this.k8sApi = clients.coreApi;
+      this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthApi = clients.authApi;
+      this.k8sRbacApi = clients.rbacApi;
+      this.k8sNetworkingApi = clients.networkingApi;
+      this.k8sCustomObjectsApi = clients.customObjectsApi;
+      this.k8sAttach = clients.attach;
+      this.k8sExec = clients.exec;
+      this.k8sLog = clients.log;
+      this.namespace = clients.namespace;
+      return true;
+    } catch (error) {
+      if (config.orchestrator.enabled !== false) {
+        logger.error({ err: error }, "Failed to load Kubernetes config");
+      } else {
+        logger.info(
+          "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
+        );
+      }
+      this.rejectDeploymentNamesAdopted(
+        new Error(
+          "Kubernetes runtime failed to initialize; deployment names were not adopted",
+        ),
+      );
+      this.status = "error";
+      this.k8sApi = undefined;
+      this.k8sAppsApi = undefined;
+      this.k8sAuthApi = undefined;
+      this.k8sRbacApi = undefined;
+      this.k8sNetworkingApi = undefined;
+      this.k8sCustomObjectsApi = undefined;
+      this.k8sAttach = undefined;
+      this.k8sLog = undefined;
+      this.namespace = "";
+      return false; // graceful fallback: the runtime stays disabled
+    }
+  }
+
+  /**
+   * Waits until the configured kubeconfig file exists, at most
+   * KUBECONFIG_WAIT_TIMEOUT_MS. Returns false when the runtime is stopped
+   * meanwhile.
+   */
+  private async waitForKubeconfigFile(): Promise<boolean> {
+    logger.info(
+      { kubeconfig: config.orchestrator.kubernetes.kubeconfig },
+      "Waiting for the Kubernetes config; the MCP Server Runtime starts when it exists",
+    );
+    const deadline = Date.now() + KUBECONFIG_WAIT_TIMEOUT_MS;
+    while (isKubeconfigFilePending() && Date.now() < deadline) {
+      if (this.status === "stopped") return false;
+      await new Promise((resolve) =>
+        setTimeout(resolve, KUBECONFIG_WAIT_POLL_MS),
+      );
+    }
+    return this.status !== "stopped";
+  }
+
+  /**
+   * While the kubeconfig is still being written (the Docker quickstart starts
+   * its cluster after the backend), waits for start() to load the clients
+   * instead of failing a request that needs them. Gives up after
+   * CLIENTS_WAIT_TIMEOUT_MS with an error that says why.
+   */
+  private async waitForClients(): Promise<void> {
+    if (!this.clientsDeferred || this.k8sApi) return;
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), CLIENTS_WAIT_TIMEOUT_MS);
+    });
+    const outcome = await Promise.race([this.clientsSettled, timedOut]);
+    clearTimeout(timer);
+    if (outcome === "timeout" && !this.k8sApi) {
+      throw new Error("Kubernetes is still starting. Try again in a minute.");
+    }
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -4822,5 +4930,11 @@ const WATCH_REFRESH_DEBOUNCE_MS = 1_000;
 /** Reopen delay after a watch stream closes (routine or error). */
 const WATCH_STREAM_RECONNECT_DELAY_MS = 15_000;
 const WATCH_STREAM_RECONNECT_JITTER_MS = 5_000;
+
+// Long enough for the quickstart to create its KinD cluster on a slow machine.
+const KUBECONFIG_WAIT_TIMEOUT_MS = 10 * 60_000;
+const KUBECONFIG_WAIT_POLL_MS = 500;
+// How long a request that needs Kubernetes waits for a cluster still starting.
+const CLIENTS_WAIT_TIMEOUT_MS = 2 * 60_000;
 
 export default new McpServerRuntimeManager();

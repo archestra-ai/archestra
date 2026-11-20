@@ -168,6 +168,7 @@ class ManagedOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    icon?: string | null;
     serviceAccountId?: string | null;
     scopes?: OAuthClientScope[];
     allowedGatewayIds?: string[];
@@ -230,6 +231,7 @@ class ManagedOauthClientModel {
           clientId: `${params.legacyKind ? `${params.legacyKind}_oauth_` : "oauth_"}${randomBytes(18).toString("base64url")}`,
           clientSecret: clientSecretHash,
           name: params.name,
+          icon: params.icon ?? null,
           serviceAccountId: params.serviceAccountId ?? null,
           // authorization_code is a confidential client (client_secret_post) that
           // additionally requires PKCE; its tokens flow through better-auth's
@@ -388,6 +390,8 @@ class ManagedOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
+    /** Omit to keep the current icon; null clears it. */
+    icon?: string | null;
     serviceAccountId?: string | null;
     scopes?: OAuthClientScope[];
     allowedGatewayIds?: string[];
@@ -460,6 +464,7 @@ class ManagedOauthClientModel {
         .update(schema.oauthClientsTable)
         .set({
           name: params.name,
+          ...(params.icon !== undefined ? { icon: params.icon } : {}),
           ...(params.serviceAccountId !== undefined
             ? { serviceAccountId: params.serviceAccountId }
             : {}),
@@ -541,6 +546,7 @@ class ManagedOauthClientModel {
     return {
       id: client.id,
       name: client.name,
+      icon: client.icon,
       clientId: client.clientId,
       serviceAccountId: client.serviceAccountId,
       organizationId: client.organizationId,
@@ -747,6 +753,7 @@ async function hydrateOauthClients(
         clientId: client.clientId,
         serviceAccountId: client.serviceAccountId,
         name: client.name ?? client.clientId,
+        icon: client.icon,
         organizationId: metadata.organizationId,
         grantType: metadata.grantType,
         includeFutureProviders: metadata.includeFutureProviders,

@@ -11,12 +11,21 @@
  * alongside first-class embeddings.
  */
 
+import type { ReasoningEffortLevel } from "./model-constants";
 import type { ThinkingEffort } from "./thinking-effort";
 
 /** Families whose transport is not supported by Gemini Chat. */
 const NON_CHAT_GEMINI_PATTERNS = ["tts", "audio", "live"];
-/** Image models can chat, but do not accept text-model thinking settings. */
-const NON_TEXT_GEMINI_PATTERNS = [...NON_CHAT_GEMINI_PATTERNS, "image"];
+/**
+ * Image and transcription models can chat, but do not accept text-model
+ * thinking settings: Gemini answers `thinking_level is not supported by this
+ * model` for `gemini-3.5-transcribe` (verified live).
+ */
+const NON_TEXT_GEMINI_PATTERNS = [
+  ...NON_CHAT_GEMINI_PATTERNS,
+  "image",
+  "transcribe",
+];
 
 /** Lowest Gemini-family generation kept in the catalog. */
 const GEMINI_FAMILY_MIN_VERSION: GeminiVersion = [2, 5];
@@ -285,9 +294,50 @@ function acceptsGeminiMinimalThinking(modelId: string): boolean {
   return modelId.toLowerCase().includes("flash");
 }
 
+/**
+ * The OpenAI `reasoning_effort` values the Unified Model API's Gemini
+ * translation accepts for a model; it rejects every other value with a 400.
+ *
+ * Gemini 2.5 takes them as thinking budgets, and only Flash and Flash-Lite can
+ * turn thinking off (`none`). Later text generations take them as thinking
+ * levels, minus the levels a family is documented to lack. `xhigh` and `max`
+ * have no Gemini equivalent.
+ */
+export function geminiAcceptedReasoningEfforts(
+  modelId: string,
+): ReasoningEffortLevel[] {
+  const family = geminiFamily(modelId);
+  if (family?.startsWith("gemini-2.5-")) {
+    return family === "gemini-2.5-flash" || family === "gemini-2.5-flash-lite"
+      ? ["none", "minimal", "low", "medium", "high"]
+      : ["minimal", "low", "medium", "high"];
+  }
+  if (!supportsGeminiThinkingEffort(modelId)) return [];
+  return (["minimal", "low", "medium", "high"] as const).filter(
+    (level) =>
+      !(
+        (level === "medium" && family === "gemini-3-pro") ||
+        (level === "minimal" &&
+          (family === "gemini-3.7-flash" || family === "gemini-3.8-flash"))
+      ),
+  );
+}
+
+/**
+ * The documented family of a Gemini text model id (`gemini-2.5-flash`),
+ * including its dated, preview and `-latest` aliases; undefined for anything
+ * else.
+ */
+export function geminiFamily(modelId: string): string | undefined {
+  return GEMINI_TEXT_FAMILY_RE.exec(modelId.toLowerCase())?.[1];
+}
+
 // ===========================================================================
 // Internal helpers
 // ===========================================================================
+
+const GEMINI_TEXT_FAMILY_RE =
+  /^(gemini-\d+(?:\.\d+)?-(?:flash-lite|flash|pro))(?:-(?:preview(?:-(?:customtools|\d[\d-]*))?|latest|\d[\d-]*))?$/;
 
 type GeminiVersion = readonly [major: number, minor: number];
 

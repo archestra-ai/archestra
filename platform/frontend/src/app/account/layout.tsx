@@ -7,11 +7,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
 import { accountSections } from "@/app/account/_parts/account-sections";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { DEVICES_HREF } from "@/lib/mcp/desktop-mcp";
 
@@ -79,15 +78,10 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   // has nothing to show here (no credential:read, no Claude Code agent); its
   // page forwards them.
   const { hasTab: hasCredentialsTab } = useAccountCredentialsAccess();
-  // The Device tab is desktop MCP, in alpha: only with the beta flag, and
-  // only once the flag is known, so it does not flash and vanish.
-  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const tabs = accountSections
     .filter(
       (section) =>
-        (section.href !== "/account/credentials" ||
-          hasCredentialsTab !== false) &&
-        (section.href !== DEVICES_HREF || desktopMcpEnabled),
+        section.href !== "/account/credentials" || hasCredentialsTab !== false,
     )
     .map((section) =>
       section.href === DEVICES_HREF
@@ -96,7 +90,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
             label: (
               <span className="inline-flex items-center gap-1.5">
                 <span>{section.label}</span>
-                <AlphaBadge />
+                <BetaBadge />
               </span>
             ),
           }

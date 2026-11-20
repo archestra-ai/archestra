@@ -60,10 +60,10 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
-// Keep unrelated beta features off even when a developer's .env enables them.
-// OpenAPPA is always available; enforcement tests opt in through the deployment
-// Guardrails setting. A test of another beta feature stubs its own gate.
-process.env.ARCHESTRA_BETA = "false";
+// Keep the opt-in M-Files connector off even when a developer's .env enables
+// it; its tests set the gate themselves. OpenAPPA is always available;
+// enforcement tests opt in through the deployment Guardrails setting.
+process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 
 // Set auth secret for tests
@@ -78,6 +78,7 @@ let pgliteClient: PGlite | null = null;
 // Tests that never issue SQL leave the database unchanged, so the next test
 // can skip truncating hundreds of tables.
 let databaseTouched = false;
+let databaseResetsSinceCheckpoint = 0;
 // The filename opts a suite into rollback; ordinary database suites retain
 // table resets, including tests of commit and schema-change behavior.
 let completedRollbackTests = 0;
@@ -567,6 +568,13 @@ async function resetDatabase(client: PGlite): Promise<void> {
         .map(({ sequence }) => `ALTER SEQUENCE ${sequence} RESTART;`)
         .join("\n"),
     );
+  }
+  // Repeated truncations leave relation files for PostgreSQL to reclaim at a
+  // checkpoint. In large suites, deferring that work until PGlite closes can
+  // exceed the teardown timeout. Reclaim them in small batches between tests.
+  if (withRows.rows.length > 0 && ++databaseResetsSinceCheckpoint >= 25) {
+    await client.exec("CHECKPOINT");
+    databaseResetsSinceCheckpoint = 0;
   }
 }
 

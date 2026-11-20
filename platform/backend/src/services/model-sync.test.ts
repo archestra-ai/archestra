@@ -30,6 +30,199 @@ beforeEach(() => modelsDevClient.clearFetchCache());
 afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
+  test("imports context tiers without writing administrator overrides", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "tier-test" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "tier-test": {
+              id: "tier-test",
+              name: "Tier test",
+              cost: {
+                input: 2,
+                output: 12,
+                tiers: [
+                  {
+                    input: 4,
+                    output: 18,
+                    tier: { type: "context", size: 272000 },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.syncedLongContextPricing).toMatchObject({
+      threshold: 272000,
+      pricePerMillionInput: "4",
+      pricePerMillionOutput: "18",
+    });
+    expect(model.longContextThreshold).toBeUndefined();
+    expect(model.customPricePerMillionInput).toBeUndefined();
+  });
+
+  test("does not combine a fetcher tariff with registry context prices", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "openai",
+      models: [
+        { id: "tier-test", capabilities: { promptPricePerToken: "0.000001" } },
+      ],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "tier-test": {
+              id: "tier-test",
+              name: "Tier test",
+              cost: {
+                input: 2,
+                output: 12,
+                context_over_200k: { input: 4, output: 18 },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.syncedLongContextPricing).toBeNull();
+  });
+
+  test("does not let metadata-only same-provider capabilities hide a cross-provider context tier", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "azure",
+      modelId: "synthetic-deployment",
+    });
+    const tier = {
+      threshold: 200000,
+      pricePerMillionInput: "6",
+      pricePerMillionOutput: "30",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+    };
+    const result = resolveModelCapabilities({
+      provider: "azure",
+      modelId: "synthetic-deployment",
+      capabilities: {
+        ...capabilities,
+        description: "Metadata only",
+        syncedLongContextPricing: null,
+      },
+      crossProviderPrices: {
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+        syncedLongContextPricing: tier,
+      },
+    });
+    expect(result.promptPricePerToken).toBe("0.000003");
+    expect(result.syncedLongContextPricing).toEqual(tier);
+    const conflictingTier = { ...tier, pricePerMillionInput: "99" };
+    for (const cacheReadPricePerToken of [null, "0.0000004"]) {
+      const resolved = resolveModelCapabilities({
+        provider: "azure",
+        modelId: "synthetic-deployment",
+        capabilities: {
+          ...capabilities,
+          syncedLongContextPricing: conflictingTier,
+          cacheReadPricePerToken,
+        },
+        crossProviderPrices: {
+          promptPricePerToken: "0.000003",
+          completionPricePerToken: "0.000015",
+          cacheReadPricePerToken: null,
+          cacheWritePricePerToken: null,
+          syncedLongContextPricing: tier,
+        },
+      });
+      expect(resolved.syncedLongContextPricing).toEqual(
+        cacheReadPricePerToken === null ? tier : null,
+      );
+    }
+  });
+
+  test.each([
+    { cost: undefined, expectedInput: "0.000003", expectedTier: "6" },
+    { cost: {}, expectedInput: "0.000003", expectedTier: "6" },
+    {
+      cost: { context_over_200k: { input: 99, output: 999 } },
+      expectedInput: "0.000003",
+      expectedTier: "6",
+    },
+    {
+      cost: { cache_read: 0.4 },
+      expectedInput: "0.000003",
+      expectedTier: null,
+    },
+    {
+      cost: { cache_read: 0.4, context_over_200k: { input: 99, output: 999 } },
+      expectedInput: "0.000003",
+      expectedTier: null,
+    },
+    {
+      cost: { input: 3.3, output: 16.5 },
+      expectedInput: "0.0000033",
+      expectedTier: null,
+    },
+    { cost: { input: 0, output: 0 }, expectedInput: "0", expectedTier: null },
+  ])("keeps the context tier with the flat tariff source (cost=$cost)", ({
+    cost,
+    expectedInput,
+    expectedTier,
+  }) => {
+    const modelId = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+    const [model] = buildModelsToUpsert({
+      provider: "bedrock",
+      models: [{ id: modelId }],
+      modelsDevData: {
+        "amazon-bedrock": {
+          id: "amazon-bedrock",
+          name: "Bedrock",
+          models: {
+            [modelId]: {
+              id: modelId,
+              name: "Metadata-only profile",
+              limit: { context: 1000000 },
+              cost,
+            },
+          },
+        },
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-5": {
+              id: "claude-sonnet-4-5",
+              name: "Canonical model",
+              cost: {
+                input: 3,
+                output: 15,
+                tiers: [
+                  {
+                    input: 6,
+                    output: 30,
+                    tier: { type: "context", size: 200000 },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.promptPricePerToken).toBe(expectedInput);
+    expect(model.syncedLongContextPricing?.pricePerMillionInput ?? null).toBe(
+      expectedTier,
+    );
+  });
+
   test("keeps custom Jev endpoint prices unknown during model synchronization", async ({
     makeOrganization,
     makeSecret,
@@ -98,6 +291,104 @@ describe("ModelSyncService", () => {
     modelFetchers.gemini = originalGeminiFetcher;
     modelFetchers.openrouter = originalOpenrouterFetcher;
     modelFetchers.ollama = originalOllamaFetcher;
+  });
+
+  test("a GitHub Copilot sync reads the extended window and replaces a stored one, keeping the admin's", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Copilot reports only the default context tier unless the request names a
+    // current API version.
+    server.use(
+      http.get("https://api.github.com/copilot_internal/v2/token", () =>
+        HttpResponse.json({
+          token: "copilot-bearer",
+          expires_at: Math.floor(Date.now() / 1000) + 1800,
+        }),
+      ),
+      http.get("https://api.githubcopilot.com/models", ({ request }) => {
+        const extended =
+          request.headers.get("x-github-api-version") === "2026-08-01";
+        return HttpResponse.json({
+          data: ["claude-haiku-5.5", "claude-opus-5.5"].map((id) => ({
+            id,
+            supported_endpoints: ["/chat/completions"],
+            capabilities: {
+              type: "chat",
+              limits: extended
+                ? {
+                    max_context_window_tokens: 1_000_000,
+                    max_prompt_tokens: 936_000,
+                    max_output_tokens: 128_000,
+                  }
+                : {
+                    max_context_window_tokens: 200_000,
+                    max_prompt_tokens: 100_000,
+                    max_output_tokens: 100_000,
+                  },
+            },
+          })),
+        });
+      }),
+      http.post("https://api.githubcopilot.com/chat/completions", () =>
+        HttpResponse.json(
+          { error: { message: "messages must be non-empty", code: "" } },
+          { status: 400 },
+        ),
+      ),
+    );
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "gho_copilot" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+    });
+    // Rows an earlier build stored from the default tier, one with an
+    // administrator's window.
+    await ModelModel.bulkUpsert(
+      ["claude-haiku-5.5", "claude-opus-5.5"].map((modelId) => ({
+        externalId: `github-copilot/${modelId}`,
+        provider: "github-copilot",
+        modelId,
+        contextLength: 200_000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      })),
+    );
+    const opus = await ModelModel.findByProviderAndModelId(
+      "github-copilot",
+      "claude-opus-5.5",
+    );
+    if (!opus) throw new Error("model not stored");
+    await ModelModel.update(opus.id, { customContextLength: 150_000 });
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "github-copilot",
+      apiKeyValue: "gho_copilot",
+    });
+
+    const haiku = await ModelModel.findByProviderAndModelId(
+      "github-copilot",
+      "claude-haiku-5.5",
+    );
+    expect(haiku).toMatchObject({
+      contextLength: 1_000_000,
+      customContextLength: null,
+    });
+    expect(
+      await ModelModel.findByProviderAndModelId(
+        "github-copilot",
+        "claude-opus-5.5",
+      ),
+    ).toMatchObject({ contextLength: 1_000_000, customContextLength: 150_000 });
+    expect(
+      await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+        haiku,
+        apiKey.id,
+      ),
+    ).toBe(128_000);
   });
 
   test("two Ollama endpoints sharing a tag keep independent agent verdicts", async ({
@@ -734,6 +1025,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: true,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -773,6 +1065,7 @@ describe("ModelSyncService", () => {
       supportsToolCalling: true,
       supportsReasoningEffort: null,
       supportedEndpoints: null,
+      supportedReasoningEfforts: null,
       promptPricePerToken: null,
       completionPricePerToken: null,
       cacheReadPricePerToken: null,
@@ -812,6 +1105,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: null,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -836,6 +1130,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: null,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -988,6 +1283,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -1011,6 +1307,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
         cacheReadPricePerToken: null,
@@ -1496,6 +1793,54 @@ describe("ModelSyncService", () => {
         cacheWritePricePerToken: "0.00000375",
       }),
     );
+  });
+
+  test("Copilot's vision flag and reasoning levels outrank the registry's description of the model", () => {
+    const registryEntry = (modalities: string[]) => ({
+      id: "gpt-6.2",
+      name: "GPT-6.2",
+      reasoning: true,
+      modalities: { input: modalities, output: ["text"] },
+    });
+    const [visionAdded] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [
+        {
+          id: "gpt-6.2",
+          capabilities: {
+            supportsVision: true,
+            supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+          },
+        },
+      ],
+      modelsDevData: {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: { "gpt-6.2": registryEntry(["text"]) },
+        },
+      },
+    });
+    expect(visionAdded).toEqual(
+      expect.objectContaining({
+        inputModalities: ["text", "image"],
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+      }),
+    );
+
+    const [visionRemoved] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [{ id: "gpt-6.2", capabilities: { supportsVision: false } }],
+      modelsDevData: {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: { "gpt-6.2": registryEntry(["text", "image", "pdf"]) },
+        },
+      },
+    });
+    // The rest of the registry's list survives.
+    expect(visionRemoved.inputModalities).toEqual(["text", "pdf"]);
   });
 
   test("floors an uncovered GitHub Copilot model to text modalities so the edit dialog stays valid", () => {

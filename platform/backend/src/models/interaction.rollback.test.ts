@@ -1958,6 +1958,106 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions failure status", () => {
+    test("counts failed requests, apart from failed-over attempts, and the chat's errors", async ({
+      makeAdmin,
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Agent", organizationId: org.id });
+      const conversation = await ConversationModel.create({
+        userId: admin.id,
+        organizationId: org.id,
+        agentId: agent.id,
+      });
+      await ConversationChatErrorModel.create({
+        conversationId: conversation.id,
+        error: {
+          code: ChatErrorCode.Unknown,
+          message: "Guardrails could not settle a withheld tool call",
+          isRetryable: false,
+        },
+      });
+      const answered = {
+        id: "r",
+        object: "chat.completion" as const,
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [],
+      };
+      const base = {
+        profileId: agent.id,
+        sessionId: conversation.id,
+        request: { model: "gpt-4", messages: [] },
+        type: "openai:chatCompletions" as const,
+      };
+      const ok = await InteractionModel.create({ ...base, response: answered });
+      // Rejected before any usage arrived.
+      const rejected = await InteractionModel.create({
+        ...base,
+        response: { error: "400 Bad Request" },
+      });
+      // Failed after usage came back: the reply is kept, the error beside it.
+      const cutOff = await InteractionModel.create({
+        ...base,
+        response: { ...answered, error: "stream ended early" },
+      });
+      // A pool retried this one, so the request itself did not fail.
+      await InteractionModel.create({
+        ...base,
+        response: { error: "429" },
+        attempt: 1,
+        attemptOutcome: "failed_over",
+      });
+
+      expect([ok, rejected, cutOff].map((row) => row.failed)).toEqual([
+        false,
+        true,
+        true,
+      ]);
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === conversation.id,
+      );
+      expect(session).toMatchObject({
+        requestCount: 4,
+        failedOverCount: 1,
+        failedRequestCount: 2,
+        chatErrorCount: 1,
+      });
+    });
+
+    test("a session that is no chat conversation has no chat errors", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "claude-code-session",
+        request: { model: "gpt-4", messages: [] },
+        response: { error: "529 Overloaded" },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      expect(
+        sessions.data.find((s) => s.sessionId === "claude-code-session"),
+      ).toMatchObject({ failedRequestCount: 1, chatErrorCount: 0 });
+    });
+  });
+
   describe("getSessions Archestra Chat session identity (T-894)", () => {
     // A new Archestra Chat fires two LLM calls that share one session_id (the
     // conversation id): the user's turn under their agent (source "chat") and
@@ -2840,6 +2940,69 @@ describe("InteractionModel", () => {
 
       expect(sessions.data).toHaveLength(1);
       expect(sessions.data[0].lastUserMessagePreview).toBe("Hi from codex cli");
+    });
+
+    test.for([
+      "anthropic:messages",
+      "github-copilot:messages",
+    ] as const)("%s session previews use the genuine prompt, not reminders or tool results", async (type, {
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent();
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "claude-native-preview",
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        type,
+        request: {
+          model: "claude-haiku-4.5",
+          max_tokens: 32,
+          messages: [
+            { role: "user", content: "Find the failing test" },
+            {
+              role: "assistant",
+              content: [
+                { type: "tool_use", id: "call_read", name: "read", input: {} },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "call_read",
+                  content: "File contents",
+                },
+                {
+                  type: "text",
+                  text: "<system-reminder>Use the task list.</system-reminder>",
+                },
+              ],
+            },
+          ],
+        } as InsertInteraction["request"],
+        response: {
+          id: "msg_preview",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4.5",
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 1 },
+        } as InsertInteraction["response"],
+      });
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "claude-native-preview" },
+      );
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "Find the failing test",
+      );
     });
 
     test("shows a Copilot CLI session by the person's prompt, not the notes Copilot adds", async ({
@@ -4254,6 +4417,57 @@ describe("InteractionModel", () => {
   });
 
   describe("updateUsageAfterInteraction", () => {
+    test("only OAuth credentials accrue application limits", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+      const appId = crypto.randomUUID();
+      const limit = await LimitModel.create({
+        entityType: "llm_oauth_client",
+        entityId: appId,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      const write = (
+        authMethod:
+          | "internal"
+          | "virtual_key"
+          | "oauth_client_credentials"
+          | "oauth_user",
+      ) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          authenticatedAppId: appId,
+          authenticatedAppName: "Synthetic application",
+          userId: authMethod === "oauth_user" ? user.id : undefined,
+          authMethod,
+          model: "gpt-4o",
+          inputTokens: 100,
+          inputTokensEstimated: true,
+          outputTokens: 0,
+          request: { model: "gpt-4o", messages: [] },
+          response: { error: "Synthetic pool member timeout" },
+          type: "openai:chatCompletions",
+        });
+      const usage = async () =>
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id);
+      for (const authMethod of ["internal", "virtual_key"] as const) {
+        const audit = await write(authMethod);
+        await drainBackgroundWork();
+        expect(audit.authenticatedAppId).toBe(appId);
+        expect(await usage()).toMatchObject([{ tokensIn: 0, tokensOut: 0 }]);
+      }
+      await write("oauth_client_credentials");
+      await drainBackgroundWork();
+      expect(await usage()).toMatchObject([{ tokensIn: 100, tokensOut: 0 }]);
+      await write("oauth_user");
+      await drainBackgroundWork();
+      expect(await usage()).toMatchObject([{ tokensIn: 200, tokensOut: 0 }]);
+    });
+
     test("updates user limit usage when interaction has userId", async ({
       makeAgent,
       makeUser,

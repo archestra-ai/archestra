@@ -30,8 +30,6 @@ The proxy, connected clients, and user are trusted. Model output and external to
 
 ## Startup configuration
 
-OpenAPPA is available on every deployment. Its UI, proxy plugin, and policy API do not depend on `ARCHESTRA_BETA`.
-
 The deployment-wide guardrail setting controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). Turn this database switch on to enforce policies. Each request reads the database switch, so replicas do not depend on local process state. The plugin list alone does not activate enforcement.
 
 Policy editing and GitHub sync stay available while enforcement is off. The OpenAPPA editor stores policy revisions in PostgreSQL. Toggling the database switch takes effect immediately without a restart.
@@ -515,7 +513,7 @@ Governed approval questions use `<toolu|call|aq>_aq2_<nonce>` as their wire call
 
 The adapter pairs the result with the actual client question call, then parses the response. Errors, ambiguous answers, or cancellations produce `none`, not approval. The first request consumes the cached question once. Later history retains the same ID without recording duplicate approvals. Ordinary native answers remain readable without an approval-cache record.
 
-Reviews and question records expire after ten minutes. Keys include organization, caller, session, parent, and offer. New keys use plain SHA-256, not an HMAC. Pending legacy `aq1` questions can consume their existing records during that expiry window. `consumeHitlRuling` uses PostgreSQL `DELETE ... RETURNING` for atomic consumption. If cached rulings conflict, denial takes precedence over no-decision, which takes precedence over approval. Approval in a parent session does not authorize a child offer.
+Reviews and question records expire after ten minutes. Keys include organization, caller, session, parent, and offer. Keys use plain SHA-256, not an HMAC. `consumeHitlRuling` uses PostgreSQL `DELETE ... RETURNING` for atomic consumption. If cached rulings conflict, denial takes precedence over no-decision, which takes precedence over approval. Approval in a parent session does not authorize a child offer.
 
 On the gateway path, the acting trajectory and offer IDs select the stored review, which replaces model-authored text. `context.elicitation.elicit` presents the form in Chat or sends an MCP elicitation request. Timeouts, cancellations, or missing clients leave the remedy blocked. Ordinary questions can use plain text in headless runs. Security reviews cannot treat that fallback as approval.
 
@@ -881,7 +879,7 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `ARCHESTRA_LLM_PROXY_PLUGINS` | `appa` | Always includes `appa`, independently of beta features. |
+| `ARCHESTRA_LLM_PROXY_PLUGINS` | `appa` | Always includes `appa`. |
 | `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |

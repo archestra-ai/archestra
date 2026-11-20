@@ -12,6 +12,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import type { GitAccess } from "@/git-hosts/git-access";
 import {
   PluginLabelModel,
@@ -237,6 +238,21 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: PluginLabelModel,
     keysOperationId: RouteId.GetPluginLabelKeys,
     valuesOperationId: RouteId.GetPluginLabelValues,
+    authorize: async ({ organizationId, userId }) => {
+      const checker = await getPluginPermissionChecker({
+        userId,
+        organizationId,
+      });
+      if (!checker.canRead) {
+        throw new ApiError(403, "You do not have permission to view plugins");
+      }
+      if (checker.canReadAll) return undefined;
+      const ownerIds = await PluginTeamModel.getUserAccessiblePluginIds({
+        organizationId,
+        userId,
+      });
+      return { ownerIds };
+    },
   });
 
   fastify.get(
@@ -261,14 +277,14 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      const isAdmin = await ResourcePermissions.allows({
+      const checker = await getPluginPermissionChecker({
         userId: user.id,
-        organizationId: organizationId,
-        resource: "plugin",
-        scope: "*",
-        action: "update",
+        organizationId,
       });
-      const accessiblePluginIds = isAdmin
+      if (!checker.canRead) {
+        throw new ApiError(403, "You do not have permission to view plugins");
+      }
+      const accessiblePluginIds = checker.canReadAll
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
             organizationId,
@@ -304,7 +320,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -342,7 +357,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -457,7 +471,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -500,7 +513,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -580,7 +592,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, params, body } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "update",
+      });
       const { syncState: observed, imported } =
         await importExistingGithubPlugin({
           id: params.id,
@@ -623,7 +640,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "update",
+      });
       const internal = await PluginModel.findByIdForSync(params.id);
       if (
         !internal ||
@@ -676,7 +698,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "update",
+      });
       const existing = await PluginModel.findById({
         id: params.id,
         organizationId,
@@ -711,7 +738,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, params } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "update",
+      });
       const plugin = await PluginModel.findById({
         id: params.id,
         organizationId,
@@ -758,7 +790,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -805,7 +836,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "read",
+      });
       const plugin = await PluginModel.findById({
         id: params.id,
         organizationId,
@@ -829,7 +865,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "update",
+      });
       const existing = await PluginModel.findById({
         id: params.id,
         organizationId,
@@ -902,7 +943,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "delete",
+      });
       const existing = await PluginModel.findById({
         id: params.id,
         organizationId,
@@ -952,23 +998,29 @@ function pluginSourceRecord(params: {
   };
 }
 
-async function requirePluginAdmin(params: {
+/**
+ * Authorize one action on one plugin through its grants. A caller who cannot
+ * even read the plugin gets 404, so its existence is not disclosed; one who
+ * can see it but not act on it gets 403.
+ */
+async function requirePluginAction(params: {
   organizationId: string;
   userId: string;
+  pluginId: string;
+  action: "read" | "update" | "delete";
 }): Promise<void> {
-  const allowed = await ResourcePermissions.allows({
+  const checker = await getPluginPermissionChecker({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "plugin",
-    scope: "*",
-    action: "update",
   });
-  if (!allowed) {
-    throw new ApiError(
-      403,
-      "You need permission to manage every plugin to approve executable plugins",
-    );
+  if (checker.allowsScoped(params.pluginId, params.action)) return;
+  if (!checker.allowsScoped(params.pluginId, "read")) {
+    throw new ApiError(404, "Plugin not found");
   }
+  throw new ApiError(
+    403,
+    `You do not have permission to ${params.action} this plugin`,
+  );
 }
 
 async function runGithubImport<T>(fn: () => Promise<T>): Promise<T> {

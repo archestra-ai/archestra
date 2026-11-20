@@ -9,6 +9,7 @@ import { buildAzureFoundryAnthropicBaseUrl } from "@/clients/azure-url";
 import config from "@/config";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import { ApiError } from "@/types/api";
+import type { Model } from "@/types/model";
 import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 
 export type AzureModelCapabilities =
@@ -60,6 +61,54 @@ export function classifyAzureModelCapabilities(
     };
   }
   return { ...row.evidence, status: "known" };
+}
+
+/**
+ * A model row as a listing across `links` (one or more provider keys) can
+ * describe it. An Azure model carries the deployment evidence its keys agree
+ * on; when the resources disagree, or some have no current evidence, the
+ * listing cannot speak for all of them, so the evidence and the capability
+ * fields it would have answered are cleared. The key-filtered picker and the
+ * request resolver retain each resource's exact evidence. Other providers are
+ * returned unchanged.
+ */
+export function withListedAzureEvidence<T extends Model>(params: {
+  model: T;
+  links: LinkedCapabilities[];
+}): T & { azureCapabilities?: AzureModelEvidence | null } {
+  const { model, links } = params;
+  if (model.provider !== "azure") return model;
+  const modelLinks = links
+    .filter((link) => link.model.id === model.id)
+    .map(classifyAzureModelCapabilities);
+  const known = modelLinks.filter((evidence) => evidence.status === "known");
+  const signature = (evidence: (typeof known)[number]) =>
+    JSON.stringify([
+      evidence.kind,
+      evidence.operations,
+      evidence.inputModalities,
+      evidence.outputModalities,
+      evidence.supportsToolCalling,
+    ]);
+  if (
+    known.length > 0 &&
+    (known.length !== modelLinks.length ||
+      known.some((evidence) => signature(evidence) !== signature(known[0])))
+  ) {
+    return {
+      ...model,
+      azureCapabilities: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      embeddingDimensions: null,
+    };
+  }
+  const evidence = known[0];
+  return {
+    ...model,
+    azureCapabilities: evidence?.status === "known" ? evidence : null,
+  };
 }
 
 /** Internal metadata lookup. The caller must authorize the selected provider key first. */

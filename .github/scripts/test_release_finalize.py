@@ -185,6 +185,11 @@ class RecordHoldTests(unittest.TestCase):
                                 "images": ["agent-codex", "mcp-server-base"]})
         self.assertEqual(FINALIZE.held_artifact("1.5.0-rc.29", SHA), HELD)
 
+    def test_an_image_held_by_both_architectures_scans_is_listed_once(self):
+        hold = self.record(["release-scan-findings-agent-codex-amd64-2", "release-scan-findings-agent-codex-arm64-2",
+                            "release-scan-findings-p4-shim-arm64-2", "release-scan-findings-platform-amd64-1"])
+        self.assertEqual(hold["images"], ["agent-codex", "p4-shim"])
+
     def test_other_failures_leave_later_pushes_to_recover(self):
         self.assertIsNone(self.record(["release-image-platform-2", "release-scan-findings-platform-1"]))
 
@@ -214,13 +219,17 @@ class HoldWorkflowTests(unittest.TestCase):
 
     def test_the_scan_findings_artifact_is_the_one_record_hold_reads(self):
         build = (self.ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
-        name = re.search(r"name: (release-scan-findings-\$\{\{ inputs.image_name \}\}-\$\{\{ github.run_attempt \}\})",
-                         build).group(1)
-        rendered = name.replace("${{ inputs.image_name }}", "mcp-server-base").replace("${{ github.run_attempt }}", "3")
-        api = HoldApi(run_artifacts=[{"name": rendered}])
+        arch = "${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}"
+        name = re.search(r"name: (release-scan-findings-\$\{\{ inputs.image_name \}\}-.+-\$\{\{ github.run_attempt \}\})$",
+                         build, re.M).group(1)
+        self.assertIn(f"-{arch}-", name)
+        rendered = [name.replace("${{ inputs.image_name }}", "mcp-server-base").replace(arch, value)
+                    .replace("${{ github.run_attempt }}", "3") for value in ("amd64", "arm64")]
+        api = HoldApi(run_artifacts=[{"name": value} for value in rendered])
         self.assertEqual(FINALIZE.record_hold(REPO, 90, 3, "1.5.0-rc.29", SHA, request=api)["images"],
                          ["mcp-server-base"])
-        self.assertEqual(build.count("findings-file: ${{ runner.temp }}/release-scan-findings"), 2)
+        # One scan per build leg, which runs once per architecture.
+        self.assertEqual(build.count("findings-file: ${{ runner.temp }}/release-scan-findings"), 1)
 
 
 if __name__ == "__main__":

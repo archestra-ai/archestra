@@ -311,14 +311,14 @@ describe("OpenAPPA yells", () => {
     ).toEqual({ unresolved: 1, superyells: 0 });
   });
 
-  test("a log reader reads and resolves only their own reports", async ({
+  test("a yell reader reads and resolves only their own reports", async ({
     makeUser,
     makeMember,
     makeCustomRole,
     makeAgent,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { guardrailsYell: ["read"] },
     });
     const admin = user;
     const other = await record("Colleague's report", { superyell: true });
@@ -657,14 +657,42 @@ describe("OpenAPPA yells", () => {
     });
   });
 
-  test("denies callers without log:read", async ({
+  test("yell admins read and resolve every report without any log permission", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const other = await record("Colleague's report");
+    const role = await makeCustomRole(organizationId, {
+      permission: { guardrailsYell: ["read", "admin"] },
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
+
+    const list = await app.inject({ url: "/api/openappa/yells" });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toEqual([
+      expect.objectContaining({ id: other.id }),
+    ]);
+    const resolved = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/yells/${other.id}`,
+      payload: { resolved: true },
+    });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+  });
+
+  test("denies callers without guardrailsYell:read, even log admins", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const yell = await record("Shared report");
     const role = await makeCustomRole(organizationId, {
-      permission: { guardrailsPolicy: ["read", "update"] },
+      permission: {
+        guardrailsPolicy: ["read", "update"],
+        log: ["read", "admin"],
+      },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });

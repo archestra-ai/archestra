@@ -83,6 +83,8 @@ export type InteractionSessionPreview = z.infer<
 export const UserInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
+  // Two users can share a name; the email tells them apart in the filter.
+  email: z.string(),
 });
 
 export const InteractionAuthMethodSchema = z.enum([
@@ -465,6 +467,12 @@ export const InteractionSummarySchema = DescribedSelectInteractionSchema.pick({
   failureReason: true,
 }).extend({
   attributionLabels: AttributionLabelsSchema.nullish(),
+  /**
+   * Whether the request failed: its stored response is an error, including a
+   * stream that failed after usage came back. The reason is on the detail
+   * endpoint's `response.error`. False for rows logged before this was tracked.
+   */
+  failed: z.boolean(),
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
   requestType: RequestTypeSchema,
@@ -613,7 +621,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
-    type: z.enum(["anthropic:messages"]),
+    type: z.enum(["anthropic:messages", "github-copilot:messages"]),
     request: withReadFallback(Anthropic.API.MessagesRequestSchema),
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()
@@ -1122,6 +1130,16 @@ export const SessionSummarySchema = z.object({
     .describe(
       "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.",
     ),
+  failedRequestCount: z
+    .number()
+    .describe(
+      "Requests that failed, including streams that failed after usage came back. Failed-over pool attempts are counted in failedOverCount instead. Rows logged before failures were tracked count as succeeded.",
+    ),
+  chatErrorCount: z
+    .number()
+    .describe(
+      "Errors the chat showed for this session's conversation. Read them at GET /api/llm-proxy-logs/sessions/:sessionId/chat-errors.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),
@@ -1211,3 +1229,7 @@ export const SessionSummarySchema = z.object({
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+export const SessionChatErrorsSchema = z.object({
+  chatErrors: z.array(SelectConversationChatErrorSchema),
+});

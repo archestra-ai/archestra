@@ -116,7 +116,6 @@ import {
   AGENT_RUNTIME_OAUTH_CLIENT_ID,
   isAgentRunGatewayToken,
 } from "@/services/agent-runtime/runtime-contract";
-import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   agentToolExclusionsService,
@@ -159,6 +158,7 @@ import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import { cursorFormSchema } from "./cursor-forms";
 import { grokCanonicalToolName, grokToolName } from "./grok-tool-names";
 import {
   buildInputRequiredResult,
@@ -764,6 +764,8 @@ export async function buildAgentMcpToolList(params: {
  */
 export async function createAgentServer(params: {
   grokToolNames?: boolean;
+  /** The client is Cursor, whose forms label a checkbox by its description. */
+  cursorForms?: boolean;
   openappaSession?: import("@/openappa/service").OpenAppaSession;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
@@ -858,6 +860,7 @@ export async function createAgentServer(params: {
         runId: runId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
         oauthClientId: tokenAuth?.oauthClientId ?? null,
+        serviceAccountId: tokenAuth?.serviceAccountId ?? null,
         source: tokenAuth?.source ?? null,
       });
       logger.info(
@@ -889,22 +892,19 @@ export async function createAgentServer(params: {
       // an ordinary SDK request — the extension's own methods are intercepted
       // at the route in index.ts — so the branch lives here. The whole
       // skill://archestra authority is reserved in every state: with the
-      // surface disabled (flag off, backfill pending), the skill unexposed,
-      // or the URI malformed, it answers not-found rather than falling
+      // skill unexposed or the URI malformed, it answers not-found rather
+      // than falling
       // through, so an upstream server can never serve its own bytes under
       // the platform's prefix. Within the namespace an unexposed skill and a
       // nonexistent one still answer identically.
       if (isPlatformSkillUri(uri)) {
-        let skillResource: Awaited<ReturnType<typeof serveSkillResource>> =
-          null;
+        let skillResource: Awaited<ReturnType<typeof serveSkillResource>>;
         try {
-          if (skillsSurfaceEnabled()) {
-            skillResource = await serveSkillResource({
-              uri,
-              agentId,
-              callerUserId: tokenAuth?.userId ?? null,
-            });
-          }
+          skillResource = await serveSkillResource({
+            uri,
+            agentId,
+            callerUserId: tokenAuth?.userId ?? null,
+          });
         } catch (error) {
           logger.error(
             {
@@ -925,9 +925,8 @@ export async function createAgentServer(params: {
         // The current revision's code for a missing resource: SEP-2164 retired
         // the MCP-specific -32002 in favor of JSON-RPC's Invalid Params, and
         // SEP-2640 pins unknown skill resources to the same code. Every reason
-        // for not-found — unexposed, deleted, never existed, malformed, surface
-        // disabled — still answers the same way, so the surface stays
-        // unprobeable.
+        // for not-found — unexposed, deleted, never existed, malformed — still
+        // answers the same way, so the surface stays unprobeable.
         throw {
           code: RESOURCE_NOT_FOUND_ERROR_CODE,
           message: `Resource not found: ${uri}`,
@@ -1163,6 +1162,7 @@ export async function createAgentServer(params: {
               llmToolCallId: tokenAuth?.llmToolCallId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              serviceAccountId: tokenAuth?.serviceAccountId ?? null,
               source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
@@ -1221,11 +1221,13 @@ export async function createAgentServer(params: {
                     clientCapabilities: mrtr?.clientCapabilities,
                     round: mrtr?.round,
                   },
+                  inspectableReviewForm: params.cursorForms === true,
                   elicitation: {
                     elicit: createGatewayUserElicit({
                       extra,
                       mrtr,
                       mrtrEnabled,
+                      cursorForms: params.cursorForms === true,
                       agentId,
                       toolName: name,
                       requestMeta: request.params._meta as
@@ -1313,6 +1315,7 @@ export async function createAgentServer(params: {
               llmToolCallId: tokenAuth?.llmToolCallId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              serviceAccountId: tokenAuth?.serviceAccountId ?? null,
               source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
@@ -2869,6 +2872,7 @@ function createGatewayUserElicit(params: {
     clientCapabilities?: unknown;
   };
   mrtrEnabled: boolean;
+  cursorForms?: boolean;
   agentId: string;
   toolName: string;
   requestMeta?: Record<string, unknown>;
@@ -2879,7 +2883,10 @@ function createGatewayUserElicit(params: {
 }) => Promise<ArchestraElicitationOutcome> {
   const { extra, mrtr, mrtrEnabled, agentId, toolName, requestMeta } = params;
 
-  return async ({ message, requestedSchema }) => {
+  return async ({ message, requestedSchema: schema }) => {
+    const requestedSchema = params.cursorForms
+      ? cursorFormSchema(schema)
+      : schema;
     const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
     if (supplied !== undefined) {
       return formAnswer({

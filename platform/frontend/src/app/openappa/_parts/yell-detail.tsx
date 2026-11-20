@@ -21,16 +21,16 @@ import {
   YellGuardrailsMark,
   YellRowActions,
   YellSignals,
-} from "./yells-table";
+} from "./yell-row";
 
 /** One yell: its facts, its whole report, what it left behind. */
 export function YellDetail({ id }: { id: string }) {
   const yell = useOpenAppaYell(id);
   const resolve = useResolveOpenAppaYell();
-  const { data: canResolve } = useHasPermissions({ log: ["read"] });
+  const { data: canResolve } = useHasPermissions({ guardrailsYell: ["read"] });
   const back = (
-    <PageBackLink href="/openappa/yells" labelled>
-      <span>Back to yells</span>
+    <PageBackLink href="/consults/logs?type=yell" labelled>
+      <span>Back to Guardrails logs</span>
     </PageBackLink>
   );
 

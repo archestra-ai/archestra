@@ -46,7 +46,7 @@ jobs:
       contents: write # List draft releases (push access only).
       actions: write # Read the release run; the sweep dispatches this workflow on each request's branch.
       attestations: read # Verify the published digests' attestations.
-    uses: archestra-ai/.github/.github/workflows/release-finalize.yml@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+    uses: archestra-ai/.github/.github/workflows/release-finalize.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -89,7 +89,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -120,7 +120,7 @@ jobs:
       # release-publisher; an older line's patch keeps the newer line latest.
       - name: Publish GitHub release
         id: publish
-        uses: archestra-ai/.github/actions/release-finalize@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+        uses: archestra-ai/.github/actions/release-finalize@v1.31.1
         with:
           operation: publish
           token: ${{ github.token }}
@@ -174,3 +174,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
         run: gh workflow run sync-terraform-provider.yml --ref main -f "release_tag=$TAG_NAME"
+
+  move-release-line:
+    name: Start Move Release Line
+    # A stable X.Y.0 makes release/X.Y the supported line: start the workflow
+    # on main that opens the pull request moving backports and Dependabot to
+    # it (move-release-line.yml checks the tag again).
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') && needs.publish.outputs.published == 'true' && endsWith(needs.finalize.outputs.tag-name, '.0') }}
+    needs:
+      - finalize
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # Start the Move Release Line workflow.
+    steps:
+      - name: Start Move Release Line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
+        run: gh workflow run move-release-line.yml --ref main -f "release_tag=$TAG_NAME"

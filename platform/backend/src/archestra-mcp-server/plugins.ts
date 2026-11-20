@@ -11,6 +11,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { PluginModel, PluginTeamModel } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -51,11 +52,12 @@ import type { ArchestraContext } from "./types";
 /**
  * Plugin management chat tools, mirroring the skill management tools.
  *
- * Plugins are client-native executable payloads (hooks, skills, scripts), so
- * the permission split is stricter than skills: `list_plugins` needs only
- * plugin:read and returns catalog metadata, while everything that touches
- * file bytes — `get_plugin`, and every mutation — requires plugin:admin,
- * matching the REST routes. GitHub-sourced plugin bytes stay read-only here,
+ * Like skills, access to one plugin is a grant on it: `list_plugins` lists the
+ * plugins the caller can read, `get_plugin` needs `read` on the plugin, and
+ * `update_plugin`, `edit_plugin` and `delete_plugin` need `update` or
+ * `delete` on it, matching the REST routes. `create_plugin` needs
+ * plugin:create, and the author starts with full access to what they create.
+ * GitHub-sourced plugin bytes stay read-only here,
  * exactly as in the UI: source updates go through the review-and-approve
  * flow, which is deliberately not reproduced in chat.
  */
@@ -243,8 +245,7 @@ const registry = defineArchestraTools([
     description:
       "List the plugins available to you in this organization — one line per " +
       "plugin with its id, client, platforms, visibility, and file count. " +
-      "Call get_plugin with a plugin id to read its files (requires the " +
-      "plugin admin permission).",
+      "Call get_plugin with a plugin id to read its files.",
     schema: ListPluginsSchema,
     async handler({ args, context }) {
       const ctx = requireUserContext(context);
@@ -252,14 +253,8 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const isAdmin = await ResourcePermissions.allows({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-        resource: "plugin",
-        scope: "*",
-        action: "update",
-      });
-      const accessiblePluginIds = isAdmin
+      const checker = await getPluginPermissionChecker(ctx);
+      const accessiblePluginIds = checker.canReadAll
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
             organizationId: ctx.organizationId,
@@ -309,7 +304,7 @@ const registry = defineArchestraTools([
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
       }
-      const permissionError = await pluginActionError(ctx, "read");
+      const permissionError = await pluginActionError(ctx, args.id, "read");
       if (permissionError) return permissionError;
 
       const plugin = await PluginModel.findById({
@@ -339,8 +334,15 @@ const registry = defineArchestraTools([
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
       }
-      const permissionError = await pluginActionError(ctx, "create");
-      if (permissionError) return permissionError;
+      if (
+        !(await userHasPermission(
+          ctx.userId,
+          ctx.organizationId,
+          "plugin",
+          "create",
+        ))
+      )
+        return errorResult("This tool requires plugin:create permission.");
 
       if (args.initialGrants?.length) {
         // SPDX-SnippetBegin
@@ -403,7 +405,7 @@ const registry = defineArchestraTools([
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
       }
-      const permissionError = await pluginActionError(ctx, "update");
+      const permissionError = await pluginActionError(ctx, args.id, "update");
       if (permissionError) return permissionError;
 
       const existing = await PluginModel.findById({
@@ -455,7 +457,7 @@ const registry = defineArchestraTools([
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
       }
-      const permissionError = await pluginActionError(ctx, "update");
+      const permissionError = await pluginActionError(ctx, args.id, "update");
       if (permissionError) return permissionError;
 
       const plugin = await PluginModel.findById({
@@ -570,7 +572,7 @@ const registry = defineArchestraTools([
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
       }
-      const permissionError = await pluginActionError(ctx, "delete");
+      const permissionError = await pluginActionError(ctx, args.id, "delete");
       if (permissionError) return permissionError;
 
       const existing = await PluginModel.findById({
@@ -609,32 +611,21 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 }
 
 /**
- * TOOL_PERMISSIONS applies the action-specific role permission. Plugins are
- * executable bytes, so every tool beyond the metadata listing also needs
- * `update` on every plugin — the grant at `*` the retired `plugin:admin` role
- * action became — matching the REST routes (plugin.routes.ts).
+ * The action on this one plugin, through its grants. A caller who cannot read
+ * the plugin is told it does not exist, as the REST routes answer 404.
  */
 async function pluginActionError(
   ctx: UserContext,
-  action: "read" | "create" | "update" | "delete",
+  pluginId: string,
+  action: "read" | "update" | "delete",
 ) {
-  const [allowed, isPluginAdmin] = await Promise.all([
-    userHasPermission(ctx.userId, ctx.organizationId, "plugin", action),
-    ResourcePermissions.allows({
-      userId: ctx.userId,
-      organizationId: ctx.organizationId,
-      resource: "plugin",
-      scope: "*",
-      action: "update",
-    }),
-  ]);
-  if (!allowed)
-    return errorResult(`This tool also requires plugin:${action} permission.`);
-  return isPluginAdmin
-    ? null
-    : errorResult(
-        "This tool requires permission to manage every plugin in the organization.",
-      );
+  const checker = await getPluginPermissionChecker(ctx);
+  if (checker.allowsScoped(pluginId, action)) return null;
+  if (!checker.allowsScoped(pluginId, "read"))
+    return unknownPluginError(pluginId);
+  return errorResult(
+    `You do not have permission to ${action} plugin "${pluginId}".`,
+  );
 }
 
 function unknownPluginError(id: string) {

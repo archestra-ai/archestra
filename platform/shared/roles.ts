@@ -1,4 +1,9 @@
 import { z } from "zod";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { getFixedRole } from "./fixed-roles";
+// SPDX-SnippetEnd
 
 export const ADMIN_ROLE_NAME = "admin";
 export const PLATFORM_ADMIN_ROLE_NAME = "platform_admin";
@@ -24,7 +29,8 @@ export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export const RoleAssignmentSchema = z
   .string()
-  .regex(/^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$/, "Select at least one role")
+  // Colons appear only in fixed role identifiers (`fixed:agents:reader`).
+  .regex(/^[a-z0-9_:-]+(?:,[a-z0-9_:-]+)*$/, "Select at least one role")
   .describe("One or more organization role identifiers, separated by commas");
 // SPDX-SnippetEnd
 
@@ -66,6 +72,8 @@ export function getRoleDisplayName(role: string): string {
       .split(",")
       .map((part) => getRoleDisplayName(part.trim()))
       .join(", ");
+  const fixed = getFixedRole(role);
+  if (fixed) return fixed.name;
   // SPDX-SnippetEnd
   if (role in roleDisplayNames) {
     return roleDisplayNames[role as PredefinedRoleName];

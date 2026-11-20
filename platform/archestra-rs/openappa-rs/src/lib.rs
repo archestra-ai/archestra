@@ -10,6 +10,7 @@ mod batteries;
 pub mod child_returns;
 mod consults;
 mod declarations;
+pub mod deferred_returns;
 mod deployments;
 mod errors;
 mod input;
@@ -36,12 +37,16 @@ use crate::{
         BindingFailure, Failure, Fault, failure, fork_refused, invalid_input, invariant,
         is_policy_moved, lease_lost, panicked, policy_moved, receipt_failure, sql_failure, storage,
     },
-    input::{ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, required, validate},
+    input::{
+        ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, open_calls, required,
+        validate,
+    },
     operations::{
         CompletedOperation, OperationState, ResultClaim, YellArguments, cancellation_operation,
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
         finish_remedy, operation_semantic, proposed, read_operation_state,
-        recorded_call_presentation, remedy_binding, required_arguments, tool_call_context,
+        recorded_call_presentation, recorded_declaration, remedy_binding, required_arguments,
+        tool_call_context,
     },
     remedy::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
@@ -51,8 +56,8 @@ use crate::{
     },
     session::{
         SessionKey, check_session_identity, mark_busy_hold, operation_key, presentation_options,
-        processed_result_key, require_decision, result_presentation_options, root_id,
-        session_actor, session_binding, wire,
+        processed_result_key, recorded_root, require_decision, result_presentation_options,
+        root_id, session_actor, session_binding, wire,
     },
 };
 use appa_eventlog::{
@@ -68,8 +73,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId,
+    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
+    SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -497,37 +502,19 @@ impl State {
         };
         // A parent is only ever looked up in the child's own organization.
         let parent = SessionKey::new(&input.organization_id, parent_id);
-        Sql(&self.store)
-            .with_client(move |client| {
-                Ok(client
-                    .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                        &[&parent.organization_id, &parent.actor],
-                    )?
-                    .map(|row| row.get::<_, String>(0)))
-            })
-            ?
-            .ok_or_else(|| {
-                failure(
-                    Failure::Binding(BindingFailure::UnstartedParent),
-                    "parent session has not started",
-                )
-            })
+        recorded_root(&Sql(&self.store), &parent)?.ok_or_else(|| {
+            failure(
+                Failure::Binding(BindingFailure::UnstartedParent),
+                "parent session has not started",
+            )
+        })
     }
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
     /// the session id alone keeps that root, so its history carries on.
     fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
-        let lookup = key.clone();
-        let recorded = Sql(&self.store).with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&lookup.organization_id, &lookup.actor],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })?;
+        let recorded = recorded_root(&Sql(&self.store), key)?;
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
@@ -657,8 +644,7 @@ impl State {
         Err(failure)
     }
 
-    /// The part of a dispatch that claims and completes receipts. It runs under
-    /// the family's lock and lease.
+    /// The part of a dispatch that claims and completes receipts.
     async fn handle_event(
         &self,
         pg: &Sql<'_>,
@@ -778,6 +764,7 @@ impl State {
                     spawn: None,
                     prompt: None,
                     ruling,
+                    declares: None,
                 },
             )
             .await;
@@ -786,7 +773,6 @@ impl State {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
                     HookDecision::Block { reason } => reason,
-                    HookDecision::Refuse { detail, .. } => detail,
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
@@ -952,6 +938,7 @@ impl State {
                     spawn: input.spawn.then_some(SpawnKind::Single),
                     prompt: None,
                     ruling: None,
+                    declares: input.declares.clone().map(DeclaredReturn::from),
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
@@ -962,6 +949,7 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
                     root: actor.root.clone(),
@@ -969,6 +957,7 @@ impl State {
                         .child
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),
@@ -977,6 +966,7 @@ impl State {
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input.output.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildReturn => HookEvent::ChildReturn {
                     root: actor.root.clone(),
@@ -1004,7 +994,12 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            wire(&outcome.decision)?
+            self.decided(
+                &actor,
+                &operation,
+                input.declares.as_ref(),
+                &outcome.decision,
+            )?
         };
         finish_operation(
             &self.store,
@@ -1045,7 +1040,7 @@ impl State {
     /// match `parent_id` and is not joined.
     ///
     /// ChildStart names this dispatcher's family root and the stored child actor, not the
-    /// dispatcher's own child trajectory. The dispatch already holds the family lock.
+    /// dispatcher's own child trajectory.
     async fn address_child(
         &self,
         pg: &Sql<'_>,
@@ -1220,7 +1215,22 @@ impl State {
         .await;
         let decision = outcome.decision;
         if cancelled && !matches!(decision, HookDecision::Ack) {
-            return Err(invariant("OpenAPPA could not settle a withheld tool call"));
+            // Only the runtime's own refusal text is named: any other answer carries output.
+            let answered = match &decision {
+                HookDecision::Block { reason } => format!("a block: {reason}"),
+                HookDecision::Refuse { class, detail } => {
+                    format!("a refusal ({class:?}): {detail}")
+                }
+                other => wire(other)?
+                    .get("decision")
+                    .and_then(Value::as_str)
+                    .unwrap_or("an unnamed decision")
+                    .to_owned(),
+            };
+            let withheld = if call.spawn { "spawn" } else { "call" };
+            return Err(invariant(format!(
+                "OpenAPPA could not settle a withheld tool call: the runtime answered the cancelled {withheld} with {answered}"
+            )));
         }
         let approved = match &decision {
             HookDecision::Ack
@@ -1260,9 +1270,9 @@ impl State {
                 HookDecision::Ack
                 | HookDecision::DeliverValue { .. }
                 | HookDecision::ChildReturn { .. } => OutputSource::Tool,
-                HookDecision::ReplaceOutput { .. }
-                | HookDecision::Block { .. }
-                | HookDecision::Refuse { .. } => OutputSource::Runtime,
+                HookDecision::ReplaceOutput { .. } | HookDecision::Block { .. } => {
+                    OutputSource::Runtime
+                }
                 _ => return Err(invariant("unexpected tool result decision")),
             }
         };
@@ -1301,6 +1311,30 @@ impl State {
         Ok(response)
     }
 
+    /// The runtime's decision as the host reads it. The release of a spawn that declared a
+    /// deferred return says whether that is the return it was released under: a
+    /// declaration made ahead of the spawn can release it under another, and the host
+    /// runs the subagent by the recorded one.
+    fn decided(
+        &self,
+        actor: &Actor,
+        call_id: &str,
+        declares: Option<&crate::input::DeclaredReturn>,
+        decision: &HookDecision,
+    ) -> napi::Result<Value> {
+        let mut response = wire(decision)?;
+        if let (HookDecision::AllowCall { .. }, Some(crate::input::DeclaredReturn::Deferred)) =
+            (decision, declares)
+            && self
+                .runtime
+                .defers_return(actor, call_id)
+                .map_err(deferred_returns::read_failure)?
+        {
+            response["defers_return"] = json!(true);
+        }
+        Ok(response)
+    }
+
     /// Re-drives a call whose receipt an interrupted dispatch left pending,
     /// then completes that receipt with the answer. The runtime replays a
     /// decision it committed and decides afresh one it never recorded, so the
@@ -1315,6 +1349,7 @@ impl State {
         context: Option<Value>,
     ) -> napi::Result<CompletedOperation> {
         let call = recorded_call(context.clone(), recorded.clone())?;
+        let declares = recorded_declaration(&recorded)?;
         let event = HookEvent::ToolCall {
             actor: actor.clone(),
             call: proposed_recorded_call(&call)?,
@@ -1322,6 +1357,7 @@ impl State {
             spawn: call.spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
+            declares: declares.clone().map(DeclaredReturn::from),
         };
         let outcome = hooks::handle_embedded_with_options(
             &self.runtime,
@@ -1329,7 +1365,12 @@ impl State {
             result_presentation_options(input, &call),
         )
         .await;
-        let decision = wire(&outcome.decision)?;
+        let decision = self.decided(
+            actor,
+            &operation.operation_id,
+            declares.as_ref(),
+            &outcome.decision,
+        )?;
         self.store
             .complete_operation(operation.clone(), decision.clone(), receipts.owner())
             .map_err(receipt_failure)?;

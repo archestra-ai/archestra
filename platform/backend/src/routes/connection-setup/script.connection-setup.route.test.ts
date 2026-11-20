@@ -98,12 +98,12 @@ vi.mock("@/cache-manager");
 import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { clientConnectionService } from "@/services/client-connection";
 import {
   connectionSetupReference,
   readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
-import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -1500,9 +1500,7 @@ describe("GET /api/connection-setups/script/:token", () => {
   test.each([
     "claude-code",
     "grok-build",
-  ] as const)("%s excludes unsupported plugins or re-validates plugin:admin before rendering executable hooks", async (clientId) => {
-    const originalFeatureState = config.beta;
-    config.beta = false;
+  ] as const)("%s excludes unsupported plugins or re-validates the use grant before rendering executable hooks", async (clientId) => {
     const plugin = await PluginModel.create({
       organizationId,
       userId: user.id,
@@ -1539,42 +1537,46 @@ describe("GET /api/connection-setups/script/:token", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    grantEverywhere(["plugin"], async () =>
-      Boolean(
-        await mockUserHasPermission.getMockImplementation()?.(
-          "",
-          "",
-          "plugin",
-          "admin" as never,
-        ),
-      ),
-    );
-    try {
-      mockUserHasPermission.mockResolvedValue(false);
-      if (clientId === "grok-build") {
-        const response = await fetchScript(rawToken);
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).not.toContain(plugin.pluginSlug);
-        return;
-      }
-      expect((await fetchScript(rawToken)).statusCode).toBe(410);
-
-      mockUserHasPermission.mockResolvedValue(true);
-      const { OrganizationModel } = await import("@/models");
-      await OrganizationModel.patch(organizationId, {
-        connectionPluginsEnabled: false,
-      });
-      expect((await fetchScript(rawToken)).statusCode).toBe(410);
-
-      await OrganizationModel.patch(organizationId, {
-        connectionPluginsEnabled: true,
-      });
-      const allowed = await fetchScript(rawToken);
-      expect(allowed.statusCode).toBe(200);
-      expect(allowed.body).toContain(plugin.pluginSlug);
-    } finally {
-      config.beta = originalFeatureState;
+    mockUserHasPermission.mockResolvedValue(true);
+    if (clientId === "grok-build") {
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain(plugin.pluginSlug);
+      return;
     }
+    // The creator still reads the plugin but may no longer use it.
+    const policyKey = {
+      organizationId,
+      resource: "plugin" as const,
+      scope: plugin.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(policyKey);
+    if (!policy) throw new Error("Missing plugin policy");
+    const readOnly = await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: policy.revision,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+    });
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+    if (!readOnly) throw new Error("Policy did not change");
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: readOnly.revision,
+      grants: policy.grants,
+    });
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionPluginsEnabled: false,
+    });
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+    await OrganizationModel.patch(organizationId, {
+      connectionPluginsEnabled: true,
+    });
+    const allowed = await fetchScript(rawToken);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.body).toContain(plugin.pluginSlug);
   });
 
   test("410s when the creator's org membership is gone", async ({

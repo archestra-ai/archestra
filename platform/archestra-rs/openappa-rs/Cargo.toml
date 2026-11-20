@@ -61,12 +61,24 @@ crate-type = ["cdylib"]
 # replaying (#897); then v0.43.1 and selector alternatives with `|` (#900),
 # file tracking as its own battery, with an annotator binding no declaration
 # names left idle instead of refused (#909), opencode background subagents
-# (#731), and the archestra battery ruling `list_openappa_operations` and
-# `propose_tuner_suggestion` (#926).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "050cb04a2cee8079d41a8e816e2f801b3f3c692c", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "050cb04a2cee8079d41a8e816e2f801b3f3c692c" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "050cb04a2cee8079d41a8e816e2f801b3f3c692c", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "050cb04a2cee8079d41a8e816e2f801b3f3c692c" }
+# (#731), the archestra battery ruling `list_openappa_operations` and
+# `propose_tuner_suggestion` (#926), and stops held while a call they did not
+# answer still runs (#936); then v0.44.0, shared policy publication (#938),
+# reused SQLite snapshots (#939), and shell annotations inspecting every
+# pipeline stage, chained command and substitution, with separate result and
+# send labels (#940); then a spawn's tool call carrying the return it
+# declares (#947, #948); then appa-guide teaching newcomers how APPA decides
+# while setting it up (#942); then the label kept on env templates and code
+# named for credentials (#944), protected Claude Code sessions' shell kept
+# working across its updates (#946), the amp battery (#956), opencode's safe
+# shell routed through the file-tracker battery (#959), a subagent's return
+# that a host can defer to its parent's decision, declared on the spawn as
+# `DeclaredReturn` (#960), and the archestra battery ruling the four MCP
+# server rules tools (#965).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a1131275c1bb59412c7fabfbc0c653de3629eb5a" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

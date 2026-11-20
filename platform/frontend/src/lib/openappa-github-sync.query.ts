@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import {
   useIsMutating,
   useMutation,
@@ -29,16 +33,47 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
-/** The GitHub App's permissions against what self-service needs, on demand. */
+type AppaGithubAppGrants = NonNullable<
+  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
+>;
+
+/**
+ * The GitHub App's grants, each with whether the App's settings ask for it
+ * now. Asked for and not granted: the installation has still to accept the
+ * change. `requested` is absent when the settings could not be read.
+ */
+export type AppaGithubAppPermissions = Omit<
+  AppaGithubAppGrants,
+  "permissions"
+> & {
+  permissions: Array<
+    AppaGithubAppGrants["permissions"][number] & { requested?: boolean }
+  >;
+};
+
+/**
+ * The GitHub App's permissions as GitHub grants them now. The Git sync card
+ * and every setup step read this one answer; every Git sync action reads it
+ * again, since it invalidates the queries under the same key. Whoever shows
+ * it shows its error too, so a failed read raises no toast.
+ */
 export function useAppaGithubAppGrants(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
-    enabled,
+    enabled: enabled && canRead === true,
     queryKey: [...appaGithubSyncQueryKey, "app-grants"],
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
-      throwOnApiError(error);
+      // The endpoint is not in the API reference yet, so the generated
+      // client has no function for it.
+      const { data, error } = await archestraApiClient.get<{
+        200: AppaGithubAppPermissions | null;
+      }>({ url: "/api/openappa/github-sync/app-permissions" });
+      throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
+    staleTime: 60_000,
   });
 }
 
@@ -106,6 +141,58 @@ export function useAppaSelfService(enabled = true) {
   });
 }
 export const appaSelfServiceQueryKey = ["openappa-github-sync", "self-service"];
+
+/**
+ * The MCP servers' rules files this reader may open with no Guardrails
+ * permission: those of servers they may open in the MCP registry.
+ */
+function useServerRulesFiles(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: serverRulesFilesQueryKey,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaServerRulesFiles();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.files ?? [];
+    },
+    staleTime: 60_000,
+  });
+}
+const serverRulesFilesQueryKey = ["openappa-github-sync", "server-rules-files"];
+
+/**
+ * Whether the Policy page is open to this reader through their MCP servers
+ * alone: no Guardrails permission, and at least one server's rules file they
+ * may open. Null until known. The page then lists only those files.
+ */
+export function useServerRulesAccess(): {
+  scoped: boolean | null;
+  files: ServerRulesFile[];
+} {
+  const policy = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const registry = useHasPermissions({ mcpRegistry: ["read"] });
+  // Asked only of a reader without the permission. With Guardrails off the
+  // list is empty, so the answer is no.
+  const wanted = policy.data === false;
+  const files = useServerRulesFiles(wanted);
+  const scoped = policy.isPending
+    ? null
+    : policy.data === true
+      ? false
+      : registry.isPending
+        ? null
+        : registry.data !== true
+          ? false
+          : files.isPending
+            ? null
+            : (files.data?.length ?? 0) > 0;
+  return { scoped, files: scoped ? (files.data ?? NO_FILES) : NO_FILES };
+}
+type ServerRulesFile =
+  archestraApiTypes.GetOpenappaServerRulesFilesResponses["200"]["files"][number];
+const NO_FILES: ServerRulesFile[] = [];
 
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();

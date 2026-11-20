@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  TriangleAlert,
   Unlink,
 } from "lucide-react";
 import Link from "next/link";
@@ -125,7 +126,56 @@ const knownFilter = (
  * battery list is a read of the document, not of a table: an entry is included
  * because a line spells it, and every control here edits that line.
  */
-export function BatteriesPanel() {
+/**
+ * One battery's dialog on its own, for a page that names a battery and wants
+ * what is wrong with it fixed where the reader is. Renders nothing until the
+ * battery is known.
+ */
+export function BatteryEditDialog({
+  name,
+  onClose,
+}: {
+  name: string;
+  onClose: () => void;
+}) {
+  const { declarations, batteries, catalog, servers, canManage, canBind } =
+    useBatteryData();
+  const policy = declarations.data;
+  const summary = batteries.data?.find((battery) => battery.name === name);
+  if (!policy || !summary) return null;
+  const included =
+    policy.batteries.find((entry) => entry.name === name) ?? null;
+  return (
+    <BatteryDialog
+      row={{ name, summary, included }}
+      catalog={catalog.data ?? []}
+      installedCatalogIds={
+        servers.data
+          ? new Set(servers.data.map((server) => server.catalogId))
+          : null
+      }
+      credentials={batteryCredentials({
+        declarations: policy,
+        name,
+        variables: summary.credentials ?? [],
+      })}
+      catalogName={(catalogId) =>
+        catalog.data
+          ? (catalog.data.find((entry) => entry.id === catalogId)?.name ??
+            "Removed server")
+          : ""
+      }
+      status={included ? enforcedStatus(policy, included) : null}
+      writable={canManage === true && !policy.managedInGithub}
+      bindable={canBind}
+      managedInGithub={policy.managedInGithub}
+      onClose={onClose}
+    />
+  );
+}
+
+/** What the batteries, and one battery's dialog, are drawn from. */
+function useBatteryData() {
   const declarations = usePolicyDeclarations();
   const batteries = useBatteries();
   // Battery matching reads each entry's server URL and image, which only the
@@ -150,6 +200,12 @@ export function BatteriesPanel() {
   // package may carry such code, so both take Can use on every credential too.
   const { data: canUseEveryCredential } = useCanUseEveryCredential();
   const canBind = canManage === true && canUseEveryCredential === true;
+  return { declarations, batteries, catalog, servers, canManage, canBind };
+}
+
+export function BatteriesPanel() {
+  const { declarations, batteries, catalog, servers, canManage, canBind } =
+    useBatteryData();
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,
@@ -188,6 +244,14 @@ export function BatteriesPanel() {
     );
   const policy = declarations.data;
   const { managedInGithub } = policy;
+  // A line of the policy's aliases that names a battery the policy does not
+  // include: it does nothing, and the policy is where it is removed.
+  const { unusedAliases } = policy;
+  const unusedAliasNote = `${
+    unusedAliases.length === 1
+      ? "One alias in the policy names a battery it does not include"
+      : `${unusedAliases.length} aliases in the policy name batteries it does not include`
+  }: ${unusedAliases.map((alias) => alias.namespace).join(", ")}.`;
   const included = policy.batteries;
   const statusOf = (entry: PolicyBattery) => enforcedStatus(policy, entry);
   // The repository owns the text while it syncs: an edit here would be undone
@@ -273,7 +337,8 @@ export function BatteriesPanel() {
   ];
   return (
     <section aria-label="OpenAPPA batteries" className="space-y-4">
-      {managedInGithub && <GithubManagedPolicyNotice />}
+      {/* A healthy sync is a chip in the toolbar; only what asks for something takes a row. */}
+      {managedInGithub && <GithubManagedPolicyNotice hideHealthy />}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
@@ -285,24 +350,46 @@ export function BatteriesPanel() {
         </div>
       )}
       <CollectionFilters>
-        <FilterBar
-          onClearFilters={hasActiveFilters ? clearFilters : undefined}
-          search={
-            <SearchInput
-              objectNamePlural="batteries"
-              searchFields={["name", "description", "namespace"]}
-              className={filterSearchClass}
-            />
-          }
-        >
-          <FilterSelect
-            value={statusFilter}
-            showSearch={false}
-            onValueChange={(value) => setFilter("status", value)}
-            placeholder="Filter by status"
-            items={STATUS_OPTIONS}
-          />
-        </FilterBar>
+        {/* What the page has to say beside its filters stays on their row. */}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <FilterBar
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  objectNamePlural="batteries"
+                  searchFields={["name", "description", "namespace"]}
+                  className={filterSearchClass}
+                />
+              }
+            >
+              <FilterSelect
+                value={statusFilter}
+                showSearch={false}
+                onValueChange={(value) => setFilter("status", value)}
+                placeholder="Filter by status"
+                items={STATUS_OPTIONS}
+              />
+            </FilterBar>
+          </div>
+          {managedInGithub && <GithubManagedPolicyNotice healthyOnly />}
+          {unusedAliases.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href={`/openappa/policy?line=${unusedAliases[0].line}`}
+                  aria-label={unusedAliasNote}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-amber-600 outline-none hover:bg-amber-500/10 focus-visible:bg-amber-500/10 dark:text-amber-400"
+                >
+                  <TriangleAlert className="size-4" aria-hidden />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end" className="max-w-60">
+                {`${unusedAliasNote} Click to see it in the policy.`}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </CollectionFilters>
       <DataTable
         columns={columns}
@@ -354,26 +441,6 @@ export function BatteriesPanel() {
           name={removing}
           onClose={() => setRemoving(null)}
         />
-      )}
-      {declarations.data.unusedAliases.length > 0 && (
-        <div className="space-y-2 border-t pt-3">
-          <h3 className="text-sm font-medium">Unused aliases</h3>
-          {declarations.data.unusedAliases.map((alias) => (
-            <div
-              key={alias.namespace}
-              className="flex flex-wrap items-center gap-2 text-sm"
-            >
-              <span className="font-mono text-xs">{alias.namespace}</span>
-              <span className="text-muted-foreground">→</span>
-              <span className="text-muted-foreground">
-                {alias.servers.join(", ")}
-              </span>
-            </div>
-          ))}
-          <p className="text-xs text-muted-foreground">
-            No included battery declares this namespace.
-          </p>
-        </div>
       )}
     </section>
   );

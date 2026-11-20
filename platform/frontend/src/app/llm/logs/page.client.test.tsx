@@ -116,6 +116,8 @@ function makeSessionSummary(
     interactionId: null,
     requestCount: 1,
     failedOverCount: 0,
+    failedRequestCount: 0,
+    chatErrorCount: 0,
     totalInputTokens: 100,
     totalOutputTokens: 50,
     totalCacheReadTokens: 0,

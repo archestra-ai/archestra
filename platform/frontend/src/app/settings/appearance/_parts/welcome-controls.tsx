@@ -23,6 +23,7 @@ import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -208,14 +209,16 @@ export function OnboardingGuide({
 export function SiteAnnouncement({
   content,
   expiresAt,
+  dismissible,
   disabled,
   onChange,
   onRemove,
 }: {
   content: string;
   expiresAt: Date | null;
+  dismissible: boolean;
   disabled: boolean;
-  onChange: (content: string, expiresAt: Date | null) => void;
+  onChange: (value: AnnouncementValue) => void;
   onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -246,6 +249,7 @@ export function SiteAnnouncement({
                 {expiresAt
                   ? `${expiresAt.getTime() < Date.now() ? "Expired" : "Expires"} ${formatExpiration(expiresAt)}`
                   : "No expiration"}
+                {!dismissible && <span> · Users can't dismiss it</span>}
               </FieldDescription>
             </div>
             <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -278,11 +282,12 @@ export function SiteAnnouncement({
         <AnnouncementDialog
           content={content}
           expiresAt={expiresAt}
+          dismissible={dismissible}
           disabled={disabled}
           onClose={() => setEditing(false)}
-          onKeep={(nextContent, expiration) => {
+          onKeep={(value) => {
             if (disabled) return;
-            onChange(nextContent, expiration);
+            onChange(value);
             setEditing(false);
           }}
         />
@@ -428,22 +433,31 @@ function GuidePageDialog({
   );
 }
 
+type AnnouncementValue = {
+  content: string;
+  expiresAt: Date | null;
+  dismissible: boolean;
+};
+
 function AnnouncementDialog({
   content,
   expiresAt,
+  dismissible,
   disabled,
   onClose,
   onKeep,
 }: {
   content: string;
   expiresAt: Date | null;
+  dismissible: boolean;
   disabled: boolean;
   onClose: () => void;
-  onKeep: (content: string, expiresAt: Date | null) => void;
+  onKeep: (value: AnnouncementValue) => void;
 }) {
   const id = useId();
   const [draft, setDraft] = useState(content);
   const [expiration, setExpiration] = useState(expiresAt);
+  const [allowDismiss, setAllowDismiss] = useState(dismissible);
   const [error, setError] = useState<string | null>(null);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
@@ -467,7 +481,11 @@ function AnnouncementDialog({
                   setError("Enter notification content.");
                   return;
                 }
-                onKeep(draft, expiration);
+                onKeep({
+                  content: draft,
+                  expiresAt: expiration,
+                  dismissible: allowDismiss,
+                });
               }}
             >
               <span>Keep changes</span>
@@ -501,6 +519,22 @@ function AnnouncementDialog({
               onChange={setExpiration}
             />
           </fieldset>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-dismissible`}>Allow users to dismiss</Label>
+            <FieldDescription id={`${id}-dismissible-description`}>
+              When off, the notification has no close button and stays until you
+              remove it or it expires.
+            </FieldDescription>
+          </div>
+          <Switch
+            id={`${id}-dismissible`}
+            checked={allowDismiss}
+            onCheckedChange={setAllowDismiss}
+            disabled={disabled}
+            aria-describedby={`${id}-dismissible-description`}
+          />
         </div>
       </div>
     </StandardDialog>

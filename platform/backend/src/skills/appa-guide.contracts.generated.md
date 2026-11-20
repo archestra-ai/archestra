@@ -1279,6 +1279,50 @@ Parents can also declare return bounds prospectively before issuing the spawn by
 
 Prospective declarations apply strictly to the parent's next immediate child spawn within the same turn. The declaration remains valid only while the parent's label remains unchanged. If intervening tool calls alter the parent's label, the declaration lapses. Prospective declarations must immediately precede the subagent call with no intervening tool invocations. Fan-out spawns ignore prospective declarations and must configure return contracts at the spawn block.
 
+A host can also declare the return on the spawn's own `tool_call` event, in the `declares` field. The field takes the same `label` and optional `return_schema`:
+
+```json
+{ "declares": { "label": {} } }
+```
+
+`declares` selects one of three returns. Without `return_schema`, the return crosses as spoken. With `return_schema`, `attest-schema` attests the return. With `deferred`, the return is a [deferred return](#deferred-returns). A void return or a named output sanitizer needs a plan from the spawn's block.
+
+If the spawn is blocked, OpenAPPA applies the declaration through the block's declaration plan and checks the call again in the same hook. The call is then released, or blocked only by its other preconditions. If no declaration plan of the block fits `declares`, the block states that the declaration was not applied.
+
+A declaration that already stands for the call, with the same tool and arguments, is kept: `declares` does not replace it. A prospective declaration also takes precedence over `declares`.
+
+OpenAPPA refuses a `tool_call` that carries `declares` but does not start exactly one subagent. Under a deployment without `context_control` a spawn is released without a prepared child, so OpenAPPA applies no declaration there.
+
+#### Deferred returns
+
+A deferred return sets no limit for the child. The parent decides when the child stops, instead of choosing a limit before the child starts. Only an embedded host that delivers a child's answer to the parent itself declares one, and a served hook that declares it is refused. The declaration is `deferred` in `declares`, with neither `label` nor `return_schema`, on a call that carries the host's `call_id`:
+
+```json
+{ "declares": { "deferred": true } }
+```
+
+The child may read and accept whatever the parent's own limits allow. OpenAPPA decides the return at the child's stop:
+
+- An empty final message returns nothing.
+- An answer that leaves the parent's label unchanged crosses as spoken.
+- An answer that would narrow the parent's label is frozen. The hook answers `defer_return`, the child's errand ends, and nothing crosses.
+
+The parent decides on a frozen answer once, by calling `execute_remedy_plan`. The deferral notice gives one reference that accepts the answer and one that discards it:
+
+```text
+[appa] The subagent's answer was deferred. Its label is suspicious/a restricted audience; accepting it combines this session's label with that label. Decide once:
+  Accept:  execute_remedy_plan(offer_id: "ret-5f1c02a9d3e84b77")
+  Discard: execute_remedy_plan(offer_id: "ret-9a40c7e1b2d36f05")
+```
+
+The notice names the answer's trust and whether its audience is restricted, but none of the groups or readers in that audience: the child's own calls chose them.
+
+Accepting returns the answer as the result of that call and combines the parent's label with the answer's label. OpenAPPA refuses an acceptance that would take the parent below a limit the parent itself stands under. Discarding crosses nothing, and a discarded answer cannot be accepted later. Repeating either call answers the recorded decision. Only the trajectory that spawned the child can decide on its answer.
+
+The spawn's own result never carries the child's words. OpenAPPA replaces it with the deferral notice once an answer is frozen, and withholds it otherwise. The notice reads the same before and after the parent decides.
+
+OpenAPPA takes `deferred` only from `declares`, and only for a spawn that starts exactly one subagent. A declaration made for a call proposed without `deferred` does not cover the same call proposed with it, and the reverse.
+
 In the example below, a child agent can inspect internal customer data and pass its return payload through `remove_customer_details` before the parent receives it:
 
 ```toml

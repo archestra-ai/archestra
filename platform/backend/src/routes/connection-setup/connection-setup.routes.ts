@@ -30,6 +30,7 @@ import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { CacheKey } from "@/cache-manager";
 import config, { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
@@ -48,6 +49,7 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { openappaEnabled } from "@/openappa/service";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -65,7 +67,10 @@ import {
   StartupGuardArtifactSchema,
   startupGuardArtifact,
 } from "@/services/agent-connection-setup/guard/startup-guard-artifact";
+import { CURSOR_DISCONNECT_UNTIL_HEADER } from "@/services/agent-connection-setup/payloads/cursor-guardrails-hook";
+import { CURSOR_WEB_CALL_HEADER } from "@/services/agent-connection-setup/payloads/cursor-web-tools";
 import { managedRuntimeManifest } from "@/services/agent-connection-setup/payloads/managed-runtime";
+import { issueConnectionHooksToken } from "@/services/connection-hooks-token";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import {
@@ -83,6 +88,10 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import {
+  CursorHookRequestSchema,
+  handleCursorHook,
+} from "@/services/cursor-guardrails-hooks";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
@@ -110,6 +119,7 @@ import {
 } from "../proxy/model-router-resolver";
 import {
   CONNECTION_HEALTH_PATH,
+  CONNECTION_HOOKS_CURSOR_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
@@ -416,6 +426,54 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorization.slice(7),
       );
       return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+
+  fastify.post(
+    CONNECTION_HOOKS_CURSOR_PATH,
+    {
+      // A tool result travels in the event; the hook helper truncates it.
+      bodyLimit: 2 * 1024 * 1024,
+      schema: {
+        operationId: RouteId.ReportCursorHookEvent,
+        // Listed in the API reference once the docs for Cursor's hooks ship.
+        hide: true,
+        description:
+          "Report one Cursor hook step with an installation-scoped hook credential. Guardrails rule on tool calls in chats that do not pass through the LLM proxy. Live membership and gateway access are rechecked.",
+        tags: ["Connection Setups"],
+        body: CursorHookRequestSchema,
+        response: constructResponseSchema(
+          z.object({
+            permission: z.enum(["allow", "deny", "ask"]).optional(),
+            user_message: z.string().optional(),
+            agent_message: z.string().optional(),
+            updated_input: z.record(z.string(), z.unknown()).optional(),
+            updated_mcp_tool_output: z.string().optional(),
+            additional_context: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (
+        await isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-cursor-hooks-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 1200 },
+        )
+      )
+        throw new ApiError(429, "Too many requests");
+      const authorization = request.headers.authorization;
+      if (!authorization?.startsWith("Bearer "))
+        throw new ApiError(401, "Hook credential required");
+      const parentCall = request.headers[CURSOR_WEB_CALL_HEADER];
+      const { answer, disconnectUntil } = await handleCursorHook({
+        token: authorization.slice(7),
+        request: request.body,
+        parentCall: typeof parentCall === "string" ? parentCall : undefined,
+      });
+      if (disconnectUntil !== undefined)
+        reply.header(CURSOR_DISCONNECT_UNTIL_HEADER, String(disconnectUntil));
+      return reply.header("Cache-Control", "no-store").send(answer);
     },
   );
 
@@ -850,14 +908,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (uniqueIds.length > 0) {
           assertConnectPluginsEnabled(organization);
-          const canDeliverPlugins = await userCanDeliverPlugins({
+          const canUse = await pluginUseChecker({
             userId: user.id,
             organizationId,
           });
-          if (!canDeliverPlugins) {
+          if (!uniqueIds.every(canUse)) {
             throw new ApiError(
               403,
-              "You need plugin:read and plugin:admin permissions to install plugins",
+              "You need permission to use every selected plugin to install it",
             );
           }
           await assertPluginDeliveryBudget({
@@ -897,26 +955,21 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId !== "grok-build" &&
         organization.connectionPluginsEnabled
       ) {
-        const canDeliverPlugins = await userCanDeliverPlugins({
+        // Every deliverable plugin the user may use, and no other: the
+        // budget applies to what this user installs, not the whole catalog.
+        const canUse = await pluginUseChecker({
           userId: user.id,
           organizationId,
         });
-        if (canDeliverPlugins) {
-          const requiredPlatform = resolvePluginPlatform(platform);
-          assertPluginDeliveryStats(
-            await PluginModel.getDeliverableStatsForClient({
-              organizationId,
-              clientType: clientId,
-              platform: requiredPlatform,
-            }),
-          );
-          const deliverable =
-            await PluginModel.findDeliverableMetadataForClient({
-              organizationId,
-              clientType: clientId,
-              platform: requiredPlatform,
-            });
-          const ids = deliverable.map((plugin) => plugin.id);
+        const deliverable = await PluginModel.findDeliverableMetadataForClient({
+          organizationId,
+          clientType: clientId,
+          platform: resolvePluginPlatform(platform),
+        });
+        const ids = deliverable
+          .map((plugin) => plugin.id)
+          .filter((id) => canUse(id));
+        if (ids.length > 0) {
           await assertPluginDeliveryBudget({ ids, organizationId });
           plugins = await PluginModel.findApprovedByIds({
             ids,
@@ -1582,11 +1635,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     assertConnectPluginsEnabledOrGone(organization);
-    const canDeliverPlugins = await userCanDeliverPlugins({
+    // A use grant revoked since the setup was made withdraws the setup.
+    const canUse = await pluginUseChecker({
       userId: setup.userId,
       organizationId: setup.organizationId,
     });
-    if (!canDeliverPlugins) throw GONE();
+    if (!pluginIds.every(canUse)) throw GONE();
     await assertPluginDeliveryBudget({
       ids: pluginIds,
       organizationId: setup.organizationId,
@@ -1682,6 +1736,21 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
               }),
             }
           : null,
+      deploymentOrigin: proxyBaseUrlToOrigin(setup.baseUrl),
+      // Only where Guardrails can be turned on: the hook stops every tool
+      // call it cannot have checked, so a deployment without Guardrails
+      // would gain nothing but that failure.
+      cursorGuardrailsHook:
+        setup.clientId === "cursor" && mcp && openappaEnabled()
+          ? {
+              url: `${proxyBaseUrlToOrigin(setup.baseUrl)}${CONNECTION_HOOKS_CURSOR_PATH}`,
+              token: issueConnectionHooksToken({
+                setupId: setup.id,
+                secret: config.auth.secret ?? "",
+              }),
+              finishWebSetup: true,
+            }
+          : null,
       runtimeHandoffInstructions:
         mcp && organization.connectionRuntimeHandoffEnabled
           ? resolveRuntimeHandoffInstructions({
@@ -1710,29 +1779,16 @@ async function assertPluginDeliveryBudget(params: {
   if (error) throw new ApiError(400, error);
 }
 
-function assertPluginDeliveryStats(params: {
-  pluginCount: number;
-  totalBytes: number;
-}): void {
-  const error = pluginDeliveryBudgetError(params);
-  if (error) throw new ApiError(400, error);
-}
-
-async function userCanDeliverPlugins(params: {
+/**
+ * Whether the user may install a plugin: a `use` grant on it (or at `*`).
+ * Loads the user's plugin grants once for every plugin a request checks.
+ */
+async function pluginUseChecker(params: {
   userId: string;
   organizationId: string;
-}): Promise<boolean> {
-  const [canRead, canAdmin] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "plugin", "read"),
-    ResourcePermissions.allows({
-      userId: params.userId,
-      organizationId: params.organizationId,
-      resource: "plugin",
-      scope: "*",
-      action: "update",
-    }),
-  ]);
-  return canRead && canAdmin;
+}): Promise<(pluginId: string) => boolean> {
+  const checker = await getPluginPermissionChecker(params);
+  return (pluginId) => checker.allowsScoped(pluginId, "use");
 }
 
 /**

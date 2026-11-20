@@ -408,7 +408,7 @@
     "searchText": "list held peer messages inbox pending queued messages message IDs expiration time check incoming messages from other agents before reading message content"
   },
   "list_plugins": {
-    "definitionHash": "997e09c178c7df397bb60252276fd4684677128fd113e24bdcfa410d1c8ee46c",
+    "definitionHash": "45ac691f6a567f6b8e1b87cd7db262182bdf40d4899dd8ca309982d0b5eca89a",
     "searchText": "list plugins organization, browse available plugins, plugin id client platforms visibility file count, filter by access mine shared org others, my plugins, shared with team role user service account, filter by owner creator, find plugin id"
   },
   "list_projects": {
@@ -468,11 +468,11 @@
     "searchText": "preview run app assigned MCP tool server-side, test tool call with arguments, inspect real output response shape schema before writing app code, debug app authoring, check auth required, sample tool result"
   },
   "preview_guardrails_policy_change": {
-    "definitionHash": "c58978983ccc3019b6431b04fb1fcaf0fc27a7bcbed2cd9bcf83b21915481d42",
-    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, check rules before publishing, text replacement edits, full rewrite, expected revision"
+    "definitionHash": "4c878d839bcfa31c38beccbe3eb4c8ca97a7427b56ece434ef6d57950f4e80d5",
+    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, confirm unknown or unobserved MCP tools before previewing, allowUnknownTools, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {
-    "definitionHash": "9c7a65198ad482003306a6d5bd62994f4faa7c23bc5fd0de317bd99e9169a6b3",
+    "definitionHash": "8c0a0fd16430d63653bc893e7065cb37d8d4cbb65dcd2fb4d4c52ca8c0d0269d",
     "searchText": "preview proposed MCP server guardrails rules file, diff, validate whole organization policy, dry run check, appa.toml include change, tool prefix rules, annotators, attention marks, tags, tool output sanitizer confined results, auto merge, expected commit, review before proposing"
   },
   "preview_guardrails_validation_change": {
@@ -480,7 +480,7 @@
     "searchText": "preview guardrails validation test suite change, dry run, check syntax of .appa test files, replay test cases against saved policy with live annotators, pass/fail results, add replace delete validation files, optimistic concurrency revision version"
   },
   "propose_guardrails_server_rules_change": {
-    "definitionHash": "c22607b64a0c1fbb26e3f4a79b50a0f8502facef3bc0df8f7c244d66743e4c12",
+    "definitionHash": "9ebd3f61ef068360b9dc55bbbc3415c54587d7859e1e6ec63375db57d6baeb4b",
     "searchText": "propose MCP server guardrails rules change, open pull request on policy repository, update per-server rules file, add self-service folder include to appa.toml, change summary for reviewers, Git sync after merge, pull request link, edit tool policy for one server"
   },
   "publish_app": {
@@ -640,8 +640,8 @@
     "searchText": "publish update guardrails policy organization.appa.toml, apply edits or full rewrite, save policy revision, open pull request or GitLab merge request via Git sync, diff changed lines, enable enforcement, AI safety rules configuration, optimistic concurrency expected revision"
   },
   "update_guardrails_validation": {
-    "definitionHash": "2d6b23b5ce076afe6a30f083fdf9e1adf334b2dea26e746ec82cf4d1b11feb5c",
-    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert or delete validation files by path, apply approved previewed changes, revision version conflict check, syntax check, Git sync pull request, save locally, commit guardrail tests"
+    "definitionHash": "41bb8456e1f529b971f6f8d3465c3a20b77a667fd03482c8b749d4bf2c700032",
+    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert delete files by path, apply approved previewed changes, run added edited validations immediately, record pass fail cannot-run results run history, deletion-only save, revision version conflict check, Git sync pull request"
   },
   "update_hook": {
     "definitionHash": "ddace8f7ca9f6310b73316dc3e3ddbd66958b6ac365994e2489531c5462d91dd",

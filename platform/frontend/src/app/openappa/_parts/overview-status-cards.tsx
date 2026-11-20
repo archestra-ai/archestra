@@ -36,7 +36,6 @@ import {
 } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { breakTheGlassSummary } from "./break-the-glass-summary";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -50,6 +49,7 @@ import {
   validationSuiteSummary,
   validationSummaryText,
 } from "./validation-run-history";
+import { ValidationStatusBadge } from "./validation-status-badge";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {
@@ -60,7 +60,7 @@ export function OverviewStatusCards() {
     guardrailsPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
-    log: ["read"],
+    guardrailsYell: ["read"],
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
@@ -224,7 +224,7 @@ function ValidationCard() {
             <span>Write a validation</span>
           </OpenAppaChatButton>
           <Button size="sm" variant="outline" asChild>
-            <Link href="/openappa/validation">
+            <Link href="/openappa/policy">
               <span>View Validations</span>
               <ArrowRight />
             </Link>
@@ -281,7 +281,7 @@ function YellsCard() {
       action={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild>
-            <Link href="/openappa/yells">
+            <Link href="/consults/logs?type=yell&yellStatus=unresolved">
               Review yells <ArrowRight />
             </Link>
           </Button>

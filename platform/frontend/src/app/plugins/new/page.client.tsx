@@ -274,8 +274,7 @@ function NewPluginWizard() {
                   Back
                 </Button>
                 <PermissionButton
-                  permissions={{ plugin: ["create", "update"] }}
-                  permissionScope="*"
+                  permissions={{ plugin: ["create"] }}
                   disabled={!isComplete || createPlugin.isPending}
                   onClick={handleCreate}
                 >

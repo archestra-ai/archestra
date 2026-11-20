@@ -73,7 +73,7 @@ jobs:
     outputs:
       run: ${{ steps.diff.outputs.run }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         if: github.event_name == 'merge_group'
         with:
           persist-credentials: false
@@ -171,7 +171,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -438,7 +438,7 @@ jobs:
       contents: read
       actions: read # Required for private mirrors' same-run platform image artifact.
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -467,7 +467,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Report screenshot validation
@@ -507,7 +507,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -692,7 +692,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -847,7 +847,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -909,10 +909,6 @@ jobs:
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
-          # OpenAPPA follows the beta master switch, off here: with it on the
-          # proxy rejects tool-declaring requests these specs send. The
-          # OpenAPPA specs run on their own stack in the quickstart job.
-          ARCHESTRA_BETA: "false"
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
           # image this workflow just built. Untrusted PRs don't push to the
@@ -1047,7 +1043,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1094,7 +1090,6 @@ jobs:
         continue-on-error: true
         env:
           PLATFORM_IMAGE: ${{ steps.load-openappa-image.outputs.image-tag }}
-          ARCHESTRA_BETA: "true"
           # Same MCP server base image choice as the lite job.
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
           MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
@@ -1411,36 +1406,47 @@ jobs:
       - name: Assert embedded Dagger Engine is live
         run: |
           KUBECONFIG_PATH=/app/data/.kubeconfig
-
-          echo "Waiting for the Dagger Engine statefulset to be Ready..."
-          if ! docker exec archestra-quickstart \
-              kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
-              statefulset/dagger-runtime-engine -n default --timeout=120s; then
-            echo "FAILED: Dagger Engine statefulset did not become Ready"
+          dump_engine_state() {
             docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n default -o wide || true
             docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" describe statefulset/dagger-runtime-engine -n default || true
             docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" get events -n default --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
             docker logs archestra-quickstart --tail=200 2>&1 || true
-            exit 1
-          fi
+          }
 
-          # rollout status only proves the pod is Ready. The entrypoint's own gate
-          # is 60s; if it timed out there but the pod became Ready a few seconds
-          # later, the backend env exports never ran and the runtime stays OFF for
-          # users even though the pod is up. The success log line is the authoritative
-          # signal that the feature actually flipped on.
+          # The backend answers /ready once the embedded cluster does, which
+          # can be before the entrypoint has even applied the engine's
+          # manifest, so wait for the entrypoint's own verdict rather than for
+          # a statefulset that may not exist yet. Its success line is the
+          # authoritative signal that the code runtime is on.
           # Match against the captured logs with shell pattern matching rather
           # than `docker logs | grep -q`: under Actions' default `bash -o pipefail`
           # a `grep -q` that exits early can SIGPIPE the producer and fail the
           # whole pipeline, spuriously reporting the confirmation as missing.
-          echo "Verifying the entrypoint enabled the code runtime..."
-          LOGS=$(docker logs archestra-quickstart 2>&1)
-          if [[ "${LOGS}" == *"code runtime stays disabled"* ]]; then
-            echo "FAILED: entrypoint reported the Dagger Engine did not become ready in time"
+          echo "Waiting for the entrypoint to report the Dagger Engine..."
+          for _ in $(seq 1 150); do
+            LOGS=$(docker logs archestra-quickstart 2>&1)
+            if [[ "${LOGS}" == *"Dagger Engine ready - code runtime enabled"* ]]; then
+              break
+            fi
+            if [[ "${LOGS}" == *"Dagger Engine did not become ready"* || "${LOGS}" == *"code runtime stays disabled"* ]]; then
+              echo "FAILED: entrypoint reported the Dagger Engine did not become ready in time"
+              dump_engine_state
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "${LOGS}" != *"Dagger Engine ready - code runtime enabled"* ]]; then
+            echo "FAILED: the entrypoint did not report the Dagger Engine within 5 minutes"
+            dump_engine_state
             exit 1
           fi
-          if [[ "${LOGS}" != *"Dagger Engine ready - code runtime enabled"* ]]; then
-            echo "FAILED: did not find the code-runtime-enabled confirmation in container logs"
+
+          # The pod is Ready too, not only reported so.
+          if ! docker exec archestra-quickstart \
+              kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+              statefulset/dagger-runtime-engine -n default --timeout=60s; then
+            echo "FAILED: Dagger Engine statefulset is not Ready"
+            dump_engine_state
             exit 1
           fi
           echo "Dagger Engine is live and the code runtime is enabled."
@@ -1513,7 +1519,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1639,7 +1645,7 @@ jobs:
       pull-requests: write # Required for playwright-report-summary to comment on PRs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1680,7 +1686,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # v4.1.1
+        uses: daun/playwright-report-summary@v4.1.1
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true

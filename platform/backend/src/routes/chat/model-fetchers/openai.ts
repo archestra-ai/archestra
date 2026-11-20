@@ -3,6 +3,8 @@ import {
   ArchestraInternalErrorCode,
   type ModelInputModality,
   type ModelOutputModality,
+  type ReasoningEffortLevel,
+  toReasoningEffortLevels,
 } from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
@@ -21,7 +23,7 @@ import {
 
 // Codex uses client_version to gate models that require a newer client.
 // An hourly workflow proposes updates from stable Codex CLI releases.
-const CODEX_MODELS_CLIENT_VERSION = "0.169.0";
+const CODEX_MODELS_CLIENT_VERSION = "0.171.0";
 
 const CodexModelsResponseSchema = z.object({
   models: z.array(
@@ -30,6 +32,8 @@ const CodexModelsResponseSchema = z.object({
       display_name: z.string().optional(),
       visibility: z.enum(["list", "hide", "none"]),
       priority: z.number(),
+      // Read leniently: a shape change here must not fail the whole catalog.
+      supported_reasoning_levels: z.unknown().optional(),
     }),
   ),
 });
@@ -125,11 +129,19 @@ export async function fetchOpenAiModels(
     return models
       .filter((model) => model.visibility === "list")
       .sort((a, b) => a.priority - b.priority)
-      .map((model) => ({
-        id: model.slug,
-        displayName: model.display_name || model.slug,
-        provider: "openai" as const,
-      }));
+      .map((model) => {
+        const supportedReasoningEfforts = codexReasoningEfforts(
+          model.supported_reasoning_levels,
+        );
+        return {
+          id: model.slug,
+          displayName: model.display_name || model.slug,
+          provider: "openai" as const,
+          ...(supportedReasoningEfforts
+            ? { capabilities: { supportedReasoningEfforts } }
+            : {}),
+        };
+      });
   }
 
   const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
@@ -144,11 +156,13 @@ export async function fetchOpenAiModels(
     extraHeaders,
   });
 
-  const { prices, outputLimits } = await fetchLiteLlmMetadata({
-    baseUrl,
-    apiKey,
-    extraHeaders,
-  });
+  const { prices, outputLimits, reasoningEfforts } = await fetchLiteLlmMetadata(
+    {
+      baseUrl,
+      apiKey,
+      extraHeaders,
+    },
+  );
   return data.data.flatMap((model) => {
     // Classification wins over the chat-name filter: transcription ids pass
     // it, audio chat ids fail it.
@@ -163,9 +177,11 @@ export async function fetchOpenAiModels(
       mapped.capabilities?.outputLength,
       outputLimits.get(model.id),
     ].filter((limit): limit is number => typeof limit === "number");
+    const supportedReasoningEfforts = reasoningEfforts.get(model.id);
     const capabilities: FetchedModelCapabilities = {
       ...(classified ?? openAiSearchCapabilities(model.id)),
       ...(limits.length ? { outputLength: Math.min(...limits) } : {}),
+      ...(supportedReasoningEfforts ? { supportedReasoningEfforts } : {}),
     };
     return [
       {
@@ -244,4 +260,22 @@ function mediaCapabilities(
     supportsToolCalling: false,
     authoritative: true,
   };
+}
+
+/**
+ * The levels a Codex catalog entry lists in `supported_reasoning_levels`
+ * (`[{ effort: "low", description }, …]`). Undefined when the entry lists
+ * none, which says nothing about whether the model reasons.
+ */
+function codexReasoningEfforts(
+  levels: unknown,
+): ReasoningEffortLevel[] | undefined {
+  if (!Array.isArray(levels) || levels.length === 0) return undefined;
+  return toReasoningEffortLevels(
+    levels.map((level) =>
+      level && typeof level === "object" && "effort" in level
+        ? level.effort
+        : undefined,
+    ),
+  );
 }

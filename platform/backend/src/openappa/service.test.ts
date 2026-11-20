@@ -39,11 +39,13 @@ import {
   executeRemedyByOffer,
   executeYell,
   listPeerMessages,
+  loadChildRejections,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
   readPeerMessage,
   returnRuntimeValue,
+  type SpawnReturnDeclaration,
   sendPeerMessage,
   sessionFromHeaders,
   startRuntimeChild,
@@ -103,6 +105,7 @@ const native = vi.hoisted(() => ({
   collectOpenappaMetrics: vi.fn(() => ""),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadChildRejections: vi.fn(),
   loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
   sendPeerMessage: vi.fn(),
@@ -161,6 +164,7 @@ beforeEach(async ({ makeOrganization }) => {
   );
   native.loadOfferReview.mockReset();
   native.loadChildReturns.mockReset();
+  native.loadChildRejections.mockReset();
   native.sendPeerMessage.mockReset();
   native.admitPeerMessage.mockReset();
   native.listPeerMessages.mockReset();
@@ -1679,9 +1683,12 @@ describe("APPA feature boundary", () => {
       "deny",
       "allow",
     ]);
-    // The runtime never saw these calls, so it holds no ruling for their ids.
+    // The runtime never saw these calls, so it holds no ruling for their ids
+    // and the proxy answers their results.
     expect(decisions[1]).not.toHaveProperty("recorded");
     expect(decisions[2]).not.toHaveProperty("recorded");
+    expect(decisions[1]).toMatchObject({ unanswered: true });
+    expect(decisions[2]).toMatchObject({ unanswered: true });
     const dispatched = native.dispatchHook.mock.calls.map(([raw]) =>
       JSON.parse(raw),
     );
@@ -2962,6 +2969,139 @@ describe("APPA feature boundary", () => {
     expect(
       JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
     ).toMatchObject({ tool: "agent__remote", spawn: false });
+  });
+
+  test.each<{ declaration: SpawnReturnDeclaration; declares: unknown }>([
+    { declaration: { kind: "as_spoken" }, declares: { label: {} } },
+    {
+      declaration: {
+        kind: "attested",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { days: { type: "integer" } },
+        },
+      },
+      declares: {
+        label: {},
+        return_schema: {
+          type: "object",
+          properties: { days: { type: "integer" } },
+        },
+      },
+    },
+  ])("dispatches a spawn that declares its return once, carrying the declaration ($declaration.kind)", async ({
+    declaration,
+    declares,
+  }) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+    const call = {
+      id: "spawn",
+      name: "agent__research",
+      arguments: { message: "Research" },
+    };
+
+    expect(
+      await evaluateToolCalls(session, [call], {
+        canonicalize: (name) => name,
+        spawnCallIds: new Set([call.id]),
+        declareSpawnReturn: () => declaration,
+      }),
+    ).toEqual([{ kind: "allow" }]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:spawn",
+        spawn: true,
+        declares,
+      }),
+    ]);
+  });
+
+  test("returns a declaring spawn's block as the call's own denial", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "blocked",
+        offers: [{ offer_id: "offer-narrow" }],
+      }),
+    );
+    const call = {
+      id: "spawn",
+      name: "agent__research",
+      arguments: { message: "Research" },
+    };
+
+    expect(
+      await evaluateToolCalls(session, [call], {
+        canonicalize: (name) => name,
+        spawnCallIds: new Set([call.id]),
+        declareSpawnReturn: () => ({ kind: "as_spoken" }),
+      }),
+    ).toEqual([
+      {
+        kind: "deny",
+        feedback: "blocked",
+        offers: ["offer-narrow"],
+        review: undefined,
+        recorded: true,
+      },
+    ]);
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
+  test.each<{ case: string; returns: unknown[]; guided: boolean }>([
+    {
+      case: "offers only an as-spoken return",
+      returns: ["as_spoken"],
+      guided: true,
+    },
+    {
+      case: "offers an attested return",
+      returns: ["as_spoken", { sanitizer: "attest-schema" }],
+      guided: false,
+    },
+    { case: "offers no return plan", returns: [], guided: false },
+  ])("tells the model why an attested return was not applied when the block $case", async ({
+    returns,
+    guided,
+  }) => {
+    const feedback = "[appa] Blocked: declare the return";
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback,
+        offers: [
+          { offer_id: "offer-narrow" },
+          ...returns.map((route, index) => ({
+            offer_id: `offer-return-${index}`,
+            returns: route,
+          })),
+        ],
+      }),
+    );
+    const call = {
+      id: "spawn",
+      name: "agent__research",
+      arguments: { message: "Research" },
+    };
+
+    const [decision] = await evaluateToolCalls(session, [call], {
+      canonicalize: (name) => name,
+      spawnCallIds: new Set([call.id]),
+      declareSpawnReturn: () => ({
+        kind: "attested",
+        schema: { type: "object" },
+      }),
+    });
+
+    if (decision.kind !== "deny") throw new Error("expected a denial");
+    expect(decision.feedback === feedback).toBe(!guided);
+    expect(decision.offers).toHaveLength(1 + returns.length);
   });
 
   test.each([
@@ -4469,6 +4609,34 @@ describe("remedy by offer", () => {
         parentSessionId: "user:alice|conversation",
       }),
     ).rejects.toThrow("Guardrails failed unexpectedly");
+  });
+
+  test("reads child rejections again after the pooled connection was closed", async () => {
+    const rejection = {
+      childSessionId: "user:alice|conversation:a1",
+      spawnCallId: "call-spawn",
+      childNativeId: "native-child",
+      notice: "OpenAPPA blocked this operation",
+    };
+    native.loadChildRejections
+      .mockRejectedValueOnce(
+        new Error(
+          "OpenAPPA storage failed: SQLSTATE 57P01: terminating connection due to administrator command",
+        ),
+      )
+      .mockResolvedValueOnce([rejection]);
+
+    await expect(
+      loadChildRejections({
+        organizationId,
+        parentSessionId: "user:alice|conversation",
+      }),
+    ).resolves.toEqual([rejection]);
+    expect(native.loadChildRejections).toHaveBeenCalledTimes(2);
+    expect(native.loadChildRejections).toHaveBeenLastCalledWith(
+      organizationId,
+      "user:alice|conversation",
+    );
   });
 
   test("fails closed with 500 when the offer review cannot be loaded", async () => {

@@ -132,8 +132,13 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("allow_call"),
       spawn_binding: z.string().min(1).optional(),
+      // The spawn was released under the deferred return its call declared.
+      defers_return: z.literal(true).optional(),
     }),
+    // A subagent's answer the runtime kept for its parent's decision; no body.
+    z.object({ decision: z.literal("defer_return") }),
     z.object({ decision: z.literal("pass_control") }),
+    z.object({ decision: z.literal("held"), running: z.array(z.string()) }),
     z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
@@ -245,6 +250,15 @@ type ProcessedToolResult = {
       refused?: true;
     }
 );
+/**
+ * A stop the runtime did not take: a call it would close, named in `running`,
+ * is not among the stopping request's answered calls. Nothing was recorded.
+ */
+type HeldStop = { decision: "held"; running: string[] };
+
+/** The child's answer crossed nothing; the session that spawned it decides. */
+type DeferredStop = { decision: "deferred" };
+
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
   | {
@@ -884,7 +898,7 @@ async function startSession(params: {
   session: OpenAppaSession;
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
-  principal?: { principal?: string };
+  principal: { principal?: string };
   lineage?: { spawnCallId?: string; childNativeId?: string };
 }): Promise<string | undefined> {
   const event = {
@@ -896,14 +910,12 @@ async function startSession(params: {
       ? { child_native_id: params.lineage.childNativeId }
       : {}),
   };
-  const decision = params.principal
-    ? await dispatchWithPrincipal({
-        session: params.session,
-        event,
-        policy: params.policy,
-        principal: params.principal,
-      })
-    : await dispatch(params.session, event, params.policy);
+  const decision = await dispatchWithPrincipal({
+    session: params.session,
+    event,
+    policy: params.policy,
+    principal: params.principal,
+  });
   if (decision.decision === "context") {
     const text = decision.text;
     if (
@@ -1160,7 +1172,8 @@ function truncated(text: string, limit: number): string {
 }
 
 /** The runtime's code for a result that matches no released call. */
-const UNRELEASED_CALL_CODE = "unreleased_call";
+/** The runtime holds no released call that a reported result could answer. */
+export const UNRELEASED_CALL_CODE = "unreleased_call";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
 
 function isOutputDecision(
@@ -1381,8 +1394,9 @@ type AppaCallDecision =
        */
       recorded?: true;
       /**
-       * The call's annotator gave no answer. The runtime has no record of
-       * the call, so its result is answered by the proxy, not the runtime.
+       * The runtime has no record of the call: its annotator gave no answer,
+       * or the call was denied before the runtime saw it. Its result is
+       * answered by the proxy, not the runtime.
        */
       unanswered?: true;
     };
@@ -1419,8 +1433,9 @@ export async function evaluateToolCalls(
     /** Signed lineage retained with a child call for later turns. */
     lineage?: { spawnCallId?: string; childNativeId?: string };
     /**
-     * Declares a held spawn's return on the caller's behalf, so one delegation
-     * call starts its child. Absent for clients that declare returns themselves.
+     * The return a spawn declares for its child, carried with the call itself
+     * so one delegation call starts its child. Absent for clients that declare
+     * returns themselves.
      */
     declareSpawnReturn?: (call: {
       id: string;
@@ -1460,6 +1475,7 @@ export async function evaluateToolCalls(
           kind: "deny" as const,
           feedback:
             "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+          unanswered: true as const,
         };
       }
       // Direct remedy control calls bypass evaluation and execute via gateway.
@@ -1536,6 +1552,9 @@ export async function evaluateToolCalls(
           : target.isRunToolDispatchTarget
             ? canonicalTool
             : call.name);
+      const declaration = spawn
+        ? options.declareSpawnReturn?.(call)
+        : undefined;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -1556,21 +1575,8 @@ export async function evaluateToolCalls(
         ...(options.lineage?.childNativeId
           ? { child_native_id: options.lineage.childNativeId }
           : {}),
+        ...(declaration ? { declares: spawnReturnDeclares(declaration) } : {}),
       };
-      const declaration = spawn
-        ? options.declareSpawnReturn?.(call)
-        : undefined;
-      if (declaration) {
-        const refusal = await declareSpawnReturn({
-          session,
-          callId: call.id,
-          event,
-          declaration,
-          controlToolName: options.control?.name,
-          policy,
-        });
-        if (refusal) return refusal;
-      }
       let decision: Awaited<ReturnType<typeof dispatchCall>>;
       try {
         decision = await dispatchCall(event);
@@ -1618,7 +1624,9 @@ export async function evaluateToolCalls(
       // Denied calls return as notices; other calls in the batch stand.
       return {
         kind: "deny" as const,
-        feedback: decisionMessage(decision),
+        feedback: unofferedAttestation(decision, declaration)
+          ? `No plan for this call returns through \`${ATTEST_SCHEMA_SANITIZER}\`, so \`return_schema\` is not enforced: a return declared by a plan below crosses unchecked against it. Call the subagent again without \`return_schema\`.\n\n${decisionMessage(decision)}`
+          : decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
             ? decision.offers
@@ -1837,11 +1845,19 @@ export async function notePrompt(
  * own remedy call — leaves the turn open: the client still has work to do, and
  * closing here would release the remedy the client is about to execute.
  */
-export async function endTurn(
-  session: OpenAppaSession,
-  operationId: string,
-): Promise<void> {
-  await dispatch(session, { event: "turn_end", operation_id: operationId });
+export async function endTurn(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  answeredCallIds?: readonly string[];
+}): Promise<{ decision: "taken" } | HeldStop> {
+  const decision = await dispatch(params.session, {
+    event: "turn_end",
+    operation_id: params.operationId,
+    ...answeredField(params.answeredCallIds),
+  });
+  return decision.decision === "held"
+    ? { decision: "held", running: decision.running }
+    : { decision: "taken" };
 }
 
 /** Finish an empty child reply under the runtime's recorded return contract. */
@@ -1850,16 +1866,22 @@ export async function endChildTurn(params: {
   operationId: string;
   spawnCallId: string;
   childNativeId?: string;
-}): Promise<void> {
+  answeredCallIds?: readonly string[];
+}): Promise<{ decision: "taken" } | HeldStop> {
   const decision = await dispatch(params.session, {
     event: "child_turn_end",
     operation_id: params.operationId,
     spawn_call_id: params.spawnCallId,
     ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
+    ...answeredField(params.answeredCallIds),
   });
+  if (decision.decision === "held") {
+    return { decision: "held", running: decision.running };
+  }
   if (decision.decision !== "ack") {
     throw openappaFailure(new Error(decisionMessage(decision)));
   }
+  return { decision: "taken" };
 }
 
 /**
@@ -1875,8 +1897,21 @@ export async function endChild(params: {
   output: string;
   spawnCallId?: string;
   childNativeId?: string;
-}): Promise<ChildEndOutcome> {
-  return crossChildValue({ ...params, event: "child_end" });
+  answeredCallIds?: readonly string[];
+}): Promise<ChildEndOutcome | HeldStop> {
+  return undeferred(await crossChildValue({ ...params, event: "child_end" }));
+}
+
+/** Only an in-process subagent's own stop is declared deferred. */
+function undeferred<Outcome extends { decision: string }>(
+  outcome: Outcome | DeferredStop,
+): Outcome {
+  if (outcome.decision === "deferred") {
+    throw openappaFailure(
+      new Error("OpenAPPA deferred a return no spawn declared deferred"),
+    );
+  }
+  return outcome as Outcome;
 }
 
 /**
@@ -1894,14 +1929,46 @@ export async function returnRuntimeValue(params: {
   | { kind: "admitted"; value: string }
   | { kind: "held"; reason: string; busy?: true }
 > {
+  const outcome = await returnSubagentValue(params);
+  if (outcome.kind === "deferred") {
+    throw openappaFailure(
+      new Error("OpenAPPA deferred a return no spawn declared deferred"),
+    );
+  }
+  return outcome;
+}
+
+/**
+ * The stop of an in-process subagent: its final answer, offered to the
+ * session that spawned it. `deferred` when that spawn declared a deferred
+ * return and the answer would narrow its parent: nothing crossed, the
+ * subagent's errand is over, and the parent decides.
+ */
+export async function returnSubagentValue(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  value: string;
+}): Promise<
+  | { kind: "admitted"; value: string }
+  | { kind: "held"; reason: string; busy?: true }
+  | { kind: "deferred" }
+> {
   const outcome = await crossChildValue({
     session: params.session,
     operationId: params.operationId,
     output: params.value,
     event: "child_return",
   });
+  if (outcome.decision === "deferred") return { kind: "deferred" };
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
+  }
+  if (outcome.decision === "held") {
+    return {
+      kind: "held",
+      reason: "OpenAPPA holds the return while a tool call is still running.",
+      busy: true,
+    };
   }
   if (outcome.crossed) return { kind: "admitted", value: outcome.content };
   return outcome.busy
@@ -2005,7 +2072,29 @@ function runtimeToolResult(decision: NativeDecision): CallToolResult {
 /** How a delegation call's child may return, when the platform declares it. */
 export type SpawnReturnDeclaration =
   | { kind: "as_spoken" }
-  | { kind: "attested"; schema: Record<string, unknown> };
+  | { kind: "attested"; schema: Record<string, unknown> }
+  | { kind: "deferred" };
+
+/** The `declares` a spawn's tool call carries, as the runtime reads it. */
+type SpawnReturnDeclares =
+  | { label: Record<string, never>; return_schema?: unknown }
+  | { deferred: true };
+
+function spawnReturnDeclares(
+  declaration: SpawnReturnDeclaration,
+): SpawnReturnDeclares {
+  switch (declaration.kind) {
+    case "as_spoken":
+      return { label: {} };
+    case "attested":
+      return {
+        label: {},
+        return_schema: normalizeReturnSchemaNode(declaration.schema),
+      };
+    case "deferred":
+      return { deferred: true };
+  }
+}
 
 const OfferedReturnSchema = z.union([
   z.literal("as_spoken"),
@@ -2013,85 +2102,29 @@ const OfferedReturnSchema = z.union([
 ]);
 
 /**
- * Declares the return of a spawn the runtime holds until its return is
- * declared. A probe of the same call, under its own operation, surfaces the
- * offers; the call itself is then dispatched once, already declared. Returns
- * the refusal the caller reports instead of dispatching.
+ * Whether an attested declaration was not applied because no plan of the block
+ * returns through `attest-schema`. The runtime offers return plans on a
+ * declaring spawn's block only when it did not apply the declaration. A plan
+ * the model then accepts stands for the call proposed again, schema or not, so
+ * the model must hear that the schema is not enforced.
  */
-async function declareSpawnReturn(params: {
-  session: OpenAppaSession;
-  callId: string;
-  event: Record<string, unknown>;
-  declaration: SpawnReturnDeclaration;
-  controlToolName?: string;
-  policy: SharedPolicy;
-}): Promise<AppaCallDecision | undefined> {
-  const probeId = `${params.callId}:declare`;
-  const probe = await dispatch(
-    params.session,
-    { ...params.event, operation_id: `call:${probeId}` },
-    await params.policy(),
+function unofferedAttestation(
+  decision: NativeDecision,
+  declaration: SpawnReturnDeclaration | undefined,
+): boolean {
+  if (declaration?.kind !== "attested" || decision.decision !== "deny_call")
+    return false;
+  const routes = (decision.offers ?? []).flatMap((offer) => {
+    const route = OfferedReturnSchema.safeParse(offer.returns);
+    return route.success ? [route.data] : [];
+  });
+  return (
+    routes.length > 0 &&
+    !routes.some(
+      (route) =>
+        route !== "as_spoken" && route.sanitizer === ATTEST_SCHEMA_SANITIZER,
+    )
   );
-  switch (probe.decision) {
-    case "allow_call":
-      await dispatch(
-        params.session,
-        { event: "cancel_call", tool_call_id: probeId },
-        await params.policy(),
-      );
-      return undefined;
-    case "pass_control":
-      return undefined;
-    case "deny_call":
-      break;
-    default:
-      return { kind: "deny", feedback: decisionMessage(probe) };
-  }
-  const wanted = params.declaration;
-  const offer = (probe.offers ?? []).find((candidate) => {
-    const returns = OfferedReturnSchema.safeParse(
-      (candidate as { returns?: unknown }).returns,
-    );
-    if (!returns.success) return false;
-    return wanted.kind === "as_spoken"
-      ? returns.data === "as_spoken"
-      : typeof returns.data === "object" &&
-          returns.data.sanitizer === ATTEST_SCHEMA_SANITIZER;
-  });
-  if (!offer) {
-    return {
-      kind: "deny",
-      feedback:
-        wanted.kind === "attested"
-          ? `This policy offers no \`${ATTEST_SCHEMA_SANITIZER}\` return for this subagent, so \`return_schema\` cannot be honored. Call it without \`return_schema\`, or ask an administrator to declare the sanitizer.\n\n${probe.feedback}`
-          : probe.feedback,
-      offers: (probe.offers ?? []).map((candidate) => candidate.offer_id),
-    };
-  }
-  const args = {
-    offer_id: offer.offer_id,
-    label: {},
-    ...(wanted.kind === "attested"
-      ? { return_schema: normalizeReturnSchemaNode(wanted.schema) }
-      : {}),
-  };
-  const declared = await executeRemedyByOffer({
-    organizationId: params.session.organization_id,
-    callerId: params.session.caller_id,
-    sessionId: params.session.session_id,
-    ...(params.session.parent_id ? { parentId: params.session.parent_id } : {}),
-    toolCallId: `${params.callId}:return`,
-    controlToolName: params.controlToolName,
-    originalArguments: JSON.stringify(args),
-    args,
-  });
-  if (!declared.result.isError) return undefined;
-  return {
-    kind: "deny",
-    feedback: declared.result.content
-      .flatMap((block) => (block.type === "text" ? [block.text] : []))
-      .join("\n"),
-  };
 }
 
 function normalizeReturnSchemaNode(node: unknown): unknown {
@@ -2139,6 +2172,15 @@ function normalizeReturnSchemaNode(node: unknown): unknown {
     next[key] = value;
   }
   return changed ? next : node;
+}
+
+/**
+ * The ids of the tool results a stopping request carried. With them, the
+ * runtime holds a stop that would close a call outside the list; without them,
+ * it closes every open call as unreported.
+ */
+function answeredField(answeredCallIds: readonly string[] | undefined) {
+  return answeredCallIds ? { answered_call_ids: answeredCallIds } : {};
 }
 
 function decisionMessage(decision: NativeDecision): string {
@@ -2286,6 +2328,67 @@ export async function loadChildReturns(params: {
   }
 }
 
+/**
+ * A decision on a deferred return, as the runtime's notice quotes it for the
+ * control call's `offer_id`. No offer id is spelled this way.
+ */
+export function isDeferredReturnReference(offerId: string): boolean {
+  return /^ret-[0-9a-f]{16}$/.test(offerId);
+}
+
+/**
+ * What a session reads as the result of a spawn whose subagent's answer was
+ * deferred: the runtime's notice, with the two references the session's
+ * control call quotes to take the answer or drop it. `null` for a spawn with
+ * no deferred return. The notice stands in for the answer from the subagent's
+ * stop on, before and after the decision; the answer itself arrives only as
+ * the result of the control call that takes it.
+ */
+export async function loadDeferredReturn(params: {
+  session: OpenAppaSession;
+  spawnCallId: string;
+  controlToolName?: string;
+}): Promise<string | null> {
+  const { session } = params;
+  try {
+    const module = await binding();
+    const presentation = nativePresentation(params.controlToolName, true);
+    const deferred = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(session.organization_id);
+        return withNativeStorageRetry(() =>
+          withOpenappaContentEncryption(
+            session.organization_id,
+            session.session_id,
+            (encryption) =>
+              module.loadDeferredReturn(
+                {
+                  organizationId: session.organization_id,
+                  sessionId: session.session_id,
+                  spawnCallId: params.spawnCallId,
+                  controlTool: presentation.control_tool,
+                  supportsDelegation: presentation.supports_delegation,
+                  ...(presentation.yell_tool
+                    ? { yellTool: presentation.yell_tool }
+                    : {}),
+                },
+                policy,
+                encryption,
+              ),
+          ),
+        );
+      },
+    });
+    return deferred?.notice ?? null;
+  } catch (error) {
+    logger.warn(
+      { err: error, sessionId: session.session_id },
+      "OpenAPPA could not load a deferred return",
+    );
+    throw openappaFailure(error);
+  }
+}
+
 /** Rejections are host status, not child crossings; never pass them to approveSpawnReturn. */
 export async function loadChildRejections(params: {
   organizationId: string;
@@ -2293,9 +2396,8 @@ export async function loadChildRejections(params: {
 }) {
   try {
     const module = await binding();
-    return await module.loadChildRejections(
-      params.organizationId,
-      params.parentSessionId,
+    return await withNativeStorageRetry(() =>
+      module.loadChildRejections(params.organizationId, params.parentSessionId),
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -2668,11 +2770,14 @@ function validateReturnContract(text: string): void {
 
 async function crossChildValue(
   params: Parameters<typeof governedCrossChildValue>[0],
-): Promise<ChildEndOutcome> {
+): Promise<ChildEndOutcome | HeldStop | DeferredStop> {
   try {
     if (await isUnenforcedSession(params.session))
       return { decision: "release", crossed: true };
     const result = await governedCrossChildValue(params);
+    // Neither a held end nor a deferred return is a ruling, so neither is waived.
+    if (result.decision === "held" || result.decision === "deferred")
+      return result;
     if (
       !result.crossed &&
       (await waiveSoftBlock(params.session, params.event, result.content))
@@ -2696,7 +2801,8 @@ async function governedCrossChildValue(params: {
   event: "child_end" | "child_return";
   spawnCallId?: string;
   childNativeId?: string;
-}): Promise<ChildEndOutcome> {
+  answeredCallIds?: readonly string[];
+}): Promise<ChildEndOutcome | HeldStop | DeferredStop> {
   if (!params.session.parent_id) {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
   }
@@ -2722,11 +2828,18 @@ async function governedCrossChildValue(params: {
         ? { output: params.output }
         : {}),
       ...correlation,
+      ...answeredField(params.answeredCallIds),
     },
     await policy(),
   );
+  if (decision.decision === "held") {
+    return { decision: "held", running: decision.running };
+  }
   if (decision.decision === "ack") {
     return { decision: "release", crossed: true };
+  }
+  if (decision.decision === "defer_return") {
+    return { decision: "deferred" };
   }
   if (decision.decision === "block") {
     return {

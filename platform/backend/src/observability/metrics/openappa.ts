@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import client from "prom-client";
+import type { OpenAppaYellKind } from "@/types/openappa-yell";
 
 const hooks = new Set([
   "session_start",
@@ -22,10 +23,16 @@ const decisions = new Set([
   "replace_output",
   "deliver_value",
   "child_return",
+  "defer_return",
   "context",
   "refuse",
   "mcp_result",
 ]);
+const yellKinds = new Set<string>([
+  "agent",
+  "approval_waived",
+  "block_waived",
+] satisfies OpenAppaYellKind[]);
 
 export function initializeOpenappaMetrics(): void {
   if (client.register.getSingleMetric("openappa_hook_dispatches_total")) return;
@@ -40,6 +47,38 @@ export function initializeOpenappaMetrics(): void {
     labelNames: ["hook", "decision"],
     buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 15, 30, 60, 120, 300],
   });
+  new client.Counter({
+    name: "openappa_yells_total",
+    help: "Committed OpenAPPA yells, as Guardrails -> Yells lists them: one per agent or client-failure report, one per call a Break the glass waiver let through",
+    labelNames: ["kind", "superyell"],
+  });
+}
+
+/**
+ * Counts a committed yell. Call it only after the row's transaction commits,
+ * so a rolled-back waiver is never counted.
+ */
+export function observeOpenappaYell(params: {
+  kind: OpenAppaYellKind;
+  superyell: boolean;
+  /** Calls a waiver stands for; an agent report counts once. */
+  calls?: number;
+}): void {
+  try {
+    (
+      client.register.getSingleMetric("openappa_yells_total") as
+        | client.Counter
+        | undefined
+    )?.inc(
+      {
+        kind: yellKinds.has(params.kind) ? params.kind : "other",
+        superyell: String(params.superyell),
+      },
+      params.calls ?? 1,
+    );
+  } catch {
+    // Instrumentation never changes how a yell is recorded.
+  }
 }
 
 /** The host's logical hook boundary, not the engine's tool-proposal decision counter. */

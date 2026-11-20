@@ -52,8 +52,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
@@ -94,8 +94,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
     go get github.com/go-git/go-git/v5@v5.19.2 && \
@@ -172,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS dagger-engine-image
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -221,7 +221,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
 # The script uses paths relative to / so that
 # .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
 # of its own.
-FROM --platform=$BUILDPLATFORM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS archestra-cli-release
+FROM --platform=$BUILDPLATFORM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS archestra-cli-release
 WORKDIR /
 COPY archestra-cli/release.lock.json ./release.lock.json
 RUN <<'ARCHESTRA_CLI_RELEASE'
@@ -286,7 +286,7 @@ rm "$sums"
 printf '{ "version": "%s" }\n' "$version" > manifest.json
 ARCHESTRA_CLI_RELEASE
 
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS base
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -497,6 +497,15 @@ RUN --mount=type=cache,target=/app/.turbo \
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm deploy --filter=@backend --prod --legacy /prod/backend
 
+# Trim the deployed tree to what the server loads: drop the optional peers
+# pnpm resolved for better-auth and drizzle-orm (Next.js with its SWC binary,
+# Vitest with msw/vite/TypeScript, PGlite), plus every third-party source map
+# and type declaration. The server keeps its own dist/*.map for
+# --enable-source-maps. About 700 MB of the 1.4 GB tree; the script fails the
+# build if the bundle ever imports a package it removes.
+COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
+RUN node /tmp/prune-backend-deploy.mjs /prod/backend
+
 # <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
 # `unified-slim` is the complete, runnable platform image minus the ~352MB
 # dagger-engine.tar, which only the quickstart docker-run path consumes (the
@@ -577,20 +586,21 @@ RUN apk --no-cache upgrade && \
     # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
     # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
     apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
-    # Install PostgreSQL 17, pgvector, supervisord, and git.
+    # Install PostgreSQL 18 with its contrib modules, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
     #
+    # PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
+    # pg_trgm, which migrations 0116/0378 use for the conversation and user
+    # search indexes (they skip the indexes when the extension is missing).
+    #
     # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
     # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-    # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
-    # because postgresql-pgvector depends on postgresql18, so that major lands in the image
-    # alongside 17 and is scanned too. (postgresql18 in fact owns the /usr/bin/postgres symlink,
-    # so it is the major supervisor actually starts.) Same stale-layer hazard as the curl pin: the bare
-    # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
-    # fixed versions and bust the cache.
-    apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \
-        "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
+    # CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
+    # pin: the bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
+    # guarantee the fixed versions and bust the cache.
+    apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
+        postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
@@ -701,6 +711,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
+COPY docker/scripts/start-backend.sh /app/start-backend.sh
 # slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
 # mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
 # Real deployments provision engines in code instead — the quickstart runs this one
@@ -770,7 +781,7 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /app/docker-banner.sh
+RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
 EXPOSE 5432 9000 9050 3000

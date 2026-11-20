@@ -19,11 +19,12 @@ import {
   resolveAutoModel,
 } from "@/auto-routing/router";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
-import config, { getProviderConfiguredBaseUrl } from "@/config";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelPoolModel,
   OAuthAccessTokenModel,
@@ -40,7 +41,10 @@ import {
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { UNIFIED_MODEL_PREFIX } from "@/routes/route-paths";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import {
+  resolveAzureModelCapabilities,
+  withListedAzureEvidence,
+} from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -96,10 +100,7 @@ import {
   toGeminiImageRequest,
 } from "../adapters/gemini-images";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
-import {
-  decodeSignedToolCallId,
-  openaiToGemini,
-} from "../adapters/gemini-openai-translator";
+import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
@@ -136,6 +137,10 @@ import {
 } from "../model-router-access";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
+  describeRoutableModel,
+  RoutableModelCapabilitiesSchema,
+} from "../model-router-catalog";
+import {
   buildRoutableModelId,
   listRoutableModels,
   type ModelRouterResolution,
@@ -143,6 +148,7 @@ import {
 } from "../model-router-resolver";
 import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
 import { registerMediaMultipartParser } from "../utils/media-multipart";
+import { decodeSignedToolCallId } from "../utils/tool-call-ids";
 import {
   AudioMultipartBodySchema,
   type AudioProxyBody,
@@ -302,6 +308,8 @@ const ModelListResponseSchema = z.object({
       object: z.literal("model"),
       created: z.number(),
       owned_by: z.string(),
+      /** Absent on model pools and auto routers, whose members can differ. */
+      capabilities: RoutableModelCapabilitiesSchema.optional(),
     }),
   ),
 });
@@ -1273,14 +1281,15 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
+  const providerApiKeyIds = params.auth.providerApiKeys
+    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+    .map((mapping) => mapping.providerApiKeyId);
   // Hide models the caller cannot invoke, mirroring the proxy-time check: a
   // user-attributed credential needs a `use` grant; auth without a user
   // identity may exercise only an organization-wide grant.
   const chatModels = await listRoutableModels({
     organizationId: params.auth.organizationId,
-    providerApiKeyIds: params.auth.providerApiKeys
-      .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
-      .map((mapping) => mapping.providerApiKeyId),
+    providerApiKeyIds,
     userId:
       params.auth.authMethod === "oauth_user"
         ? params.auth.userId
@@ -1290,12 +1299,14 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     includeEmbeddings: true,
     includeMedia: true,
   });
+  // Azure capabilities are per resource; describe each model by the evidence
+  // of the keys this caller is mapped to.
+  const azureLinks =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels(
+      providerApiKeyIds,
+    );
   // Pools come first: their names are what clients are meant to ask for.
-  const pools = (
-    config.llmProxy.modelPoolsEnabled
-      ? await ModelPoolModel.list(params.auth.organizationId)
-      : []
-  ).filter(
+  const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
     (pool) =>
       pool.members.some((member) => member.enabled) &&
       mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
@@ -1319,12 +1330,19 @@ async function listModels(params: { auth: ModelRouterAuth }) {
         owned_by: "model-pool",
       })),
       ...autoModel,
-      ...chatModels.map((model) => ({
-        id: buildRoutableModelId(model),
-        object: "model" as const,
-        created: Math.floor(model.createdAt.getTime() / 1000),
-        owned_by: model.provider,
-      })),
+      ...chatModels.map((model) => {
+        const id = buildRoutableModelId(model);
+        return {
+          id,
+          object: "model" as const,
+          created: Math.floor(model.createdAt.getTime() / 1000),
+          owned_by: model.provider,
+          capabilities: describeRoutableModel({
+            model: withListedAzureEvidence({ model, links: azureLinks }),
+            routableId: id,
+          }),
+        };
+      }),
     ],
   };
 }
@@ -1441,14 +1459,8 @@ export async function authenticateModelRouterBearer(params: {
     // resolves to no provider key.
     if (
       mappings.length === 0 &&
-      !(
-        config.llmProxy.modelPoolsEnabled &&
-        (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
-      ) &&
-      !(
-        config.autoRouting.enabled &&
-        (await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
-      )
+      !(await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id)) &&
+      !(await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
     ) {
       throw new ApiError(
         401,
@@ -1521,7 +1533,6 @@ async function usableModelPoolId(params: {
   auth: ModelRouterAuth;
   model: string;
 }): Promise<string | null> {
-  if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.auth.organizationId,
     name: params.model.trim(),

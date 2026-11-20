@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,7 +38,7 @@ The agent picks the model the copy runs on for each task:
 - **Smart**: a stronger model, for hard reasoning or checking a conclusion.
 - **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
 
-To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent and can be on any provider. A Normal copy of an agent on an [auto router](/docs/llm-proxy/auto-routing) is routed by that router. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
+To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent, can be on any provider, and are separate from an [auto router's](/docs/llm-proxy/auto-routing) own fast and smart tiers. A Normal copy of an agent on an auto router is routed by that router. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
 
 What to know:
 
@@ -55,3 +55,18 @@ What to know:
 - The parent names the answer's shape when it delegates. Every field must be bounded: a number in a range, a yes or no, or a fixed list of values. Free text is never accepted.
 - An answer that does not match is withheld. The parent gets an error, never the raw text.
 - External agents cannot return structured answers.
+
+## Answers the Parent Must Accept
+
+A subagent can read a web page or an inbound email and finish its task, and the parent keeps its trust until it chooses otherwise. With [Guardrails](/docs/agents/guardrails) on, an answer that would lower the parent's trust or narrow its audience does not come back on its own. Guardrails holds it, and the parent picks one:
+
+- **Accept:** the parent gets the answer and takes on its labels. After accepting an answer built on an untrusted web page, the parent is untrusted too.
+- **Discard:** nothing of the answer reaches the parent, and its labels stay as they were.
+
+To keep the parent's trust and still use the result, ask for a [structured answer](#get-trusted-answers-from-untrusted-data) instead.
+
+What to know:
+
+- An answer that changes nothing for the parent comes back directly.
+- A discarded answer cannot be accepted later. The parent delegates again to get a new one.
+- This covers forks and agents you built. The exceptions are a subagent with a [dedicated runtime](/docs/agents/runtime) and a subagent's own subagents: they are refused such a read instead.

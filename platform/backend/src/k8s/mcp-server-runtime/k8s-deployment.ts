@@ -2,10 +2,10 @@ import { PassThrough } from "node:stream";
 import {
   type ImagePullPolicy,
   type ImagePullSecretConfig,
-  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
+  type McpServerResources,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@archestra/shared";
@@ -43,6 +43,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import {
   applyDeploymentObservation,
   deriveOrdinaryDeploymentState,
@@ -624,6 +625,12 @@ export default class K8sDeployment {
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
+  // What the live Deployment runs, as last read from the cluster. The catalog
+  // row is only what the NEXT restart will run: a transport edit marks a
+  // single-tenant install "restart required" and leaves its pod alone.
+  private deployedUid?: string;
+  private deployedTransport?: DeployedTransport;
+  private replacedByAnotherProcess = false;
 
   constructor(options: K8sDeploymentOptions) {
     this.mcpServer = options.mcpServer;
@@ -2184,6 +2191,7 @@ export default class K8sDeployment {
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
+    runtimeResources?: McpServerResources,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -2322,27 +2330,10 @@ export default class K8sDeployment {
               }),
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests/limits for the container (with defaults).
-          // Ephemeral-storage governance keeps the scheduler disk-aware and
-          // prevents DiskPressure eviction cascades on over-packed nodes.
-          resources: {
-            requests: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_REQUEST
-                : config.orchestrator.mcpServerResources.requests.memory,
-              cpu: config.orchestrator.mcpServerResources.requests.cpu,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.requests
-                  .ephemeralStorage,
-            },
-            limits: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_LIMIT
-                : config.orchestrator.mcpServerResources.limits.memory,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.limits.ephemeralStorage,
-            },
-          },
+          resources: resolveMcpServerResources(
+            runtimeResources,
+            this.catalogItem?.id,
+          ),
         },
       ],
       restartPolicy: "Always",
@@ -2941,6 +2932,24 @@ export default class K8sDeployment {
    * Called by the manager after lazy-loading a deployment on a different replica.
    */
   async resolveHttpEndpoint(): Promise<void> {
+    // This process did not create the Deployment, so it has to read what the
+    // pod runs before it decides how to reach it.
+    try {
+      this.recordDeployed(
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        }),
+        { ownDeployment: true },
+      );
+    } catch (error) {
+      if (!isK8sNotFoundError(error)) {
+        logger.warn(
+          { err: error },
+          `Failed to read the deployed transport of ${this.deploymentName}; using the catalog's`,
+        );
+      }
+    }
     await this.ensureHttpServerConfigured();
   }
 
@@ -2948,7 +2957,7 @@ export default class K8sDeployment {
    * Ensure HTTP server configuration (Service and URL) is set up
    */
   private async ensureHttpServerConfigured(): Promise<void> {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (!needsHttp) {
       return;
     }
@@ -3083,6 +3092,7 @@ export default class K8sDeployment {
         );
         await lifecycle?.assertOwned?.();
         await this.adoptRuntimeOwner(existingDeployment);
+        this.recordDeployed(existingDeployment, { ownDeployment: true });
 
         // SELF-HEAL: a Deployment created before the catalog-stable selector fix
         // (#6340) still labels its pods with the per-install `mcpServer.id`, while
@@ -3291,6 +3301,13 @@ export default class K8sDeployment {
         })),
       };
 
+      const runtimeResources = catalogItem.deploymentSpecYaml
+        ? undefined
+        : await InternalMcpCatalogModel.resolveRuntimeResources(
+            catalogItem.localConfig,
+            catalogItem.organizationId,
+          );
+
       // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
@@ -3315,6 +3332,7 @@ export default class K8sDeployment {
             platformNodeSelector,
             platformTolerations,
             resolvedImagePullSecretNames,
+            runtimeResources,
           ),
         );
         await lifecycle?.assertOwned?.();
@@ -3342,12 +3360,23 @@ export default class K8sDeployment {
             ),
           };
         }
-        await mutate(() =>
+        const deployedTransport: DeployedTransport = needsHttp
+          ? "streamable-http"
+          : "stdio";
+        deploymentSpec.metadata ??= {};
+        deploymentSpec.metadata.annotations = {
+          ...deploymentSpec.metadata.annotations,
+          [MCP_TRANSPORT_ANNOTATION]: deployedTransport,
+        };
+        const created = await mutate(() =>
           this.k8sAppsApi.createNamespacedDeployment({
             namespace: this.namespace,
             body: deploymentSpec,
           }),
         );
+        this.deployedUid = created?.metadata?.uid;
+        this.deployedTransport = deployedTransport;
+        this.replacedByAnotherProcess = false;
         logger.debug(`Deployment ${this.deploymentName} created`);
       } catch (createError) {
         // A concurrent reconcile (e.g. another orchestrator replica that also saw
@@ -4702,7 +4731,43 @@ export default class K8sDeployment {
   }
 
   /**
-   * Check if this MCP server needs an HTTP port
+   * Whether the running pod serves streamable HTTP. A Deployment created
+   * before the transport was recorded on it falls back to the catalog row.
+   */
+  private async servesHttp(): Promise<boolean> {
+    if (this.deployedTransport) {
+      return this.deployedTransport === "streamable-http";
+    }
+    return await this.needsHttpPort();
+  }
+
+  /**
+   * Record the identity and transport of the live Deployment. A read that
+   * finds another Deployment than the one this object knew means another
+   * process replaced it; this object's own create or adoption does not.
+   */
+  private recordDeployed(
+    deployment: k8s.V1Deployment,
+    options?: { ownDeployment?: boolean },
+  ): void {
+    const uid = deployment.metadata?.uid;
+    if (options?.ownDeployment) {
+      this.replacedByAnotherProcess = false;
+    } else if (uid && this.deployedUid && uid !== this.deployedUid) {
+      this.replacedByAnotherProcess = true;
+    }
+    this.deployedUid = uid ?? this.deployedUid;
+    const transport =
+      deployment.metadata?.annotations?.[MCP_TRANSPORT_ANNOTATION];
+    this.deployedTransport =
+      transport === "stdio" || transport === "streamable-http"
+        ? transport
+        : undefined;
+  }
+
+  /**
+   * Whether the catalog asks for an HTTP port: what the next pod this object
+   * creates will serve, not necessarily what the running one does.
    */
   private async needsHttpPort(): Promise<boolean> {
     const catalogItem = await this.getCatalogItem();
@@ -4838,7 +4903,7 @@ export default class K8sDeployment {
    * Assign HTTP port from the pod/service
    */
   private async assignHttpPortIfNeeded(pod: k8s.V1Pod): Promise<void> {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (needsHttp && pod.status?.podIP) {
       const catalogItem = await this.getCatalogItem();
       const httpPort = catalogItem?.localConfig?.httpPort || 8080;
@@ -5734,6 +5799,7 @@ export default class K8sDeployment {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (this.stateGeneration !== generation) return;
       // SPDX-SnippetEnd
+      this.recordDeployed(deployment);
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -5968,7 +6034,16 @@ export default class K8sDeployment {
    * Check if this pod uses streamable HTTP transport
    */
   async usesStreamableHttp(): Promise<boolean> {
-    return await this.needsHttpPort();
+    return await this.servesHttp();
+  }
+
+  /**
+   * True once a state refresh found a different Deployment under this name:
+   * another process restarted the install, so everything this object was built
+   * from (catalog row, install row, endpoint) may be out of date.
+   */
+  get wasReplacedByAnotherProcess(): boolean {
+    return this.replacedByAnotherProcess;
   }
 
   /**
@@ -5987,7 +6062,7 @@ export default class K8sDeployment {
   async getRunningPodHttpEndpoint(): Promise<
     { endpointUrl: string; podName: string } | undefined
   > {
-    const needsHttp = await this.needsHttpPort();
+    const needsHttp = await this.servesHttp();
     if (!needsHttp) {
       return undefined;
     }
@@ -6206,10 +6281,9 @@ const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
 const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
 
 /**
- * The built-in Playwright server runs one Chromium shared by every browser
- * session in its Environment, with a context per conversation. The generic MCP
- * server default (sized for small tool servers) starves it: pages slow to a
- * crawl and screenshots time out long before the pod is OOM-killed.
+ * The transport the Deployment's pod was created to serve. Every backend
+ * process reads it instead of trusting its own copy of the catalog row.
  */
-const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
-const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";
+const MCP_TRANSPORT_ANNOTATION = "archestra.ai/mcp-transport";
+
+type DeployedTransport = "stdio" | "streamable-http";

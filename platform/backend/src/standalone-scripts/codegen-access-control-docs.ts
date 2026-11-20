@@ -9,6 +9,7 @@ import {
   PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
   type Resource,
+  resourceCategories,
   resourceLabels,
   roleDescriptions,
 } from "@archestra/shared";
@@ -17,6 +18,11 @@ import {
   permissionDescriptions,
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { fixedRoleGroups } from "@archestra/shared/fixed-roles";
+// SPDX-SnippetEnd
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
 
@@ -47,9 +53,9 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds every permission except `log:admin`, " +
-        "`auditLog:admin`, and `member:impersonate`. It " +
+        "`guardrailsYell:admin`, `auditLog:admin`, and `member:impersonate`. It " +
         "manages users, roles, settings, and resources, but sees only its " +
-        "own logs and audit records and cannot sign in as another member. " +
+        "own logs, yells, and audit records and cannot sign in as another member. " +
         "Because of " +
         "[No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), " +
         "it cannot grant a role that holds the withheld permissions.\n";
@@ -77,6 +83,26 @@ function generatePredefinedRolesSections(): string {
   return sections.join("\n");
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function generateFixedRolesTable(): string {
+  let table = "| Group | Role | Identifier | Permissions |\n";
+  table += "|-------|------|------------|-------------|\n";
+  for (const group of fixedRoleGroups) {
+    for (const role of group.roles) {
+      const permissions = Object.entries(role.permission)
+        .flatMap(([resource, actions]) =>
+          (actions ?? []).map((action) => `\`${resource}:${action}\``),
+        )
+        .join(", ");
+      table += `| ${group.name} | ${role.name} | \`${role.role}\` | ${permissions} |\n`;
+    }
+  }
+  return table;
+}
+// SPDX-SnippetEnd
+
 /**
  * Validates that every resource:action combination in allAvailableActions
  * has a corresponding entry in permissionDescriptions. Throws if any are missing.
@@ -103,35 +129,50 @@ function validatePermissionDescriptions(): void {
   }
 }
 
+/**
+ * One table per area, in the order and grouping the roles pages use
+ * (`resourceCategories`), so a reader finds related permissions together.
+ */
 function generateCustomRolesPermissionsTable(): string {
   validatePermissionDescriptions();
 
-  const resources = Object.keys(allAvailableActions) as Resource[];
-
-  let table = "| Permission | Description |\n";
-  table += "|------------|-------------|\n";
-
-  for (const resource of resources
-    .filter((r) => !internalResources.includes(r))
-    .sort()) {
-    const actions = allAvailableActions[resource];
-
-    for (const action of actions) {
-      const key = `${resource}:${action}`;
-      // The span anchors the row, so docs can link to `/docs/reference/permissions#agent:read`.
-      const legacyAnchors =
-        resource === "oauthClient"
-          ? ["mcpOauthClient", "llmOauthClient"]
-              .map((old) => `<span id="${old}:${action}"></span>`)
-              .join("")
-          : resource === "project"
-            ? `<span id="scheduledTask:${action}"></span>`
-            : "";
-      table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
-    }
+  const uncategorized = (Object.keys(allAvailableActions) as Resource[]).filter(
+    (resource) =>
+      !internalResources.includes(resource) &&
+      !Object.values(resourceCategories).some((resources) =>
+        resources.includes(resource),
+      ),
+  );
+  if (uncategorized.length > 0) {
+    throw new Error(
+      `Resources missing from resourceCategories: ${uncategorized.join(", ")}. ` +
+        "Add them to resourceCategories in shared/permission.types.ts",
+    );
   }
 
-  return table;
+  return Object.entries(resourceCategories)
+    .map(([category, resources]) => {
+      let table = `### ${category}\n\n`;
+      table += "| Permission | Description |\n";
+      table += "|------------|-------------|\n";
+      for (const resource of resources) {
+        for (const action of allAvailableActions[resource]) {
+          const key = `${resource}:${action}`;
+          // The span anchors the row, so docs can link to `/docs/reference/permissions#agent:read`.
+          const legacyAnchors =
+            resource === "oauthClient"
+              ? ["mcpOauthClient", "llmOauthClient"]
+                  .map((old) => `<span id="${old}:${action}"></span>`)
+                  .join("")
+              : resource === "project"
+                ? `<span id="scheduledTask:${action}"></span>`
+                : "";
+          table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
+        }
+      }
+      return table;
+    })
+    .join("\n");
 }
 
 /**
@@ -165,6 +206,11 @@ Every organization has these four roles. You cannot edit or delete them.
 
 ${generatePredefinedRolesSections()}
 
+## Granular Roles
+
+Each granular role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
+
+${generateFixedRolesTable()}
 <span id="llm-api-permissions"></span>
 
 ## Available Permissions

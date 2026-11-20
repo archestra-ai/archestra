@@ -60,6 +60,7 @@ const model = {
   supportsToolCalling: true,
   supportsReasoningEffort: false,
   supportedEndpoints: null,
+  supportedReasoningEfforts: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
   cacheReadPricePerToken: null,
@@ -94,6 +95,7 @@ const model = {
   priceSource: "models_dev",
   pricePerMillionCacheRead: null,
   pricePerMillionCacheWrite: null,
+  syncedLongContextPricing: null,
   longContextThreshold: null,
   longContextPricePerMillionInput: null,
   longContextPricePerMillionOutput: null,
@@ -516,6 +518,101 @@ describe("ModelsPage", () => {
         }),
       ]),
     );
+  });
+
+  it("shows synced tiers without turning inherited prices into overrides", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const updates: archestraApiTypes.UpdateModelData["body"][] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            syncedLongContextPricing: {
+              threshold: 272000,
+              pricePerMillionInput: "4",
+              pricePerMillionOutput: "18",
+              pricePerMillionCacheRead: "0.4",
+              pricePerMillionCacheWrite: null,
+            },
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/llmModel/${model.id}`,
+        () =>
+          HttpResponse.json({
+            resource: "llmModel",
+            scope: model.id,
+            name: model.modelId,
+            ownerId: null,
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "update", "manage-permissions"],
+            canShareOrganizationWide: true,
+            actorSubjects: [],
+          } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
+      ),
+      http.patch(
+        `${API_ORIGIN}/api/llm-models/${model.id}`,
+        async ({ request }) => {
+          const body =
+            (await request.json()) as archestraApiTypes.UpdateModelData["body"];
+          updates.push(body);
+          return HttpResponse.json({ ...model, ...body });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText(/Synced tier above/)).toHaveTextContent(
+      "272,000",
+    );
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Above prompt tokens")).toHaveValue("");
+    expect(screen.getByLabelText("Above prompt tokens")).toHaveAttribute(
+      "placeholder",
+      "272,000",
+    );
+    expect(screen.getByLabelText("Long input")).toHaveValue("");
+    expect(screen.getByLabelText("Long input")).toHaveAttribute(
+      "placeholder",
+      "4.00",
+    );
+    expect(screen.getByLabelText("Long cache write")).toHaveAttribute(
+      "placeholder",
+      "Not reported",
+    );
+    await user.type(screen.getByLabelText("Long input"), "6");
+    await user.click(screen.getByRole("button", { name: "Use synced tier" }));
+    expect(screen.getByLabelText("Long input")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        longContextThreshold: null,
+        longContextPricePerMillionInput: null,
+        longContextPricePerMillionOutput: null,
+        longContextPricePerMillionCacheRead: null,
+        longContextPricePerMillionCacheWrite: null,
+      }),
+    );
+    expect(updates[0]).not.toHaveProperty("syncedLongContextPricing");
   });
 
   it("opens model permissions through Edit without a duplicate row action", async () => {

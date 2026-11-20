@@ -927,6 +927,7 @@ mod tests {
                 spawn: None,
                 prompt: None,
                 ruling: None,
+                declares: None,
             },
         ));
         assert!(

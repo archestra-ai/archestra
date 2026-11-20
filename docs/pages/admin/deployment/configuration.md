@@ -106,12 +106,6 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 ## General
 
-- **`ARCHESTRA_BETA`** - Turns on beta features.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
-  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
-
 - **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Releases](/docs/admin/deployment/verify-releases).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
@@ -121,10 +115,15 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - Requires the Docker socket mounted into the container. For evaluation only. See [Run Archestra](/docs/get-started#run-archestra).
 
+- **`ARCHESTRA_NODE_SOURCE_MAPS`** - Shows TypeScript files and lines in the stack traces the backend logs.
+  - Default: `true`, or `false` with [`ARCHESTRA_QUICKSTART`](/docs/admin/deployment/configuration#ARCHESTRA_QUICKSTART)
+  - Values: `true`, `false`
+  - Costs about 250 MB of backend memory. Error reports show source lines either way.
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
   - Values: `true`, `false`
-  - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
+  - See [Pricing](/pricing) for what it unlocks.
   - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
   - Turns [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) off unless that variable is set.
 
@@ -193,6 +192,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix of the auth cookie names, for example `archestra.session_token`.
   - Default: `archestra`
   - Give each instance a unique prefix when two instances run on one host on different ports, or on sibling subdomains that share a [cookie domain](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_COOKIE_DOMAIN). Otherwise their session cookies overwrite each other.
+
+- **`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`** - Service accounts and federated credentials to create on startup, as a JSON array. Requires an Enterprise license.
+  - Default: unset (nothing is created)
+  - With the Helm chart, set `archestra.bootstrap.serviceAccounts` instead. See [Declare Accounts in the Helm Chart](/docs/admin/identity/workload-identity#declare-accounts-in-the-helm-chart).
+  - Only missing accounts and credentials are created, matched by name. A malformed value stops startup.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Turns off email and password sign-in. Users sign in only through SSO.
   - Default: `false`
@@ -565,10 +569,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the beta [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified Model API.
-  - Default: unset (off)
-  - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
-
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
@@ -646,10 +646,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
-
-- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
-  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
 
 ## Chat
 
@@ -990,7 +986,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.
@@ -1266,7 +1262,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 ### M-Files
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Turns on the beta [M-Files connector](/docs/knowledge/connectors/m-files).
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
+  - Default: `false`
   - Values: `true`, `false`. Existing M-Files connectors keep syncing while it is off.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory that serves the VAF Add On package to the install script and the connector form.
@@ -1511,7 +1507,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives [Real User Monitoring](/docs/admin/observability#real-user-monitoring) events from the web UI. Setting it turns RUM on.
   - Default: unset (RUM off)
-  - Requires an [Enterprise license](/docs/get-started/pricing-model). The backend does not start when this is set without one.
+  - Requires an [Enterprise license](/pricing). The backend does not start when this is set without one.
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for basic authentication to the RUM endpoint.
   - Default: unset. Used only together with [`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD).
@@ -1565,7 +1561,7 @@ To disable captured prompt/response and tool argument/result fields on trace spa
 
 ## Data Retention
 
-Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started/pricing-model). Each value is a whole number of days; any other value turns that window off.
+Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/pricing). Each value is a whole number of days; any other value turns that window off.
 
 - **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to keep LLM proxy logs and Guardrails consult records.
   - Default: `0` (keep forever)

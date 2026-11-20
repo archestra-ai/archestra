@@ -180,18 +180,17 @@ pub(crate) fn root_id(organization_id: &str, session_id: &str) -> String {
 }
 
 /// The root the session `key` names has recorded, or `None` before it started.
-pub(crate) fn recorded_root(state: &State, key: &SessionKey) -> napi::Result<Option<String>> {
+pub(crate) fn recorded_root(pg: &Sql<'_>, key: &SessionKey) -> napi::Result<Option<String>> {
     let key = key.clone();
-    Sql(&state.store)
-        .with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })
-        .map_err(sql_failure)
+    pg.with_client(move |client| {
+        Ok(client
+            .query_opt(
+                "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                &[&key.organization_id, &key.actor],
+            )?
+            .map(|row| row.get::<_, String>(0)))
+    })
+    .map_err(sql_failure)
 }
 
 /// The label of the session `key` names, read through `state`'s pinned view.
@@ -205,15 +204,9 @@ pub(crate) async fn session_status(
         .ok_or_else(|| invariant("OpenAPPA status was read outside a pinned deployment"))?;
     let leased = state.lease().await?;
     tokio::task::spawn_blocking(move || {
-        let root = Sql(&leased.state.store).with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })?;
-        let Some(root) = root else { return Ok(None) };
+        let Some(root) = recorded_root(&Sql(&leased.state.store), &key)? else {
+            return Ok(None);
+        };
         let root = TrajectoryId(root);
         let status = match leased.state.runtime.try_status(&root) {
             Ok(status) => status,

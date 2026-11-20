@@ -74,3 +74,12 @@ Keep Copilot billing on the organization's plan, or on each person's own seat. G
 - Each card's switch decides only its own plan. The other plan stays on.
 - The plan you switch off leaves **Model Providers**, the chat menu and **Connect**. Nobody can set it up again, and Connect does not prepare a new setup with an account of that plan.
 - Connections that already exist keep working, and you can still delete them.
+
+
+## Native Anthropic Messages
+
+Claude clients can send the native Messages wire format directly to Copilot without a model pool. Set the client's Anthropic base URL to `https://<archestra-host>/v1/github-copilot` (or append `/<llm-proxy-id>` for a specific LLM proxy). The client appends `/v1/messages`.
+
+Use an Archestra virtual key linked to your Copilot credential, and a model ID available to that credential. Requests keep native thinking/signatures, tool history, structured-output parameters and cache fields rather than translating through Chat Completions. Archestra applies its normal key access, budgets and interaction logging under the GitHub Copilot provider.
+
+This endpoint does not add capabilities to Copilot: model, beta and server-side tool support depend on the upstream service. Upstream rejections are returned to the client. Token counting (`/v1/messages/count_tokens`) uses the same Copilot credential and model access checks. Counts are estimates, not generated usage, and do not debit Archestra generation budgets. There is no automatic fallback to Anthropic or another paid provider.

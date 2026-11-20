@@ -3539,6 +3539,129 @@ describe("model router proxy routes", () => {
     );
   });
 
+  test("describes each listed model's limits, reasoning levels and serving endpoints", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const base = {
+      inputModalities: ["text", "image"] as const,
+      outputModalities: ["text"] as const,
+      lastSyncedAt: new Date(),
+    };
+    await ModelModel.upsert({
+      ...base,
+      inputModalities: [...base.inputModalities],
+      outputModalities: [...base.outputModalities],
+      externalId: "openai/gpt-5.4",
+      provider: "openai",
+      modelId: "gpt-5.4",
+      contextLength: 400_000,
+      outputLength: 128_000,
+      // The administrator's window is the one requests are held to.
+      customContextLength: 272_000,
+      supportsToolCalling: true,
+    });
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.3-codex",
+      provider: "openai",
+      modelId: "gpt-5.3-codex",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      // Published by the provider, so it wins over the id rule.
+      supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "openai/text-embedding-3-small",
+      provider: "openai",
+      modelId: "text-embedding-3-small",
+      inputModalities: ["text"],
+      outputModalities: null,
+      embeddingDimensions: 1536,
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o-search-preview",
+      provider: "openai",
+      modelId: "gpt-4o-search-preview",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "kimi/kimi-k2",
+      provider: "kimi",
+      modelId: "kimi-k2",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsReasoningEffort: false,
+      lastSyncedAt: new Date(),
+    });
+    const organization = await makeOrganization();
+    const keys = await Promise.all(
+      (["openai", "kimi"] as const).map(async (provider) => {
+        const secret = await makeSecret({
+          secret: { apiKey: `sk-${provider}` },
+        });
+        const key = await makeLlmProviderApiKey(organization.id, secret.id, {
+          provider,
+        });
+        await linkAllProviderModelsToApiKey(provider, key.id);
+        return { provider, providerApiKeyId: key.id };
+      }),
+    );
+    const { value } = await VirtualApiKeyModel.create({
+      name: "model-router-capabilities-vk",
+      providerApiKeys: keys,
+      ...accessGrants("org"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/model-router/models",
+      headers: { authorization: `Bearer ${value}` },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const capabilitiesById = Object.fromEntries(
+      (
+        response.json().data as Array<{ id: string; capabilities?: unknown }>
+      ).map((entry) => [entry.id, entry.capabilities]),
+    );
+    expect(capabilitiesById["openai:gpt-5.4"]).toEqual({
+      context_length: 272_000,
+      max_output_tokens: 128_000,
+      input_modalities: ["text", "image"],
+      output_modalities: ["text"],
+      supports_tools: true,
+      supports_vision: true,
+      supports_reasoning_effort: true,
+      supported_reasoning_efforts: ["low", "medium", "high"],
+      supported_endpoints: ["/chat/completions", "/responses"],
+    });
+    expect(capabilitiesById["openai:gpt-5.3-codex"]).toMatchObject({
+      supports_vision: false,
+      supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+      supported_endpoints: ["/responses"],
+    });
+    expect(capabilitiesById["openai:text-embedding-3-small"]).toMatchObject({
+      supported_endpoints: ["/embeddings"],
+    });
+    // OpenAI serves it on Chat Completions only, and the router would forward
+    // a Responses request for it to OpenAI's Responses API unchanged.
+    expect(capabilitiesById["openai:gpt-4o-search-preview"]).toMatchObject({
+      supported_endpoints: ["/chat/completions"],
+    });
+    expect(capabilitiesById["kimi:kimi-k2"]).toMatchObject({
+      supports_reasoning_effort: false,
+      supported_reasoning_efforts: [],
+      supported_endpoints: ["/chat/completions"],
+    });
+  });
+
   test("streams Anthropic model router responses as OpenAI SSE chunks", async ({
     makeAgent,
     makeOrganization,

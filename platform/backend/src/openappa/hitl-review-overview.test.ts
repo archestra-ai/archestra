@@ -21,7 +21,6 @@ import {
   hitlInspectionDigest,
   hitlReviewCard,
   hitlReviewCardAnswer,
-  previousHitlCardAnswer,
   renderHitlReviewText,
 } from "./hitl-review-overview";
 import type { ReviewScopeItem } from "./review-scope";
@@ -820,15 +819,6 @@ const PUBLIC: ReviewScopeItem = {
   text: "the readers must be the public audience",
 };
 
-describe("previousHitlCardAnswer", () => {
-  test("reads Deny and Inspect details, and asks again instead of granting Approve", () => {
-    expect(previousHitlCardAnswer("Deny")).toBe("deny");
-    expect(previousHitlCardAnswer("Inspect details")).toBe("inspect");
-    expect(previousHitlCardAnswer("Approve")).toBe("ask-again");
-    expect(previousHitlCardAnswer("Allow")).toBeUndefined();
-  });
-});
-
 describe("renderHitlReviewText", () => {
   test("shows the tool's full definition text under the tool, escaped", () => {
     const text = renderHitlReviewText({
@@ -874,6 +864,43 @@ describe("renderHitlReviewText", () => {
     expect(text).toContain("### Generated summary (not authoritative)");
     expect(text).toContain("Runs a long echo.");
     expect(text).toContain("### Reading this review");
+  });
+
+  test("shows a written file's content as a code block, by the file's name", () => {
+    const content = "# Title\n\nconst price = `$5 and $6`;\n";
+    const text = renderHitlReviewText({
+      tool: "host/archestra/Write",
+      arguments: JSON.stringify({ content, file_path: "C:/work/notes.mjs" }),
+      text: COVERAGE,
+    });
+    // Its lines and characters stay as they are: no escapes, no reflow.
+    expect(text).toContain(`content:\n\n\`\`\`js\n${content}\n\`\`\``);
+    // Another tool's \`content\` is still prose.
+    expect(
+      renderHitlReviewText({
+        tool: "mcp/mail/send",
+        arguments: JSON.stringify({ content: "Dear reviewer" }),
+        text: COVERAGE,
+      }),
+    ).toContain("content:\n\nDear reviewer");
+  });
+
+  test("shows every argument as a code block when asked for literal arguments", () => {
+    const text = renderHitlReviewText(
+      {
+        tool: "mcp/mail/send",
+        arguments: JSON.stringify({
+          message: "Dear reviewer,\n\nthis is *prose* worth $5.",
+          to: ["a@example.com"],
+        }),
+        text: COVERAGE,
+      },
+      { literalArguments: true },
+    );
+    expect(text).toContain(
+      "message:\n\n```text\nDear reviewer,\n\nthis is *prose* worth $5.\n```",
+    );
+    expect(text).toContain('to:\n\n```json\n[\n  "a@example.com"\n]\n```');
   });
 
   test("escapes invisible control characters without touching genuine backslashes", () => {

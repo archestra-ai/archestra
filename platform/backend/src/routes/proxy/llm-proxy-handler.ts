@@ -88,6 +88,8 @@ import {
   UserTokenModel,
 } from "@/models";
 import type { LimitViolationResponse } from "@/models/limit";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
+import OAuthClientModel from "@/models/oauth-client";
 import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
@@ -128,6 +130,7 @@ import { appaWireFamily } from "@/openappa/wire";
 import {
   admitOpenappaRequest,
   type OpenappaAdmission,
+  resolveDisconnectBypass,
   resolveInstallerSetupBypass,
 } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
@@ -174,6 +177,7 @@ import {
 } from "@/types";
 import type { AttributionLabels } from "@/types/attribution-label";
 import type { AutoRoutingRequestContext } from "@/types/auto-routing";
+import { ManagedOauthClientMetadataSchema } from "@/types/managed-oauth-client";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
@@ -757,7 +761,6 @@ async function handleObservedLLMProxy<
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
   telemetry.setStreaming(requestAdapter.isStreaming());
-  assertNotAutoOnNativeRoute(requestAdapter.getModel());
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
@@ -801,6 +804,10 @@ async function handleObservedLLMProxy<
   const resolvedAgent =
     authenticationSnapshot?.agent ?? (await resolveAgent(agentId));
   const resolvedAgentId = resolvedAgent.id;
+  await assertNotAutoOnNativeRoute({
+    model: requestAdapter.getModel(),
+    organizationId: resolvedAgent.organizationId,
+  });
   // Pre-call reads shared within this request only; never stored or reused.
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
@@ -1336,6 +1343,35 @@ async function handleObservedLLMProxy<
           : "provider_key";
   }
 
+  // A2A uses the agent's provider credential. Its proof-bound execution
+  // reference names the application for audit only; it must not replace the
+  // credential identity used by authorization, billing, or proxy limits.
+  const a2aClient =
+    oauthExecution && !authenticatedApp
+      ? await OAuthClientModel.findByClientId(
+          oauthExecution.execution.clientId,
+        ).catch((error) => {
+          logger.warn(
+            { error },
+            "Failed to resolve A2A OAuth application for audit",
+          );
+          return null;
+        })
+      : null;
+  const a2aClientMetadata = a2aClient
+    ? ManagedOauthClientMetadataSchema.safeParse(a2aClient.metadata).data
+    : undefined;
+  const attributedOAuthApp =
+    authenticatedApp ??
+    (a2aClient &&
+    a2aClientMetadata?.organizationId === resolvedAgent.organizationId
+      ? {
+          id: a2aClient.id,
+          name: a2aClient.name ?? a2aClient.clientId,
+          clientId: a2aClient.clientId,
+        }
+      : undefined);
+
   // Encrypted chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
@@ -1604,7 +1640,6 @@ async function handleObservedLLMProxy<
         : null;
     const autoRouteWire =
       internalCall &&
-      config.autoRouting.enabled &&
       autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan
@@ -1891,13 +1926,23 @@ async function handleObservedLLMProxy<
     let admission: OpenappaAdmission = { kind: "ungoverned" };
     let governedThread: GovernedThread | undefined;
     let appaReceipts: OpenappaReceipts | undefined;
-    const installerSetupBypass = await resolveInstallerSetupBypass({
-      request,
-      body,
-      agent: resolvedAgent,
-      virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
-      appaActive,
-    });
+    // The conversation that runs a connect installer, or that disconnects
+    // a client, is let through ungoverned.
+    const connectionProcedureBypass =
+      (await resolveInstallerSetupBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+        appaActive,
+      })) ||
+      (await resolveDisconnectBypass({
+        request,
+        body,
+        agent: resolvedAgent,
+        authenticatedUserId,
+        appaActive,
+      }));
     if (hasProxyPlugins) {
       admission = await admitOpenappaRequest({
         request,
@@ -1918,10 +1963,15 @@ async function handleObservedLLMProxy<
           unsupportedClientAction,
         },
         chatSource: isInternalChat ? source : undefined,
+        // A summary skips the turn and child-return lifecycle, so only this
+        // process may claim one.
+        summaryRequest:
+          proof.inProcess &&
+          (source === "chat:compaction" || source === "a2a:compaction"),
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,
-        installerSetupBypass,
+        connectionProcedureBypass,
         ingress: appaIngress,
         toolIdentity,
         runtimeSnapshot: requestContext.runtimeSnapshot,
@@ -2498,8 +2548,8 @@ async function handleObservedLLMProxy<
                 sessionSource,
                 source,
                 authMethod,
-                authenticatedAppId: authenticatedApp?.id,
-                authenticatedAppName: authenticatedApp?.name,
+                authenticatedAppId: attributedOAuthApp?.id,
+                authenticatedAppName: attributedOAuthApp?.name,
                 billingTeamId,
                 type: provider.interactionType,
                 request:
@@ -2752,7 +2802,7 @@ async function handleObservedLLMProxy<
       authMethod,
       billingMode,
       getBillingMode: () => billingMode,
-      authenticatedApp,
+      authenticatedApp: attributedOAuthApp,
       billingTeamId,
       userId,
       serviceAccountId,
@@ -2865,8 +2915,8 @@ async function handleObservedLLMProxy<
         sessionSource,
         source,
         authMethod,
-        authenticatedAppId: authenticatedApp?.id,
-        authenticatedAppName: authenticatedApp?.name,
+        authenticatedAppId: attributedOAuthApp?.id,
+        authenticatedAppName: attributedOAuthApp?.name,
         billingTeamId,
         type: provider.interactionType,
         request: withClaudeSubagentMetadata(
@@ -3652,8 +3702,11 @@ async function handleStreaming<
       throw new ApiError(499, "Client disconnected during inference");
     }
 
-    // Anthropic requires message_stop; its beta usage arrives before that frame.
-    upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
+    // Native Messages streams require message_stop; beta usage can precede it.
+    const requiresMessagesTerminal =
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages";
+    upstreamFinished = !requiresMessagesTerminal || providerTerminalSeen;
     if (!upstreamFinished)
       throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
@@ -4402,7 +4455,9 @@ async function handleNonStreaming<
                 source,
                 billingMode: getBillingMode(),
                 authMethod,
-                tokens: providerName === "anthropic",
+                tokens:
+                  providerName === "anthropic" ||
+                  provider.interactionType === "github-copilot:messages",
               }),
             );
           throw new ObservedProviderUsageError({
@@ -4732,11 +4787,16 @@ async function handleNonStreaming<
             source,
             billingMode,
             authMethod,
-            tokens: providerName === "anthropic",
+            tokens:
+              providerName === "anthropic" ||
+              provider.interactionType === "github-copilot:messages",
           });
           return;
         }
-        if (providerName === "anthropic")
+        if (
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages"
+        )
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -4910,11 +4970,16 @@ async function handleNonStreaming<
         source,
         billingMode,
         authMethod,
-        tokens: providerName === "anthropic",
+        tokens:
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages",
       });
       return;
     }
-    if (providerName === "anthropic")
+    if (
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages"
+    )
       metrics.llm.reportLLMTokens(
         providerName,
         agent,
@@ -5633,6 +5698,28 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
+  if (
+    upstreamAttempt?.trackPoolUsage &&
+    record.modelPoolId &&
+    record.providerApiKeyId &&
+    record.model
+  ) {
+    try {
+      await ModelPoolUsageModel.record({
+        poolId: record.modelPoolId,
+        providerApiKeyId: record.providerApiKeyId,
+        modelId: upstreamAttempt.poolUsageModelId ?? record.model,
+        tokens:
+          (record.inputTokensEstimated ? 0 : (record.inputTokens ?? 0)) +
+          (record.outputTokens ?? 0) +
+          (record.cacheReadTokens ?? 0) +
+          (record.cacheWriteTokens ?? 0),
+      });
+    } catch (error) {
+      // Never turn an already answered inference into a client retry.
+      logger.error({ err: error }, "Unable to record model pool routing usage");
+    }
+  }
   try {
     await throughput?.settleSpend(
       record.cost,

@@ -1063,22 +1063,16 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
-  test("connectAndGetTools advertises the Skills client extension when enabled", async () => {
-    const originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
+  test("connectAndGetTools advertises the Skills client extension", async () => {
     mockListTools.mockResolvedValueOnce({ tools: [] });
     const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
     if (!catalogItem) throw new Error("expected catalog item");
 
-    try {
-      await mcpClient.connectAndGetTools({
-        catalogItem,
-        mcpServerId,
-        secrets: { access_token: "skills-token" },
-      });
-    } finally {
-      config.mcpGateway.skillsEnabled = originalEnabled;
-    }
+    await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "skills-token" },
+    });
 
     const { Client } = await import(
       "@modelcontextprotocol/sdk/client/index.js"

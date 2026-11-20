@@ -17,7 +17,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { GuardrailTerm } from "@/app/consults/logs/_parts/guardrail-terms";
 import { useYellInvestigation } from "@/app/openappa/_parts/use-yell-investigation";
-import { yellHref } from "@/app/openappa/_parts/yells-table";
+import { yellHref } from "@/app/openappa/_parts/yell-row";
 import {
   Tooltip,
   TooltipContent,
@@ -347,7 +347,7 @@ function DownloadReport({ yellId }: { yellId: string }) {
   );
 }
 
-/** Investigates the yell in chat, as the Yells table does. */
+/** Investigates the yell in chat, as the Guardrails log does. */
 function InvestigateLink({ yell }: { yell: TraceYell }) {
   const investigation = useYellInvestigation(yell);
   const { data: allowed } = useHasPermissions(investigation.permissions);

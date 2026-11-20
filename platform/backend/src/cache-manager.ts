@@ -82,6 +82,26 @@ export const CacheKey = {
   /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
   OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
+  /** The chat a Cursor subagent's subagents belong to, for the hook steps Cursor sends for them */
+  CursorSubagentRoot: "cursor-subagent-root",
+  /** Offers Guardrails made for calls of Cursor's own tools, whose results a hook cannot withhold */
+  CursorOwnToolOffer: "cursor-own-tool-offer",
+  /** Cursor chats whose model saw a result that Guardrails had to withhold */
+  CursorUnvouchedChat: "cursor-unvouched-chat",
+  /** Calls a Cursor subagent has open, which the end of the main agent's loop must not close */
+  CursorSubagentOpenCall: "cursor-subagent-open-call",
+  /** Cursor chats in which a subagent called a tool lately */
+  CursorSubagentActive: "cursor-subagent-active",
+  /** Guardrails marks a Cursor chat's model was told to show and has not shown yet */
+  CursorOwedMarks: "cursor-owed-marks",
+  /** Cursor chats whose model was already told to show the session mark */
+  CursorSessionMarkAsked: "cursor-session-mark-asked",
+  /** Cursor subagents that were already told to show their marks */
+  CursorSubagentMarkAsked: "cursor-subagent-mark-asked",
+  /** The Cursor chat and call that a web tool's CLI process reports for */
+  CursorWebCall: "cursor-web-call",
+  /** The Cursor chat that owns a disconnect reference, and that chat's exemption */
+  CursorDisconnectChat: "cursor-disconnect-chat",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
@@ -143,7 +163,7 @@ export const CacheKey = {
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Most active users in an organization's LLM logs, for the logs user filter */
-  InteractionUserOptions: "interaction-user-options-v2",
+  InteractionUserOptions: "interaction-user-options-v3",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */

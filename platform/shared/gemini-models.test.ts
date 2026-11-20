@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  geminiAcceptedReasoningEfforts,
   geminiThinkingConfigForEffort,
   isGeminiImageGenerationModel,
   isLegacyGeminiModel,
@@ -115,6 +116,7 @@ describe("supportsGeminiThinkingEffort", () => {
     ["gemini-3.1-flash-image-preview", false],
     ["gemini-nano-banana-2.1", false],
     ["gemini-3.5-flash-preview-tts", false],
+    ["gemini-3.5-transcribe", false],
     ["gemma-4-31b-it", false],
     ["gemini-embedding-001", false],
     ["gpt-5", false],
@@ -130,6 +132,29 @@ describe("supportsGeminiThinkingEffort", () => {
 
   test("does not regress once a 3.10 generation ships", () => {
     expect(supportsGeminiThinkingEffort("gemini-3.10-flash")).toBe(true);
+  });
+});
+
+describe("geminiAcceptedReasoningEfforts", () => {
+  test.each([
+    // 2.5 takes budgets; only Flash and Flash-Lite can turn thinking off.
+    ["gemini-2.5-flash", ["none", "minimal", "low", "medium", "high"]],
+    [
+      "gemini-2.5-flash-lite-preview-06-17",
+      ["none", "minimal", "low", "medium", "high"],
+    ],
+    ["gemini-2.5-pro", ["minimal", "low", "medium", "high"]],
+    // Later generations take levels, minus each family's documented gaps.
+    ["gemini-3.6-flash", ["minimal", "low", "medium", "high"]],
+    ["gemini-3-pro-preview", ["minimal", "low", "high"]],
+    ["gemini-3.8-flash", ["low", "medium", "high"]],
+    // Models that take no thinking setting at all.
+    ["gemini-2.5-flash-image", []],
+    ["gemini-2.0-flash", []],
+    ["gemini-3.5-transcribe", []],
+    ["gemma-4-31b-it", []],
+  ] as const)("%s accepts %o", (modelId, expected) => {
+    expect(geminiAcceptedReasoningEfforts(modelId)).toEqual(expected);
   });
 });
 

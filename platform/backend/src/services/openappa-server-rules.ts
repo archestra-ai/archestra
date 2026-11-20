@@ -12,7 +12,10 @@ import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
-import { catalogToolPrefixes } from "@/openappa/batteries";
+import {
+  catalogToolPrefixes,
+  openappaBatteriesService,
+} from "@/openappa/batteries";
 import {
   asRecord,
   governsServerTool,
@@ -28,6 +31,7 @@ import {
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
+  serverRulesPrefix,
   withRequester,
   withServerRulesFolderIncluded,
 } from "@/openappa/policy-text";
@@ -46,6 +50,7 @@ import {
 import {
   checkAppaPullRequestsSoon,
   checkIntegrationId,
+  getAppaSelfService,
   heldMergeReason,
   listedNames,
   mergeReadiness,
@@ -78,6 +83,14 @@ import { ApiError } from "@/types";
  */
 
 type Caller = { organizationId: string; userId: string };
+
+/** A server's rules file as one member may open it. */
+type ServerRulesFile = {
+  path: string;
+  /** The servers it governs that the member may open, by name. */
+  servers: { id: string; name: string }[];
+  canEdit: boolean;
+};
 
 /** What a caller reads about one server's rules. */
 export async function getServerRules(params: Caller & { catalogId: string }) {
@@ -140,8 +153,8 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
         ? `The user may read these rules but not propose a change: that takes edit access to ${server.needs(unseenServers("the user"))} in the MCP registry.${sharedSentence(server)}`
         : `${
             accepted === null
-              ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
-              : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees."
+              ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, say what it does, then call propose_guardrails_server_rules_change: the user approves that call before it runs.`
+              : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, say what it does, then call propose_guardrails_server_rules_change: the user approves that call before it runs."
           }${sharedSentence(server)}`,
     expectedCommit: source?.sourceCommit ?? null,
   };
@@ -211,15 +224,17 @@ export async function previewServerRulesChange(
   const autoMerge = selfServiceAutoMergeActive(change.source);
   return {
     stage: "preview" as const,
+    // A server's rules always change through a pull request.
+    delivery: "pull_request" as const,
     ...change.view,
-    // Under auto-merge the request is the approval: the pull request merges
-    // once its check passes, which judges both the file and its requester.
+    // The person approves the proposing call itself, in the chat, with this
+    // preview's diff in front of them. Under auto-merge that approval is the
+    // only one: the pull request then merges once its check passes, which
+    // judges both the file and its requester.
     autoMerge,
     instruction: !change.view.valid
       ? "Fix the errors and preview again."
-      : autoMerge
-        ? "Auto-merge is on. If this is the change the user asked for, call propose_guardrails_server_rules_change now with the same content and expectedCommit and a plain summary. Do not ask the user to approve it first: it merges by itself once its checks pass."
-        : "Explain what the change does to agents, then ask the user whether to open the pull request.",
+      : `If this is the change the user asked for, say in one or two sentences what it does to agents, then call propose_guardrails_server_rules_change now with the same content and expectedCommit and a plain summary. The user is shown this preview's diff and asked to approve that call before it runs, so do not ask them in text as well, and do not repeat the file. ${autoMerge ? "Auto-merge is on: once approved, the pull request merges by itself when its checks pass." : "Once approved, the pull request opens for the user to merge."}`,
   };
 }
 
@@ -278,6 +293,7 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
+    autoMerge: selfServiceAutoMergeActive(change.source),
     instruction: selfServiceAutoMergeActive(change.source)
       ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number, wait=true and the last phase as since, tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
       : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
@@ -313,6 +329,95 @@ const SETTLED: ReadonlySet<ChangePhase> = new Set([
   "applied",
   "closed",
 ]);
+
+/**
+ * The servers' rules files the policy includes that a member may open on the
+ * Policy page, with no Guardrails permission: each file that governs a server
+ * the member may open in the MCP registry, and whether they may change it
+ * there. Empty while self-service is off: the files are then the
+ * organization's policy alone.
+ */
+export async function listServerRulesFiles(
+  params: Caller,
+): Promise<ServerRulesFile[]> {
+  const { organizationId, userId } = params;
+  if (!(await getAppaSelfService(organizationId)).enabled) return [];
+  const folder = serverRulesFolderOf(
+    await OpenAppaGithubSyncModel.find(organizationId),
+  );
+  const { repositoryFiles } =
+    await openappaBatteriesService.policyDeclarations(organizationId);
+  const named = repositoryFiles.flatMap(({ path }) => {
+    const prefix = serverRulesPrefix(folder, path);
+    return prefix === null ? [] : [{ path, prefix }];
+  });
+  if (named.length === 0) return [];
+  const prefixes = await catalogToolPrefixes(organizationId, {
+    targets: named.map((file) => file.prefix),
+    catalogIds: [],
+  });
+  const files = await Promise.all(
+    named.map(async ({ path, prefix }) => {
+      const servers = await rulesFileServers(prefix, prefixes);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The registry's own rules: whoever may open a server the file governs
+      // reads it, and whoever may edit every server that owns it changes it.
+      const readable = await Promise.all(
+        servers.map((server) =>
+          ResourcePermissions.allows({
+            organizationId,
+            userId,
+            resource: "mcpRegistry",
+            scope: server.id,
+            action: "read",
+          }),
+        ),
+      );
+      const seen = servers.filter((_, index) => readable[index]);
+      if (seen.length === 0) return null;
+      const notEditable = await ownersNotEditable({
+        organizationId,
+        userId,
+        servers,
+      });
+      // SPDX-SnippetEnd
+      return {
+        path,
+        servers: seen.map(({ id, name }) => ({ id, name })),
+        canEdit: notEditable.length === 0,
+      };
+    }),
+  );
+  return files.filter((file) => file !== null);
+}
+
+/** One of those files, as the repository holds it at the accepted commit. */
+export async function readServerRulesFile(
+  params: Caller & { path: string },
+): Promise<{
+  entry: string;
+  name: string;
+  kind: "repository";
+  content: string;
+}> {
+  const { path } = params;
+  // The same answer for a file that is not included and for one the member
+  // may not open, so the path of another server's file tells nothing.
+  const allowed = (await listServerRulesFiles(params)).some(
+    (file) => file.path === path,
+  );
+  const content = allowed
+    ? await acceptedFile({ organizationId: params.organizationId, path })
+    : null;
+  if (content === null)
+    throw new ApiError(
+      404,
+      "This policy file is not included or you don't have access",
+    );
+  return { entry: path, name: path, kind: "repository", content };
+}
 
 /**
  * Where a server's rules pull request stands: its policy check, whether the

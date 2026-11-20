@@ -225,44 +225,6 @@ class PluginModel {
       .orderBy(asc(schema.pluginsTable.pluginSlug));
   }
 
-  static async getDeliverableStatsForClient(params: {
-    organizationId: string;
-    clientType: ClientType;
-    platform: "posix" | "windows";
-  }): Promise<{ pluginCount: number; totalBytes: number }> {
-    const [stats] = await db
-      .select({
-        pluginCount: sql<number>`count(distinct ${schema.pluginsTable.id})::int`,
-        totalBytes: sql<number>`coalesce(sum(case
-          when ${schema.pluginFilesTable.encoding} = 'base64'
-            then octet_length(decode(${schema.pluginFilesTable.content}, 'base64'))
-          else octet_length(${schema.pluginFilesTable.content})
-        end), 0)::int`,
-      })
-      .from(schema.pluginsTable)
-      .leftJoin(
-        schema.pluginFilesTable,
-        eq(schema.pluginFilesTable.pluginId, schema.pluginsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.pluginsTable.organizationId, params.organizationId),
-          eq(schema.pluginsTable.clientType, params.clientType),
-          sql`${params.platform} = any(${schema.pluginsTable.supportedPlatforms})`,
-          eq(schema.pluginsTable.enabled, true),
-          eq(
-            schema.pluginsTable.approvedContentHash,
-            schema.pluginsTable.contentHash,
-          ),
-          notDeleted(schema.pluginsTable),
-        ),
-      );
-    return {
-      pluginCount: stats?.pluginCount ?? 0,
-      totalBytes: stats?.totalBytes ?? 0,
-    };
-  }
-
   static async getApprovedDeliveryStats(params: {
     ids: string[];
     organizationId: string;

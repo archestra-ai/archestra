@@ -277,6 +277,28 @@ export class ResourcePermissions {
           resources?: ScopedResource[];
         },
   ): Promise<ManagedScopedPermission[]> {
+    if ("userId" in params && params.lookups?.memo) {
+      if (params.resources?.length === 0) return [];
+      const all = await params.lookups.memo(
+        `resource-grants\0${params.organizationId}\0${params.userId}`,
+        async () => {
+          const subjects = await ResourcePermissions.getSubjects({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            lookups: params.lookups,
+          });
+          const policies = await ResourcePermissionPolicyModel.findForSubjects({
+            organizationId: params.organizationId,
+            subjects,
+          });
+          const keys = new Set(subjects.map(subjectKey));
+          return expandScopedGrants({ policies, subjectKeys: keys });
+        },
+      );
+      if (!params.resources) return all;
+      const requested = new Set<ScopedResource>(params.resources);
+      return all.filter((grant) => requested.has(grant.resource));
+    }
     const subjects =
       "subjects" in params
         ? params.subjects

@@ -28,6 +28,7 @@ import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelPoolModel from "@/models/model-pool";
+import OauthClientFederatedCredentialModel from "@/models/oauth-client-federated-credential";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -431,6 +432,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "OAuth refresh token runtime state",
   },
+  oauthClientAssertionsTable: {
+    audited: false,
+    reason: "OAuth client assertion replay cache (jti until expiry)",
+  },
+  oauthResourcesTable: {
+    audited: false,
+    reason: "Better Auth OAuth resources; no route of ours writes them",
+  },
 
   // =========================================================================
   // Join / membership / labels (parent resource carries audit signal)
@@ -621,6 +630,10 @@ export const AUDIT_DECISIONS = {
   oauthClientTeamsTable: {
     audited: false,
     reason: "join: oauth client × team; parent (oauth client) audited",
+  },
+  oauthClientResourcesTable: {
+    audited: false,
+    reason: "join: OAuth client × OAuth resource; no route of ours writes it",
   },
   mcpServerUsersTable: {
     audited: false,
@@ -1023,6 +1036,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountFederatedCredentialsTable: {
     audited: true,
     model: ServiceAccountFederatedCredentialModel,
+  },
+  oauthClientFederatedCredentialsTable: {
+    audited: true,
+    model: OauthClientFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,

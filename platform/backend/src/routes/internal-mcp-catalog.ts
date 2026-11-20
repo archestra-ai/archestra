@@ -989,13 +989,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "App catalog entities are managed via the Apps API.",
         );
       }
-      assertDesktopMcpOffered(restBody.serverType);
       await assertCanWriteMcpDeploymentYaml({
         userId: request.user.id,
         organizationId: request.organizationId,
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      if (restBody.localConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          restBody.localConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1522,10 +1529,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // app + server after the update.
       // A partial update may not name the server type: check the command for
       // devices against the type the item will have.
-      // A server can become a desktop MCP server only where those are offered.
-      if (originalCatalogItem.serverType !== "desktop_mcp") {
-        assertDesktopMcpOffered(restBody.serverType);
-      }
       if (
         restBody.desktopConfig &&
         (restBody.serverType ?? originalCatalogItem.serverType) !==
@@ -1656,6 +1659,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
       });
+      const effectiveLocalConfig =
+        restBody.localConfig === undefined
+          ? originalCatalogItem.localConfig
+          : restBody.localConfig;
+      if (effectiveLocalConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          effectiveLocalConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType ?? originalCatalogItem.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2580,6 +2595,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2692,6 +2714,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -3502,19 +3531,6 @@ const MAX_REGISTRY_QUERY_IDS = 10_000;
  * parses before the combined id check (about 13,000 UUIDs).
  */
 const REGISTRY_QUERY_BODY_LIMIT_BYTES = 512 * 1024;
-
-/**
- * Desktop MCP is in alpha: a new desktop MCP server needs the deployment's
- * beta flag (ARCHESTRA_BETA). The items that already are one keep working.
- */
-function assertDesktopMcpOffered(serverType: string | undefined): void {
-  if (serverType === "desktop_mcp" && !config.beta) {
-    throw new ApiError(
-      403,
-      "Desktop MCP servers are in alpha and need ARCHESTRA_BETA=true.",
-    );
-  }
-}
 
 /**
  * Two rounds of tool renames as one: a tool renamed in both keeps its first

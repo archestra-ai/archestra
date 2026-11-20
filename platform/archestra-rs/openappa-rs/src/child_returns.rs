@@ -1,8 +1,9 @@
 use crate::{
     Sql,
-    errors::{invalid_input, panicked, sql_failure},
+    errors::{panicked, sql_failure},
+    initialized,
     input::Input,
-    sealed, state_mutex,
+    sealed,
 };
 use appa_eventlog::{encryption::StorageCipher, postgres::PostgresError};
 use appa_runtime_api::{HookEvent, SpawnBinding, SpawnRef, TrajectoryId};
@@ -48,15 +49,7 @@ pub async fn load_child_returns(
     parent_session_id: String,
     lookup: Option<ChildReturnLookup>,
 ) -> napi::Result<Vec<ChildReturnRecord>> {
-    // Mirror load_offer_review: clone state, drop the mutex, then lease a
-    // connection before host SQL so lookups never contend with dispatches.
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-            .clone()
-    };
-    let leased = state.lease().await?;
+    let leased = initialized().await?.lease().await?;
     let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // session_id is the leading PK column of openappa_operations, and
@@ -201,15 +194,7 @@ pub async fn load_child_addresses(
     organization_id: String,
     child_session_id: String,
 ) -> napi::Result<Vec<ChildAddressRecord>> {
-    // Mirror load_child_returns: clone state, drop the mutex, then lease a
-    // connection before host SQL so lookups never contend with dispatches.
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-            .clone()
-    };
-    let leased = state.lease().await?;
+    let leased = initialized().await?.lease().await?;
     let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // Only the child's own parent addresses it, and only an address the
@@ -326,7 +311,7 @@ pub(crate) fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Resul
 /// Receipt key for a spawn call. The host's id is raw; the operation the tool-call
 /// dispatch stored is `call:<id>`. The engine does not accept either string as a
 /// [`SpawnRef`].
-fn spawn_operation_id(spawn_call_id: &str) -> String {
+pub(crate) fn spawn_operation_id(spawn_call_id: &str) -> String {
     format!("call:{spawn_call_id}")
 }
 
@@ -746,6 +731,7 @@ mod runtime_child_tests {
             spawn: spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
+            declares: None,
         }
     }
 
@@ -991,6 +977,262 @@ mod runtime_child_tests {
             "a later call still runs after the crossing, got {later:?}"
         );
     }
+
+    #[tokio::test]
+    async fn a_child_end_is_held_until_the_host_answers_the_call_by_its_raw_id() {
+        let delegate = crate::operations::canonical_tool("delegate").unwrap();
+        let read = crate::operations::canonical_tool("read").unwrap();
+        let runtime = open_runtime(&delegate, &read);
+        let root = TrajectoryId("archestra:parent-root".into());
+        let child = child_of(&root);
+        opened_child(&runtime, &root, &child, &delegate).await;
+        let opened = hooks::handle(
+            &runtime,
+            tool_call(&root, Some(&child), &read, Some("call:read-1"), false),
+        )
+        .await;
+        assert!(
+            matches!(opened, HookDecision::AllowCall { .. }),
+            "{opened:?}"
+        );
+
+        let end = |answered: Value| {
+            let input = event_input("child_end", json!({ "answered_call_ids": answered }));
+            validate(&input).unwrap();
+            HookEvent::ChildEnd {
+                root: root.clone(),
+                child: child.clone(),
+                value: input.output.clone(),
+                open_calls: crate::input::open_calls(&input),
+            }
+        };
+        assert_eq!(
+            hooks::handle(&runtime, end(json!(["other"]))).await,
+            HookDecision::Held {
+                running: vec!["call:read-1".into()]
+            }
+        );
+        let ended = hooks::handle(&runtime, end(json!(["read-1"]))).await;
+        assert!(
+            !matches!(ended, HookDecision::Held { .. }),
+            "the answered call must not hold the end, got {ended:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_narrowing_answer_under_a_deferred_return_is_no_crossing_and_reads_back_as_a_notice()
+    {
+        let delegate = crate::operations::canonical_tool("delegate").unwrap();
+        let read = crate::operations::canonical_tool("read").unwrap();
+        let narrowing = policy(&delegate, &read).replacen(
+            &format!("name = \"{read}\"\ndelta = {{}}"),
+            &format!("name = \"{read}\"\ndelta = {{ trust = \"suspicious\" }}"),
+            1,
+        );
+        let runtime = crate::policy::open(
+            crate::policy::compile(&narrowing, |_| None).unwrap(),
+            Arc::new(LogStore::open(Backend::Memory).unwrap()),
+        )
+        .unwrap();
+        let root = TrajectoryId("archestra:parent-root".into());
+        let parent = Actor {
+            root: root.clone(),
+            child: None,
+        };
+        let child = child_of(&root);
+        assert_eq!(
+            hooks::handle(&runtime, start(&root)).await,
+            HookDecision::Ack
+        );
+
+        let HookEvent::ToolCall {
+            actor,
+            call,
+            call_id,
+            spawn,
+            prompt,
+            ruling,
+            ..
+        } = tool_call(&root, None, &delegate, Some("call:spawn-1"), true)
+        else {
+            unreachable!()
+        };
+        let declared: crate::input::DeclaredReturn =
+            serde_json::from_value(json!({ "deferred": true })).unwrap();
+        let released = hooks::handle(
+            &runtime,
+            HookEvent::ToolCall {
+                actor,
+                call,
+                call_id,
+                spawn,
+                prompt,
+                ruling,
+                declares: Some(declared.into()),
+            },
+        )
+        .await;
+        let HookDecision::AllowCall {
+            spawn: Some(binding),
+            ..
+        } = released
+        else {
+            panic!("a spawn is released under the deferred return it declares, got {released:?}");
+        };
+        assert!(runtime.defers_return(&parent, "call:spawn-1").unwrap());
+        let presentation = appa_runtime::api::EmbeddedPresentationOptions::default();
+        assert_eq!(
+            runtime
+                .deferred_return(&parent, "call:spawn-1", &presentation)
+                .unwrap(),
+            None
+        );
+
+        let started = hooks::handle(
+            &runtime,
+            HookEvent::ChildStart {
+                root: root.clone(),
+                child: child.clone(),
+                spawn: SpawnRef::Binding(binding),
+            },
+        )
+        .await;
+        assert!(
+            matches!(started, HookDecision::Ack | HookDecision::Context { .. }),
+            "{started:?}"
+        );
+        let reading = || tool_call(&root, Some(&child), &read, Some("call:read-1"), false);
+        let HookDecision::DenyCall { offers, .. } = hooks::handle(&runtime, reading()).await else {
+            panic!("a read that narrows the child asks for the child's own consent");
+        };
+        let [narrow] = offers.as_slice() else {
+            panic!("no floor bounds the child, so its menu is the narrowing alone: {offers:?}");
+        };
+        let consented = runtime
+            .execute_remedy_with(
+                &Actor {
+                    root: root.clone(),
+                    child: Some(child.clone()),
+                },
+                OfferId(narrow.id.clone()),
+                RemedyArguments::default(),
+            )
+            .await;
+        assert!(
+            matches!(consented, RemedyOutcome::Authorized { .. }),
+            "{consented:?}"
+        );
+        let opened = hooks::handle(&runtime, reading()).await;
+        assert!(
+            matches!(opened, HookDecision::AllowCall { .. }),
+            "{opened:?}"
+        );
+        let reported = hooks::handle(
+            &runtime,
+            HookEvent::ToolResult {
+                actor: Actor {
+                    root: root.clone(),
+                    child: Some(child.clone()),
+                },
+                call: ProposedCall {
+                    tool: read.clone(),
+                    arguments: arguments(),
+                    cwd: None,
+                },
+                call_id: Some("call:read-1".into()),
+                outcome: ToolOutcome::Success {
+                    body: OutcomeBody::Available("note".into()),
+                },
+            },
+        )
+        .await;
+        assert!(matches!(reported, HookDecision::Ack), "{reported:?}");
+
+        // The stop of an in-process subagent: its final answer, offered without ending.
+        let stop = || HookEvent::ChildReturn {
+            root: root.clone(),
+            child: child.clone(),
+            value: "the answer".into(),
+        };
+        let ended = hooks::handle(&runtime, stop()).await;
+        assert_eq!(ended, HookDecision::DeferReturn);
+        assert_eq!(
+            hooks::handle(&runtime, stop()).await,
+            HookDecision::DeferReturn
+        );
+        let receipt = wire(&ended).unwrap();
+        assert_eq!(receipt["decision"], "defer_return");
+        assert!(receipt.get("value").is_none());
+        assert!(
+            crossed_return(ReturnReceipt {
+                event: "child_return",
+                operation_id: "runtime-return:spawn-1:req-1",
+                decision: receipt["decision"].as_str().unwrap(),
+                decision_value: None,
+                output: Some("the answer"),
+            })
+            .is_none(),
+            "a deferred answer crossed nothing"
+        );
+        assert!(
+            runtime
+                .audit(&root)
+                .unwrap()
+                .iter()
+                .all(|entry| { !matches!(entry.event, AuditEvent::ChildReturn { .. }) })
+        );
+
+        let notice = runtime
+            .deferred_return(&parent, "call:spawn-1", &presentation)
+            .unwrap()
+            .expect("the parent is told its subagent's answer waits for its decision");
+        assert_ne!(notice.accept, notice.discard);
+
+        // The parent's turn may end before it decides: the spawn's result was answered
+        // with the notice, and the answer still waits.
+        let mut turn = event_input("turn_end", json!({ "answered_call_ids": ["spawn-1"] }));
+        turn.parent_id = None;
+        turn.output = None;
+        validate(&turn).unwrap();
+        let stopped = hooks::handle(
+            &runtime,
+            HookEvent::TurnEnd {
+                actor: parent.clone(),
+                open_calls: crate::input::open_calls(&turn),
+            },
+        )
+        .await;
+        assert_eq!(stopped, HookDecision::Ack);
+        let accepted = runtime
+            .execute_embedded_remedy(
+                &parent,
+                serde_json::from_value(json!({ "offer_id": notice.accept.as_str() })).unwrap(),
+            )
+            .await;
+        assert!(
+            matches!(&accepted, RemedyOutcome::Returned { value } if value == "the answer"),
+            "{accepted:?}"
+        );
+        assert_eq!(
+            runtime
+                .deferred_return(&parent, "call:spawn-1", &presentation)
+                .unwrap(),
+            Some(notice),
+            "the spawn's own result keeps the notice after the decision"
+        );
+    }
+
+    #[test]
+    fn only_a_stop_carries_answered_call_ids() {
+        let answered = json!({ "answered_call_ids": ["read-1"] });
+        assert!(validate(&event_input("child_end", answered.clone())).is_ok());
+        assert_eq!(
+            crate::errors::rejected_input(
+                validate(&event_input("child_return", answered)).unwrap_err()
+            ),
+            "only a stop carries answered_call_ids"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1031,13 +1273,7 @@ pub async fn load_child_rejections(
     parent_session_id: String,
 ) -> napi::Result<Vec<ChildRejectionRecord>> {
     AssertUnwindSafe(async move {
-        let state = {
-            let slot = state_mutex().lock().await;
-            slot.as_ref()
-                .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
-                .clone()
-        };
-        let leased = state.lease().await?;
+        let leased = initialized().await?.lease().await?;
         Sql(&leased.state.store)
             .with_client(move |client| {
                 let receipts = sealed::read(

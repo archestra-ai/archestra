@@ -8,6 +8,7 @@ import {
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  type ReasoningEffortLevel,
   requiresPerplexityAgentApi,
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
@@ -18,6 +19,7 @@ import {
   type ModelsDevApiResponse,
   modelsDevClient,
   modelsDevCostToPerToken,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import config from "@/config";
@@ -187,6 +189,21 @@ class ModelSyncService {
       if (!forceRefresh && authoritativeIds.size > 0)
         await ModelModel.applyAuthoritativeCapabilities(
           modelsToUpsert.filter((model) => authoritativeIds.has(model.modelId)),
+        );
+      if (!forceRefresh)
+        await ModelModel.applyAuthoritativeContextLengths(
+          providerModels.flatMap((model) =>
+            model.capabilities?.authoritativeContextLength &&
+            model.capabilities.contextLength
+              ? [
+                  {
+                    provider,
+                    modelId: model.id,
+                    contextLength: model.capabilities.contextLength,
+                  },
+                ]
+              : [],
+          ),
         );
 
       logger.info(
@@ -388,10 +405,12 @@ interface ProviderModelCapabilities {
   supportsToolCalling: boolean | null;
   supportsReasoningEffort: boolean | null;
   supportedEndpoints: SupportedProviderEndpoint[] | null;
+  supportedReasoningEfforts: ReasoningEffortLevel[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
+  syncedLongContextPricing?: ReturnType<typeof modelsDevLongContextPricing>;
 }
 
 export function buildModelsToUpsert(params: {
@@ -517,10 +536,12 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       supportsReasoningEffort: capabilities.supportsReasoningEffort,
       supportedEndpoints: capabilities.supportedEndpoints,
+      supportedReasoningEfforts: capabilities.supportedReasoningEfforts,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
       cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
+      syncedLongContextPricing: capabilities.syncedLongContextPricing ?? null,
       embeddingDimensions: resolveEmbeddingDimensions({
         modelId:
           provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
@@ -913,14 +934,16 @@ export function resolveModelCapabilities(params: {
         inferredCapabilities.outputLength ??
         crossProviderMetadata?.outputLength ??
         null,
-      inputModalities:
+      inputModalities: applyVisionSupport(
+        fetched?.supportsVision,
         fetched?.inputModalities ??
-        capabilities?.inputModalities ??
-        inferredCapabilities.inputModalities ??
-        parseModalities(
-          crossProviderMetadata?.inputModalities,
-          ModelInputModalitySchema,
-        ),
+          capabilities?.inputModalities ??
+          inferredCapabilities.inputModalities ??
+          parseModalities(
+            crossProviderMetadata?.inputModalities,
+            ModelInputModalitySchema,
+          ),
+      ),
       outputModalities:
         fetched?.outputModalities ??
         capabilities?.outputModalities ??
@@ -950,6 +973,9 @@ export function resolveModelCapabilities(params: {
       // a given model over. models.dev describes the model, not the transport
       // a particular reseller exposes it on.
       supportedEndpoints: fetched?.supportedEndpoints ?? null,
+      // Fetcher-only too: models.dev says whether a model reasons, not which
+      // levels a given provider accepts for it.
+      supportedReasoningEfforts: fetched?.supportedReasoningEfforts ?? null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
@@ -970,6 +996,22 @@ export function resolveModelCapabilities(params: {
         crossProviderPrices?.cacheReadPricePerToken ??
         publishedPrices?.cacheReadPricePerToken ??
         null,
+      // Keep the tier with its tariff. Metadata-only registry entries must not
+      // hide the fallback tier; an explicit same-provider price (including zero)
+      // without a tier must not borrow a different provider's long rates.
+      syncedLongContextPricing:
+        fetched?.promptPricePerToken != null ||
+        fetched?.completionPricePerToken != null ||
+        fetched?.cacheReadPricePerToken != null ||
+        fetched?.cacheWritePricePerToken != null
+          ? null
+          : capabilities?.promptPricePerToken != null ||
+              capabilities?.completionPricePerToken != null
+            ? (capabilities.syncedLongContextPricing ?? null)
+            : capabilities?.cacheReadPricePerToken != null ||
+                capabilities?.cacheWritePricePerToken != null
+              ? null
+              : (crossProviderPrices?.syncedLongContextPricing ?? null),
       cacheWritePricePerToken:
         fetched?.cacheWritePricePerToken ??
         capabilities?.cacheWritePricePerToken ??
@@ -1048,15 +1090,37 @@ function buildCapabilitiesMap(
         // models.dev describes the model, not which transport a given provider
         // exposes it on — only a fetcher can know that.
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: prices.promptPricePerToken,
         completionPricePerToken: prices.completionPricePerToken,
         cacheReadPricePerToken: prices.cacheReadPricePerToken,
         cacheWritePricePerToken: prices.cacheWritePricePerToken,
+        syncedLongContextPricing: modelsDevLongContextPricing(model.cost),
       });
     }
   }
 
   return map;
+}
+
+/**
+ * The input modalities with `image` added or removed as the provider's own
+ * vision flag says. The registry can describe the same model id as text-only
+ * while the provider serves it images (or the reverse); the provider knows
+ * what it accepts, and everything else the list says (`pdf`, `audio`) stays.
+ */
+function applyVisionSupport(
+  supportsVision: boolean | null | undefined,
+  modalities: ModelInputModality[] | null,
+): ModelInputModality[] | null {
+  if (supportsVision === true) {
+    const base = modalities ?? ["text"];
+    return base.includes("image") ? base : [...base, "image"];
+  }
+  if (supportsVision === false && modalities?.includes("image")) {
+    return modalities.filter((modality) => modality !== "image");
+  }
+  return modalities;
 }
 
 /**
@@ -1425,6 +1489,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     supportsReasoningEffort: null,
     supportsToolCalling: null,
     supportedEndpoints: null,
+    supportedReasoningEfforts: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
     cacheReadPricePerToken: null,

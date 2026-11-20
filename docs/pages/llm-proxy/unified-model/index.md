@@ -2,7 +2,7 @@
 title: Unified Model API
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,7 @@ The answer comes back in OpenAI format, from any provider.
 
 - **Model IDs** start with the provider: `openai:gpt-5.4`, `anthropic:claude-sonnet-4-6`. The API sends the rest of the ID to that provider.
 - **One provider only?** When the key maps to one provider, plain IDs such as `gpt-5.4` also work.
+- **Auto routers:** pass `auto` or `auto:<name>` on `/chat/completions` or `/responses` to let an [auto router](/docs/llm-proxy/auto-routing) pick a fast, normal, or smart model for each session. The router must be granted to the virtual key or OAuth client first.
 
 ## Endpoints and Credentials
 
@@ -55,6 +56,35 @@ The Unified Model API speaks the OpenAI API. It supports these endpoints:
 | `/realtime` (WebSocket) | OpenAI realtime models |
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The Unified Model API does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
+
+## Build a Model Picker
+
+`/models` tells your app each model's limits and settings, so a picker needs no hard-coded defaults. Each model entry carries a `capabilities` object:
+
+```json
+{
+  "id": "openai:gpt-5.4",
+  "object": "model",
+  "owned_by": "openai",
+  "capabilities": {
+    "context_length": 1050000,
+    "max_output_tokens": 128000,
+    "input_modalities": ["text", "image", "pdf"],
+    "output_modalities": ["text"],
+    "supports_tools": true,
+    "supports_vision": true,
+    "supports_reasoning_effort": true,
+    "supported_reasoning_efforts": ["low", "medium", "high"],
+    "supported_endpoints": ["/chat/completions", "/responses"]
+  }
+}
+```
+
+- **Limits:** `context_length` and `max_output_tokens` are the model's limits, with any override an administrator set on **Models**. `null` means unknown.
+- **`supported_reasoning_efforts`:** the `reasoning_effort` values this API accepts for the model. The provider's own list is used when it publishes one (GitHub Copilot, a ChatGPT subscription, a LiteLLM gateway). Otherwise the list holds the levels Archestra knows are safe, and the provider may accept more. `[]` means send none; `null` means unknown.
+- **`supported_endpoints`:** the endpoints on this page that serve the model. Send a Responses-only model to `/responses`.
+
+Model pools and auto routers carry no `capabilities`, because their members can differ. The same fields, in camel case, are in `capabilities` on [`GET /api/llm-models/available`](/docs/reference/api/llm-proxy#tag/llm-models/GET/api/llm-models/available), which any member's API key can read.
 
 ## Images and Audio
 
@@ -112,6 +142,7 @@ Most failures come from the model name or from which provider keys your credenti
 | `Provider "…" is not yet available through the OpenAI-compatible Unified Model API.` | The Unified Model API does not support that provider. Use the provider's own [proxy endpoint](/docs/llm-proxy#start-using-it). |
 | `Unified Model API requests require a mapped virtual API key or LLM OAuth client access token.` | You sent a passthrough key, a provider key, or an identity provider JWT. Use a standard virtual key or an OAuth client token. |
 | `… is per-user: it can only be used through the same user's own personal credential.` | A subscription key, such as GitHub Copilot, works only for the person who added it. Use your personal virtual key. |
+| `403` when requesting `auto` or `auto:<name>` | Add the router under **Auto routers** on the virtual key or OAuth client. See [Auto Routing](/docs/llm-proxy/auto-routing). |
 
 Two problems return no error:
 

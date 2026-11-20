@@ -42,11 +42,6 @@ Then:
 
 Entra then pushes everyone assigned and keeps Archestra up to date on its own schedule.
 
-What to know:
-
-- Assigning a group needs an Entra ID P1 or P2 license. Microsoft 365 E3 and E5 include it. Without one, assign people one by one.
-- The pushed email must match the sign-in email. If it doesn't, the first sign-in creates a second, empty user.
-
 ## Example: One Entra Group, Teams in Terraform
 
 Give everyone access through one Entra group, and keep team membership in Terraform. You don't need an Entra group per team.

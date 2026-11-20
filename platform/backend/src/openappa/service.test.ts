@@ -39,6 +39,7 @@ import {
   executeRemedyByOffer,
   executeYell,
   listPeerMessages,
+  loadChildRejections,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
@@ -104,6 +105,7 @@ const native = vi.hoisted(() => ({
   collectOpenappaMetrics: vi.fn(() => ""),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadChildRejections: vi.fn(),
   loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
   sendPeerMessage: vi.fn(),
@@ -162,6 +164,7 @@ beforeEach(async ({ makeOrganization }) => {
   );
   native.loadOfferReview.mockReset();
   native.loadChildReturns.mockReset();
+  native.loadChildRejections.mockReset();
   native.sendPeerMessage.mockReset();
   native.admitPeerMessage.mockReset();
   native.listPeerMessages.mockReset();
@@ -4603,6 +4606,34 @@ describe("remedy by offer", () => {
         parentSessionId: "user:alice|conversation",
       }),
     ).rejects.toThrow("Guardrails failed unexpectedly");
+  });
+
+  test("reads child rejections again after the pooled connection was closed", async () => {
+    const rejection = {
+      childSessionId: "user:alice|conversation:a1",
+      spawnCallId: "call-spawn",
+      childNativeId: "native-child",
+      notice: "OpenAPPA blocked this operation",
+    };
+    native.loadChildRejections
+      .mockRejectedValueOnce(
+        new Error(
+          "OpenAPPA storage failed: SQLSTATE 57P01: terminating connection due to administrator command",
+        ),
+      )
+      .mockResolvedValueOnce([rejection]);
+
+    await expect(
+      loadChildRejections({
+        organizationId,
+        parentSessionId: "user:alice|conversation",
+      }),
+    ).resolves.toEqual([rejection]);
+    expect(native.loadChildRejections).toHaveBeenCalledTimes(2);
+    expect(native.loadChildRejections).toHaveBeenLastCalledWith(
+      organizationId,
+      "user:alice|conversation",
+    );
   });
 
   test("fails closed with 500 when the offer review cannot be loaded", async () => {

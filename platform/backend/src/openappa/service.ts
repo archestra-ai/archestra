@@ -2289,9 +2289,8 @@ export async function loadChildRejections(params: {
 }) {
   try {
     const module = await binding();
-    return await module.loadChildRejections(
-      params.organizationId,
-      params.parentSessionId,
+    return await withNativeStorageRetry(() =>
+      module.loadChildRejections(params.organizationId, params.parentSessionId),
     );
   } catch (error) {
     throw openappaFailure(error);

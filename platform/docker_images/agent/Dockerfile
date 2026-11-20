@@ -231,7 +231,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.168.0 \
+RUN pnpm add --global @openai/codex@0.169.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -397,8 +397,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.0)" kimi-code.tgz \
- && echo "0bc8299536d242c9fecf13248720bed8c33695a7f613a62e116a81b7b510314da5aadafb24a8bdcc7206345b938045ece6d22f4b71dd5381e99b19de2f78bb96  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.1)" kimi-code.tgz \
+ && echo "33b33707047c64d73b16cbfe508f81fe13e3889957ddad7714b575ff83ed4166faca61c1659e7066cfbefd615a44a5146f90a88844efac0d38639d3a1d78955d  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -422,13 +422,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=869507e9a3b285c436a8ea2093e17c0c9c72949d6c3ef36b7513b2a7d8a2ceab1ec38b3c498239495750cdcb2e602a093e8afa52f7533612628e024c80f5a3c9 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=5b028738b75f352610cc10fe975fe1166ac41f2b1fe40c1e3cf5f5d326968d0704ccf46dc53aeadcf5135af30af77f594ece570f042ff1da5cee6bc528564c63 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=5e82d04da0b22fdaf710b3b0e35a613f365b4ca8e54e02eb3200b3f19e5176fb7c957cb7591b290b5baaefee3e9802605b54f63ab65a727bc981eeaf47841c60 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=80c0dd5e0b699b12926f9e437f18adcf030748d26fa0106d6c4c3578268dcdfd430944190bd29fb5d40996231fa57a8d241bcbdcd1d812a985f9991933d28783 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.110)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.111)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

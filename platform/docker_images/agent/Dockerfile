@@ -283,6 +283,20 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && mkdir -p /opt/hermes-python \
  && tar -xzf /tmp/hermes-python.tgz -C /opt/hermes-python --strip-components=1 \
  && rm /tmp/hermes-python.tgz \
+ # Hermes builds and runs its TUI on the Node and pnpm its lock pins, which
+ # are newer than the image's own; both stay private to Hermes.
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["node"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-node.tar.xz \
+ && echo "$2  /tmp/hermes-node.tar.xz" | sha256sum -c - \
+ && mkdir -p /opt/hermes-node \
+ && tar -xJf /tmp/hermes-node.tar.xz -C /opt/hermes-node --strip-components=1 \
+ && rm -rf /tmp/hermes-node.tar.xz /opt/hermes-node/include /opt/hermes-node/share \
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["pnpm"]["artifacts"][sys.argv[1]][0]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-pnpm.tgz \
+ && echo "$2  /tmp/hermes-pnpm.tgz" | sha256sum -c - \
+ && mkdir -p /tmp/hermes-pnpm \
+ && tar -xzf /tmp/hermes-pnpm.tgz -C /tmp/hermes-pnpm --strip-components=1 \
+ && rm /tmp/hermes-pnpm.tgz \
  && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
  # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
@@ -291,9 +305,10 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
       --python /opt/hermes-python/bin/python3 --compile-bytecode \
  && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
       Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
- && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
- && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
- && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
+ && PATH="/tmp/hermes-pnpm:/opt/hermes-node/bin:$PATH" LEFTHOOK=0 npm_config_install_links=false \
+      node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
+ && PATH="/opt/hermes-node/bin:$PATH" node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
+ && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache /tmp/hermes-pnpm \
       website apps tests tests-js evals \
  && .venv/bin/python scripts/write_install_stamp.py --output install-stamp.json \
       --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
@@ -309,7 +324,7 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && hermes --version \
  && chown -R 1000:1000 /home/node
 ENV HERMES_TUI_DIR=/opt/hermes-tui
-ENV HERMES_NODE=/usr/local/bin/node
+ENV HERMES_NODE=/opt/hermes-node/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
@@ -397,8 +412,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.1)" kimi-code.tgz \
- && echo "33b33707047c64d73b16cbfe508f81fe13e3889957ddad7714b575ff83ed4166faca61c1659e7066cfbefd615a44a5146f90a88844efac0d38639d3a1d78955d  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
+ && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \

@@ -19,6 +19,7 @@ import {
   SESSION_MAX_AGE_MIN_SECONDS,
   StoredAgentRuntimeTierSettingsSchema,
   StoredKnowledgeConnectorOverridesSchema,
+  StoredMcpRuntimeTierSettingsSchema,
   StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
   StoredPopularAgentOverridesSchema,
@@ -380,6 +381,7 @@ const extendedFields = {
     StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   agentRuntimeTiers: StoredAgentRuntimeTierSettingsSchema.nullable(),
+  mcpRuntimeTiers: StoredMcpRuntimeTierSettingsSchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
 };

@@ -995,6 +995,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      if (restBody.localConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          restBody.localConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1651,6 +1659,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
       });
+      const effectiveLocalConfig =
+        restBody.localConfig === undefined
+          ? originalCatalogItem.localConfig
+          : restBody.localConfig;
+      if (effectiveLocalConfig) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          effectiveLocalConfig,
+          request.organizationId,
+          undefined,
+          restBody.serverType ?? originalCatalogItem.serverType,
+        );
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2575,6 +2595,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2687,6 +2714,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });

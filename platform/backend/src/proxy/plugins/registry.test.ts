@@ -968,6 +968,7 @@ describe("runtime proof attachments", () => {
 
   async function finalize(
     params: {
+      id?: string;
       wrapped?: boolean | "string";
       stringInput?: boolean;
       report?: boolean;
@@ -982,6 +983,7 @@ describe("runtime proof attachments", () => {
     config.openappa.offerSigningSecret = "runtime-proof-test-secret";
     const entry = {
       ...attachment,
+      id: params.id ?? attachment.id,
       session: { ...session },
       wrapped: Boolean(params.wrapped),
       name: params.wrapped ? "archestra__run_tool" : attachment.name,
@@ -1057,6 +1059,15 @@ describe("runtime proof attachments", () => {
     { now: Math.floor(Date.now() / 1000) - 600 },
   ])("rejects a proof for different authority or expired approval: %j", async (sign) => {
     await expect(finalize({ sign })).rejects.toThrow("rewrote a call");
+  });
+
+  test("releases a proof signed for the policy id of a call whose provider id is too long", async () => {
+    await expect(
+      finalize({
+        id: `gemsig-${"s".repeat(2000)}.call-1`,
+        sign: { toolCallId: "call-1" },
+      }),
+    ).resolves.toMatchObject({ decision: "allow" });
   });
 
   test("rejects unreported proof insertion", async () => {

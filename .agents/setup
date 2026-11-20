@@ -109,6 +109,9 @@ wiremock() {
 
 # Amp and supervised services start in login shells, which read
 # ~/.bash_profile. Rewrite the block each run so a version bump replaces it.
+# Only PATH: Amp's project snapshot keeps the directories these files add to
+# PATH and drops every other line, so dev-lite.sh picks the lean Agent Runtime
+# defaults itself when AMP_ORB=1 and finds the WireMock jar at $wiremock_jar.
 login_profile() {
   local begin="# >>> archestra orb setup >>>" end="# <<< archestra orb setup <<<" tmp
   tmp="$(mktemp)"
@@ -119,10 +122,6 @@ login_profile() {
   cat >> "$tmp" <<EOF
 $begin
 export PATH="$node_dir/bin:\$HOME/.cargo/bin:$pg_bin:\$PATH"
-# As in the lite Agent Runtime image: build the backend once (reload after
-# edits) instead of keeping the tsdown watcher resident.
-export ARCHESTRA_DEV_BACKEND_WATCH=false
-export ARCHESTRA_DEV_LITE_WIREMOCK_JAR="$wiremock_jar"
 $end
 EOF
   mv -f "$tmp" "$HOME/.bash_profile"

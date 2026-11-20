@@ -1,8 +1,8 @@
 ---
 title: Verify Releases
-description: Check that an Archestra image was built by Archestra, and get its signed SBOM for your vulnerability scanner.
+description: Check that an Archestra image was built by Archestra, and get its signed SBOM and VEX statements for your vulnerability scanner.
 order: 10
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-19
 ---
 
 Prove that the Archestra image you run is the one Archestra released, and see every package inside it, without trusting the registry. Each release image carries signed attestations next to it in its registry: where it was built, its SBOM, and a scan for live credentials. `gh`, cosign, and admission controllers such as Kyverno read them.
@@ -17,6 +17,7 @@ Every attestation is signed with a GitHub Actions identity from an Archestra wor
 | SBOM (SPDX) | Every package in the image, in SPDX 2.3 | `https://spdx.dev/Document/v2.3` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | SBOM (CycloneDX) | The same packages, in CycloneDX | `https://cyclonedx.org/bom` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Secret scan | How many credentials a scan found, by type and whether they were live | `https://archestra.ai/attestations/secret-scan/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
+| VEX | Which reported vulnerabilities do not affect the image, and why | `https://openvex.dev/ns/v0.2.0` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 
 They cover `docker.io/archestra/platform`, plus `mcp-server-base`, `p4-shim`, `sandbox-base`, and `agent-*` under `ghcr.io/archestra-ai/`.
 
@@ -74,6 +75,35 @@ gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
 
 - **Dependency-Track and other CycloneDX tools:** upload `platform.cdx.json`.
 - **Grype, Trivy, and license tools:** use `--predicate-type https://spdx.dev/Document/v2.3` to get the SPDX file, then run `grype sbom:platform.spdx.json` or `trivy sbom platform.spdx.json`.
+
+## Drop Findings That Do Not Affect the Image
+
+Stop chasing CVEs that cannot be exploited in an Archestra image. A scanner reports a vulnerable package whether or not the image ever runs the vulnerable code. Archestra investigates those findings and signs a [VEX](https://github.com/openvex/spec) statement for each one that does not apply, with the reason. Your scanner reads the statements and drops those findings.
+
+1. Verify and extract the image's statements:
+
+   ```bash
+   gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
+     --repo archestra-ai/archestra --bundle-from-oci \
+     --signer-workflow archestra-ai/.github/.github/workflows/release-publish.yml \
+     --predicate-type https://openvex.dev/ns/v0.2.0 --format json \
+     | jq '.[0].verificationResult.statement.predicate' > platform.vex.json
+   ```
+
+2. Scan with them:
+
+   ```bash
+   grype "docker.io/archestra/platform@$DIGEST" --vex platform.vex.json
+   trivy image --vex platform.vex.json "docker.io/archestra/platform@$DIGEST"
+   ```
+
+The findings the statements cover no longer appear. To list them anyway, add `--show-suppressed` to the Grype command.
+
+What to know:
+
+- Each statement says why: the vulnerable code is not in the image, is never run, or cannot be reached by an attacker. Read `impact_statement` in `platform.vex.json` to check a claim.
+- An image that no statement covers has no VEX attestation, so `gh attestation verify` fails for it. Scan it as usual.
+- Statements are added as Archestra investigates new advisories. The newest are in [`vex/openvex.json`](https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json), which Grype and Trivy read as is.
 
 ## Admit Only Archestra Images
 

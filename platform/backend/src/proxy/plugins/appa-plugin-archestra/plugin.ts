@@ -46,10 +46,12 @@ import {
   type WaivedCall,
   waiverFor,
 } from "@/openappa/break-the-glass";
+import { policyCallId } from "@/openappa/call-id";
 import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  underPolicyCallIds,
 } from "@/openappa/child-return";
 import {
   mintChildTrajectoryReceipt,
@@ -255,6 +257,7 @@ import {
   withoutCallerScope,
   withoutRemedySections,
 } from "./utils";
+import { WireCallIds } from "./wire-call-ids";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
@@ -655,21 +658,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
         // Any malformed frame left after filtering must fail closed here.
-        childReturns: collectAndStripChildReturns(binding.requestBody, {
-          openCodeBackgroundReturns:
-            !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
-          codexMailboxReturns: binding.adapter?.id === "codex",
-          copilotAgentReports: binding.adapter?.id === "copilot-cli",
-          grokSubagentReturns: binding.adapter?.id === "grok-build",
-        }),
+        childReturns: underPolicyCallIds(
+          collectAndStripChildReturns(binding.requestBody, {
+            openCodeBackgroundReturns:
+              !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
+            codexMailboxReturns: binding.adapter?.id === "codex",
+            copilotAgentReports: binding.adapter?.id === "copilot-cli",
+            grokSubagentReturns: binding.adapter?.id === "grok-build",
+          }),
+        ),
         promptOperationId: undefined,
         ...appaTurnBoundaries({ family, body: binding.requestBody }),
       });
       // reportingRecovery prevents this filtered pass from recovering again.
+      const recovered = new Set([...recovery.resultIds].map(policyCallId));
       return this.onToolResults({
         ...context,
         toolResults: context.toolResults.filter((result) =>
-          recovery.resultIds.has(result.id),
+          recovered.has(result.id),
         ),
       });
     }
@@ -679,8 +685,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // A later reply does not wait on it: a running child keeps its spawn open
       // by itself, and one that never reports must not hold the session.
       const answered = new Set(
-        [...latestResponsesToolRound(binding.requestBody)].map(
-          withoutTrajectoryStamp,
+        [...latestResponsesToolRound(binding.requestBody)].map((id) =>
+          policyCallId(withoutTrajectoryStamp(id)),
         ),
       );
       binding.pendingBackgroundSpawns = [...backgroundLaunches].filter(
@@ -2691,6 +2697,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolResults(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
+    const ids = new WireCallIds();
+    const toolResults = context.toolResults.map((result) =>
+      ids.toolResult(result),
+    );
+    if (!ids.same)
+      return ids.toolResultsOutcome(
+        await this.onToolResults({ ...context, toolResults }),
+      );
     return this.withSoftBlockWaiver(
       context,
       "onToolResults",
@@ -2758,6 +2772,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const ids = new WireCallIds();
+    const toolCalls = context.toolCalls.map((call) => ids.toolCall(call));
+    if (!ids.same)
+      return ids.toolCallsOutcome(
+        await this.onToolCalls({ ...context, toolCalls }),
+      );
     rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
@@ -2796,6 +2816,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onHostedToolCalls(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    const ids = new WireCallIds();
+    const hostedToolCalls = context.hostedToolCalls.map((call) =>
+      ids.hostedToolCall(call),
+    );
+    if (!ids.same)
+      return ids.hostedToolCallsOutcome(
+        await this.onHostedToolCalls({ ...context, hostedToolCalls }),
+      );
     rejectSummaryToolCalls(context.resources, context.hostedToolCalls.length);
     return this.withSoftBlockWaiver(
       context,
@@ -2835,6 +2863,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const ids = new WireCallIds();
+    const toolCalls = context.toolCalls.map((call) => ids.toolCall(call));
+    if (!ids.same)
+      return ids.toolCallsOutcome(
+        await this.onPrepareToolCalls({ ...context, toolCalls }),
+      );
     // Preparation runs before the finalizer, so the summary check runs here
     // first, outside the waiver.
     rejectSummaryToolCalls(context.resources, context.toolCalls.length);

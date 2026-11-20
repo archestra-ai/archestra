@@ -22,6 +22,7 @@ import logger from "@/logging";
 import { OpenAppaSessionModel } from "@/models";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { clientSessionId } from "./actor";
+import { policyCallId } from "./call-id";
 import {
   type AppaChildTrajectoryReceipt,
   appendChildTrajectoryReceipt,
@@ -202,7 +203,9 @@ function restoreNoticeCalls(params: {
     // session; the notice already records the call and its ruling.
     if (!PROVIDER_TOOL_NAME.test(notice.tool)) continue;
     if (!call.restore(notice.tool, notice.original, notice.namespace)) continue;
-    restoredCallIds.add(parseTrajectoryStamp(call.id)?.callId ?? call.id);
+    restoredCallIds.add(
+      policyCallId(parseTrajectoryStamp(call.id)?.callId ?? call.id),
+    );
     restoreResult({
       ...params,
       callId: call.id,
@@ -233,7 +236,7 @@ export function restoreDeferredNativeCalls(params: {
     match: (name, namespace) =>
       name === params.carrierName && namespace === undefined,
   })) {
-    const id = parseTrajectoryStamp(call.id)?.callId ?? call.id;
+    const id = policyCallId(parseTrajectoryStamp(call.id)?.callId ?? call.id);
     const original = params.originals.get(id);
     if (
       call.kind !== "function" ||

@@ -24,15 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 // SPDX-SnippetEnd
 import {
+  useIsGlobalAdmin,
   useOrganization,
   useUpdateMcpSettings,
 } from "@/lib/organization.query";
+import { McpRuntimeTiersBlock } from "./_parts/mcp-runtime-tiers-block";
 
 const TOGGLE_OPTION_LABELS = {
   enabled: "Enabled",
@@ -44,6 +47,8 @@ const MCP_SETTINGS_PERMISSIONS: Permissions = {
 };
 
 export default function McpSettingsPage() {
+  const { data: canEditTiers } = useHasPermissions(MCP_SETTINGS_PERMISSIONS);
+  const { isGlobalAdmin } = useIsGlobalAdmin();
   const { data: organization, isPending } = useOrganization();
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -222,6 +227,9 @@ export default function McpSettingsPage() {
           />
         </DisabledEnterpriseSection>
         {/* SPDX-SnippetEnd */}
+        <McpRuntimeTiersBlock
+          canEdit={isGlobalAdmin && canEditTiers === true}
+        />
         <SettingsSaveBar
           hasChanges={hasChanges}
           isSaving={updateMcpSettingsMutation.isPending}

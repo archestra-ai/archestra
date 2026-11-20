@@ -2393,6 +2393,119 @@ describe("ChatMessages", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps an earlier row's preview open when a pending proposal references it and a newer preview arrives (even without full-view)", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+
+    const alphaContent = "[policy]\nversion = 2\n# allow alpha\n";
+    const alphaDiff =
+      "--- a/mcp/alpha.toml\n+++ b/mcp/alpha.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# allow alpha\n";
+    const betaContent = "[policy]\nversion = 2\n# allow beta\n";
+    const betaDiff =
+      "--- a/mcp/beta.toml\n+++ b/mcp/beta.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# allow beta\n";
+
+    const buildMessages = (
+      proposalState: "approval-requested" | "output-denied",
+    ) =>
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-sparky__preview_guardrails_server_rules_change",
+              toolCallId: "preview-alpha",
+              state: "output-available",
+              input: {
+                mcpServerId: "server-alpha",
+                expectedCommit: "c1",
+                content: alphaContent,
+              },
+              output: {
+                _meta: {},
+                content: JSON.stringify({
+                  valid: true,
+                  path: "mcp/alpha.toml",
+                  mcpServer: { id: "server-alpha", name: "Alpha" },
+                  diff: alphaDiff,
+                }),
+              },
+            },
+            {
+              type: "text",
+              text: "Proposing the Alpha rules and previewing Beta next.",
+            },
+            {
+              type: "tool-sparky__propose_guardrails_server_rules_change",
+              toolCallId: "propose-alpha",
+              state: proposalState,
+              input: {
+                mcpServerId: "server-alpha",
+                expectedCommit: "c1",
+                content: alphaContent,
+                summary: "Updates Alpha rules.",
+              },
+              ...(proposalState === "approval-requested"
+                ? { approval: { id: "apr-alpha" } }
+                : { errorText: "User denied" }),
+            },
+            {
+              type: "tool-sparky__preview_guardrails_server_rules_change",
+              toolCallId: "preview-beta",
+              state: "output-available",
+              input: {
+                mcpServerId: "server-beta",
+                expectedCommit: "c2",
+                content: betaContent,
+              },
+              output: {
+                _meta: {},
+                content: JSON.stringify({
+                  valid: true,
+                  path: "mcp/beta.toml",
+                  mcpServer: { id: "server-beta", name: "Beta" },
+                  diff: betaDiff,
+                }),
+              },
+            },
+          ],
+        },
+      ] as unknown as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("approval-requested")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    // Even without chat:full-view, Alpha's preview stays open alongside Beta's
+    // newer preview because the pending proposal points to Alpha's diff.
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(2);
+    expect(screen.getByText("# allow alpha")).toBeInTheDocument();
+    expect(screen.getByText("# allow beta")).toBeInTheDocument();
+    expect(screen.getByText("The change previewed above")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+
+    // Once the proposal is resolved, Alpha's earlier preview collapses cleanly,
+    // leaving only Beta's newer preview open.
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("output-denied")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
+    expect(screen.queryByText("# allow alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("# allow beta")).toBeInTheDocument();
+  });
+
   it("keeps an approval-requested tool in its chronological circle before and after settlement", () => {
     const buildMessages = (state: "approval-requested" | "output-available") =>
       [

@@ -81,6 +81,7 @@ import {
 import {
   PreviewedChangeReview,
   proposalApprovalText,
+  usePinnedPreviewToolCallIds,
   usePreviewedChange,
 } from "./previewed-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
@@ -469,8 +470,12 @@ export function CompactToolGroup({
   const [dismissedApprovalKeys, setDismissedApprovalKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [dismissedPinnedPreviewKeys, setDismissedPinnedPreviewKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
+  const pinnedPreviewToolCallIds = usePinnedPreviewToolCallIds();
   // The latest proposed or saved Guardrails change opens its circle once, so
   // the diff or the save result shows without a click; a circle the user
   // picked is left alone. It opens for every reader, also one who cannot
@@ -505,11 +510,27 @@ export function CompactToolGroup({
   const approvalPendingKeys = new Set(
     tools.filter(isApprovalPendingEntry).map((entry) => entry.key),
   );
+  // Previews still referenced by an unresolved proposal ("The change previewed
+  // above") stay open even when a newer preview arrives in this or a later row.
+  const pinnedPreviewKeys = new Set(
+    tools
+      .filter((entry) => {
+        if (entry.kind === "hook") return false;
+        const call = releasedCall(entry);
+        return (
+          call?.part.toolCallId !== undefined &&
+          pinnedPreviewToolCallIds.has(call.part.toolCallId)
+        );
+      })
+      .map((entry) => entry.key),
+  );
 
   const isEntryExpanded = (key: string) =>
     approvalPendingKeys.has(key)
       ? !dismissedApprovalKeys.has(key)
-      : expandedKey === key;
+      : pinnedPreviewKeys.has(key)
+        ? !dismissedPinnedPreviewKeys.has(key)
+        : expandedKey === key;
 
   const handleToggle = (key: string) => {
     if (approvalPendingKeys.has(key)) {
@@ -526,6 +547,19 @@ export function CompactToolGroup({
     }
     if (!canExpandToolCalls) return;
     userToggledRef.current = true;
+    if (pinnedPreviewKeys.has(key)) {
+      setDismissedPinnedPreviewKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+      setExpandedKey((prev) => (prev === key ? null : prev));
+      return;
+    }
     // Expanding a tool card collapses any inline app open in this row — the
     // mirror of an app pill collapsing an expanded tool card, so only one
     // thing unfolds under the row at a time. Panel-hosted apps are untouched

@@ -1446,6 +1446,68 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
+  it("keeps a preview referenced by a pending proposal open alongside a newer preview even when canExpandToolCalls is false", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const previewA = previewEntry(RULES_AFTER, { diff: RULES_DIFF });
+    const proposeA = proposeEntry(RULES_AFTER);
+    const betaDiff =
+      "--- a/mcp/billing.toml\n+++ b/mcp/billing.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# second server\n";
+    const previewB = {
+      kind: "tool" as const,
+      key: "preview-b",
+      toolName: "archestra__preview_guardrails_server_rules_change",
+      part: {
+        type: "tool-archestra__preview_guardrails_server_rules_change",
+        state: "output-available",
+        toolCallId: "preview-b",
+        input: {
+          mcpServerId: "server-2",
+          content: "[policy]\nversion = 2\n# second server\n",
+          expectedCommit: "c2",
+        },
+        output: storedResult({
+          valid: true,
+          path: "mcp/billing.toml",
+          mcpServer: { id: "server-2", name: "Billing" },
+          diff: betaDiff,
+        }),
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PreviewedChangesProvider
+          value={collectPreviewedChanges(
+            [
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [previewA.part, proposeA.part, previewB.part],
+              } as never,
+            ],
+            (name: string) => name.replace(/^archestra__/, "") as never,
+          )}
+        >
+          <CompactToolGroup
+            canExpandToolCalls={false}
+            tools={[previewA, proposeA, previewB]}
+            autoOpenPolicyKey="preview-b"
+            onToolApprovalResponse={vi.fn()}
+          />
+        </PreviewedChangesProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(2);
+    expect(screen.getByText("The change previewed above")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Approve/ })).toBeVisible();
+    expect(screen.getByText("mcp/billing.toml")).toBeVisible();
+  });
+
   it("renders inline auth cards under the circle row while keeping the error circle clickable", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>

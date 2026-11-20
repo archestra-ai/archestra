@@ -1802,8 +1802,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: binding.session.organization_id,
       profileId: binding.profileId,
-      callerId: binding.session.caller_id,
-      chat: binding.chat,
       identity: binding.identity,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
@@ -2152,13 +2150,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               },
             };
           } catch (error) {
-            await cancelCalls(
-              session,
-              rest.flatMap((each) =>
-                decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-              ),
-              policy,
-            );
+            await cancelCalls(session, admittedCalls(), policy);
             if (error instanceof GrokChildResumeRefusal) {
               return {
                 decision: "refuse",
@@ -2185,13 +2177,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           // An unmarked nested child would fall back to its native parent and
           // lose the governed lineage. Nothing from this evaluated batch may
           // run when that happens.
-          await cancelCalls(
-            session,
-            rest.flatMap((each) =>
-              decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-            ),
-            policy,
-          );
+          await cancelCalls(session, admittedCalls(), policy);
           throw new ApiError(
             400,
             "OpenAPPA cannot safely start a nested child because its delegation marker could not be attached",
@@ -2352,9 +2338,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
-        const admitted = rest.flatMap((each) =>
-          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-        );
+        const admitted = admittedCalls();
         let transient: boolean;
         try {
           transient =
@@ -3736,8 +3720,6 @@ function signedCall(params: {
 async function resolveRuntimeCalls(params: {
   organizationId: string;
   profileId: string;
-  callerId?: string;
-  chat?: boolean;
   identity: AppaTrustedContext["toolIdentity"];
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
@@ -4864,8 +4846,6 @@ async function signObservedRuntimeCalls(
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: observer.session.organization_id,
       profileId: observer.profileId,
-      callerId: observer.session.caller_id,
-      chat: observer.chat,
       identity: observer.identity,
       calls,
       resolution: toolNameResolution(observer),
@@ -6949,13 +6929,12 @@ async function canonicalizeHitlAskUserCall(params: {
     }
     // A missing snapshot here can be a concurrent replacement, not an absent
     // feature. Never downgrade it to the old, potentially unreadable card.
-    if (params.offerIds.length > 0)
-      return {
-        call: params.call,
-        invalidOfferCount: false,
-        reviewUnavailable: true,
-        offerIds: [],
-      };
+    return {
+      call: params.call,
+      invalidOfferCount: false,
+      reviewUnavailable: true,
+      offerIds: [],
+    };
   }
   const hitl = await getHitlAskUserArguments({
     session: params.binding.session,
@@ -7309,7 +7288,7 @@ async function claimNativeQuestionResults(params: {
     const entry = candidate.keys
       .map((key) => claimed.get(key))
       .find((value) => value?.name === candidate.name);
-    if (entry?.name === candidate.name) {
+    if (entry) {
       // A card issued by the removed paged review never grants anything:
       // its answer is unverified, and the review re-asks or stays open.
       if (entry.page !== undefined) continue;

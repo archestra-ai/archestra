@@ -2750,13 +2750,14 @@ class ToolModel {
   }
 
   static async findProxyToolNames(params: {
+    organizationId: string;
     userId: string;
     isAgentAdmin: boolean;
   }): Promise<Array<{ name: string }>> {
     return db
-      .select({ name: schema.toolsTable.name })
+      .selectDistinct({ name: schema.toolsTable.name })
       .from(schema.toolsTable)
-      .where(visibleProxyToolsCondition(params));
+      .where(visibleProxyToolNamesCondition(params));
   }
 
   static async findDescribedProxyToolsByNames(params: {
@@ -4379,29 +4380,72 @@ function coverageCatalogCondition(params: {
   );
 }
 
+function proxyToolBaseCondition() {
+  return and(
+    isNull(schema.toolsTable.agentId),
+    isNull(schema.toolsTable.delegateToAgentId),
+    isNull(schema.toolsTable.delegateToA2aConnectionId),
+    eq(schema.toolsTable.clonedPendingDiscovery, false),
+    notDeleted(schema.toolsTable),
+  );
+}
+
+function observedByUserCondition(userId: string) {
+  return exists(
+    db
+      .select({ id: schema.toolObservationsTable.id })
+      .from(schema.toolObservationsTable)
+      .where(
+        and(
+          eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+          eq(schema.toolObservationsTable.userId, userId),
+        ),
+      ),
+  );
+}
+
+function visibleProxyToolNamesCondition(params: {
+  organizationId: string;
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  // Proxy ingestion deduplicates names globally against existing catalog rows
+  // and attributes observations to the reused row. Include caller/org proxy
+  // observations for name recognition even when catalogId is non-null, while
+  // keeping metadata reads restricted to uncataloged proxy rows below.
+  const visibility = params.isAgentAdmin
+    ? or(
+        isNull(schema.toolsTable.catalogId),
+        exists(
+          db
+            .select({ id: schema.toolObservationsTable.id })
+            .from(schema.toolObservationsTable)
+            .innerJoin(
+              schema.membersTable,
+              eq(
+                schema.membersTable.userId,
+                schema.toolObservationsTable.userId,
+              ),
+            )
+            .where(
+              and(
+                eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+                eq(schema.membersTable.organizationId, params.organizationId),
+              ),
+            ),
+        ),
+      )
+    : observedByUserCondition(params.userId);
+  return and(proxyToolBaseCondition(), visibility);
+}
+
 function visibleProxyToolsCondition(params: {
   userId: string;
   isAgentAdmin: boolean;
 }) {
   return and(
     isNull(schema.toolsTable.catalogId),
-    isNull(schema.toolsTable.agentId),
-    isNull(schema.toolsTable.delegateToAgentId),
-    isNull(schema.toolsTable.delegateToA2aConnectionId),
-    eq(schema.toolsTable.clonedPendingDiscovery, false),
-    notDeleted(schema.toolsTable),
-    params.isAgentAdmin
-      ? undefined
-      : exists(
-          db
-            .select({ id: schema.toolObservationsTable.id })
-            .from(schema.toolObservationsTable)
-            .where(
-              and(
-                eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
-                eq(schema.toolObservationsTable.userId, params.userId),
-              ),
-            ),
-        ),
+    proxyToolBaseCondition(),
+    params.isAgentAdmin ? undefined : observedByUserCondition(params.userId),
   );
 }

@@ -2197,8 +2197,8 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
 }
 
 /**
- * The stored metadata of the existing tools a previewed change names, from
- * the catalogs the caller can read; null when it names none.
+ * The stored metadata of the known tools a previewed change names, from
+ * readable catalogs and visible proxy tools; null when none is readable.
  */
 async function touchedToolsMetadata(params: {
   userId: string;
@@ -2229,12 +2229,11 @@ async function touchedToolsMetadata(params: {
   const byName = new Map(
     [...proxyTools, ...described].map((tool) => [tool.name, tool]),
   );
-  return touchedToolMetadata(
-    names.flatMap((name) => {
-      const tool = byName.get(name);
-      return tool ? [tool] : [];
-    }),
-  );
+  const resolved = names.flatMap((name) => {
+    const tool = byName.get(name);
+    return tool ? [tool] : [];
+  });
+  return resolved.length > 0 ? touchedToolMetadata(resolved) : null;
 }
 
 /** Assigned and Auto-discovered rows allowed by RBAC and conversation selection. */

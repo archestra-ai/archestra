@@ -292,7 +292,11 @@ export const guardrailsPolicyService = {
         includeAppCatalogs: true,
         catalogIds: visibleCatalogIds,
       }),
-      ToolModel.findProxyToolNames({ userId: params.userId, isAgentAdmin }),
+      ToolModel.findProxyToolNames({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        isAgentAdmin,
+      }),
     ]);
     // Built-in tools exist in code even when a feature flag keeps one unseeded.
     const inventory = new Set([

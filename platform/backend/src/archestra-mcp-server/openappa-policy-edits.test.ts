@@ -7,6 +7,8 @@ import A2aRemoteAgentModel, {
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import ToolModel from "@/models/tool";
 import ToolObservationModel from "@/models/tool-observation";
+import { coverageVisibility } from "@/openappa/coverage";
+import { persistTools } from "@/routes/proxy/utils/tools";
 import {
   guardrailsPolicyService,
   initialPolicy,
@@ -550,6 +552,109 @@ describe("rules naming tools", () => {
         ],
       },
     });
+  });
+
+  test("catalog-first proxy observation is recognized for a non-admin without disclosing unreadable catalog metadata", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const name = "workbench__read_document";
+    const restrictedTeam = await makeTeam(organizationId, userId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Restricted Workbench",
+      access: { teams: [restrictedTeam.id] },
+    });
+    await ToolModel.create({
+      catalogId: catalog.id,
+      name,
+      description: "Restricted catalog description.",
+      parameters: { type: "object", properties: { secretPath: {} } },
+    });
+
+    const observer = await makeUser();
+    const otherMember = await makeUser();
+    await makeMember(observer.id, organizationId, {
+      role: `member,${policyEditorRole}`,
+    });
+    await makeMember(otherMember.id, organizationId, {
+      role: `member,${policyEditorRole}`,
+    });
+
+    // Confirm neither non-admin can read the colliding catalog.
+    expect(
+      (await coverageVisibility(observer.id, organizationId)).visibleCatalogIds,
+    ).not.toContain(catalog.id);
+    expect(
+      (await coverageVisibility(otherMember.id, organizationId))
+        .visibleCatalogIds,
+    ).not.toContain(catalog.id);
+
+    // Production proxy ingestion deduplicates globally against the existing
+    // catalog row and attributes the caller's observation to that row.
+    await persistTools({
+      agentId: context.agent?.id ?? "",
+      tools: [
+        {
+          toolName: name,
+          toolDescription: "Client description.",
+          toolParameters: { type: "object", properties: { clientPath: {} } },
+        },
+      ],
+      observer: { userId: observer.id },
+    });
+
+    const { revision } = await saveRevision(initialPolicy());
+    const content = withRules([name]);
+
+    // The observing non-admin gets a direct preview and warning-free publish,
+    // without exposing the restricted catalog's description or parameters.
+    context.userId = observer.id;
+    const previewed = modelText(
+      await preview({ content, expectedRevision: revision }),
+    );
+    expect(previewed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+    });
+    expect(JSON.stringify(previewed)).not.toContain(
+      "Restricted catalog description.",
+    );
+    expect(JSON.stringify(previewed)).not.toContain("secretPath");
+
+    // A non-admin who neither observed the tool nor can read the catalog still
+    // cannot discover it through targets, suggestions, or metadata.
+    context.userId = otherMember.id;
+    for (const ruleName of [name, "workbench__read_documen"]) {
+      const gated = modelText(
+        await preview({
+          content: withRules([ruleName]),
+          expectedRevision: revision,
+        }),
+      );
+      expect(gated).toMatchObject({
+        stage: "confirmation_required",
+        valid: true,
+        unknownTools: [
+          {
+            rule: ruleName,
+            reason: "unknown_server",
+            prefix: "workbench",
+            closest: [],
+          },
+        ],
+      });
+    }
+
+    context.userId = observer.id;
+    const published = modelText(
+      await publish({ content, expectedRevision: revision }),
+    );
+    expect(published).toMatchObject({ warnings: [] });
   });
 
   test("provisional and agent-owned tools do not enter the proxy inventory", async ({

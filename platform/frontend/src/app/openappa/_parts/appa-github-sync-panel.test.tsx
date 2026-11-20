@@ -2644,6 +2644,30 @@ test("a failed sync that no permission explains shows beside the Finish setup no
   readable = false;
   show();
   expect(await screen.findByText(PLAIN_REFUSAL)).toBeVisible();
+  cleanup();
+
+  // The policy synced, but GitHub refused the update of the files beside
+  // it, with every permission held: that warning shows too, in plain words.
+  readable = true;
+  state = {
+    ...state,
+    source: state.source && { ...state.source, lastSyncError: null },
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "unavailable",
+      paths: [],
+      detail:
+        "GitHub returned HTTP 403 for README.md. Check repository access.",
+      checkedAt: "2026-09-15T12:00:00Z",
+    },
+  };
+  show();
+  expect(
+    await screen.findByText("Repository files could not be checked"),
+  ).toBeVisible();
+  expect(screen.getByText(PLAIN_REFUSAL)).toBeVisible();
+  expect(screen.queryByText("Could not sync policy")).toBeNull();
+  expect(document.body).not.toHaveTextContent("HTTP 403");
 });
 
 test("asks for the GitHub and the organization, each error in place of its hint", async () => {

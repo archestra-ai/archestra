@@ -60,7 +60,12 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { appaGitHost, isAccessRefusal, shownFailure } from "./appa-git-host";
+import {
+  appaGitHost,
+  isAccessRefusal,
+  shownFailure,
+  UNEXPLAINED_REFUSAL,
+} from "./appa-git-host";
 import {
   FinishSetupHost,
   FinishSetupNotice,
@@ -86,7 +91,10 @@ export function AppaGithubSyncPanel() {
     organizationSettings: ["update"],
   });
   const pieces = useFinishSetupPieces();
-  const syncError = useShownSyncError(query.data?.source, pieces);
+  const { syncError, refusalHeld } = useShownFailures(
+    query.data?.source,
+    pieces,
+  );
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -123,6 +131,9 @@ export function AppaGithubSyncPanel() {
   } = query.data;
   const git = appaGitHost(query.data);
   const urls = source?.repo ? git.urls(source.repo) : null;
+  const filesRefused =
+    !!source?.githubAppConfigId &&
+    isAccessRefusal(query.data.templateFiles?.detail);
   const lastChecked = source?.lastSyncedAt
     ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
     : source?.interval
@@ -271,11 +282,14 @@ export function AppaGithubSyncPanel() {
                   />
                 ) : null}
                 {connected &&
-                // GitHub refusing the App is the Finish setup notice's to say.
+                // GitHub refusing the App for a permission it lacks is the
+                // Finish setup notice's to say; a refusal nothing explains
+                // shows in plain words, once: the failed sync above says it
+                // already when the sync was refused too.
                 ((query.data.templateFiles?.state === "unavailable" &&
                   !(
-                    source.githubAppConfigId &&
-                    isAccessRefusal(query.data.templateFiles.detail)
+                    filesRefused &&
+                    (refusalHeld || syncError === UNEXPLAINED_REFUSAL)
                   )) ||
                   // An access token has no App to grant it Workflows: what
                   // it lacks shows here, not as a Finish setup step.
@@ -291,7 +305,9 @@ export function AppaGithubSyncPanel() {
                           : "Repository files could not be updated"}
                       </span>
                       <InlineNoticeText className="flex-1">
-                        {query.data.templateFiles.detail ??
+                        {(filesRefused
+                          ? UNEXPLAINED_REFUSAL
+                          : query.data.templateFiles.detail) ??
                           "Try again at the next sync."}
                       </InlineNoticeText>
                     </InlineNotice>
@@ -546,7 +562,10 @@ function AutoMergeStatus({
 }
 
 /**
- * The failed sync's message as the card prints it, or null for nothing.
+ * What the card prints for a failure: the failed sync's message
+ * (`syncError`, null for nothing), and whether a refusal of the App is held
+ * back for now (`refusalHeld`), which the repository files warning goes by
+ * as well.
  *
  * A failure that is not GitHub refusing the App (a policy that does not
  * validate, a missing file) always shows: no setup step explains it.
@@ -559,10 +578,10 @@ function AutoMergeStatus({
  * since GitHub takes a moment to honour it. A refusal past all of that has
  * no explanation on the page, and shows as a plain sentence.
  */
-function useShownSyncError(
+function useShownFailures(
   source: Source | null | undefined,
   pieces: ReturnType<typeof useFinishSetupPieces>,
-): string | null {
+): { syncError: string | null; refusalHeld: boolean } {
   const connected = !!source?.interval;
   const viaApp = connected && !!source?.githubAppConfigId;
   const grants = useAppaGithubAppGrants(viaApp);
@@ -610,15 +629,22 @@ function useShownSyncError(
     excused !== failedAt
   )
     setExcused(failedAt);
-  if (failedAt === null) return null;
-  if (!refusal) return error;
-  const explained =
+  // A permission waits, a grant is settling, or GitHub's answer on the
+  // permissions is not in yet.
+  const refusalHeld =
     waitsForPermissions ||
     settling ||
-    excused === failedAt ||
-    stale ||
-    isFetching;
-  return shownFailure(source, error, explained);
+    (viaApp && (grants.isPending || isFetching));
+  if (failedAt === null) return { syncError: null, refusalHeld };
+  if (!refusal) return { syncError: error, refusalHeld };
+  return {
+    syncError: shownFailure(
+      source,
+      error,
+      refusalHeld || excused === failedAt || stale,
+    ),
+    refusalHeld,
+  };
 }
 
 /** How long after a grant GitHub may still refuse the App's calls. */

@@ -41,7 +41,7 @@ Entra runs an initial cycle for all assigned users, then incremental cycles abou
 
 ## Example: One Entra Group, Teams in Terraform
 
-All users get access through one Entra group, and team membership is managed in Terraform. No per-team Entra groups are needed.
+All users get access through one Entra group, and team membership is managed in Terraform.
 
 1. In Entra, assign one group, for example **Archestra Users**, to the Archestra app.
 2. Add a role that holds [`team:update`](/docs/reference/permissions#team:update), for example the predefined **Team Writer**, to the service account you created for Entra in [Set Up Microsoft Entra ID](#set-up-microsoft-entra-id). Configure the Terraform provider with `ARCHESTRA_BASE_URL` and the service account key in `ARCHESTRA_API_KEY`.

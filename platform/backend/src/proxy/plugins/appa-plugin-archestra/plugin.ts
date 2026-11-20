@@ -5446,7 +5446,7 @@ async function childOfNamedSpawn(params: {
 const RELAY_BROADCAST =
   "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
 const RELAY_EMPTY_MESSAGE =
-  "This message has no text, so OpenAPPA did not send it. Send the teammate a message with plain text.";
+  "This message has no text, so OpenAPPA did not send it. Send the teammate a message that has text.";
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_AMBIGUOUS_RECIPIENT =

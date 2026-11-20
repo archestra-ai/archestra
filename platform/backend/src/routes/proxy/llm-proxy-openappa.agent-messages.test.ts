@@ -2096,12 +2096,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           ),
         ).toEqual([]);
 
-        const history = [
+        const history = (launchResult: string) => [
           { role: "user", content: "Audit the triggers with a teammate" },
           toolUse(spawned.callId, "Agent", spawnInput),
-          toolResult(spawned.callId, [
-            { type: "text", text: launchReceipt(auditor, "auditor") },
-          ]),
+          toolResult(spawned.callId, [{ type: "text", text: launchResult }]),
           { role: "assistant", content: "The auditor is running." },
           {
             role: "user",
@@ -2111,13 +2109,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           },
         ];
         answerText();
-        const read = await send(undefined, history);
+        const read = await send(
+          undefined,
+          history(launchReceipt(auditor, "auditor")),
+        );
         expect(read.statusCode, read.body).toBe(200);
         expect(forwarded()).toContain("Three triggers are stuck");
         expect(forwarded()).not.toContain("[appa] Message withheld");
 
         reply("SendMessage", { to: "auditor", message: "Report again" });
-        const told = await send(undefined, history);
+        // On record, only the stored launch result names the teammate.
+        const told = await send(
+          undefined,
+          history(
+            launch === "on record"
+              ? "The auditor is starting."
+              : launchReceipt(auditor, "auditor"),
+          ),
+        );
         expect(told.statusCode, told.body).toBe(200);
         const notice = noticeFrom(told.body, true);
         expect(notice.name).toBe("archestra__get_remedy_plans");

@@ -3,11 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { enterpriseTier } from "@/enterprise-tier";
 import { scimProvisioningService } from "@/services/scim-provisioning.ee";
-import {
-  ApiError,
-  constructResponseSchema,
-  ErrorResponsesSchema,
-} from "@/types";
+import { ApiError } from "@/types";
 
 /**
  * SCIM 2.0 `/Users` endpoints for identity-provider provisioning. The
@@ -24,6 +20,17 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         403,
         "SCIM provisioning is an enterprise feature. Please contact sales@archestra.ai to enable it.",
       );
+  });
+
+  // Every response is SCIM's media type, and every error body is a SCIM error
+  // (RFC 7644 section 3.12). The app's error handler still picks the status
+  // and logs; this only reshapes its `{ error }` body, including errors raised
+  // before the handler runs (authentication, licence, validation).
+  fastify.addHook("preSerialization", async (_request, reply, payload) => {
+    reply.type(SCIM_CONTENT_TYPE);
+    return reply.statusCode >= 400
+      ? toScimError(reply.statusCode, payload)
+      : payload;
   });
 
   // Identity providers send SCIM bodies as `application/scim+json`, and may
@@ -47,7 +54,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ScimGetServiceProviderConfig,
         description: "SCIM 2.0: the features this SCIM service supports",
         tags: ["SCIM"],
-        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+        response: scimResponses(200, z.record(z.string(), z.unknown())),
       },
     },
     async (_request, reply) =>
@@ -84,7 +91,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
           startIndex: z.coerce.number().int().min(1).default(1),
           count: z.coerce.number().int().min(0).max(MAX_COUNT).default(100),
         }),
-        response: constructResponseSchema(ScimListResponseSchema),
+        response: scimResponses(200, ScimListResponseSchema),
       },
     },
     async ({ query, organizationId }, reply) => {
@@ -109,7 +116,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "SCIM 2.0: get one user",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
-        response: constructResponseSchema(ScimUserSchema),
+        response: scimResponses(200, ScimUserSchema),
       },
     },
     async ({ params, organizationId }, reply) =>
@@ -125,7 +132,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in.",
         tags: ["SCIM"],
         body: ScimUserInputSchema,
-        response: { ...ErrorResponsesSchema, 201: ScimUserSchema },
+        response: scimResponses(201, ScimUserSchema),
       },
     },
     async ({ body, organizationId }, reply) => {
@@ -136,7 +143,11 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: displayNameOf(body) ?? email,
       });
       if (result.status === "exists")
-        throw new ApiError(409, "A user with this userName already exists");
+        throw new ApiError(
+          409,
+          "A user with this userName already exists",
+          "uniqueness",
+        );
       return reply.code(201).send(result.user);
     },
   );
@@ -151,7 +162,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimUserInputSchema,
-        response: constructResponseSchema(ScimUserSchema),
+        response: scimResponses(200, ScimUserSchema),
       },
     },
     async (request, reply) => {
@@ -176,7 +187,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimPatchSchema,
-        response: constructResponseSchema(ScimUserSchema),
+        response: scimResponses(200, ScimUserSchema),
       },
     },
     async (request, reply) => {
@@ -200,7 +211,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "SCIM 2.0: delete a user. Soft-deletes the user like deactivation: no sign-in, data kept.",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
-        response: { ...ErrorResponsesSchema, 204: z.undefined() },
+        response: scimResponses(204, z.undefined()),
       },
     },
     async (request, reply) => {
@@ -223,6 +234,61 @@ const SCIM_BASE = "/api/scim/v2";
 const MAX_COUNT = 200;
 
 const UserIdParamsSchema = z.object({ id: z.string() });
+
+const SCIM_CONTENT_TYPE = "application/scim+json; charset=utf-8";
+const SCIM_ERROR_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:Error";
+
+/** The `scimType` values (RFC 7644 section 3.12) this service sends. */
+const SCIM_TYPES = new Set(["invalidFilter", "invalidValue", "uniqueness"]);
+
+const ScimErrorSchema = z.object({
+  schemas: z.array(z.string()),
+  status: z.string(),
+  scimType: z.string().optional(),
+  detail: z.string(),
+});
+
+/** One success response plus a SCIM error body for every error status. */
+function scimResponses<S extends number, T extends z.ZodTypeAny>(
+  status: S,
+  schema: T,
+) {
+  return {
+    [status]: schema,
+    400: ScimErrorSchema,
+    401: ScimErrorSchema,
+    403: ScimErrorSchema,
+    404: ScimErrorSchema,
+    409: ScimErrorSchema,
+    500: ScimErrorSchema,
+  } as Record<S, T> &
+    Record<400 | 401 | 403 | 404 | 409 | 500, typeof ScimErrorSchema>;
+}
+
+/**
+ * The SCIM error for an error reply. `scimType` comes from the error's
+ * internal code when it names one, and a 409 is always `uniqueness`.
+ */
+function toScimError(status: number, payload: unknown) {
+  const error =
+    typeof payload === "object" && payload !== null && "error" in payload
+      ? (payload.error as { message?: unknown; internal_code?: unknown })
+      : undefined;
+  const code = error?.internal_code;
+  const scimType =
+    typeof code === "string" && SCIM_TYPES.has(code)
+      ? code
+      : status === 409
+        ? "uniqueness"
+        : undefined;
+  return {
+    schemas: [SCIM_ERROR_SCHEMA],
+    status: String(status),
+    ...(scimType && { scimType }),
+    detail:
+      typeof error?.message === "string" ? error.message : "Request failed",
+  };
+}
 
 /** SCIM sends booleans as JSON booleans or, from Entra ID, as "True"/"False". */
 const ScimBooleanSchema = z.union([
@@ -298,6 +364,7 @@ function parseFilter(filter: string): string {
     throw new ApiError(
       400,
       'Only the filter userName eq "<value>" is supported',
+      "invalidFilter",
     );
   return match[1].replace(/\\(.)/g, "$1");
 }
@@ -306,7 +373,11 @@ function parseFilter(filter: string): string {
 function emailOf(body: ScimUserInput): string {
   const email = emailIn(body);
   if (!email)
-    throw new ApiError(400, "userName or emails must contain an email address");
+    throw new ApiError(
+      400,
+      "userName or emails must contain an email address",
+      "invalidValue",
+    );
   return email;
 }
 
@@ -400,7 +471,11 @@ async function applyChanges(params: {
       userName: params.userName,
     });
     if (result === "exists")
-      throw new ApiError(409, "A user with this userName already exists");
+      throw new ApiError(
+        409,
+        "A user with this userName already exists",
+        "uniqueness",
+      );
     userNameChanged = result === "changed";
   }
   const user =

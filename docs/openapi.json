@@ -613192,31 +613192,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613230,31 +613225,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613268,35 +613258,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613310,31 +613291,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613348,31 +613324,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613386,31 +613357,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613606,31 +613572,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613644,31 +613605,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613682,35 +613638,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613724,31 +613671,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613762,31 +613704,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -613800,31 +613737,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614016,31 +613948,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614054,31 +613981,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614092,35 +614014,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614134,31 +614047,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614172,31 +614080,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614210,31 +614113,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614371,31 +614269,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614409,31 +614302,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614447,35 +614335,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614489,31 +614368,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614527,31 +614401,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614565,31 +614434,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614791,31 +614655,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614829,31 +614688,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614867,35 +614721,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614909,31 +614754,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614947,31 +614787,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -614985,31 +614820,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615180,31 +615010,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615218,31 +615043,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615256,35 +615076,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615298,31 +615109,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615336,31 +615142,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615374,31 +615175,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615441,31 +615237,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615479,31 +615270,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615517,35 +615303,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615559,31 +615336,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615597,31 +615369,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }
@@ -615635,31 +615402,26 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
+                    "schemas": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "scimType": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemas",
+                    "status",
+                    "detail"
                   ],
                   "additionalProperties": false
                 }

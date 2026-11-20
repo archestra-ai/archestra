@@ -8,7 +8,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AccountModel, MemberModel, TeamModel, UserModel } from "@/models";
 import SessionModel from "@/models/session";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { ApiError, type User } from "@/types";
 
 describe("SCIM /api/scim/v2/Users", () => {
   let app: FastifyInstanceWithZod;
@@ -85,7 +85,56 @@ describe("SCIM /api/scim/v2/Users", () => {
 
   test("pushing the same userName twice is a conflict", async () => {
     expect((await createUser("grace@example.com")).statusCode).toBe(201);
-    expect((await createUser("grace@example.com")).statusCode).toBe(409);
+    const conflict = await createUser("grace@example.com");
+    expect(conflict.statusCode).toBe(409);
+    expectScimError(conflict, 409, "uniqueness");
+  });
+
+  test("every error is a SCIM error with SCIM's media type", async () => {
+    const created = await createUser("hopper@example.com");
+    expect(created.headers["content-type"]).toContain("application/scim+json");
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/scim/v2/Users/00000000-0000-0000-0000-000000000000",
+    });
+    expect(missing.statusCode).toBe(404);
+    expectScimError(missing, 404);
+    expect(missing.json().detail).toBe("User not found");
+
+    // Schema validation fails before the route runs.
+    const noUserName = await app.inject({
+      method: "POST",
+      url: "/api/scim/v2/Users",
+      headers: { "content-type": "application/scim+json" },
+      payload: JSON.stringify({ displayName: "No userName" }),
+    });
+    expect(noUserName.statusCode).toBe(400);
+    expectScimError(noUserName, 400);
+
+    const notAnEmail = await createUser("not-an-email");
+    expect(notAnEmail.statusCode).toBe(400);
+    expectScimError(notAnEmail, 400, "invalidValue");
+  });
+
+  test("an authentication failure before the route is a SCIM error too", async () => {
+    const guarded = createFastifyInstance();
+    guarded.addHook("onRequest", async () => {
+      throw new ApiError(401, "Unauthorized");
+    });
+    const { default: scimRoutes } = await import("./scim.routes.ee");
+    await guarded.register(scimRoutes);
+    try {
+      const response = await guarded.inject({
+        method: "GET",
+        url: "/api/scim/v2/Users",
+      });
+      expect(response.statusCode).toBe(401);
+      expectScimError(response, 401);
+      expect(response.json().detail).toBe("Unauthorized");
+    } finally {
+      await guarded.close();
+    }
   });
 
   test("Entra-style deactivation soft-deletes the user and keeps their teams; activation restores them", async ({
@@ -191,6 +240,7 @@ describe("SCIM /api/scim/v2/Users", () => {
     try {
       const response = await createUser("unlicensed@example.com");
       expect(response.statusCode).toBe(403);
+      expectScimError(response, 403);
       expect(
         await UserModel.findByEmail("unlicensed@example.com"),
       ).toBeUndefined();
@@ -229,6 +279,7 @@ describe("SCIM /api/scim/v2/Users", () => {
 
     const clash = await replaceUserName(pending.id, "taken@example.com");
     expect(clash.statusCode).toBe(409);
+    expectScimError(clash, 409, "uniqueness");
   });
 
   test("filters other than userName eq are rejected", async () => {
@@ -237,7 +288,23 @@ describe("SCIM /api/scim/v2/Users", () => {
       url: `/api/scim/v2/Users?filter=${encodeURIComponent('displayName co "Ada"')}`,
     });
     expect(response.statusCode).toBe(400);
+    expectScimError(response, 400, "invalidFilter");
   });
+
+  function expectScimError(
+    response: Awaited<ReturnType<typeof app.inject>>,
+    status: number,
+    scimType?: string,
+  ) {
+    expect(response.headers["content-type"]).toContain("application/scim+json");
+    const body = response.json();
+    expect(body).toEqual({
+      schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      status: String(status),
+      ...(scimType && { scimType }),
+      detail: expect.any(String),
+    });
+  }
 
   function patchActive(userId: string, value: "True" | "False") {
     return app.inject({

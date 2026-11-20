@@ -4,7 +4,10 @@ import { AlertTriangle, ExternalLink, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import {
+  useAppaGithubAppGrants,
+  useAppaGithubSync,
+} from "@/lib/openappa-github-sync.query";
 import { appaGitHost, shownFailure } from "./appa-git-host";
 import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
 
@@ -26,12 +29,7 @@ export function GithubManagedPolicyNotice({
   const { data } = useAppaGithubSync();
   const pieces = useFinishSetupPieces();
   const git = appaGitHost(data);
-  const source = data?.source;
-  // GitHub refusing the App for a permission it lacks is not a failure of
-  // its own to announce: the Finish setup notice says what the App lacks.
-  const failed = Boolean(
-    shownFailure(source, source?.lastSyncError, !!pieces?.permissions.length),
-  );
+  const failed = useSyncFailureShown();
   const validations = validationDirectory !== undefined;
   const href = managedSourceUrl(data, validationDirectory);
 
@@ -136,6 +134,27 @@ export function GithubManagedPolicyNotice({
     </div>
   ) : (
     notice
+  );
+}
+
+/**
+ * Whether the Guardrails pages announce the last sync as failed. GitHub
+ * refusing the App for a permission it lacks is not a failure of its own to
+ * announce: the Finish setup notice says what the App lacks. Until GitHub
+ * has said what the App holds, a refusal is not announced either, so the
+ * failure never shows first only to give way to that notice.
+ */
+export function useSyncFailureShown(): boolean {
+  const source = useAppaGithubSync().data?.source;
+  const pieces = useFinishSetupPieces();
+  const viaApp = !!source?.interval && !!source.githubAppConfigId;
+  const grants = useAppaGithubAppGrants(viaApp);
+  return Boolean(
+    shownFailure(
+      source,
+      source?.lastSyncError,
+      (viaApp && grants.isPending) || !!pieces?.permissions.length,
+    ),
   );
 }
 

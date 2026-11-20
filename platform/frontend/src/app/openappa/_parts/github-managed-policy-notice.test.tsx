@@ -231,4 +231,30 @@ test("a failed sync that a missing permission does not explain shows beside the 
   );
   expect(screen.getByText("Finish the Git sync setup")).toBeVisible();
   client.clear();
+  cleanup();
+
+  // On a page that opens before GitHub has said what the App holds, the
+  // refusal is not announced first only to give way to the notice.
+  let announced = false;
+  const watcher = new MutationObserver(() => {
+    if (document.body.textContent?.includes("Git sync failed"))
+      announced = true;
+  });
+  watcher.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <GithubManagedPolicyNotice />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  watcher.disconnect();
+  expect(announced).toBe(false);
 });

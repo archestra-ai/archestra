@@ -4,10 +4,11 @@ import { MessageCircle } from "lucide-react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { shownFailure } from "./appa-git-host";
 import { useFinishSetupPieces } from "./finish-setup-dialog";
-import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
+import {
+  GithubManagedPolicyNotice,
+  useSyncFailureShown,
+} from "./github-managed-policy-notice";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -19,21 +20,12 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
  */
 export function OverviewSetupCards() {
   const { isFresh } = useOpenAppaSetupState();
-  const sync = useAppaGithubSync();
+  const failed = useSyncFailureShown();
   const pieces = useFinishSetupPieces();
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   // A failed sync, or a setup that still waits on something.
-  const source = sync.data?.source;
-  if (
-    !shownFailure(
-      source,
-      source?.lastSyncError,
-      !!pieces?.permissions.length,
-    ) &&
-    !pieces
-  )
-    return null;
+  if (!failed && !pieces) return null;
   return <GithubManagedPolicyNotice />;
 }
 

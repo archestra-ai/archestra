@@ -28,7 +28,7 @@ use std::{
 use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "b8d63cdded690af45b87393d33de8e7c472f939a:archestra-live-v3";
+    "a1131275c1bb59412c7fabfbc0c653de3629eb5a:archestra-live-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 /// A root policy can be 1 MiB, and composition adds its batteries' contracts to it.

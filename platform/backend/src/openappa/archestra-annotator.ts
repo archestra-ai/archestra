@@ -194,7 +194,7 @@ class OpenAppaArchestraAnnotator {
       selection.provider === "gemini"
         ? geminiMinimalThinkingConfig(selection.modelName)
         : null;
-    const providerOptions =
+    const providerOptions: AnnotationCall["providerOptions"] =
       selection.provider === "kimi-code" &&
       /^(?:k3(?:[.-]|$)|kimi-for-coding$)/.test(selection.modelName)
         ? { "kimi-code": { reasoningEffort: "low" } }

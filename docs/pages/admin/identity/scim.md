@@ -52,21 +52,21 @@ All users get access through one Entra group, and team membership is managed in 
 
    ```hcl
    locals {
-     payments = ["alice@example.com", "bob@example.com"]
+     engineering_team = ["alice@example.com", "bob@example.com"]
    }
 
-   data "archestra_user" "payments" {
-     for_each = toset(local.payments)
+   data "archestra_user" "engineering_team" {
+     for_each = toset(local.engineering_team)
      email    = each.value
    }
 
-   resource "archestra_team" "payments" {
-     name    = "Payments"
-     members = [for user in data.archestra_user.payments : { user_id = user.id }]
+   resource "archestra_team" "engineering_team" {
+     name    = "Engineering Team"
+     members = [for user in data.archestra_user.engineering_team : { user_id = user.id }]
    }
    ```
 
-4. Run `terraform apply`. The users are members of **Payments** before their first sign-in.
+4. Run `terraform apply`. The users are members of **Engineering Team** before their first sign-in.
 
 Notes:
 

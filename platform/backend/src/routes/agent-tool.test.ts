@@ -1650,6 +1650,7 @@ describe("GET /api/agents/:agentId/tools", () => {
     const author = await makeUser();
     await makeMember(author.id, organizationId, { role: "admin" });
     const role = await makeCustomRole(organizationId, { permission: {} });
+    user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
     const agent = await makeAgent({
       organizationId,

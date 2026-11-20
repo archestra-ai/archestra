@@ -227,7 +227,7 @@ Required RBAC permission: [`guardrailsPolicy:read`](/docs/reference/permissions#
 | `edits[].newText` | `string` | Yes | The text that replaces oldText. Empty deletes oldText. |
 | `edits[].replaceAll` | `boolean \| null` | No | Replace every match of oldText instead of exactly one. |
 | `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
-| `allowUnknownTools` | `boolean \| null` | No | Set true only after the user explicitly approved creating rules for tools that are neither in the MCP registry nor observed in LLM proxy traffic. |
+| `allowUnknownTools` | `boolean \| null` | No | Set true only after the user approves rules for tools absent from the MCP registry and observed LLM proxy traffic. |
 
 
 ### update_guardrails_policy

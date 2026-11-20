@@ -468,7 +468,7 @@
     "searchText": "preview run app assigned MCP tool server-side, test tool call with arguments, inspect real output response shape schema before writing app code, debug app authoring, check auth required, sample tool result"
   },
   "preview_guardrails_policy_change": {
-    "definitionHash": "1785a4344cc9ac930842e1e92d2b0ec981f2afc3e93cfb34edc2a2019c872b17",
+    "definitionHash": "4c878d839bcfa31c38beccbe3eb4c8ca97a7427b56ece434ef6d57950f4e80d5",
     "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, confirm unknown or unobserved MCP tools before previewing, allowUnknownTools, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {

@@ -68,7 +68,7 @@ All users get access through one Entra group, and team membership is managed in 
 
 4. Run `terraform apply`. The users are members of **Engineering Team** before their first sign-in.
 
-Manage each team's members in one place: either in Terraform, or with [Team Sync](/docs/admin/identity/sso#team-sync), which adds people to a team at sign-in based on their Entra groups (`external_group_ids` in Terraform). Don't use both on one team. `terraform apply` sets the members to exactly the `members` list, so it removes anyone Team Sync added, and their next sign-in adds them back.
+Keep one source of truth for a team's members. Don't set `external_group_ids` on a team whose `members` Terraform manages: `terraform apply` removes anyone [Team Sync](/docs/admin/identity/sso#team-sync) added, and their next sign-in adds them back.
 
 ## Troubleshooting
 

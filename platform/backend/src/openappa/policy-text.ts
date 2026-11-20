@@ -57,6 +57,13 @@ export function toolHeaderLines(text: string): number[] {
   return arrayHeaderLines(text, ["policy", "tool"]);
 }
 
+/** Whether a line is a `[policy.tool.<key>…]` header: a table of the `[[policy.tool]]` entry above it. */
+export function isToolChildTableHeader(line: string): boolean {
+  const keys =
+    TABLE_HEADER.exec(line)?.[1]?.match(KEY_SEGMENT)?.map(unquote) ?? [];
+  return keys.length > 2 && keys[0] === "policy" && keys[1] === "tool";
+}
+
 /** The 1-based line of every `[[a.b]]` array-of-tables header for `path`. */
 export function arrayHeaderLines(text: string, path: string[]): number[] {
   return text

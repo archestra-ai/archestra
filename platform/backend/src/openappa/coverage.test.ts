@@ -1,8 +1,11 @@
 import config from "@/config";
 import ToolModel from "@/models/tool";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
+import { openappaBatteriesService } from "./batteries";
 import { coverageVisibility, openappaCoverageService } from "./coverage";
+import { parsePolicyToml } from "./policy-text";
 
 beforeEach(() => {
   config.openappa.enabled = true;
@@ -252,6 +255,56 @@ describe("openappaCoverageService.rulesForTools", () => {
     expect(rules.get("acme__nothing_names_this")).toMatchObject({
       rule: { source: "catchall", name: "*" },
       text: '[[policy.tool]]\nname = "*"\nannotator = "noop"',
+    });
+  });
+
+  test("a rule's TOML keeps the child table written directly under it", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const { content } = await seedCoverage({
+      organizationId: organization.id,
+      userId: user.id,
+      fixtures: { makeAgent, makeAgentTool, makeInternalMcpCatalog, makeTool },
+    });
+    const inline = 'requires = { audience = { within = ["internal"] } }';
+    expect(content).toContain(inline);
+    const { revision } = await guardrailsPolicyService.get(organization.id);
+    await guardrailsPolicyService.update({
+      organizationId: organization.id,
+      userId: user.id,
+      content: content.replace(
+        inline,
+        '[policy.tool.requires]\naudience = { within = ["internal"] }',
+      ),
+      expectedRevision: revision,
+    });
+    const composed = await openappaBatteriesService.recompile(organization.id);
+    expect(composed.lastError).toBeNull();
+
+    const rules = await openappaCoverageService.rulesForTools({
+      organizationId: organization.id,
+      toolNames: ["acme__ping"],
+    });
+
+    expect(parsePolicyToml(rules.get("acme__ping")?.text ?? "")).toEqual({
+      policy: {
+        tool: [
+          {
+            name: "acme__ping",
+            delta: {},
+            requires: { audience: { within: ["internal"] } },
+          },
+        ],
+      },
     });
   });
 });

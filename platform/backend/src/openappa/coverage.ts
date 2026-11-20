@@ -27,6 +27,7 @@ import {
 import { enforcedBattery } from "./composition-view";
 import {
   asRecord,
+  isToolChildTableHeader,
   type ToolEntry,
   toolEntries,
   toolHeaderLines,
@@ -626,16 +627,19 @@ type CoverageSnapshot = Awaited<
 >;
 
 /**
- * The TOML block that starts at 1-based `line`: its header and every line up
- * to the next table header, without the comments and blank lines that lead
- * into that next header.
+ * The TOML block that starts at 1-based `line`: its header, the child tables
+ * written directly under it (`[policy.tool.requires]`), and every line up to
+ * the next other table header, without the comments and blank lines that lead
+ * into that header. A child table placed after another header is not part of
+ * the block.
  */
 function ruleExcerpt(text: string, line: number): string | null {
   const lines = text.split("\n");
   if (line < 1 || line > lines.length) return null;
   const block = [lines[line - 1]];
   for (let index = line; index < lines.length; index++) {
-    if (/^\s*\[/.test(lines[index])) break;
+    if (/^\s*\[/.test(lines[index]) && !isToolChildTableHeader(lines[index]))
+      break;
     block.push(lines[index]);
   }
   // Comments and blank lines at the end introduce the next block.

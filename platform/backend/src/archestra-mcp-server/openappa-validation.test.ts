@@ -97,6 +97,17 @@ test("the agent previews a validation against the saved policy and saves it with
     delivery: "revision",
     revision: 1,
     validation: { valid: true },
+    run: {
+      partial: true,
+      draft: false,
+      files: [
+        {
+          path: regression.path,
+          status: "passed",
+          steps: [{ status: "passed" }, { status: "passed" }],
+        },
+      ],
+    },
   });
   expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
     revision: 1,
@@ -106,7 +117,13 @@ test("the agent previews a validation against the saved policy and saves it with
     [regression, existing],
   );
   expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+  const runs = await OpenAppaPolicyTestsModel.listRuns(organization.id);
+  expect(runs).toHaveLength(1);
+  expect(runs[0].result).toMatchObject({
+    partial: true,
+    files: [{ path: regression.path, status: "passed" }],
+  });
+  expect(saved.structuredContent).toMatchObject({ run: { id: runs[0].id } });
 });
 
 test("validations save beside the unsaved starter policy without saving it or enabling enforcement", async ({

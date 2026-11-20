@@ -1135,7 +1135,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_validation",
     title: "Save OpenAPPA validations",
     description:
-      "Save a change to the .appa validation files. Call preview_guardrails_validation_change first, explain it, then send the same `changes`, expectedRevision and expectedVersion that were previewed, only when the user approved saving. Checks syntax again and saves without replaying. When Git sync is configured, this opens a pull request containing only the changed files; they take effect after merge and sync. Otherwise it saves locally. This tool never changes the policy or enforcement. On a conflict, read the policy and suite again and preview again.",
+      "Save a change to the .appa validation files. Call preview_guardrails_validation_change first, explain it, then send the same `changes`, expectedRevision and expectedVersion that were previewed, only when the user approved saving. Locally, this checks syntax, saves, and runs the added or edited files right away. It records the run and returns `run` with the results. Deletion-only saves return `run: null`. If the immediate run cannot complete after the save commits (for example due to a concurrent change, replay busy, or timeout), the files stay saved and the result returns `run: null` with `runError`. With Git sync, this opens a pull request containing only the changed files; validations take effect and run after merge and sync. This tool never changes the policy or enforcement. On a conflict before saving, read the policy and suite again and preview again.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);

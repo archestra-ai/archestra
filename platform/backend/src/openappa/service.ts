@@ -2257,7 +2257,7 @@ export async function executeRemedyByOffer(params: {
     ),
   );
   if (decision.decision !== "mcp_result" || !decision.offer) {
-    throw new ApiError(503, "OpenAPPA returned no offer lookup state");
+    throw new ApiError(500, "OpenAPPA returned no offer lookup state");
   }
   return {
     result: runtimeToolResult(decision),

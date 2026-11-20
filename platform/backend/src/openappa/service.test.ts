@@ -4158,15 +4158,18 @@ describe("remedy by offer", () => {
       }),
     );
 
-    await expect(
-      executeRemedyByOffer({
-        organizationId,
-        sessionId: "session",
-        toolCallId: "client-remedy-2",
-        originalArguments: '{"offer_id":"offer"}',
-        args: { offer_id: "offer" },
-      }),
-    ).rejects.toThrow("OpenAPPA returned no offer lookup state");
+    const execution = executeRemedyByOffer({
+      organizationId,
+      sessionId: "session",
+      toolCallId: "client-remedy-2",
+      originalArguments: '{"offer_id":"offer"}',
+      args: { offer_id: "offer" },
+    });
+
+    await expect(execution).rejects.toThrow(
+      "OpenAPPA returned no offer lookup state",
+    );
+    await expect(execution).rejects.toMatchObject({ statusCode: 500 });
   });
 
   test("rejects malformed native MCP resource content before forwarding it", async () => {

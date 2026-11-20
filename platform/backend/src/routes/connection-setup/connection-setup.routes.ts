@@ -44,7 +44,10 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
+import {
+  CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX,
+  CONNECTION_SETUP_TOKEN_TTL_MS,
+} from "@/models/connection-setup";
 import { openappaEnabled } from "@/openappa/service";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
@@ -1112,7 +1115,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 pluginClientType: marketplaceRender.pluginClientType,
                 pluginPlatform: marketplaceRender.pluginPlatform,
                 marketplaceName: marketplaceRender.marketplaceName,
-                name: `Connection setup (${setup.clientId})`,
+                name: `${CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX}${setup.clientId})`,
                 expiresAt: setup.skillLinkTtlDays
                   ? new Date(
                       Date.now() + setup.skillLinkTtlDays * 24 * 60 * 60 * 1000,

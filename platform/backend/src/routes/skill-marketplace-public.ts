@@ -4,16 +4,22 @@ import path from "node:path";
 import { DEFAULT_APP_NAME } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  ConnectionSetupModel,
+  MemberModel,
   OrganizationModel,
   PluginModel,
   SkillFileModel,
   SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
+  SkillTeamModel,
 } from "@/models";
+import { CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { serveGitHttpRequest } from "@/skills/marketplace/git-http-backend";
@@ -283,20 +289,97 @@ async function buildShareLinkServeContext(
   const validated = await SkillShareLinkModel.validate({ rawToken: token });
   if (!validated) return null;
 
+  const [organization, owningSetup] = await Promise.all([
+    OrganizationModel.getById(validated.link.organizationId),
+    ConnectionSetupModel.findBySkillShareLinkId({
+      skillShareLinkId: validated.link.id,
+    }),
+  ]);
+
+  let allowedSkillIds = validated.skills.map((s) => s.id);
+  let allowedPluginIds = validated.plugins.map((plugin) => plugin.id);
+
+  // Links minted by Connect are scoped to the setup owner rather than acting as
+  // standalone org-wide public share links: revalidate active membership, setup
+  // revocation, and live grants on every clone or pull so revoking a plugin use
+  // grant (or removing the user) withdraws delivery of any future versions.
+  // Also guard links whose owning setup row was cascade-deleted (e.g. gateway
+  // removal) so deletion cannot widen a Connect link into an unrestricted one.
+  const isOrphanedConnectLink =
+    !owningSetup &&
+    Boolean(
+      validated.link.name?.startsWith(CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX),
+    );
+  const scopedUserId = owningSetup
+    ? owningSetup.userId
+    : isOrphanedConnectLink
+      ? validated.link.createdByUserId
+      : null;
+
+  if (owningSetup) {
+    if (
+      owningSetup.revokedAt !== null ||
+      owningSetup.organizationId !== validated.link.organizationId
+    ) {
+      return null;
+    }
+  }
+
+  if (scopedUserId) {
+    const member = await MemberModel.getByUserId(
+      scopedUserId,
+      validated.link.organizationId,
+    );
+    if (!member) return null;
+
+    if (allowedSkillIds.length > 0) {
+      const skillChecker = await getSkillPermissionChecker({
+        userId: scopedUserId,
+        organizationId: validated.link.organizationId,
+      });
+      if (!skillChecker.canRead && !skillChecker.isAdmin) {
+        allowedSkillIds = [];
+      } else {
+        const accessibleSkillIds =
+          await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId: validated.link.organizationId,
+            userId: scopedUserId,
+          });
+        if (accessibleSkillIds !== undefined) {
+          const allowedSet = new Set(accessibleSkillIds);
+          allowedSkillIds = allowedSkillIds.filter((id) => allowedSet.has(id));
+        }
+      }
+    }
+
+    if (allowedPluginIds.length > 0) {
+      if (!organization?.connectionPluginsEnabled) {
+        allowedPluginIds = [];
+      } else {
+        const pluginChecker = await getPluginPermissionChecker({
+          userId: scopedUserId,
+          organizationId: validated.link.organizationId,
+        });
+        allowedPluginIds = allowedPluginIds.filter((pluginId) =>
+          pluginChecker.allowsScoped(pluginId, "use"),
+        );
+      }
+    }
+  }
+
   const parsedPluginPlatform = PluginPlatformSchema.safeParse(
     validated.link.pluginPlatform,
   );
-  const [skills, plugins, organization] = await Promise.all([
-    loadSkillsForLink(validated.skills.map((s) => s.id)),
+  const [skills, plugins] = await Promise.all([
+    loadSkillsForLink(allowedSkillIds),
     loadPluginsForLink({
-      ids: validated.plugins.map((plugin) => plugin.id),
+      ids: allowedPluginIds,
       organizationId: validated.link.organizationId,
       clientType: validated.link.pluginClientType,
       pluginPlatform: parsedPluginPlatform.success
         ? parsedPluginPlatform.data
         : null,
     }),
-    OrganizationModel.getById(validated.link.organizationId),
   ]);
   if (skills.length === 0 && plugins.length === 0) return null;
 
@@ -331,7 +414,7 @@ async function buildShareLinkServeContext(
     logContext: {
       shareLinkId: validated.link.id,
       skillIds: skills.map((s) => s.id),
-      pluginIds: validated.plugins.map((plugin) => plugin.id),
+      pluginIds: allowedPluginIds,
     },
   };
 }

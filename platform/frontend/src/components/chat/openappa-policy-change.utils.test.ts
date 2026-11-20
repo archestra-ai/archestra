@@ -126,6 +126,19 @@ describe("parsePolicyChange", () => {
     ).toMatchObject({ delivery: "pull_request", before: "", after: "x\n" });
   });
 
+  it("takes the file from run_tool arguments sent as JSON text", () => {
+    expect(
+      parsePolicyChange(
+        stored({ delivery: "pull_request", diff: DIFF }),
+        false,
+        {
+          tool_name: "preview_guardrails_server_rules_change",
+          tool_args: JSON.stringify({ content: AFTER }),
+        },
+      ),
+    ).toMatchObject({ before: BEFORE, after: AFTER });
+  });
+
   it("prefers the texts a result carries over rebuilding them", () => {
     expect(
       parsePolicyChange({

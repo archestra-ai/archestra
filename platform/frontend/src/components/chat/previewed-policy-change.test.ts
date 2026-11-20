@@ -90,6 +90,20 @@ describe("collectPreviewedChanges", () => {
       ).toBe(true);
   });
 
+  it("reads run_tool arguments sent as JSON text, as run_tool itself does", () => {
+    const messages = conversation(
+      { output: valid, viaRunTool: "preview_guardrails_server_rules_change" },
+      { viaRunTool: "propose_guardrails_server_rules_change" },
+    );
+    for (const part of messages[0].parts as unknown as Array<{
+      input: { tool_args: unknown };
+    }>)
+      part.input.tool_args = JSON.stringify(part.input.tool_args);
+    expect(collectPreviewedChanges(messages, shortName).has("propose-1")).toBe(
+      true,
+    );
+  });
+
   it("leaves a proposal unmatched when another file was previewed after its own", () => {
     const messages = conversation({ output: valid });
     const parts = messages[0].parts as unknown as Array<

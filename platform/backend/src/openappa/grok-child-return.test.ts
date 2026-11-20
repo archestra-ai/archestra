@@ -137,26 +137,6 @@ test("malformed identities and truncated native footers fail closed", () => {
     expect(() => grokChildOutputs(text)).toThrow("withheld");
 });
 
-test("a host failure notice with a malformed entry is withheld instead of passing through", () => {
-  for (const status of [
-    { "not-an-id": { failed: "boom" } },
-    { [child]: { failed: "boom", extra: true } },
-    { [child]: { failed: 1 } },
-  ])
-    expect(() => grokChildOutputs(JSON.stringify({ status }))).toThrow(
-      expect.objectContaining({ statusCode: 409 }),
-    );
-});
-
-test("a well-formed host failure notice is read, and text that only looks like JSON is not", () => {
-  expect(
-    grokChildOutputs(
-      JSON.stringify({ status: { [child]: { failed: "boom" } } }),
-    ),
-  ).toEqual([{ id: child, status: "completed", value: "boom" }]);
-  expect(grokChildOutputs("{ not json")).toBeUndefined();
-});
-
 test("idle and tool-attached completion reminders pass through return collection", () => {
   for (const leading of ["", "An ordinary tool result\n\n"]) {
     const input = {

@@ -138,6 +138,40 @@ describe("Archestra tools under the composed default policy", () => {
     ]);
   });
 
+  test("a server's own rules are read and previewed like the policy, and proposed only from trusted data the organization may read; none falls to the catch-all", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+  }) => {
+    const { organizationId } = await setUp({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+    });
+    const file = { mcpServerId: "s", content: "", expectedCommit: "c" };
+    expect(
+      await contracts(organizationId, [
+        evaluated("get_guardrails_server_rules", { mcpServerId: "s" }),
+        evaluated("preview_guardrails_server_rules_change", file),
+        evaluated("get_guardrails_server_rules_change_status", {
+          mcpServerId: "s",
+          number: 1,
+        }),
+        evaluated("propose_guardrails_server_rules_change", {
+          ...file,
+          summary: "m",
+        }),
+      ]),
+    ).toEqual([
+      // A read of the organization's own policy text: nothing asks a person.
+      "narrows/-",
+      "narrows/-",
+      "narrows/-",
+      // The pull request the organization reads, from trusted data only.
+      "-/trusted+internal",
+    ]);
+  });
+
   test("an approval prompt shows the call without the derived arguments", () => {
     const shown = (
       shortName: ArchestraToolShortName,

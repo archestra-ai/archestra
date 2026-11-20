@@ -2,7 +2,7 @@
 title: Unified Model API
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -56,6 +56,35 @@ The Unified Model API speaks the OpenAI API. It supports these endpoints:
 | `/realtime` (WebSocket) | OpenAI realtime models |
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The Unified Model API does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
+
+## Build a Model Picker
+
+`/models` tells your app each model's limits and settings, so a picker needs no hard-coded defaults. Each model entry carries a `capabilities` object:
+
+```json
+{
+  "id": "openai:gpt-5.4",
+  "object": "model",
+  "owned_by": "openai",
+  "capabilities": {
+    "context_length": 1050000,
+    "max_output_tokens": 128000,
+    "input_modalities": ["text", "image", "pdf"],
+    "output_modalities": ["text"],
+    "supports_tools": true,
+    "supports_vision": true,
+    "supports_reasoning_effort": true,
+    "supported_reasoning_efforts": ["low", "medium", "high"],
+    "supported_endpoints": ["/chat/completions", "/responses"]
+  }
+}
+```
+
+- **Limits:** `context_length` and `max_output_tokens` are the model's limits, with any override an administrator set on **Models**. `null` means unknown.
+- **`supported_reasoning_efforts`:** the `reasoning_effort` values this API accepts for the model. The provider's own list is used when it publishes one (GitHub Copilot, a ChatGPT subscription, a LiteLLM gateway). Otherwise the list holds the levels Archestra knows are safe, and the provider may accept more. `[]` means send none; `null` means unknown.
+- **`supported_endpoints`:** the endpoints on this page that serve the model. Send a Responses-only model to `/responses`.
+
+Model pools and auto routers carry no `capabilities`, because their members can differ. The same fields, in camel case, are in `capabilities` on `GET /api/llm-models/available`, which any member's API key can read.
 
 ## Images and Audio
 

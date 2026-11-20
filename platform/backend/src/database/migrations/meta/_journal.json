@@ -4572,6 +4572,13 @@
       "when": 1795131970370,
       "tag": "0652_high_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 653,
+      "version": "7",
+      "when": 1795189209547,
+      "tag": "0653_solid_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

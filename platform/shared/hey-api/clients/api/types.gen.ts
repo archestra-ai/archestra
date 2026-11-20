@@ -45369,7 +45369,9 @@ export type GetNewChatBootstrapResponses = {
                 outputModalities: Array<'text' | 'image' | 'audio'> | null;
                 supportsToolCalling: boolean | null;
                 supportsReasoningEffort: boolean | null;
+                outputLength: number | null;
                 supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                 recommendedForAgents: boolean | null;
                 pricePerMillionInput: string | null;
                 pricePerMillionOutput: string | null;
@@ -45612,7 +45614,9 @@ export type GetNewChatBootstrapResponses = {
                     outputModalities: Array<'text' | 'image' | 'audio'> | null;
                     supportsToolCalling: boolean | null;
                     supportsReasoningEffort: boolean | null;
+                    outputLength: number | null;
                     supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                     recommendedForAgents: boolean | null;
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
@@ -45971,7 +45975,9 @@ export type GetConversationBootstrapResponses = {
                     outputModalities: Array<'text' | 'image' | 'audio'> | null;
                     supportsToolCalling: boolean | null;
                     supportsReasoningEffort: boolean | null;
+                    outputLength: number | null;
                     supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                     recommendedForAgents: boolean | null;
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
@@ -46214,7 +46220,9 @@ export type GetConversationBootstrapResponses = {
                         outputModalities: Array<'text' | 'image' | 'audio'> | null;
                         supportsToolCalling: boolean | null;
                         supportsReasoningEffort: boolean | null;
+                        outputLength: number | null;
                         supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                         recommendedForAgents: boolean | null;
                         pricePerMillionInput: string | null;
                         pricePerMillionOutput: string | null;
@@ -107979,7 +107987,9 @@ export type GetLlmModelsResponses = {
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
             supportsReasoningEffort: boolean | null;
+            outputLength: number | null;
             supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+            supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
             recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
@@ -108219,6 +108229,7 @@ export type GetModelsWithApiKeysResponses = {
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;
@@ -108812,6 +108823,7 @@ export type UpdateModelResponses = {
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;
@@ -117346,6 +117358,17 @@ export type ModelRouterListModelsWithDefaultAgentResponses = {
             object: 'model';
             created: number;
             owned_by: string;
+            capabilities?: {
+                context_length: number | null;
+                max_output_tokens: number | null;
+                input_modalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                output_modalities: Array<'text' | 'image' | 'audio'> | null;
+                supports_tools: boolean | null;
+                supports_vision: boolean | null;
+                supports_reasoning_effort: boolean | null;
+                supported_reasoning_efforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
+                supported_endpoints: Array<'/chat/completions' | '/responses' | '/embeddings'>;
+            };
         }>;
     };
 };
@@ -117440,6 +117463,17 @@ export type ModelRouterListModelsWithAgentResponses = {
             object: 'model';
             created: number;
             owned_by: string;
+            capabilities?: {
+                context_length: number | null;
+                max_output_tokens: number | null;
+                input_modalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                output_modalities: Array<'text' | 'image' | 'audio'> | null;
+                supports_tools: boolean | null;
+                supports_vision: boolean | null;
+                supports_reasoning_effort: boolean | null;
+                supported_reasoning_efforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
+                supported_endpoints: Array<'/chat/completions' | '/responses' | '/embeddings'>;
+            };
         }>;
     };
 };

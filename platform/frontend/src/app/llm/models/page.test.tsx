@@ -60,6 +60,7 @@ const model = {
   supportsToolCalling: true,
   supportsReasoningEffort: false,
   supportedEndpoints: null,
+  supportedReasoningEfforts: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
   cacheReadPricePerToken: null,

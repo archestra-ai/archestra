@@ -1025,6 +1025,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: true,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -1064,6 +1065,7 @@ describe("ModelSyncService", () => {
       supportsToolCalling: true,
       supportsReasoningEffort: null,
       supportedEndpoints: null,
+      supportedReasoningEfforts: null,
       promptPricePerToken: null,
       completionPricePerToken: null,
       cacheReadPricePerToken: null,
@@ -1103,6 +1105,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: null,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -1127,6 +1130,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: null,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -1279,6 +1283,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -1302,6 +1307,7 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
         cacheReadPricePerToken: null,
@@ -1787,6 +1793,54 @@ describe("ModelSyncService", () => {
         cacheWritePricePerToken: "0.00000375",
       }),
     );
+  });
+
+  test("Copilot's vision flag and reasoning levels outrank the registry's description of the model", () => {
+    const registryEntry = (modalities: string[]) => ({
+      id: "gpt-6.2",
+      name: "GPT-6.2",
+      reasoning: true,
+      modalities: { input: modalities, output: ["text"] },
+    });
+    const [visionAdded] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [
+        {
+          id: "gpt-6.2",
+          capabilities: {
+            supportsVision: true,
+            supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+          },
+        },
+      ],
+      modelsDevData: {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: { "gpt-6.2": registryEntry(["text"]) },
+        },
+      },
+    });
+    expect(visionAdded).toEqual(
+      expect.objectContaining({
+        inputModalities: ["text", "image"],
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+      }),
+    );
+
+    const [visionRemoved] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [{ id: "gpt-6.2", capabilities: { supportsVision: false } }],
+      modelsDevData: {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: { "gpt-6.2": registryEntry(["text", "image", "pdf"]) },
+        },
+      },
+    });
+    // The rest of the registry's list survives.
+    expect(visionRemoved.inputModalities).toEqual(["text", "pdf"]);
   });
 
   test("floors an uncovered GitHub Copilot model to text modalities so the edit dialog stays valid", () => {

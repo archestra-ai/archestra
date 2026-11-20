@@ -1714,6 +1714,7 @@ describe("asking through the client's own question tool", () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-string-guidance" });
     trustedOf(context).request = {
+      session: {},
       tools: {
         control: { name: "archestra__execute_remedy_plan" },
         notice: { name: "archestra__get_remedy_plans" },
@@ -15516,8 +15517,10 @@ describe("soft-block emergency override", () => {
         },
       }),
     };
+    const withheld = "[appa] The child return is withheld.";
     const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
-      decision: "release",
+      decision: "replace",
+      content: withheld,
       crossed: false,
     });
     try {
@@ -15529,7 +15532,7 @@ describe("soft-block emergency override", () => {
           response: {},
           responseText: "raw child return",
         }),
-      ).toEqual({ decision: "replace", responseText: "raw child return" });
+      ).toEqual({ decision: "replace", responseText: withheld });
       expect(endChild).toHaveBeenCalledOnce();
       expect(await isUnenforcedSession(trusted.session)).toBe(false);
     } finally {

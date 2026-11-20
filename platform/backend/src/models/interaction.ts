@@ -1449,7 +1449,7 @@ class InteractionModel {
   /**
    * Get all unique user IDs with user names
    * Used for filtering dropdowns in the UI
-   * Returns user info (id and name) for the dropdown to display names but filter by id
+   * Returns user info (id, name and email) for the dropdown to display names but filter by id
    */
   static async getUniqueUserIds(params: {
     requestingUserId?: string;
@@ -1497,6 +1497,7 @@ class InteractionModel {
       .select({
         userId: activity.userId,
         userName: schema.usersTable.name,
+        userEmail: schema.usersTable.email,
       })
       .from(activity)
       .innerJoin(schema.usersTable, eq(activity.userId, schema.usersTable.id))
@@ -1510,11 +1511,13 @@ class InteractionModel {
 
     return result
       .filter(
-        (r): r is { userId: string; userName: string } => r.userId !== null,
+        (r): r is { userId: string; userName: string; userEmail: string } =>
+          r.userId !== null,
       )
       .map((r) => ({
         id: r.userId,
         name: r.userName,
+        email: r.userEmail,
       }));
   }
 
@@ -3560,7 +3563,7 @@ class InteractionModel {
     const users = schema.usersTable;
     const search = params.search?.trim();
     const candidates = db
-      .select({ id: users.id, name: users.name })
+      .select({ id: users.id, name: users.name, email: users.email })
       .from(users)
       .where(
         and(
@@ -3603,7 +3606,7 @@ class InteractionModel {
     // from flattening the subquery, which would probe every candidate and
     // sort afterwards. Drizzle omits a zero offset, hence the raw outer query.
     const result = await db.execute<UserInfo>(sql`
-      SELECT candidates.id, candidates.name
+      SELECT candidates.id, candidates.name, candidates.email
       FROM (${candidates} OFFSET 0) AS candidates
       CROSS JOIN LATERAL (${probe}) AS probe
       ORDER BY candidates.name COLLATE "C", candidates.id COLLATE "C"

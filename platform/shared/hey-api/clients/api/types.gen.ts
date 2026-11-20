@@ -81187,6 +81187,7 @@ export type GetLlmProxyLogUserIdsResponses = {
     200: Array<{
         id: string;
         name: string;
+        email: string;
     }>;
 };
 

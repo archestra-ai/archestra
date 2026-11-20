@@ -41,7 +41,7 @@ describe("archestra annotator", () => {
   let organizationId: string;
   let agentId: string;
   let useDefaultModel: (params: {
-    provider: "openai" | "openrouter" | "kimi-code";
+    provider: "openai" | "openrouter" | "kimi-code" | "gemini";
     modelId: string;
     organizationId?: string;
     /** Leave the organization default alone; only create the key and model. */
@@ -725,6 +725,49 @@ describe("archestra annotator", () => {
       { model: "openai/gpt-6-luna", cap: 4_000, source: "guardrail:annotator" },
       { model: "openai/gpt-6-sol", cap: 8_000, source: "guardrail:sanitizer" },
     ]);
+  });
+
+  test("uses Gemini 3.8 Flash with only a Gemini key and no model choice", async () => {
+    const { keyId } = await useDefaultModel({
+      provider: "gemini",
+      modelId: "gemini-3.8-pro",
+      keepDefault: true,
+    });
+    const flash = await ModelModel.create({
+      externalId: "gemini/gemini-3.8-flash",
+      provider: "gemini",
+      modelId: "gemini-3.8-flash",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(keyId, [flash.id]);
+    const calls: string[] = [];
+    server.use(
+      http.post(
+        `http://127.0.0.1:${config.api.port}/v1/gemini/${agentId}/v1beta/models/:model`,
+        ({ params }) => {
+          calls.push(String(params.model));
+          return HttpResponse.json({
+            candidates: [
+              {
+                content: {
+                  role: "model",
+                  parts: [{ text: '{"rank":"trusted"}' }],
+                },
+                finishReason: "STOP",
+              },
+            ],
+          });
+        },
+      ),
+    );
+
+    const response = await annotate(bearer());
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rank: "trusted" });
+    expect(calls).toEqual(["gemini-3.8-flash:generateContent"]);
   });
 
   test("refuses without a call when no LLM key is configured", async () => {

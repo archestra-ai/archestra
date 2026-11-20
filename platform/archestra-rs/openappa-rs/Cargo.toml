@@ -68,11 +68,17 @@ crate-type = ["cdylib"]
 # pipeline stage, chained command and substitution, with separate result and
 # send labels (#940); then a spawn's tool call carrying the return it
 # declares (#947, #948); then appa-guide teaching newcomers how APPA decides
-# while setting it up (#942).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "161ddc1607733d7ad9ca687e1ab372c22d969e91" }
+# while setting it up (#942); then the label kept on env templates and code
+# named for credentials (#944), protected Claude Code sessions' shell kept
+# working across its updates (#946), the amp battery (#956), opencode's safe
+# shell routed through the file-tracker battery (#959), a subagent's return
+# that a host can defer to its parent's decision, declared on the spawn as
+# `DeclaredReturn` (#960), and the archestra battery ruling the four MCP
+# server rules tools (#965).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b8d63cdded690af45b87393d33de8e7c472f939a", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b8d63cdded690af45b87393d33de8e7c472f939a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b8d63cdded690af45b87393d33de8e7c472f939a", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b8d63cdded690af45b87393d33de8e7c472f939a" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

@@ -897,19 +897,19 @@ function SourceRows() {
       ) : null}
     </span>
   ) : null;
-  // A refusal is explained while the permissions row names what is missing.
-  const syncFailure = shownFailure(
-    source,
-    source.lastSyncError,
-    missing.length > 0,
-  );
-  const filesFailure = shownFailure(source, files?.detail, missing.length > 0);
-  // Asked only where no permission is missing: nothing explains a refusal.
+  // A refusal is explained while the permissions row names what is missing,
+  // and held until GitHub has said what the App holds: no sentence shows
+  // first only to give way to that row.
+  const explained = (app && grants.isPending) || missing.length > 0;
+  const syncFailure = shownFailure(source, source.lastSyncError, explained);
+  const filesFailure = shownFailure(source, files?.detail, explained);
   const checkDetail = status.check?.detail;
   const checkFailure = !checkDetail
     ? null
     : app && isAccessRefusal(checkDetail)
-      ? UNEXPLAINED_REFUSAL
+      ? explained
+        ? null
+        : UNEXPLAINED_REFUSAL
       : `${checkDetail}.`;
   const checked = source.lastSyncedAt
     ? ` · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`

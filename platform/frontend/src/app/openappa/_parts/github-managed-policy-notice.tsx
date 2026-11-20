@@ -37,7 +37,7 @@ export function GithubManagedPolicyNotice({
 
   // Setup still waits on something, a pull request to merge among it: the
   // one Finish setup notice, as on the Git sync settings.
-  if (pieces && (!failed || pieces.permissions.length > 0))
+  if (pieces && !failed)
     return healthyOnly ? null : <FinishSetupNotice pieces={pieces} />;
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.
@@ -78,7 +78,7 @@ export function GithubManagedPolicyNotice({
   }
   if (healthyOnly) return null;
 
-  return (
+  const notice = (
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
       <span className="font-medium">
@@ -125,6 +125,17 @@ export function GithubManagedPolicyNotice({
         )}
       </InlineNoticeText>
     </InlineNotice>
+  );
+  // A failed sync outranks the rest of the setup. A permission the App
+  // lacks is not what failed here (that refusal is never a failure of its
+  // own), so its notice stays beside the failure.
+  return failed && pieces?.permissions.length ? (
+    <div className="space-y-2">
+      <FinishSetupNotice pieces={pieces} />
+      {notice}
+    </div>
+  ) : (
+    notice
   );
 }
 

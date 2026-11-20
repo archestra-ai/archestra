@@ -11,7 +11,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import type { GitAccess } from "@/git-hosts/git-access";
 import {
@@ -39,6 +38,7 @@ import {
   hasSinglePluginGitAuth,
   type PluginGitAuth,
   pluginSourceGitHost,
+  requirePluginGitCredentialUse,
   resolvePluginImportAccess,
   resolvePluginSourceAccess,
   storedCredentialId,
@@ -712,6 +712,16 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.interval !== null && existing.sourceKind !== "github") {
         throw new ApiError(400, "Only Git-sourced plugins can be synced");
       }
+      if (body.interval !== null) {
+        const existingCredentialId = storedCredentialId(existing);
+        if (existingCredentialId) {
+          await requirePluginGitCredentialUse({
+            organizationId,
+            userId: user.id,
+            credentialId: existingCredentialId,
+          });
+        }
+      }
       await PluginModel.setGithubSync({
         id: existing.id,
         interval: body.interval,
@@ -751,6 +761,14 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!plugin) throw new ApiError(404, "Plugin not found");
       if (plugin.sourceKind !== "github" || !plugin.sourceRepo) {
         throw new ApiError(400, "Plugin is not connected to a Git source");
+      }
+      const existingCredentialId = storedCredentialId(plugin);
+      if (existingCredentialId) {
+        await requirePluginGitCredentialUse({
+          organizationId,
+          userId: user.id,
+          credentialId: existingCredentialId,
+        });
       }
       const active = await TaskModel.findActivePayloadValues(
         "plugin_github_sync",
@@ -904,6 +922,15 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
         });
         assertPluginSourceHost({ plugin: existing, access });
+      } else if (githubSource && authentication === undefined) {
+        const existingCredentialId = storedCredentialId(existing);
+        if (existingCredentialId) {
+          await requirePluginGitCredentialUse({
+            organizationId,
+            userId: user.id,
+            credentialId: existingCredentialId,
+          });
+        }
       }
       const input = githubSource
         ? {
@@ -1093,7 +1120,7 @@ async function importExistingGithubPlugin(params: {
 
 /**
  * Request-supplied authentication for the plugin's own host, or else the
- * source's stored credential (which needs `credential:read`).
+ * source's stored credential (which needs a `use` grant on that credential).
  */
 async function resolveExistingPluginAccess(params: {
   plugin: Plugin;
@@ -1116,16 +1143,13 @@ async function resolveExistingPluginAccess(params: {
     assertPluginSourceHost({ plugin, access });
     return access;
   }
-  if (storedCredentialId(plugin)) {
-    const allowed = await userHasPermission(
-      params.userId,
-      plugin.organizationId,
-      "credential",
-      "read",
-    );
-    if (!allowed) {
-      throw new ApiError(403, "You do not have access to Git credentials");
-    }
+  const credentialId = storedCredentialId(plugin);
+  if (credentialId) {
+    await requirePluginGitCredentialUse({
+      organizationId: plugin.organizationId,
+      userId: params.userId,
+      credentialId,
+    });
   }
   return resolvePluginSourceAccess(plugin);
 }

@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ResourcePermissionAction } from "@archestra/shared";
+import { vi } from "vitest";
 import { PluginModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { createGithubPat } from "@/services/github-pat";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   authenticatedRouteApp,
   USER_HEADER,
 } from "@/test/authenticated-route-app";
+import { stubGithub } from "@/test/github-skills-stub";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
@@ -27,12 +31,16 @@ describe("plugin permissions", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await app.close();
   });
 
   const as = (
     user: User,
-    request: { method: "GET" | "POST" | "PUT" | "DELETE"; url: string } & {
+    request: {
+      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+      url: string;
+    } & {
       payload?: object;
     },
   ) => app.inject({ ...request, headers: { [USER_HEADER]: user.id } });
@@ -312,6 +320,206 @@ describe("plugin permissions", () => {
     });
     expect(adminKeys.statusCode).toBe(200);
     expect(adminKeys.json()).toEqual(["env", "secret"]);
+  });
+
+  test("a Can edit grantee cannot repoint or fetch through a stored Git credential without use access on it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const [admin, editor] = await Promise.all([makeUser(), makeUser()]);
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    // Default members hold credential:read; that alone must not unlock org PATs.
+    await makeMember(editor.id, organizationId);
+
+    const orgPat = await createGithubPat({
+      organizationId,
+      userId: admin.id,
+      data: { name: "Org private PAT", token: "ghp_org_secret" },
+    });
+    // Restrict the credential to admin only (removing default org-wide use).
+    const patPolicy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "credential",
+      scope: orgPat.id,
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "credential",
+      scope: orgPat.id,
+      revision: patPolicy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "user", id: admin.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
+    });
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: admin.id,
+      input: createPayload(),
+      source: {
+        repo: "acme/plugins",
+        ref: "main",
+        sha: "approved-commit",
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+        githubPatId: orgPat.id,
+      },
+      initialPermissionGrants: [
+        {
+          subject: { type: "user", id: editor.id },
+          actions: ["read", "use", "update"],
+        },
+      ],
+    });
+    if (!plugin) throw new Error("Missing Git-backed plugin");
+
+    // Metadata-only edits stay allowed without touching the Git credential.
+    expect(
+      (
+        await as(editor, {
+          method: "PUT",
+          url: `/api/plugins/${plugin.id}`,
+          payload: { displayName: "Renamed by editor" },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // Repointing githubSource while omitting authentication would retain orgPat.
+    const repointWithoutAuth = await as(editor, {
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "acme/secret-infra",
+          ref: "main",
+          syncInterval: "1d",
+        },
+      },
+    });
+    expect(repointWithoutAuth.statusCode).toBe(403);
+
+    // Explicitly referencing orgPat is also rejected without a use grant on it.
+    const repointWithOrgPat = await as(editor, {
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "acme/secret-infra",
+          ref: "main",
+          syncInterval: "1d",
+          authentication: {
+            githubAppConfigId: null,
+            githubPatId: orgPat.id,
+          },
+        },
+      },
+    });
+    expect(repointWithOrgPat.statusCode).toBe(403);
+
+    // Source remains untouched.
+    expect(
+      (
+        await PluginModel.findById({
+          id: plugin.id,
+          organizationId,
+        })
+      )?.sourceRepo,
+    ).toBe("acme/plugins");
+
+    // Preview, manual check, and scheduled sync cannot use the stored PAT either.
+    const fetchMock = stubGithub([
+      {
+        owner: "acme",
+        repo: "plugins",
+        files: { "hooks/hooks.json": "{}\n" },
+      },
+      {
+        owner: "acme",
+        repo: "secret-infra",
+        files: { "hooks/hooks.json": '{"secret":true}\n' },
+      },
+    ]);
+    expect(
+      (
+        await as(editor, {
+          method: "POST",
+          url: `/api/plugins/${plugin.id}/github/preview-update`,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await as(editor, {
+          method: "POST",
+          url: `/api/plugins/${plugin.id}/github/check`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await as(editor, {
+          method: "PATCH",
+          url: `/api/plugins/${plugin.id}/github/sync`,
+          payload: { interval: "1h" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Granting `use` on the credential authorizes previewing and repointing with it.
+    await ResourcePermissionPolicyModel.addSubjectGrant({
+      organizationId,
+      resource: "credential",
+      scope: orgPat.id,
+      subject: { type: "user", id: editor.id },
+      actions: ["read", "use"],
+    });
+    expect(
+      (
+        await as(editor, {
+          method: "POST",
+          url: `/api/plugins/${plugin.id}/github/preview-update`,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // Explicitly clearing authentication lets an editor without credential use switch to public.
+    const editorWithoutCred = await makeUser();
+    await makeMember(editorWithoutCred.id, organizationId);
+    await ResourcePermissionPolicyModel.addSubjectGrant({
+      organizationId,
+      resource: "plugin",
+      scope: plugin.id,
+      subject: { type: "user", id: editorWithoutCred.id },
+      actions: ["read", "use", "update"],
+    });
+    const clearedToPublic = await as(editorWithoutCred, {
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "public-owner/public-plugin",
+          ref: "main",
+          syncInterval: "1d",
+          authentication: {
+            githubAppConfigId: null,
+            githubPatId: null,
+          },
+        },
+      },
+    });
+    expect(clearedToPublic.statusCode).toBe(200);
+    expect(clearedToPublic.json()).toMatchObject({
+      sourceRepo: "public-owner/public-plugin",
+      githubPatId: null,
+      githubAppConfigId: null,
+    });
   });
 });
 

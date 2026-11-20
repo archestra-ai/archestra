@@ -5,6 +5,7 @@
 import { DocsPage } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  CircleAlert,
   Fingerprint,
   KeyRound,
   ListFilter,
@@ -46,6 +47,7 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -61,43 +63,46 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useAppName } from "@/lib/hooks/use-app-name";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type FederatedCredential,
   type FederatedCredentialBody,
+  type FederatedCredentialOwner,
   useBulkDeleteFederatedCredentials,
   useDeleteFederatedCredential,
   useFederatedCredentials,
   useSaveFederatedCredential,
-} from "@/lib/service-account-federated-credential.query";
+} from "@/lib/federated-credential.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * Federated credentials of one service account: trust policies that let a CI
- * job or other workload sign in as the account with its own OIDC token, so no
- * API key has to be stored with it. Laid out like the account's API keys tab:
- * filters and the Add button on one row, then the table.
+ * Federated credentials of a service account or an OAuth client: trust
+ * policies that let a CI job or other workload sign in as it with its own
+ * OIDC token, so no API key or client secret has to be stored with it. Laid
+ * out like a service account's API keys tab: filters and the Add button on
+ * one row, then the table.
  */
 export function FederatedCredentialsSection({
-  serviceAccountId,
+  owner,
   canUpdate,
   createOpen,
   onCreateOpenChange,
 }: {
-  serviceAccountId: string;
+  owner: FederatedCredentialOwner;
   canUpdate: boolean;
   /** The add dialog, opened from the page header's Add credential button. */
   createOpen: boolean;
   onCreateOpenChange: (open: boolean) => void;
 }) {
   const { data, isPending, isLoadingError, refetch } =
-    useFederatedCredentials(serviceAccountId);
+    useFederatedCredentials(owner);
   const credentials = data ?? [];
-  const deleteMutation = useDeleteFederatedCredential(serviceAccountId);
-  const bulkDelete = useBulkDeleteFederatedCredentials(serviceAccountId);
+  const deleteMutation = useDeleteFederatedCredential(owner);
+  const bulkDelete = useBulkDeleteFederatedCredentials(owner);
   const [editing, setEditing] = useState<FederatedCredential | null>(null);
   const [toDelete, setToDelete] = useState<FederatedCredential | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -150,7 +155,7 @@ export function FederatedCredentialsSection({
   } = useBulkSelection({
     rows: filtered,
     getId: (credential) => credential.id,
-    filterSignature: `${serviceAccountId}|${search}|${providerFilter}`,
+    filterSignature: `${owner.id}|${search}|${providerFilter}`,
   });
 
   const columns: ColumnDef<FederatedCredential>[] = useMemo(
@@ -352,7 +357,11 @@ export function FederatedCredentialsSection({
           hideSelectedCount
           emptyIcon={Fingerprint}
           emptyMessage="No federated credentials"
-          emptyDescription="Add one to let a CI job sign in as this account without an API key."
+          emptyDescription={
+            owner.kind === "serviceAccount"
+              ? "Add one to let a CI job sign in as this account without an API key."
+              : "Add one to let a CI job sign in as this client without its secret."
+          }
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No federated credentials match your filters"
           onClearFilters={clearFilters}
@@ -363,7 +372,7 @@ export function FederatedCredentialsSection({
 
         <FederatedCredentialDialog
           key={editing?.id ?? "new"}
-          serviceAccountId={serviceAccountId}
+          owner={owner}
           credential={editing}
           open={createOpen || !!editing}
           onOpenChange={(open) => {
@@ -375,7 +384,7 @@ export function FederatedCredentialsSection({
         />
         <CredentialAddedDialog
           credential={added}
-          serviceAccountId={serviceAccountId}
+          owner={owner}
           onClose={() => setAdded(null)}
         />
         <DeleteConfirmDialog
@@ -424,6 +433,29 @@ export function FederatedCredentialsSection({
   );
 }
 
+/**
+ * The section as a detail page's tab: federated credentials need an
+ * enterprise license, and without one the tab says so instead.
+ */
+export function FederatedCredentialsTab(
+  props: React.ComponentProps<typeof FederatedCredentialsSection>,
+) {
+  const federationAvailable = useEnterpriseFeature("core");
+  if (!federationAvailable) {
+    return (
+      <InlineNotice variant="info">
+        <CircleAlert />
+        <InlineNoticeText>
+          {props.owner.kind === "serviceAccount"
+            ? "Federated credentials need an enterprise license. They let a CI job sign in with its own OIDC token instead of an API key."
+            : "Federated credentials need an enterprise license. They let a CI job sign in with its own OIDC token instead of the client secret."}
+        </InlineNoticeText>
+      </InlineNotice>
+    );
+  }
+  return <FederatedCredentialsSection {...props} />;
+}
+
 // === Internal helpers
 
 const ALL = "all";
@@ -435,11 +467,11 @@ const ALL = "all";
  */
 function CredentialAddedDialog({
   credential,
-  serviceAccountId,
+  owner,
   onClose,
 }: {
   credential: FederatedCredential | null;
-  serviceAccountId: string;
+  owner: FederatedCredentialOwner;
   onClose: () => void;
 }) {
   const docsUrl = getFrontendDocsUrl(DocsPage.PlatformWorkloadIdentity);
@@ -456,16 +488,26 @@ function CredentialAddedDialog({
       <DialogBody className="space-y-2">
         <Label>Sign in from the workload</Label>
         <FieldDescription>
-          Exchange the workload&apos;s OIDC token for an {appName} token, then
-          send that as a Bearer token. A workload that cannot run the exchange,
-          such as an Agent Substrate actor, can send its OIDC token itself as
-          the Bearer token.{" "}
+          {owner.kind === "serviceAccount" ? (
+            <span>
+              Exchange the workload&apos;s OIDC token for an {appName} token,
+              then send that as a Bearer token. A workload that cannot run the
+              exchange, such as an Agent Substrate actor, can send its OIDC
+              token itself as the Bearer token.
+            </span>
+          ) : (
+            <span>
+              Request an access token with the workload&apos;s OIDC token as the
+              client assertion, in place of the client secret. Then call{" "}
+              {appName} with that access token, as you would with the secret.
+            </span>
+          )}{" "}
           {docsUrl ? (
             <ExternalDocsLink href={docsUrl}>How it works</ExternalDocsLink>
           ) : null}
         </FieldDescription>
         <CopyableCode
-          value={exchangeCommand(serviceAccountId)}
+          value={signInCommand(owner)}
           toastMessage="Request copied"
           className="break-all text-xs"
         />
@@ -637,20 +679,20 @@ function ProviderLogo({
 }
 
 function FederatedCredentialDialog({
-  serviceAccountId,
+  owner,
   credential,
   open,
   onOpenChange,
   onAdded,
 }: {
-  serviceAccountId: string;
+  owner: FederatedCredentialOwner;
   credential: FederatedCredential | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Called with a newly added credential (not on edit). */
   onAdded: (credential: FederatedCredential) => void;
 }) {
-  const save = useSaveFederatedCredential(serviceAccountId);
+  const save = useSaveFederatedCredential(owner);
   const form = useForm<FormValues>({
     defaultValues: credential
       ? {
@@ -899,16 +941,25 @@ function defaultAudience(): string {
   return window.location.origin;
 }
 
-function exchangeCommand(serviceAccountId: string): string {
+/** The request a workload makes with its OIDC token, the owner filled in. */
+function signInCommand(owner: FederatedCredentialOwner): string {
   const origin =
     typeof window === "undefined"
       ? "https://your-host"
       : window.location.origin;
+  if (owner.kind === "oauthClient")
+    return [
+      `curl -s ${origin}/api/auth/oauth2/token`,
+      "-d grant_type=client_credentials",
+      `-d client_id=${owner.clientId}`,
+      "-d client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      '-d client_assertion="$OIDC_TOKEN"',
+    ].join(" ");
   return [
     `curl -s ${origin}/api/workload-identity/token`,
     "-d grant_type=urn:ietf:params:oauth:grant-type:token-exchange",
     "-d subject_token_type=urn:ietf:params:oauth:token-type:jwt",
     '-d subject_token="$OIDC_TOKEN"',
-    `-d service_account_id=${serviceAccountId}`,
+    `-d service_account_id=${owner.id}`,
   ].join(" ");
 }

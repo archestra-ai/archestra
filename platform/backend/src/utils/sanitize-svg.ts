@@ -1,9 +1,5 @@
-import createDOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
-
-const window = new JSDOM("").window;
-// biome-ignore lint/suspicious/noExplicitAny: jsdom's window shape doesn't match DOMPurify's WindowLike type literally, but is compatible at runtime.
-const purify = createDOMPurify(window as any);
+import { createRequire } from "node:module";
+import createDOMPurify, { type DOMPurify } from "dompurify";
 
 /**
  * Sanitize an SVG document string by stripping script tags, event handlers,
@@ -12,7 +8,7 @@ const purify = createDOMPurify(window as any);
  * is not a valid SVG.
  */
 export function sanitizeSvg(svg: string): string | null {
-  const clean = purify.sanitize(svg, {
+  const clean = getPurify().sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     FORBID_TAGS: ["script", "foreignObject"],
     FORBID_ATTR: ["onload", "onerror", "onclick", "onmouseover", "onfocus"],
@@ -24,4 +20,25 @@ export function sanitizeSvg(svg: string): string | null {
   if (!trimmed) return null;
   if (!/^<svg[\s>]/i.test(trimmed)) return null;
   return trimmed;
+}
+
+// === Internal helpers
+
+let purify: DOMPurify | undefined;
+
+/**
+ * jsdom and the window DOMPurify runs in cost about 30 MB of heap, and only
+ * an uploaded SVG logo needs them, so they load on the first call instead of
+ * at startup. Loaded synchronously, so sanitizeSvg stays synchronous.
+ */
+function getPurify(): DOMPurify {
+  if (!purify) {
+    const { JSDOM } = createRequire(import.meta.url)(
+      "jsdom",
+    ) as typeof import("jsdom");
+    const window = new JSDOM("").window;
+    // biome-ignore lint/suspicious/noExplicitAny: jsdom's window shape doesn't match DOMPurify's WindowLike type literally, but is compatible at runtime.
+    purify = createDOMPurify(window as any);
+  }
+  return purify;
 }

@@ -232,6 +232,7 @@ export { default as modelTeamsTable } from "./model-team";
 export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
+export { default as oauthClientFederatedCredentialsTable } from "./oauth-client-federated-credential";
 export { default as oauthClientLabelsTable } from "./oauth-client-label";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";

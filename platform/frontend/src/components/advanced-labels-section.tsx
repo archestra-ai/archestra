@@ -18,6 +18,8 @@ export const AdvancedLabelsSection = forwardRef<
     onLabelsChange: (labels: ProfileLabel[]) => void;
     className?: string;
     collapsible?: boolean;
+    /** When collapsible, start open; pass whether labels are set. */
+    defaultOpen?: boolean;
     disabled?: boolean;
     attributionSource?: "credential" | "billingTeam";
   }
@@ -27,6 +29,7 @@ export const AdvancedLabelsSection = forwardRef<
     onLabelsChange,
     className,
     collapsible = false,
+    defaultOpen,
     disabled = false,
     attributionSource,
   },
@@ -49,7 +52,11 @@ export const AdvancedLabelsSection = forwardRef<
   );
   if (!collapsible) return <div className={className}>{content}</div>;
   return (
-    <AdvancedSection keepMounted className={className}>
+    <AdvancedSection
+      keepMounted
+      defaultOpen={defaultOpen}
+      className={className}
+    >
       {content}
     </AdvancedSection>
   );

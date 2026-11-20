@@ -55,6 +55,57 @@ describe("peer proofs", () => {
     expect(cycle.self).toBe(cycle);
   });
 
+  test("proof removal rewrites JSON-text tool arguments that carry a proof", () => {
+    const peerArguments = { message_id: "m-1", limit: 5 };
+    const stamped = JSON.stringify({ ...peerArguments, peer_proof: "proof" });
+    const untouched = '{ "peer": "worker", "limit": 1 }';
+    const chat = {
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_read",
+              type: "function",
+              function: { name: "read_peer_message", arguments: stamped },
+            },
+            {
+              id: "call_list",
+              type: "function",
+              function: { name: "list_peer_messages", arguments: untouched },
+            },
+          ],
+        },
+      ],
+    };
+    const responses = {
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_read",
+          name: "read_peer_message",
+          arguments: stamped,
+        },
+        {
+          type: "function_call",
+          call_id: "call_custom",
+          name: "custom",
+          arguments: "not json {",
+        },
+      ],
+    };
+
+    stripPeerProofs(chat);
+    stripPeerProofs(responses);
+
+    const [read, list] = chat.messages[0].tool_calls;
+    expect(JSON.parse(read.function.arguments)).toEqual(peerArguments);
+    expect(list.function.arguments).toBe(untouched);
+    const [readCall, customCall] = responses.input;
+    expect(JSON.parse(readCall.arguments)).toEqual(peerArguments);
+    expect(customCall.arguments).toBe("not json {");
+  });
+
   test("invalid claims are not signed", () => {
     expect(
       signPeerProof({ ...claims, organization_id: "" }, secret),

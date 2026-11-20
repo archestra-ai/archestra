@@ -118,16 +118,43 @@ export function peerProofAuthorizes(params: {
 
 /** Remove proxy-only proofs without recursing through untrusted request data. */
 export function stripPeerProofs(request: unknown): void {
-  const pending: unknown[] = [request];
+  stripPeerProofsFrom(request);
+}
+
+/**
+ * Iterative over object nesting. It re-enters only for JSON-text tool
+ * arguments, whose nesting is bounded by the string's escaping growth.
+ */
+function stripPeerProofsFrom(root: unknown): boolean {
+  const pending: unknown[] = [root];
   const visited = new WeakSet<object>();
+  let stripped = false;
   while (pending.length > 0) {
     const value = pending.pop();
     if (!value || typeof value !== "object" || visited.has(value)) continue;
     visited.add(value);
     const record = value as Record<string, unknown>;
-    delete record[PEER_PROOF_ARGUMENT];
-    for (const nested of Object.values(record)) pending.push(nested);
+    if (Object.hasOwn(record, PEER_PROOF_ARGUMENT)) {
+      delete record[PEER_PROOF_ARGUMENT];
+      stripped = true;
+    }
+    for (const [key, nested] of Object.entries(record)) {
+      if (
+        (key === "arguments" || key === "tool_args") &&
+        typeof nested === "string"
+      ) {
+        if (!nested.includes(PEER_PROOF_ARGUMENT)) continue;
+        const parsed = parseJson(nested);
+        if (stripPeerProofsFrom(parsed)) {
+          record[key] = JSON.stringify(parsed);
+          stripped = true;
+        }
+      } else {
+        pending.push(nested);
+      }
+    }
   }
+  return stripped;
 }
 
 function signHs256(

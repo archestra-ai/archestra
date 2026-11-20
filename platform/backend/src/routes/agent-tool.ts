@@ -9,9 +9,7 @@ import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
-  isAgentTypeAdmin,
   requireAgentModifyPermission,
-  requireAgentTypePermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
@@ -1021,14 +1019,15 @@ export async function getAgentDelegationsForUser(params: {
     throw new ApiError(404, "Agent not found");
   }
 
-  // Check read permission for this agent's type (return 404 to avoid leaking existence)
+  // Same read path as GET /api/agents/:id: a scoped object grant is enough.
+  // A role-only check 404s for a caller who can already read the agent, and
+  // the composer then pulses its tool icons until the request succeeds.
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
   try {
-    await requireAgentTypePermission({
-      userId,
-      organizationId,
-      agentType: agent.agentType,
-      action: "read",
-    });
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -1038,11 +1037,7 @@ export async function getAgentDelegationsForUser(params: {
     throw new ApiError(400, "LLM proxies cannot have subagents");
   }
 
-  const admin = await isAgentTypeAdmin({
-    userId,
-    organizationId,
-    agentType: agent.agentType,
-  });
+  const admin = checker.isAdmin(agent.agentType);
 
   // If not admin, verify team access
   if (

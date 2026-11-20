@@ -62,7 +62,8 @@ Run them on the Mac, inside the checkout. `dev-vm-sync.py` is
 `platform/scripts/dev-vm-sync.py`.
 
 **`run`: most commands** (pnpm, cargo, tests, tilt, kubectl). Runs in the VM's
-copy, in the folder matching the one you are in.
+copy, in the folder matching the one you are in. It waits until the copy has
+your latest edits, so don't run `mutagen sync flush` before it.
 
 ```sh
 dev-vm-sync.py run 'pnpm test'
@@ -125,8 +126,14 @@ dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'   # rebuild a resource
 
 - Never run pnpm, npm, npx, cargo, tilt or kubectl on the Mac. There are no
   `node_modules` there, on purpose; don't install them.
-- Before a commit, run `pnpm lint` and `pnpm type-check` through `run`: the
-  pre-commit hook skips the check in this setup.
+- Each commit runs the pre-commit check in the VM (`dev-vm-sync.py
+  commit-check`) on what it stages; it fails when the checkout has no sync.
+- To queue a PR, run `platform/scripts/dev-vm-enqueue.py <PR-number> --repo
+  <repository>` on the Mac, not `pnpm enqueue`: its preflight runs in the VM,
+  its `gh` calls here.
+- git works in the VM copy, read-only: `run` first pushes this checkout's
+  HEAD, staged files and archestra's main (as `origin/main`) to a repo in the
+  VM. Commit only on the Mac; nothing committed in the VM comes back.
 - The first synced checkout's app is http://localhost:13000, API :19000,
   Tilt :20350; the next ones 13001, 19001, 20351 and so on. `start` prints a
   checkout's URLs. Login: admin@example.com / password. Ports 3000, 9000 and

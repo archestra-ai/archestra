@@ -1,8 +1,4 @@
-import {
-  archestraApiClient,
-  archestraApiSdk,
-  type archestraApiTypes,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   useIsMutating,
   useMutation,
@@ -33,23 +29,14 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
-type AppaGithubAppGrants = NonNullable<
-  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
->;
-
 /**
  * The GitHub App's grants, each with whether the App's settings ask for it
  * now. Asked for and not granted: the installation has still to accept the
  * change. `requested` is absent when the settings could not be read.
  */
-export type AppaGithubAppPermissions = Omit<
-  AppaGithubAppGrants,
-  "permissions"
-> & {
-  permissions: Array<
-    AppaGithubAppGrants["permissions"][number] & { requested?: boolean }
-  >;
-};
+export type AppaGithubAppPermissions = NonNullable<
+  archestraApiTypes.GetAppaGithubAppPermissionsResponses["200"]
+>;
 
 /**
  * The GitHub App's permissions as GitHub grants them now. The Git sync card
@@ -65,11 +52,8 @@ export function useAppaGithubAppGrants(enabled: boolean) {
     enabled: enabled && canRead === true,
     queryKey: [...appaGithubSyncQueryKey, "app-grants"],
     queryFn: async () => {
-      // The endpoint is not in the API reference yet, so the generated
-      // client has no function for it.
-      const { data, error } = await archestraApiClient.get<{
-        200: AppaGithubAppPermissions | null;
-      }>({ url: "/api/openappa/github-sync/app-permissions" });
+      const { data, error } =
+        await archestraApiSdk.getAppaGithubAppPermissions();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },

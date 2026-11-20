@@ -56,12 +56,12 @@ Each recipient gets a level:
 
 - **Can read:** sees the credential and where it is used.
 - **Can use:** also connects a personal value, and binds it to a [guardrails battery](/docs/agents/guardrails/policies#batteries).
-- **Can update:** also changes its details and its organization value.
+- **Can edit:** also changes its details and its organization value.
 - **Full access:** also deletes it and manages who else can reach it.
 
 What to know:
 
-- Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read) and one of these: a role that can add, change, or delete credentials; **Can update** or **Full access** on an organization credential; or access to another Settings page. Owning a personal credential, including one you added, does not open it.
+- Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read) and one of these: a role that can add, change, or delete credentials; **Can edit** or **Full access** on an organization credential; or access to another Settings page. Owning a personal credential, including one you added, does not open it.
 - Anyone can add a credential that only they can use. Sharing one, or adding an organization credential, needs [`credential:create`](/docs/reference/permissions#credential:create): the new credential starts shared with **Everyone in the organization** at **Can use** (remove that grant to keep it to a team), or with its creator alone if they lack **Full access** on every credential. The creator gets **Full access**, and so do admins and editors on every credential.
 - Attaching a credential to an MCP server or Agent takes **Can use** on it. Once attached, its organization value works for anyone who can use that server or Agent. A personal value needs **Can use**. Without it, the MCP server's **Install** button is disabled and the Agent's chat says "You don't have access", both asking you to get an admin to share it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 

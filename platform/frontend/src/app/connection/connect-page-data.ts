@@ -26,13 +26,20 @@ import {
   useAgentOptionsByIds,
   useAgentOptionsPage,
 } from "@/lib/agent-options.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { useOrganization } from "@/lib/organization.query";
 import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
+import {
+  canUseAnyPlugin,
+  canUsePlugin,
+} from "@/lib/plugins/plugin-eligibility";
 import {
   type ConnectSkill,
   useSkillsPaginated,
@@ -266,10 +273,9 @@ export function useConnectPageData({
   });
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: canDeliverPlugins } = useHasPermissions(
-    { plugin: ["read", "update"] },
-    "*",
-  );
+  // Plugins are offered by their own `use` grant.
+  const { data: scopedGrants } = useScopedCapabilities();
+  const canDeliverPlugins = canUseAnyPlugin(scopedGrants ?? []);
 
   const { data: defaultGateway, isLoading: defaultGatewayLoading } =
     useDefaultMcpGateway();
@@ -342,9 +348,7 @@ export function useConnectPageData({
 
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
-  const { data: allPlugins } = usePlugins(
-    pluginsEnabled && canDeliverPlugins === true,
-  );
+  const { data: allPlugins } = usePlugins(pluginsEnabled && canDeliverPlugins);
   // The OS the setup command is for: the browser's, until the user picks the
   // other command.
   const [windows, setWindows] = useState(false);
@@ -358,6 +362,7 @@ export function useConnectPageData({
       .filter(
         (p) =>
           isDeliverablePlugin(p, client.id) &&
+          canUsePlugin(scopedGrants ?? [], p.id) &&
           p.supportedPlatforms.includes(onWindows ? "windows" : "posix"),
       )
       .map((p) => ({

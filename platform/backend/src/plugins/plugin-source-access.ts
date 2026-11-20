@@ -4,12 +4,12 @@ import {
   type GitProvider,
   gitHostFromUrl,
 } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
 import {
   type GitAccess,
   resolveGitCredentialAccess,
   resolveGitSourceAccess,
 } from "@/git-hosts/git-access";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, type Plugin } from "@/types";
 
 /** How a request authenticates to a plugin repository; at most one is set. */
@@ -45,9 +45,36 @@ export function hasSinglePluginGitAuth(auth: PluginGitAuth): boolean {
 }
 
 /**
+ * Require a scoped `use` grant on a saved Git credential before reading or
+ * repointing a plugin source through it. `credential:read` only opens the
+ * Credentials page and is held by default members, so it must not unlock
+ * organization Git tokens.
+ */
+export async function requirePluginGitCredentialUse(params: {
+  organizationId: string;
+  userId: string;
+  credentialId: string;
+}): Promise<void> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const permitted = await ResourcePermissions.getPermittedIds({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "credential",
+    scopes: [params.credentialId],
+    action: "use",
+  });
+  if (!permitted.has(params.credentialId)) {
+    throw new ApiError(403, "You do not have access to Git credentials");
+  }
+  // SPDX-SnippetEnd
+}
+
+/**
  * The host and token a request reads with. A stored credential carries its
- * own host (GitHub Enterprise Server, self-managed GitLab) and needs
- * `credential:read`; otherwise the provider's cloud, with a transient
+ * own host (GitHub Enterprise Server, self-managed GitLab) and needs a `use`
+ * grant on that credential; otherwise the provider's cloud, with a transient
  * github.com token when one is given. Undefined means public github.com.
  */
 export async function resolvePluginImportAccess(
@@ -72,15 +99,11 @@ export async function resolvePluginImportAccess(
       ? { host: gitHostFromUrl({ provider: "gitlab" }) }
       : undefined;
   }
-  const allowed = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "credential",
-    "read",
-  );
-  if (!allowed) {
-    throw new ApiError(403, "You do not have access to Git credentials");
-  }
+  await requirePluginGitCredentialUse({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    credentialId,
+  });
   const access = await resolveGitCredentialAccess({
     organizationId: params.organizationId,
     credentialId,

@@ -95,13 +95,13 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
   get_schedule_trigger_run_transcript:
     "Requires a user token. The caller must be the schedule actor, or hold both organization-wide Projects **Can read** access and `log:admin`. Project membership or Projects read alone shows run status but not the transcript.",
   update_schedule_trigger:
-    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can edit** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   delete_schedule_trigger:
     "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Full access** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   enable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can edit** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   disable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can edit** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   run_schedule_trigger_now:
     "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
@@ -117,6 +117,18 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Returns only projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
   get_project:
     "Readable only for projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
+  // Plugins are authorized by per-plugin grants; `plugin:read`, `plugin:update`,
+  // and `plugin:delete` role actions do not grant access to individual plugins.
+  list_plugins:
+    "Returns only plugins the caller holds a `read` grant on. Callers with `plugin:read` or `plugin:create` but no grants receive an empty list.",
+  get_plugin:
+    "Requires a `read` grant on the target plugin; unreadable plugins return not found.",
+  update_plugin:
+    "Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.",
+  edit_plugin:
+    "Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.",
+  delete_plugin:
+    "Requires a `delete` grant (**Full access**) on the target plugin.",
 };
 
 /**
@@ -432,9 +444,13 @@ export function formatToolPermission(
     return "None";
   }
 
-  // No role holds this action: it is granted on the individual item.
+  // No role holds this action, or (for plugins) individual plugin access comes
+  // solely from per-plugin grants rather than the role action.
   const resource = roleActionResourceFor(permission.resource);
-  if (!allAvailableActions[resource]?.includes(permission.action as never)) {
+  if (
+    !allAvailableActions[resource]?.includes(permission.action as never) ||
+    (resource === "plugin" && permission.action !== "create")
+  ) {
     const item = perItemNoun(resource);
     return `\`${permission.action}\` on the ${item} (granted per item)`;
   }

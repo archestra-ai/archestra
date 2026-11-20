@@ -26,6 +26,7 @@ import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
+import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { CacheKey } from "@/cache-manager";
 import config, { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
@@ -43,7 +44,10 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
+import {
+  CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX,
+  CONNECTION_SETUP_TOKEN_TTL_MS,
+} from "@/models/connection-setup";
 import { openappaEnabled } from "@/openappa/service";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
@@ -709,14 +713,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (uniqueIds.length > 0) {
           assertConnectPluginsEnabled(organization);
-          const canDeliverPlugins = await userCanDeliverPlugins({
+          const canUse = await pluginUseChecker({
             userId: user.id,
             organizationId,
           });
-          if (!canDeliverPlugins) {
+          if (!uniqueIds.every(canUse)) {
             throw new ApiError(
               403,
-              "You need plugin:read and plugin:admin permissions to install plugins",
+              "You need permission to use every selected plugin to install it",
             );
           }
           await assertPluginDeliveryBudget({
@@ -752,26 +756,21 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isOpenCodeFamilyClient(clientId) &&
         organization.connectionPluginsEnabled
       ) {
-        const canDeliverPlugins = await userCanDeliverPlugins({
+        // Every deliverable plugin the user may use, and no other: the
+        // budget applies to what this user installs, not the whole catalog.
+        const canUse = await pluginUseChecker({
           userId: user.id,
           organizationId,
         });
-        if (canDeliverPlugins) {
-          const requiredPlatform = resolvePluginPlatform(platform);
-          assertPluginDeliveryStats(
-            await PluginModel.getDeliverableStatsForClient({
-              organizationId,
-              clientType: clientId,
-              platform: requiredPlatform,
-            }),
-          );
-          const deliverable =
-            await PluginModel.findDeliverableMetadataForClient({
-              organizationId,
-              clientType: clientId,
-              platform: requiredPlatform,
-            });
-          const ids = deliverable.map((plugin) => plugin.id);
+        const deliverable = await PluginModel.findDeliverableMetadataForClient({
+          organizationId,
+          clientType: clientId,
+          platform: resolvePluginPlatform(platform),
+        });
+        const ids = deliverable
+          .map((plugin) => plugin.id)
+          .filter((id) => canUse(id));
+        if (ids.length > 0) {
           await assertPluginDeliveryBudget({ ids, organizationId });
           plugins = await PluginModel.findApprovedByIds({
             ids,
@@ -1116,7 +1115,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 pluginClientType: marketplaceRender.pluginClientType,
                 pluginPlatform: marketplaceRender.pluginPlatform,
                 marketplaceName: marketplaceRender.marketplaceName,
-                name: `Connection setup (${setup.clientId})`,
+                name: `${CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX}${setup.clientId})`,
                 expiresAt: setup.skillLinkTtlDays
                   ? new Date(
                       Date.now() + setup.skillLinkTtlDays * 24 * 60 * 60 * 1000,
@@ -1409,11 +1408,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     assertConnectPluginsEnabledOrGone(organization);
-    const canDeliverPlugins = await userCanDeliverPlugins({
+    // A use grant revoked since the setup was made withdraws the setup.
+    const canUse = await pluginUseChecker({
       userId: setup.userId,
       organizationId: setup.organizationId,
     });
-    if (!canDeliverPlugins) throw GONE();
+    if (!pluginIds.every(canUse)) throw GONE();
     await assertPluginDeliveryBudget({
       ids: pluginIds,
       organizationId: setup.organizationId,
@@ -1537,29 +1537,16 @@ async function assertPluginDeliveryBudget(params: {
   if (error) throw new ApiError(400, error);
 }
 
-function assertPluginDeliveryStats(params: {
-  pluginCount: number;
-  totalBytes: number;
-}): void {
-  const error = pluginDeliveryBudgetError(params);
-  if (error) throw new ApiError(400, error);
-}
-
-async function userCanDeliverPlugins(params: {
+/**
+ * Whether the user may install a plugin: a `use` grant on it (or at `*`).
+ * Loads the user's plugin grants once for every plugin a request checks.
+ */
+async function pluginUseChecker(params: {
   userId: string;
   organizationId: string;
-}): Promise<boolean> {
-  const [canRead, canAdmin] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "plugin", "read"),
-    ResourcePermissions.allows({
-      userId: params.userId,
-      organizationId: params.organizationId,
-      resource: "plugin",
-      scope: "*",
-      action: "update",
-    }),
-  ]);
-  return canRead && canAdmin;
+}): Promise<(pluginId: string) => boolean> {
+  const checker = await getPluginPermissionChecker(params);
+  return (pluginId) => checker.allowsScoped(pluginId, "use");
 }
 
 /**

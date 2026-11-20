@@ -250,7 +250,40 @@ class ConnectionSetupModel {
       .set({ skillShareLinkId: params.skillShareLinkId })
       .where(eq(schema.connectionSetupsTable.id, params.connectionSetupId));
   }
+
+  /**
+   * Look up the connection setup that minted a share link, if any. Explicit
+   * org-wide public share links have no owning setup; Connect-minted links do
+   * and stay bound to their setup owner's live membership and grants.
+   */
+  static async findBySkillShareLinkId(params: {
+    skillShareLinkId: string;
+  }): Promise<{
+    id: string;
+    organizationId: string;
+    userId: string;
+    revokedAt: Date | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.connectionSetupsTable.id,
+        organizationId: schema.connectionSetupsTable.organizationId,
+        userId: schema.connectionSetupsTable.userId,
+        revokedAt: schema.connectionSetupsTable.revokedAt,
+      })
+      .from(schema.connectionSetupsTable)
+      .where(
+        eq(
+          schema.connectionSetupsTable.skillShareLinkId,
+          params.skillShareLinkId,
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
 }
+
+export const CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX = "Connection setup (";
 
 export default ConnectionSetupModel;
 

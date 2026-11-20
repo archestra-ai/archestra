@@ -21,3 +21,29 @@ export function isDeliverablePlugin(
     plugin.approvedContentHash === plugin.contentHash
   );
 }
+
+/**
+ * Whether the user may install the plugin: a `use` grant on it, or on every
+ * plugin. Only such plugins are offered for a connection setup, and the
+ * server refuses any other.
+ */
+export function canUsePlugin(
+  grants: readonly { resource: string; action: string; scope: string }[],
+  pluginId: string,
+): boolean {
+  return grants.some(
+    (grant) =>
+      grant.resource === "plugin" &&
+      grant.action === "use" &&
+      (grant.scope === "*" || grant.scope === pluginId),
+  );
+}
+
+/** Whether the user may install any plugin at all. */
+export function canUseAnyPlugin(
+  grants: readonly { resource: string; action: string }[],
+): boolean {
+  return grants.some(
+    (grant) => grant.resource === "plugin" && grant.action === "use",
+  );
+}

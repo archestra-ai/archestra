@@ -330,7 +330,7 @@ export function canDelegateScopedPermissions(params: {
 export const resourcePermissionPresets = {
   view: { label: "Can read", actions: ["read"] },
   use: { label: "Can use", actions: ["read", "use"] },
-  edit: { label: "Can update", actions: ["read", "use", "update"] },
+  edit: { label: "Can edit", actions: ["read", "use", "update"] },
   manage: {
     label: "Full access",
     actions: ["read", "use", "update", "delete", "manage-permissions"],
@@ -377,7 +377,7 @@ export function resourcePermissionPresetsFor(
   ) {
     return {
       view: resourcePermissionPresets.view,
-      edit: { label: "Can update", actions: ["read", "update"] },
+      edit: { label: "Can edit", actions: ["read", "update"] },
       manage: {
         label: "Full access",
         actions: ["read", "update", "delete", "manage-permissions"],

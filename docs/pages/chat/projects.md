@@ -44,7 +44,7 @@ Pause a schedule to halt automatic triggers while retaining the ability to trigg
 
 Schedules use the project role permissions. Using **Run now** also requires [`project:create`](/docs/reference/permissions#project:create). Project members with [`project:read`](/docs/reference/permissions#project:read) can read schedules.
 
-In addition to those role permissions, only the schedule actor or someone with the corresponding [organization-wide Project grant](/docs/admin/access-control#granular-access-control) can change or run a schedule: **Can update** to edit, **Full access** to delete, and **Can use** to run. Full access to an individual project does not authorize acting as another schedule actor.
+In addition to those role permissions, only the schedule actor or someone with the corresponding [organization-wide Project grant](/docs/admin/access-control#granular-access-control) can change or run a schedule: **Can edit** to change, **Full access** to delete, and **Can use** to run. Full access to an individual project does not authorize acting as another schedule actor.
 
 When upgrading from separate Scheduled Tasks permissions, those retired grants are removed from custom roles and organization-wide policies. A custom role retains each scheduling action only if its corresponding Project action is already allowed. Review custom roles and grant the appropriate Project permissions explicitly if they still need those actions.
 

@@ -24,6 +24,17 @@ export class RequestLookups {
     string,
     ReturnType<typeof MemberModel.getByUserId>
   >();
+  private customMemos = new Map<string, Promise<unknown>>();
+
+  /** Memoize one async lookup for the lifetime of this request. */
+  memo<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const cached = this.customMemos.get(key) as Promise<T> | undefined;
+    if (cached) return cached;
+    const loaded = load();
+    this.customMemos.set(key, loaded);
+    loaded.catch(() => this.customMemos.delete(key));
+    return loaded;
+  }
 
   /** {@link ResourcePermissionSubjectModel.resolvePrincipal}, memoized. */
   principal(params: {

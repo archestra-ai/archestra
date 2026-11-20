@@ -3,10 +3,13 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  MemberModel,
+  OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
   SkillMarketplaceRepoModel,
@@ -14,6 +17,8 @@ import {
   SkillShareLinkModel,
   UserTokenModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import connectionSetupRoutes from "@/routes/connection-setup/connection-setup.routes";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { MarketplaceMaterializer } from "@/skills/marketplace/materialize";
 import {
@@ -651,6 +656,175 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       );
       expect(result.code).not.toBe(0);
     }, 30_000);
+
+    test("a Connect-minted plugin link revalidates per-plugin use grants and org membership on every clone and pull", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, {
+        connectionPluginsEnabled: true,
+      });
+      const admin = await makeUser();
+      const member = await makeUser();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(member.id, org.id);
+
+      const plugin = await PluginModel.create({
+        organizationId: org.id,
+        userId: admin.id,
+        input: {
+          displayName: "Private hook",
+          description: "v1 private plugin",
+          clientType: "claude-code",
+          supportedPlatforms: ["posix"],
+          files: [
+            {
+              path: "hooks/hooks.json",
+              content: '{"version":"v1"}\n',
+              encoding: "utf8",
+              mode: "100644",
+            },
+          ],
+        },
+        initialPermissionGrants: [
+          {
+            subject: { type: "user", id: member.id },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+      if (!plugin) throw new Error("failed to seed plugin");
+
+      // Run a use-only Connect setup through real POST + script render.
+      cacheManager.start(new Map() as never);
+      const setupApp = createFastifyInstance();
+      setupApp.addHook("onRequest", async (request) => {
+        Object.assign(request, { user: member, organizationId: org.id });
+      });
+      await setupApp.register(connectionSetupRoutes);
+      let marketplaceUrl: string;
+      try {
+        const created = await setupApp.inject({
+          method: "POST",
+          url: "/api/connection-setups",
+          payload: {
+            clientId: "claude-code",
+            platform: "macos",
+            baseUrl,
+            pluginIds: [plugin.id],
+          },
+        });
+        expect(created.statusCode, created.body).toBe(200);
+        const scriptPathMatch = (created.json().command as string).match(
+          /\/api\/connection-setups\/script\/[^\s'"]+/,
+        );
+        expect(scriptPathMatch?.[0]).toBeTruthy();
+        const script = await setupApp.inject({
+          method: "GET",
+          url: scriptPathMatch?.[0] as string,
+        });
+        expect(script.statusCode, script.body).toBe(200);
+        const match = script.body.match(
+          /https?:\/\/[^\s'"]+\/skills\/m\/[^\s'"]+\/repo\.git/,
+        );
+        expect(match?.[0]).toBeTruthy();
+        marketplaceUrl = match?.[0] as string;
+      } finally {
+        await setupApp.close();
+        await cacheManager.shutdown();
+      }
+
+      // While the member holds `use`, cloning serves v1.
+      const cloneV1 = path.join(cloneDir, "connect-plugin-v1");
+      const firstClone = await runGitClone(marketplaceUrl, cloneV1);
+      expect(firstClone.code, firstClone.stderr).toBe(0);
+      expect(
+        await fs.readFile(
+          path.join(cloneV1, "plugins", plugin.pluginSlug, "hooks/hooks.json"),
+          "utf8",
+        ),
+      ).toBe('{"version":"v1"}\n');
+
+      // Revoke the member's `use` grant (downgrade to `Can read`) and publish v2.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "plugin",
+        scope: plugin.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: org.id,
+        resource: "plugin",
+        scope: plugin.id,
+        revision: policy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: admin.id },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+          {
+            subject: { type: "user", id: member.id },
+            actions: ["read"],
+          },
+        ],
+      });
+      await PluginModel.update({
+        id: plugin.id,
+        organizationId: org.id,
+        userId: admin.id,
+        input: {
+          files: [
+            {
+              path: "hooks/hooks.json",
+              content: '{"version":"v2"}\n',
+              encoding: "utf8",
+              mode: "100644",
+            },
+          ],
+        },
+      });
+
+      // Neither a fresh clone nor git pull on the existing clone can fetch v2.
+      const cloneAfterRevoke = await runGitClone(
+        marketplaceUrl,
+        path.join(cloneDir, "connect-plugin-revoked"),
+      );
+      expect(cloneAfterRevoke.code).not.toBe(0);
+      const pullAfterRevoke = await runGit(cloneV1, ["pull", "--quiet"]);
+      expect(pullAfterRevoke.code).not.toBe(0);
+      expect(
+        await fs.readFile(
+          path.join(cloneV1, "plugins", plugin.pluginSlug, "hooks/hooks.json"),
+          "utf8",
+        ),
+      ).toBe('{"version":"v1"}\n');
+
+      // Re-granting `use` restores delivery with v2, and removing the member
+      // from the organization immediately withdraws access again.
+      await ResourcePermissionPolicyModel.addSubjectGrant({
+        organizationId: org.id,
+        resource: "plugin",
+        scope: plugin.id,
+        subject: { type: "user", id: member.id },
+        actions: ["read", "use"],
+      });
+      const pullAfterRestore = await runGit(cloneV1, ["pull", "--quiet"]);
+      expect(pullAfterRestore.code, pullAfterRestore.stderr).toBe(0);
+      expect(
+        await fs.readFile(
+          path.join(cloneV1, "plugins", plugin.pluginSlug, "hooks/hooks.json"),
+          "utf8",
+        ),
+      ).toBe('{"version":"v2"}\n');
+
+      await MemberModel.deleteAllByUserId(member.id);
+      const cloneAfterRemoval = await runGitClone(
+        marketplaceUrl,
+        path.join(cloneDir, "connect-plugin-removed-member"),
+      );
+      expect(cloneAfterRemoval.code).not.toBe(0);
+    }, 60_000);
 
     test("the static URL clones with the token as the URL password", async ({
       makeOrganization,

@@ -89,12 +89,12 @@ vi.mock("@/cache-manager");
 import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { clientConnectionService } from "@/services/client-connection";
 import {
   connectionSetupReference,
   readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
-import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -1235,7 +1235,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(allowed.body).toContain("codex mcp add 'gate'");
   });
 
-  test("re-validates plugin:admin before rendering executable hooks", async () => {
+  test("re-validates the use grant before rendering executable hooks", async () => {
     const originalFeatureState = config.beta;
     config.beta = false;
     const plugin = await PluginModel.create({
@@ -1274,21 +1274,29 @@ describe("GET /api/connection-setups/script/:token", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    grantEverywhere(["plugin"], async () =>
-      Boolean(
-        await mockUserHasPermission.getMockImplementation()?.(
-          "",
-          "",
-          "plugin",
-          "admin" as never,
-        ),
-      ),
-    );
     try {
-      mockUserHasPermission.mockResolvedValue(false);
+      mockUserHasPermission.mockResolvedValue(true);
+      // The creator still reads the plugin but may no longer use it.
+      const policyKey = {
+        organizationId,
+        resource: "plugin" as const,
+        scope: plugin.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(policyKey);
+      if (!policy) throw new Error("Missing plugin policy");
+      const readOnly = await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: policy.revision,
+        grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+      });
       expect((await fetchScript(rawToken)).statusCode).toBe(410);
 
-      mockUserHasPermission.mockResolvedValue(true);
+      if (!readOnly) throw new Error("Policy did not change");
+      await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: readOnly.revision,
+        grants: policy.grants,
+      });
       const { OrganizationModel } = await import("@/models");
       await OrganizationModel.patch(organizationId, {
         connectionPluginsEnabled: false,

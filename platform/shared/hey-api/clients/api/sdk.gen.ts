@@ -9759,7 +9759,7 @@ export const perplexityResponsesWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const transferPluginOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferPluginOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferPluginOwnershipResponses, TransferPluginOwnershipErrors, ThrowOnError>({
     url: '/api/plugins/{id}/transfer-ownership',
@@ -9779,7 +9779,7 @@ export const transferPluginOwnership = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const pluginLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<PluginLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<PluginLabelKeysResponses, PluginLabelKeysErrors, ThrowOnError>({ url: '/api/plugins/labels/keys', ...options });
 
@@ -9792,7 +9792,7 @@ export const pluginLabelKeys = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const pluginLabelValues = <ThrowOnError extends boolean = false>(options?: Options<PluginLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<PluginLabelValuesResponses, PluginLabelValuesErrors, ThrowOnError>({ url: '/api/plugins/labels/values', ...options });
 
@@ -9805,7 +9805,7 @@ export const pluginLabelValues = <ThrowOnError extends boolean = false>(options?
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const getPlugins = <ThrowOnError extends boolean = false>(options?: Options<GetPluginsData, ThrowOnError>) => (options?.client ?? client).get<GetPluginsResponses, GetPluginsErrors, ThrowOnError>({ url: '/api/plugins', ...options });
 
@@ -9918,7 +9918,7 @@ export const importGithubPlugin = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const previewGithubPluginUpdate = <ThrowOnError extends boolean = false>(options: Options<PreviewGithubPluginUpdateData, ThrowOnError>) => (options.client ?? client).post<PreviewGithubPluginUpdateResponses, PreviewGithubPluginUpdateErrors, ThrowOnError>({
     url: '/api/plugins/{id}/github/preview-update',
@@ -9938,7 +9938,7 @@ export const previewGithubPluginUpdate = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const applyGithubPluginUpdate = <ThrowOnError extends boolean = false>(options: Options<ApplyGithubPluginUpdateData, ThrowOnError>) => (options.client ?? client).post<ApplyGithubPluginUpdateResponses, ApplyGithubPluginUpdateErrors, ThrowOnError>({
     url: '/api/plugins/{id}/github/apply-update',
@@ -9958,7 +9958,7 @@ export const applyGithubPluginUpdate = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const updatePluginGithubSync = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginGithubSyncData, ThrowOnError>) => (options.client ?? client).patch<UpdatePluginGithubSyncResponses, UpdatePluginGithubSyncErrors, ThrowOnError>({
     url: '/api/plugins/{id}/github/sync',
@@ -9978,7 +9978,7 @@ export const updatePluginGithubSync = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const triggerPluginGithubSync = <ThrowOnError extends boolean = false>(options: Options<TriggerPluginGithubSyncData, ThrowOnError>) => (options.client ?? client).post<TriggerPluginGithubSyncResponses, TriggerPluginGithubSyncErrors, ThrowOnError>({ url: '/api/plugins/{id}/github/check', ...options });
 
@@ -9991,7 +9991,7 @@ export const triggerPluginGithubSync = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `plugin:delete`: Delete plugins
+ * None (no additional RBAC permission required)
  */
 export const deletePlugin = <ThrowOnError extends boolean = false>(options: Options<DeletePluginData, ThrowOnError>) => (options.client ?? client).delete<DeletePluginResponses, DeletePluginErrors, ThrowOnError>({ url: '/api/plugins/{id}', ...options });
 
@@ -10004,7 +10004,7 @@ export const deletePlugin = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
+ * None (no additional RBAC permission required)
  */
 export const getPlugin = <ThrowOnError extends boolean = false>(options: Options<GetPluginData, ThrowOnError>) => (options.client ?? client).get<GetPluginResponses, GetPluginErrors, ThrowOnError>({ url: '/api/plugins/{id}', ...options });
 
@@ -10017,7 +10017,7 @@ export const getPlugin = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `plugin:update`: Modify plugin metadata and files
+ * None (no additional RBAC permission required)
  */
 export const updatePlugin = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginData, ThrowOnError>) => (options.client ?? client).put<UpdatePluginResponses, UpdatePluginErrors, ThrowOnError>({
     url: '/api/plugins/{id}',
@@ -10037,7 +10037,6 @@ export const updatePlugin = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
  * `skill:read`: Open Skills
  */
 export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: Options<GetPluginSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetPluginSkillsResponses, GetPluginSkillsErrors, ThrowOnError>({ url: '/api/skills/plugins', ...options });
@@ -10051,7 +10050,6 @@ export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
  * `skill:read`: Open Skills
  */
 export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillUsageStatisticsData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillUsageStatisticsResponses, GetPluginSkillUsageStatisticsErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}/usage-statistics', ...options });
@@ -10065,7 +10063,6 @@ export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `plugin:read`: View plugins and their file metadata
  * `skill:read`: Open Skills
  */
 export const getPluginSkill = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillResponses, GetPluginSkillErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}', ...options });

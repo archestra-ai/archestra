@@ -43,7 +43,6 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -147,11 +146,13 @@ function PluginDetailView({
     searchParams.get("tab") === "permissions" ? "permissions" : "general";
   const pluginHref = `/plugins/${plugin.id}`;
   const { data: canDelete } = useHasPermissions(
-    { plugin: ["delete", "update"] },
-    "*",
+    { plugin: ["delete"] },
+    plugin.id,
   );
-  const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
-  const isReadOnly = canUpdate === false;
+  const { data: canUpdate, isPending: isUpdatePermissionPending } =
+    useHasPermissions({ plugin: ["update"] }, plugin.id);
+  const isReadOnly = isUpdatePermissionPending || canUpdate !== true;
+  const showReadOnlyNotice = !isUpdatePermissionPending && canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
 
   const isGithubPlugin = plugin.sourceKind === "github";
@@ -162,13 +163,11 @@ function PluginDetailView({
   const installAction = pluginAction(actionModel, "install");
   const updatesAction = pluginAction(actionModel, "updates");
   const deleteAction = pluginAction(actionModel, "delete");
-  const updateReason = isReadOnly
-    ? formatPermissionConstraint(updatesAction.permissions)
+  const updateReason = showReadOnlyNotice
+    ? "Requires Can edit or Full access on this plugin"
     : undefined;
   const deleteReason =
-    canDelete === false
-      ? formatPermissionConstraint(deleteAction.permissions)
-      : undefined;
+    canDelete === false ? "Requires Full access on this plugin" : undefined;
   const updateReasonId = useId();
   const deleteReasonId = useId();
 
@@ -420,7 +419,8 @@ function PluginDetailView({
             </AlertDescription>
           </Alert>
         ) : (
-          isReadOnly && (
+          showReadOnlyNotice &&
+          activeSection === "general" && (
             <Alert>
               <Info className="h-4 w-4" />
               <AlertDescription>
@@ -466,7 +466,7 @@ function PluginDetailView({
             <div className="flex items-center gap-2">
               <PermissionButton
                 permissions={{ plugin: ["update"] }}
-                permissionScope="*"
+                permissionScope={plugin.id}
                 disabled={!isDirty || !isComplete || isGone || isSaving}
                 onClick={handleSave}
               >

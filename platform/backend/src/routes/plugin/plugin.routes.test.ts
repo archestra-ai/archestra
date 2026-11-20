@@ -18,15 +18,12 @@ import {
 } from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
 import { useRouteTestApp } from "@/test/route-test-app";
-import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
 beforeEach(() => {
   config.beta = false;
-  grantEverywhere(["plugin"]);
 });
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -61,6 +58,10 @@ function createPayload(): CreatePlugin {
 
 describe("plugin routes", () => {
   const ctx = useRouteTestApp(pluginRoutes);
+
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  });
 
   test("creates, lists, and reads an opaque plugin without rewriting files", async () => {
     const created = await ctx.app.inject({
@@ -252,11 +253,7 @@ describe("plugin routes", () => {
     ).toBe(true);
   });
 
-  test("replaces an expired GitHub token without changing approved plugin bytes", async ({
-    makeMember,
-  }) => {
-    // Using a stored GitHub credential needs credential:read.
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  test("replaces an expired GitHub token without changing approved plugin bytes", async () => {
     const expiredPat = await createGithubPat({
       organizationId: ctx.organizationId,
       data: { name: "Expired token", token: "ghp_expired" },
@@ -530,7 +527,6 @@ describe("plugin routes", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     const otherUser = await makeUser();
     await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
     const myTeam = await makeTeam(ctx.organizationId, ctx.user.id);
@@ -707,10 +703,7 @@ describe("plugin routes", () => {
     });
   });
 
-  test("discovers and batch-imports selected marketplace plugins with explicit permissions", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  test("discovers and batch-imports selected marketplace plugins with explicit permissions", async () => {
     registerAuditLogHook(ctx.app);
     stubGithub([
       {
@@ -1049,10 +1042,11 @@ describe("plugin audit records", () => {
   let organizationId: string;
   let actor: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     actor = await makeUser();
+    await makeMember(actor.id, organizationId);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (

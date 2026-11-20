@@ -25,7 +25,6 @@ import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
@@ -92,10 +91,6 @@ function NewPluginWizard() {
   const isComplete = isPluginDraftComplete({ draft, isGithubPlugin: false });
 
   const createPlugin = useCreatePlugin();
-  const { data: canViewPluginDetails } = useHasPermissions(
-    { plugin: ["read", "update"] },
-    "*",
-  );
   const handleCreate = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
@@ -116,10 +111,7 @@ function NewPluginWizard() {
         labels: finalLabels,
       })
       .catch(() => null);
-    if (!created) return;
-    // A plugin's page shows its bytes, which only someone who manages every
-    // plugin may read; anyone else goes back to the list.
-    router.push(canViewPluginDetails ? `/plugins/${created.id}` : "/plugins");
+    if (created) router.push(`/plugins/${created.id}`);
   };
 
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
@@ -283,7 +275,6 @@ function NewPluginWizard() {
                 </Button>
                 <PermissionButton
                   permissions={{ plugin: ["create"] }}
-                  permissionScope="*"
                   disabled={!isComplete || createPlugin.isPending}
                   onClick={handleCreate}
                 >

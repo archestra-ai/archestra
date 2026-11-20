@@ -241,6 +241,29 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
+  it("leaves the Permissions tab unlocked by the General tab's update check", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    renderPage(BASE_PLUGIN);
+
+    expect(
+      screen.getByTestId("plugin-permissions").closest("fieldset"),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "You can view this plugin's configuration but not change it.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("locks a repository-owned plugin and edits its source in a dialog", async () => {
     const user = userEvent.setup();
     renderPage({
@@ -307,6 +330,26 @@ describe("PluginDetailPage", () => {
     expect(
       screen.getByText(/view this plugin's configuration but not change it/i),
     ).toBeVisible();
+  });
+
+  it("keeps the General form read-only without flashing the notice while update permission is loading", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByLabelText("Display name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Description")).toHaveAttribute("readonly");
+    expect(
+      screen.getByRole("textbox", { name: "File contents" }),
+    ).toHaveAttribute("readonly");
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/view this plugin's configuration but not change it/i),
+    ).not.toBeInTheDocument();
   });
 
   it("reviews a pending update from the source card", async () => {

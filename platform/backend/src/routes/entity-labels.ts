@@ -30,6 +30,15 @@ export function registerEntityLabelRoutes(
     model: EntityLabelModel;
     keysOperationId: RouteId;
     valuesOperationId: RouteId;
+    /**
+     * Optional per-request check when route-level permissions defer to grants.
+     * Returning `{ ownerIds }` scopes the returned label vocabulary to those
+     * readable entities so labels on unreadable entities are not disclosed.
+     */
+    authorize?: (params: {
+      organizationId: string;
+      userId: string;
+    }) => Promise<{ ownerIds?: string[] } | undefined | void>;
   },
 ): void {
   const {
@@ -39,6 +48,7 @@ export function registerEntityLabelRoutes(
     model,
     keysOperationId,
     valuesOperationId,
+    authorize,
   } = options;
 
   fastify.get(
@@ -51,8 +61,13 @@ export function registerEntityLabelRoutes(
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send(await model.getAllKeys(organizationId));
+    async ({ organizationId, user }, reply) => {
+      const scope = authorize
+        ? await authorize({ organizationId, userId: user.id })
+        : undefined;
+      return reply.send(
+        await model.getAllKeys(organizationId, scope?.ownerIds),
+      );
     },
   );
 
@@ -69,11 +84,18 @@ export function registerEntityLabelRoutes(
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async ({ query: { key }, organizationId }, reply) => {
+    async ({ query: { key }, organizationId, user }, reply) => {
+      const scope = authorize
+        ? await authorize({ organizationId, userId: user.id })
+        : undefined;
       return reply.send(
         key
-          ? await model.getValuesByKey({ organizationId, key })
-          : await model.getAllValues(organizationId),
+          ? await model.getValuesByKey({
+              organizationId,
+              key,
+              ownerIds: scope?.ownerIds,
+            })
+          : await model.getAllValues(organizationId, scope?.ownerIds),
       );
     },
   );

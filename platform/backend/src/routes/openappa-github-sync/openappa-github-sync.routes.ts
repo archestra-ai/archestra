@@ -392,7 +392,21 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           organizationId: request.organizationId,
           userId: request.user.id,
         });
-        return reply.send(await getAppaGithubSync(request.organizationId));
+        // The request opens a pull request and usually leaves the settings as
+        // they were, so the record marks it beside whatever a first pull
+        // changed, read once for the response and the record.
+        const status = await getAppaGithubSync(request.organizationId);
+        request.auditBefore = {
+          ...request.auditBefore,
+          includeServersRequested: false,
+        };
+        request.auditAfter = {
+          ...(status.source
+            ? { ...status.source, hasPolicy: status.hasPolicy }
+            : {}),
+          includeServersRequested: true,
+        };
+        return reply.send(status);
       }
       // The switch's dialog opens the pull request that includes the
       // servers' folder as its own step, with include_servers.

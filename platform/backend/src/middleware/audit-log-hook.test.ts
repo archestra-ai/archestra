@@ -299,6 +299,7 @@ describe("registerAuditLogHook", () => {
     // GitHub read-only POSTs — exact denylist entries; must produce zero rows.
     app.post("/api/skills/github/discover", async () => ({ ok: true }));
     app.post("/api/skills/github/preview", async () => ({ ok: true }));
+    app.post("/api/openappa/policy-tests/inspect", async () => ({ ok: true }));
 
     // Route-pattern (":id/suffix") denylist entries — a variable id sits before
     // a static suffix, so a concrete-URL prefix would over-match the parent.
@@ -952,6 +953,15 @@ describe("registerAuditLogHook", () => {
       await app.inject({
         method: "POST",
         url: "/api/organization/knowledge-settings/test-embedding",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/openappa/policy-tests/inspect writes zero rows (a read sent as a POST)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/openappa/policy-tests/inspect",
       });
       await settle();
       expect(await getRows()).toHaveLength(0);

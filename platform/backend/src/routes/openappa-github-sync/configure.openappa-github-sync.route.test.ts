@@ -2137,6 +2137,25 @@ describe("APPA GitHub sync", () => {
     });
     expect(include.statusCode, include.body).toBe(200);
     expect(opened).toHaveLength(1);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      // The record keeps the sync settings and marks the request beside them.
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          before: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: false,
+          }),
+          after: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: true,
+          }),
+        }),
+      );
+    });
     // The minute's round checks the setup pull request like any other: the
     // policy it carries is judged, with or without a rule that requires
     // the check, so it can merge once the check passes.

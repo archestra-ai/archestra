@@ -1134,7 +1134,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         enterCapturedGuardrailsActivation("inactive");
         return;
       }
-      if (binding.returnContract && !binding.threadContinue) {
+      // A runtime or bound subagent got its contract in its task; a wire the
+      // proxy cannot write guidance into keeps it there.
+      const contractInTask =
+        binding.runtimeSessionId === binding.session.session_id &&
+        !appaWireFamily(context.interactionType);
+      if (
+        binding.returnContract &&
+        !binding.threadContinue &&
+        !contractInTask
+      ) {
         deliverReturnContract({
           request: context.request,
           interactionType: context.interactionType,
@@ -2570,9 +2579,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // A side request's reply does not finish its active child either.
       return { decision: "release" };
     }
-    if (!binding.request.turnEndOperationId) {
-      throw new ApiError(503, "OpenAPPA could not safely end the child turn");
-    }
     enterCapturedGuardrailsActivation("active");
     // Runtime workspace returns use their authenticated task identity.
     if (binding.runtimeSessionId === binding.session.session_id) {
@@ -2594,6 +2600,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return outcome.value === context.responseText
         ? { decision: "release" }
         : { decision: "replace", responseText: outcome.value };
+    }
+    // Only a native child ends on the wire's turn id; a runtime or bound
+    // subagent above returns by its task, on any wire.
+    if (!binding.request.turnEndOperationId) {
+      throw new ApiError(503, "OpenAPPA could not safely end the child turn");
     }
     // If the runtime admits a value, the value crosses the boundary.
     const childNativeId = binding.child?.lineage?.childNativeId;

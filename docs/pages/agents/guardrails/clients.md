@@ -120,9 +120,12 @@ The model writes these marks, so a mark is a sign that the hook ran, not proof. 
 
 A Cursor chat searches the web and reads pages through two tools that Guardrails check before and after each call: `cursor_web_search` and `cursor_web_fetch`. Cursor's own Web Search and Web Fetch call no hook, so setup switches them off and installs these two in their place. The agent finds and uses them without being told.
 
-Each call runs Cursor's own web search or fetch on your Cursor plan, through Cursor's command-line agent. No other search provider is involved. That run is a subagent of the chat, so what it does shows in the chat's Guardrails log. A page on `localhost` or your private network is fetched from your computer instead, because Cursor's servers cannot reach it.
+Each call runs Cursor's own web search or fetch on your Cursor plan, through Cursor's command-line agent. No other search provider is involved. A page on `localhost` or your private network is fetched from your computer instead, because Cursor's servers cannot reach it.
 
-Guardrails rule on the two tools as your policy's web search and URL fetch, with the rules that apply to other coding clients. An output sanitizer can rewrite a result, and a policy can withhold one, because the hook replaces the result before the model reads it.
+How a call is checked depends on where the chat's model runs:
+
+- **Cursor's own models:** the hook rules on the two tools as your policy's web search and URL fetch, with the rules that apply to other coding clients. The command-line agent's run is a subagent of the chat, so what it does shows in the chat's Guardrails log. An output sanitizer can rewrite a result, and a policy can withhold one, because the hook replaces the result before the model reads it.
+- **Archestra models:** the LLM Proxy checks the chat. It rules on the two tools as MCP tools, under their own names, and not as your policy's web search and URL fetch. The command-line agent's run is checked as a chat of its own.
 
 The connection procedure sets all of it up:
 

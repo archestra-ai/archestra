@@ -3,8 +3,8 @@ module github.com/docker/docker
 go 1.25.11
 
 require (
-	github.com/moby/go-archive v0.3.0
-	github.com/moby/profiles/seccomp v0.2.3
+	github.com/moby/go-archive v0.3.3
+	github.com/moby/profiles/seccomp v0.2.4
 	github.com/moby/sys/reexec v0.1.0
 	github.com/moby/sys/user v0.4.1
 	github.com/opencontainers/runtime-spec v1.3.0

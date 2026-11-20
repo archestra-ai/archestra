@@ -9,17 +9,17 @@ lastUpdated: 2026-11-20
 
 Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644). Entra creates a user in Archestra when you assign them to the Archestra app, and deactivates the user when you unassign them. Without provisioning, a user exists only after their first Single Sign-On sign-in. This is an [Enterprise feature](/docs/get-started/pricing-model).
 
-## What Happens to a Person
+## User Lifecycle
 
-Each change in Entra shows up in **Settings → Users**:
+How Archestra handles each change from Entra:
 
-- **Assigned in Entra:** they appear as **Pending (auto-provisioned)**, with the **Default Roles for New Users** from **Settings → Auth**.
-- **First sign-in:** Single Sign-On opens that same user. Any roles and teams you gave them are already there.
-- **Unassigned in Entra:** they show as **Deactivated** and can no longer sign in. Their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and teams stay. Assign them again to restore them.
+- **Assigned in Entra:** Archestra creates the user with the status **Pending (auto-provisioned)** and the **Default Roles for New Users** from **Settings → Auth**.
+- **First sign-in:** Single Sign-On signs the person in as the provisioned user, with any roles and teams assigned to it.
+- **Unassigned in Entra:** Archestra deactivates the user, and **Settings → Users** shows them as **Deactivated**. They can't sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and team memberships are kept. Assigning them in Entra again reactivates the user.
 
 What to know:
 
-- Archestra never deletes a user through SCIM. To remove someone for good, use **Remove user** in **Settings → Users**.
+- Archestra never deletes a user through SCIM. To delete a user, use **Remove user** in **Settings → Users**.
 - Deactivated users don't count toward the 30-user free tier.
 
 ## Set Up Microsoft Entra ID

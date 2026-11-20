@@ -2,7 +2,7 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,9 +28,12 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 
 - **Private image:** add an image pull secret, or the registry's credentials.
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
-- **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
+- **CPU and memory:** choose a **Runtime tier** under **Resources**, from the MCP-specific tiers managed in **Settings → MCP**. Choose **Deployment defaults** to use the MCP deployment settings. You need **Full access + deploy** on the server; see [Granular Access Control](/docs/admin/access-control#granular-access-control).
+- **Custom deployment:** edit the **K8s YAML** tab for volumes or node rules. When custom YAML is saved, configure resources there instead.
 - **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. Everyone else edits only the name, icon, description, and labels.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/idp-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
+
+Resource changes take effect on the next install or reinstall. For existing installs, follow the save confirmation to restart the shared server or mark individual installs for reinstallation.
 
 <span id="logs-and-recovery"></span>
 

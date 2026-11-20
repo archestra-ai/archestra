@@ -48,6 +48,7 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { openappaEnabled } from "@/openappa/service";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -65,7 +66,10 @@ import {
   StartupGuardArtifactSchema,
   startupGuardArtifact,
 } from "@/services/agent-connection-setup/guard/startup-guard-artifact";
+import { CURSOR_DISCONNECT_UNTIL_HEADER } from "@/services/agent-connection-setup/payloads/cursor-guardrails-hook";
+import { CURSOR_WEB_CALL_HEADER } from "@/services/agent-connection-setup/payloads/cursor-web-tools";
 import { managedRuntimeManifest } from "@/services/agent-connection-setup/payloads/managed-runtime";
+import { issueConnectionHooksToken } from "@/services/connection-hooks-token";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import {
@@ -83,6 +87,10 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import {
+  CursorHookRequestSchema,
+  handleCursorHook,
+} from "@/services/cursor-guardrails-hooks";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
@@ -110,6 +118,7 @@ import {
 } from "../proxy/model-router-resolver";
 import {
   CONNECTION_HEALTH_PATH,
+  CONNECTION_HOOKS_CURSOR_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
@@ -416,6 +425,54 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorization.slice(7),
       );
       return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+
+  fastify.post(
+    CONNECTION_HOOKS_CURSOR_PATH,
+    {
+      // A tool result travels in the event; the hook helper truncates it.
+      bodyLimit: 2 * 1024 * 1024,
+      schema: {
+        operationId: RouteId.ReportCursorHookEvent,
+        // Listed in the API reference once the docs for Cursor's hooks ship.
+        hide: true,
+        description:
+          "Report one Cursor hook step with an installation-scoped hook credential. Guardrails rule on tool calls in chats that do not pass through the LLM proxy. Live membership and gateway access are rechecked.",
+        tags: ["Connection Setups"],
+        body: CursorHookRequestSchema,
+        response: constructResponseSchema(
+          z.object({
+            permission: z.enum(["allow", "deny", "ask"]).optional(),
+            user_message: z.string().optional(),
+            agent_message: z.string().optional(),
+            updated_input: z.record(z.string(), z.unknown()).optional(),
+            updated_mcp_tool_output: z.string().optional(),
+            additional_context: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (
+        await isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-cursor-hooks-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 1200 },
+        )
+      )
+        throw new ApiError(429, "Too many requests");
+      const authorization = request.headers.authorization;
+      if (!authorization?.startsWith("Bearer "))
+        throw new ApiError(401, "Hook credential required");
+      const parentCall = request.headers[CURSOR_WEB_CALL_HEADER];
+      const { answer, disconnectUntil } = await handleCursorHook({
+        token: authorization.slice(7),
+        request: request.body,
+        parentCall: typeof parentCall === "string" ? parentCall : undefined,
+      });
+      if (disconnectUntil !== undefined)
+        reply.header(CURSOR_DISCONNECT_UNTIL_HEADER, String(disconnectUntil));
+      return reply.header("Cache-Control", "no-store").send(answer);
     },
   );
 
@@ -1680,6 +1737,21 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
                 setupId: setup.id,
                 secret: config.auth.secret ?? "",
               }),
+            }
+          : null,
+      deploymentOrigin: proxyBaseUrlToOrigin(setup.baseUrl),
+      // Only where Guardrails can be turned on: the hook stops every tool
+      // call it cannot have checked, so a deployment without Guardrails
+      // would gain nothing but that failure.
+      cursorGuardrailsHook:
+        setup.clientId === "cursor" && mcp && openappaEnabled()
+          ? {
+              url: `${proxyBaseUrlToOrigin(setup.baseUrl)}${CONNECTION_HOOKS_CURSOR_PATH}`,
+              token: issueConnectionHooksToken({
+                setupId: setup.id,
+                secret: config.auth.secret ?? "",
+              }),
+              finishWebSetup: true,
             }
           : null,
       runtimeHandoffInstructions:

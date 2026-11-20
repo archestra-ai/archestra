@@ -22,6 +22,7 @@ beforeEach(() => {
 import {
   ModelsDevClient,
   modelsDevClient,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "./models-dev-client";
 
@@ -412,6 +413,80 @@ describe("ModelsDevClient", () => {
       const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.outputLength).toBeNull();
+    });
+  });
+
+  describe("long-context pricing", () => {
+    const long = { input: 4, output: 18, cache_read: 0.4 };
+    test("retains typed tiers through fetch validation and registry conversion", async () => {
+      const model = createMockModel({
+        cost: {
+          input: 2,
+          output: 12,
+          tiers: [{ ...long, tier: { type: "context", size: 272000 } }],
+          context_over_200k: { input: 99, output: 99 },
+        },
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () =>
+          createMockApiResponse({
+            openai: createMockProvider("openai", { test: model }),
+          }),
+      });
+      const fetched = await modelsDevClient.fetchModelsFromApi();
+      const converted = modelsDevClient.convertToModel(
+        "openai",
+        fetched.openai.models.test,
+      );
+      expect(converted?.syncedLongContextPricing).toEqual({
+        threshold: 272000,
+        pricePerMillionInput: "4",
+        pricePerMillionOutput: "18",
+        pricePerMillionCacheRead: "0.4",
+        pricePerMillionCacheWrite: null,
+      });
+      expect(converted?.promptPricePerToken).toBe("0.000002");
+    });
+    test("uses legacy 200K only when tiers is absent", () => {
+      expect(
+        modelsDevLongContextPricing({ context_over_200k: long })?.threshold,
+      ).toBe(200000);
+      expect(
+        modelsDevLongContextPricing({ tiers: [], context_over_200k: long }),
+      ).toBeNull();
+      expect(
+        modelsDevLongContextPricing({ tiers: {}, context_over_200k: long }),
+      ).toBeNull();
+    });
+    test("skips unsupported or malformed tiers and preserves zero prices", () => {
+      expect(
+        modelsDevLongContextPricing({
+          tiers: [
+            { ...long, tier: { type: "batch", size: 1 } },
+            { ...long, tier: { type: "context", size: -1 } },
+            { ...long, input: -1, tier: { type: "context", size: 100 } },
+            {
+              ...long,
+              cache_read: Infinity,
+              tier: { type: "context", size: 100 },
+            },
+            {
+              input: 0,
+              output: 0,
+              cache_read: 0,
+              tier: { type: "context", size: 100000 },
+            },
+          ],
+        }),
+      ).toEqual({
+        threshold: 100000,
+        pricePerMillionInput: "0",
+        pricePerMillionOutput: "0",
+        pricePerMillionCacheRead: "0",
+        pricePerMillionCacheWrite: null,
+      });
+      expect(modelsDevLongContextPricing({ tiers: [null, {}] })).toBeNull();
     });
   });
 

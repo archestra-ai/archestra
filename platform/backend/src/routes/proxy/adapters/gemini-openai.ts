@@ -8,9 +8,9 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { encodeSignedToolCallId } from "../utils/tool-call-ids";
 import { geminiAdapterFactory } from "./gemini";
 import {
-  encodeSignedToolCallId,
   type GeminiOpenaiContext,
   geminiResponseToOpenai,
   geminiUsageViewToOpenai,
@@ -46,6 +46,29 @@ function selectCandidateZero<T extends { candidates?: { index?: number }[] }>(
   };
 }
 
+// A call Gemini gave no id gets one here, once: policy, the client's wire and
+// the audit log name the call by it, and a signed call and an unsigned one
+// of the same response stay apart.
+function withCallIds(response: GeminiResponse): GeminiResponse {
+  const seed = Date.now();
+  let calls = 0;
+  return {
+    ...response,
+    candidates: response.candidates?.map((candidate) => {
+      if (!candidate.content?.parts) return candidate;
+      const parts = candidate.content.parts.map((part) => {
+        if (!("functionCall" in part) || !part.functionCall) return part;
+        const id =
+          part.functionCall.id ??
+          `gemini-call-${part.functionCall.name}-${seed + calls}`;
+        calls += 1;
+        return { ...part, functionCall: { ...part.functionCall, id } };
+      });
+      return { ...candidate, content: { ...candidate.content, parts } };
+    }),
+  };
+}
+
 class GeminiOpenaiResponseAdapter
   implements LLMResponseAdapter<GeminiResponse>
 {
@@ -58,7 +81,7 @@ class GeminiOpenaiResponseAdapter
 
   constructor(response: GeminiResponse, ctx: GeminiOpenaiContext) {
     this.inner = geminiAdapterFactory.createResponseAdapter(
-      selectCandidateZero(response),
+      withCallIds(selectCandidateZero(response)),
     );
     this.ctx = ctx;
   }

@@ -23,6 +23,7 @@ import type {
   ModelDefaultParameters,
   ModelInputModality,
   ModelOutputModality,
+  SyncedLongContextPricing,
 } from "@/types";
 
 /**
@@ -170,6 +171,11 @@ const modelsTable = pgTable(
         scale: 8,
       },
     ),
+
+    /** Refreshed from the provider catalog; never overwrites manual tier prices. */
+    syncedLongContextPricing: jsonb(
+      "synced_long_context_pricing",
+    ).$type<SyncedLongContextPricing>(),
 
     /**
      * Long-context pricing: once a request's prompt (input + cache read +

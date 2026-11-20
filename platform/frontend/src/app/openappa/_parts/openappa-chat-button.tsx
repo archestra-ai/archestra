@@ -105,7 +105,7 @@ export function useOpenAppaChatLaunch({
     ],
     ...(target?.kind === "mcp_gateway" ? { mcpGateway: ["read"] } : {}),
     ...(target?.kind === "mcp_server" ? { mcpRegistry: ["read"] } : {}),
-    ...(subject.kind === "yell" ? { log: ["read"] } : {}),
+    ...(subject.kind === "yell" ? { guardrailsYell: ["read"] } : {}),
   };
 
   return {

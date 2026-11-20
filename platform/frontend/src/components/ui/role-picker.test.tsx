@@ -71,6 +71,7 @@ describe("RolePicker", () => {
       data: {
         agent: ["read", "create", "delete"],
         log: ["read"],
+        guardrailsYell: ["read"],
         mcpGateway: ["read", "create", "delete"],
       },
     } as unknown as ReturnType<typeof useAllPermissions>);
@@ -104,7 +105,8 @@ describe("RolePicker", () => {
     render(<Harness />);
 
     await user.click(screen.getByRole("combobox", { name: "Roles" }));
-    // The viewer holds log:read but not log:admin, so Log Admin stays out.
+    // The viewer holds the reader permissions but not log:admin, so Log Admin
+    // stays out.
     await user.click(
       screen.getByRole("checkbox", { name: "Select all Logs & Audit roles" }),
     );

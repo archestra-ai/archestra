@@ -1,6 +1,7 @@
 import type {
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
+  McpRuntimeTierSettings,
   MessagingChannelOverrides,
   ModelProviderOverrides,
   OrganizationCustomFont,
@@ -490,6 +491,9 @@ const organizationsTable = pgTable("organization", {
    * environment. NULL falls back to built-in unrestricted behavior.
    */
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /** Independent administrator-defined CPU/RAM tiers for MCP containers. */
+  mcpRuntimeTiers: jsonb("mcp_runtime_tiers").$type<McpRuntimeTierSettings>(),
 
   /**
    * Administrator overrides of the Agent Runtime tiers' CPU, memory and warm

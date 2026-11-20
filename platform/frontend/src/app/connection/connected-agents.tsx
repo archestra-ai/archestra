@@ -5,6 +5,7 @@
 // before anything is connected.
 
 import {
+  cursorDisconnectCommand,
   INSTALLER_CLIENT_FOOTPRINT,
   revokeSignsOut,
   startupGuardDisconnectCommand,
@@ -33,6 +34,7 @@ import {
   type ConnectedClient,
   useConnectedClients,
   useDisconnectConnectedClient,
+  useDisconnectReference,
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
@@ -470,6 +472,9 @@ function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
   const manualOnly = !readsPrompts(client);
   const skills = data.footprintFor(client).skillsInstalled;
   const guard = startupGuardStem(client.id);
+  // The steps are on screen only while their dialog is open, so a reference
+  // is issued when a person is about to use the prompt.
+  const { data: reference } = useDisconnectReference();
   const [origin, setOrigin] = useState("");
   const [windows, setWindows] = useState(false);
   useEffect(() => {
@@ -483,22 +488,27 @@ function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
         ? ["The MCP Client Tool node you added in n8n"]
         : [`The ${data.appName} MCP entry in your agent's config`])),
   ];
+  const shell = windows ? "Windows PowerShell" : "macOS or Linux";
   const terminal =
-    guard || client.id === "pi" ? (
+    guard || client.id === "pi" || client.id === "cursor" ? (
       <div className="space-y-2">
         <p className="text-muted-foreground">
           {client.id === "chatgpt"
-            ? `Run this in a terminal on the computer where you ran setup (${windows ? "Windows PowerShell" : "macOS or Linux"}):`
-            : `If ${nameOf(client)} won't run it, run this in a terminal yourself (${windows ? "Windows PowerShell" : "macOS or Linux"}):`}
+            ? `Run this in a terminal on the computer where you ran setup (${shell}):`
+            : `If ${nameOf(client)} won't run it, run this in a terminal yourself (${shell}):`}
         </p>
         <CopyPrompt
           text={
             client.id === "pi"
               ? "arcpi --disconnect"
-              : (startupGuardDisconnectCommand(
-                  client.id,
-                  windows ? "windows" : "bash",
-                ) ?? "")
+              : client.id === "cursor"
+                ? cursorDisconnectCommand(windows ? "windows" : "bash", {
+                    wait: true,
+                  })
+                : (startupGuardDisconnectCommand(
+                    client.id,
+                    windows ? "windows" : "bash",
+                  ) ?? "")
           }
         />
       </div>
@@ -513,7 +523,14 @@ function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
             : `${client.id === "chatgpt" ? "Or paste" : "Paste"} this into ${nameOf(client)} to remove it:`}
         </p>
         {!manualOnly && (
-          <CopyPrompt text={disconnectPrompt(data, client, origin)} />
+          <CopyPrompt
+            text={disconnectPrompt({
+              data,
+              client,
+              origin,
+              reference: reference ?? null,
+            })}
+          />
         )}
       </div>
       {!manualOnly && client.id !== "chatgpt" && terminal}
@@ -609,13 +626,21 @@ function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
 /**
  * The cleanup prompt: disconnect.md removes what connect.md set up. Apps with
  * an installer get their own steps, other agents the generic ones; both point
- * at the base the setup wrote when it isn't this page's own.
+ * at the base the setup wrote when it isn't this page's own. The reference
+ * rides in the link, so it is in the conversation from its first message:
+ * Guardrails leave the conversation that presents it unchecked.
  */
-function disconnectPrompt(
-  data: ConnectPageData,
-  client: ConnectClient,
-  origin: string,
-) {
+function disconnectPrompt({
+  data,
+  client,
+  origin,
+  reference,
+}: {
+  data: ConnectPageData;
+  client: ConnectClient;
+  origin: string;
+  reference: string | null;
+}) {
   // Generic client: the prompt for whichever agent reads it.
   const any = client.id === "generic";
   const params = new URLSearchParams(
@@ -624,6 +649,7 @@ function disconnectPrompt(
       : { client: usesGenericInstructions(client) ? "generic" : client.id },
   );
   if (data.baseUrl !== `${origin}/v1`) params.set("base", data.baseUrl);
+  if (reference) params.set("ref", reference);
   const query = params.size ? `?${decodeURIComponent(params.toString())}` : "";
   return `Read ${origin}/disconnect.md${query} and disconnect ${any ? "this agent" : client.label} from ${data.appName}.`;
 }

@@ -129,6 +129,7 @@ const LocalConfigSelectSchema = z.object({
     )
     .optional(),
   imagePullPolicy: ImagePullPolicySchema.optional(),
+  runtimeTier: z.string().optional(),
 });
 
 const CatalogLabelSchema = z.object({

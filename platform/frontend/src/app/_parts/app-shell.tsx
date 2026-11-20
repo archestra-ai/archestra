@@ -15,6 +15,7 @@ import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { DevFeedbackLauncher } from "@/components/dev-feedback/dev-feedback-launcher";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { ImpersonationExpiry } from "@/components/impersonation-expiry";
 import { LoadingState } from "@/components/loading";
 import {
   NavigationStatusProvider,
@@ -143,6 +144,7 @@ export function AppShell({
         <MaintenanceModeOverlay />
         {children}
         <Toaster />
+        <ImpersonationExpiry />
       </>
     );
   }
@@ -156,6 +158,7 @@ export function AppShell({
         <MaintenanceModeOverlay />
         <AuthSurfaceFrame>{children}</AuthSurfaceFrame>
         <Toaster />
+        <ImpersonationExpiry />
       </>
     );
   }
@@ -271,6 +274,7 @@ export function AppShell({
             </div>
           </main>
           <Toaster />
+          <ImpersonationExpiry />
           <ConversationSearchProvider />
           <AfterIdle>
             <OnboardingSurveyDialog />

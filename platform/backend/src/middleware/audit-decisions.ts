@@ -28,6 +28,7 @@ import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelPoolModel from "@/models/model-pool";
+import OauthClientFederatedCredentialModel from "@/models/oauth-client-federated-credential";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -1023,6 +1024,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountFederatedCredentialsTable: {
     audited: true,
     model: ServiceAccountFederatedCredentialModel,
+  },
+  oauthClientFederatedCredentialsTable: {
+    audited: true,
+    model: OauthClientFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,

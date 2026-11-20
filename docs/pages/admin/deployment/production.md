@@ -2,7 +2,7 @@
 title: Production
 description: Prepare database recovery, public access, cluster security, and capacity before serving traffic
 order: 2
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-19
 ---
 
 Before sending production traffic through Archestra, make sure you can restore its database and keys, reach its public endpoints, and run its workloads safely.
@@ -38,7 +38,7 @@ Archestra runs code other people wrote: MCP servers, agent runs, and sandboxed c
 - **Cloud access:** give pods cloud permissions through workload identity, such as GKE Workload Identity, EKS IRSA, or AKS Workload Identity, instead of static keys. Grant only the roles Archestra uses. [Connect a Database](/docs/admin/deployment/database#connect-a-database) shows it for each cloud's PostgreSQL.
 - **Private by default:** expose only the ingress. Keep the cluster's control plane and the [database](/docs/admin/deployment/database#connect-a-database) on private networks. Set [`ARCHESTRA_METRICS_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_SECRET) and keep the metrics port, 9050, off the ingress. Put SSO, an identity-aware proxy, or a VPN in front of non-production instances. Microsoft Teams, Outlook email, and Slack or Jira webhooks also need a few [public webhook endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 - **Egress:** verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
-- **Release images:** a released chart pins every image to its digest, and every release image carries signed build provenance and an SBOM in its registry. [Verify them](/docs/admin/deployment/verify-releases) before you deploy, or let the cluster admit no other Archestra image.
+- **Release images:** a released chart pins every image to its digest, and every release image carries signed build provenance and an SBOM in its registry. [Verify them](/docs/admin/deployment/verify-releases) before you deploy, or let the cluster admit no other Archestra image. If your security team scans the images, give its scanner Archestra's [VEX statements](/docs/admin/deployment/verify-releases#drop-findings-that-do-not-affect-the-image), so it drops the CVEs that cannot be exploited in them.
 - **Audit trail:** export Archestra's [audit log](/docs/admin/observability/audit-logs) over OTLP with [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED), and send your cluster's Kubernetes audit log to the same SIEM.
 - **Deploy access:** with the default values, the chart creates nothing outside its namespaces. The CI identity that runs `helm upgrade` needs write access only to the release namespace, the MCP server namespace, and any environment namespaces you list. Do not give people cluster-admin for day-to-day work.
 

@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import { describe, expect, test } from "vitest";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { scrubOpenappaIngress, scrubTranslatedClientWire } from "./ingress";
 
 const kiloHeaders = {
@@ -134,6 +135,29 @@ describe("ingress on a Model Router translated wire", () => {
       expect.objectContaining({ envelopeId: "call_own" }),
     ]);
     expect(ingress.clientWire).toBeUndefined();
+  });
+
+  test("names a return by the policy id of a call id too long for policy, and leaves the id in the body", () => {
+    const callId = `gemsig-${"s".repeat(2000)}.gemini-call-task-1`;
+    const body = chatWithTaskResult(
+      stampToolCallId({
+        callId,
+        sessionId: "ses_root",
+        organizationId: "organization",
+        callerId: "user:user",
+        secret: "secret",
+      }),
+    );
+    const ingress = scrubOpenappaIngress({
+      request: fakeRequest(),
+      body,
+      interactionType: "openai:chatCompletions",
+    });
+    expect(ingress.childReturns?.completions).toEqual([
+      expect.objectContaining({ envelopeId: "gemini-call-task-1" }),
+    ]);
+    expect(body.messages[1]).toMatchObject({ tool_calls: [{ id: callId }] });
+    expect(body.messages[2]).toMatchObject({ tool_call_id: callId });
   });
 
   test("collects nothing on another wire when no route translated it", () => {

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { p4ShimRuntimeManager } from "@/k8s/p4-shim-runtime/manager";
+import { isKubeconfigFilePending } from "@/k8s/shared";
 import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import logger from "@/logging";
 import { KnowledgeBaseConnectorModel } from "@/models";
@@ -26,6 +27,8 @@ import { KnowledgeBaseConnectorModel } from "@/models";
  */
 export async function handleP4ShimReconcile(): Promise<void> {
   if (!p4ShimRuntimeManager.isEnabled()) return;
+  // The Docker quickstart's cluster is still starting: the next tick runs.
+  if (isKubeconfigFilePending()) return;
 
   // Both sides of the comparison, before either is acted on, and the
   // connectors first. Read the other way round, a connector created between

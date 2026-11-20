@@ -14,6 +14,7 @@ import {
 } from "better-auth/client/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { createAuthClient } from "better-auth/react";
+import { signedOutRefusal } from "@/lib/auth/signed-out-refusal";
 import config from "@/lib/config/config";
 
 const ac = createAccessControl(allAvailableActions);
@@ -82,6 +83,10 @@ export const authClient = createAuthClient({
   ],
   fetchOptions: {
     credentials: "include",
+    // A 401 from any auth call means the session may have ended.
+    onError: ({ response }) => {
+      if (response?.status === 401) signedOutRefusal.report();
+    },
   },
   cookies: { secure: !config.debug },
   autoSignIn: true,

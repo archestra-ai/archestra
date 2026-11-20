@@ -19,7 +19,11 @@ import {
 } from "@/lib/model-pools.query";
 import { MembersEditor } from "./members-editor";
 import { PoolConnectSection } from "./pool-connect-section";
-import { ModelNameField, TimeoutFields } from "./pool-fields";
+import {
+  ModelNameField,
+  RoutingStrategyField,
+  TimeoutFields,
+} from "./pool-fields";
 import {
   type PoolFormValues,
   toFormValues,
@@ -98,6 +102,7 @@ export function PoolDialog({
         disabled={disabled}
         taken={problem === "taken"}
       />
+      <RoutingStrategyField form={form} disabled={disabled} />
       <MembersEditor
         form={form}
         options={options}

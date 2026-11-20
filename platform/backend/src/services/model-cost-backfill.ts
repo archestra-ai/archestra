@@ -497,9 +497,12 @@ function pricingFor(params: {
     model.modelId,
     model.provider,
   );
-  // Long-context prices are the model's own, the same for every key, so they
-  // apply as the proxy applies them; resolved just past the threshold.
-  const threshold = ModelModel.getLongContextThreshold(priced);
+  // Only an explicit administrator tier applies across individually priced
+  // instances. A synced or published catalog tier is not that instance's tariff,
+  // matching request-time pricing, which suppresses catalog tiers for a key.
+  const threshold = params.instancePriced
+    ? priced.longContextThreshold
+    : ModelModel.getLongContextThreshold(priced);
   const longContext =
     threshold === null
       ? null

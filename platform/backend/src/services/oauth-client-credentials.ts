@@ -7,10 +7,21 @@ import { requestedOauthClientScopes } from "@/auth/oauth-client-scopes";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 
+/**
+ * The client credentials grant for a managed OAuth client. The client
+ * authenticates with its secret, or the caller has already authenticated it
+ * another way (a workload OIDC token presented as a client assertion, which
+ * a federated credential trusts). Either way it gets the same access token.
+ */
 export async function issueManagedOauthClientAccessToken(params: {
   clientId?: string;
   clientSecret?: string;
   scope?: string;
+  /** A client authenticated through one of its federated credentials. */
+  federated?: {
+    client: ManagedOauthClientForCredentials;
+    federatedCredentialId: string;
+  };
 }): Promise<{
   ok: boolean;
   statusCode: number;
@@ -21,11 +32,15 @@ export async function issueManagedOauthClientAccessToken(params: {
     statusCode: 401,
     body: { error: "invalid_client" },
   };
-  if (!params.clientId || !params.clientSecret) return invalidClient;
-  const client = await ManagedOauthClientModel.findClientForCredentials({
-    clientId: params.clientId,
-    clientSecret: params.clientSecret,
-  });
+  let client: ManagedOauthClientForCredentials | null =
+    params.federated?.client ?? null;
+  if (!params.federated) {
+    if (!params.clientId || !params.clientSecret) return invalidClient;
+    client = await ManagedOauthClientModel.findClientForCredentials({
+      clientId: params.clientId,
+      clientSecret: params.clientSecret,
+    });
+  }
   if (!client || client.grantType !== "client_credentials")
     return invalidClient;
   const scopes = requestedOauthClientScopes({
@@ -54,6 +69,7 @@ export async function issueManagedOauthClientAccessToken(params: {
     expiresAt: new Date(Date.now() + expiresIn * 1000),
     scopes,
     referenceId: `${OAUTH_CLIENT_REFERENCE_PREFIX}${client.id}`,
+    federatedCredentialId: params.federated?.federatedCredentialId ?? null,
   });
   return {
     ok: true,
@@ -66,3 +82,7 @@ export async function issueManagedOauthClientAccessToken(params: {
     },
   };
 }
+
+type ManagedOauthClientForCredentials = NonNullable<
+  Awaited<ReturnType<typeof ManagedOauthClientModel.findClientForCredentials>>
+>;

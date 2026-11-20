@@ -47,3 +47,12 @@ export const useTestOcrConnection = vi.fn();
 export const useKeywordRankingStatus = vi.fn();
 export const useMemberSignupStatus = vi.fn();
 export const useDeletePendingSignupMember = vi.fn();
+
+export const useMcpRuntimeTiers = vi.fn(() => ({
+  data: { tiers: [] },
+  isPending: false,
+}));
+export const useSaveMcpRuntimeTiers = vi.fn(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+}));

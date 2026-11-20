@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "mcp_runtime_tiers" jsonb;

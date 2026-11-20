@@ -251,7 +251,9 @@ def push(record, image, arch):
     incoming = f"{image}@{expected_digest}"
     digest_file = directory / "promoted-digest"
     config = Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
-    subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--authfile", str(config),
+    # Retry transient registry errors (a failed blob upload); the copy is
+    # content-addressed, so a retry writes the same digest or fails.
+    subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--retry-times", "3", "--authfile", str(config),
                     "--digestfile", str(digest_file), "oci-archive:" + str(directory / "image.oci.tar"),
                     "docker://" + incoming], check=True)
     result = digest_file.read_text().strip()

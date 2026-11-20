@@ -23,9 +23,9 @@ import {
   useAppAccessContext,
 } from "@/lib/apps/use-app-access";
 import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
+import { getAppRowKey, useOpenApp } from "@/lib/hooks/use-open-app";
 import { AppTypeIcon } from "./app-type-icon";
 import { useAppRowActions } from "./use-app-row-actions";
-import { getAppRowKey, useOpenApp } from "./use-open-app";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 

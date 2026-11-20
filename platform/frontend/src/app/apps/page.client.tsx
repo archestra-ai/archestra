@@ -54,10 +54,10 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { getAppRowKey } from "@/lib/hooks/use-open-app";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppPinnedTiles } from "./_parts/app-pinned-tiles";
 import { AppsTable } from "./_parts/apps-table";
-import { getAppRowKey } from "./_parts/use-open-app";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;

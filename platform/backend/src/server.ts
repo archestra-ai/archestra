@@ -1107,7 +1107,7 @@ const startWebServer = async () => {
     // Agent Runtime is available once the cluster serves the Agent Sandbox
     // API. The loops below start regardless and idle until it does, so
     // installing the controller later needs no restart.
-    void agentSandboxApi.refresh();
+    agentSandboxApi.checkAtStartup();
     // A missing RuntimeClass would leave every unprivileged run waiting for a
     // pod Kubernetes refuses to create; say so at startup, not per run.
     void agentRuntimeClassDetector.checkAtStartup();

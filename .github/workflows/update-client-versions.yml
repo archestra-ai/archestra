@@ -41,7 +41,7 @@ jobs:
       COPILOT_CLI_FILE: platform/backend/src/services/agent-connection-setup/agents/copilot-cli.ts
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -163,7 +163,7 @@ jobs:
       # The App token makes pushes and the new PR trigger ordinary CI.
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -334,7 +334,7 @@ jobs:
       AGENT_DIR: platform/docker_images/agent
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -345,7 +345,7 @@ jobs:
 
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -484,7 +484,7 @@ jobs:
       IMAGE_FILE: platform/backend/src/playwright-mcp-image.json
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -495,7 +495,7 @@ jobs:
 
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -612,14 +612,14 @@ jobs:
       # The webhook lives in GCP Secret Manager. A dedicated service account
       # reads only the alerting secrets, so no repository secret holds it.
       - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
         with:
           service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Read the alerting webhook
         id: alerting
-        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
         with:
           secrets: |-
             slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url

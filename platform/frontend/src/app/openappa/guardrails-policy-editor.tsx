@@ -60,6 +60,7 @@ import {
   POLICY_VALIDATION_CSS,
   PolicyValidationPane,
 } from "./_parts/policy-validation-pane";
+import { usePolicyDownload } from "./_parts/use-policy-download";
 import {
   type PolicyWorkspace,
   usePolicyWorkspace,
@@ -84,6 +85,7 @@ export function GuardrailsPolicyEditor() {
 
 function PolicyEditor() {
   const workspace = usePolicyWorkspace();
+  const download = usePolicyDownload(workspace);
   const [outlineOpen, setOutlineOpen] = useStoredFlag(
     "openappa-policy-outline-open",
   );
@@ -178,6 +180,7 @@ function PolicyEditor() {
           quickOpenLabel="Open a policy file"
           quickOpen={policyQuickOpen(workspace)}
           title={<PolicyBarTitle workspace={workspace} />}
+          download={download}
           actions={
             <PolicyBarActions
               workspace={workspace}

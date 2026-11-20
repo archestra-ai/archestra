@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
 import {
   runtimeTierFormMemory,
   runtimeTierFormValues,
   runtimeTierSettingsAfter,
   suggestRuntimeTierName,
   validateRuntimeTierForm,
-} from "./runtime-tier-form";
+} from "@/components/runtime-tiers/runtime-tier-form";
+import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
 
 it("suggests a readable name while avoiding case-insensitive tier-name collisions", () => {
   const random = vi.spyOn(Math, "random").mockReturnValue(0);

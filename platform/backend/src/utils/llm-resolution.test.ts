@@ -52,6 +52,7 @@ const MOCK_MODEL = {
   customPricePerMillionOutput: null,
   customPricePerMillionCacheRead: null,
   customPricePerMillionCacheWrite: null,
+  syncedLongContextPricing: null,
   longContextThreshold: null,
   longContextPricePerMillionInput: null,
   longContextPricePerMillionOutput: null,

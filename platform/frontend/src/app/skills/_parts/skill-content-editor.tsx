@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import type { WorkspaceDownload } from "@/components/file-workspace/download-zip";
 import {
   FILE_ROW_ACTION_CLASS,
   FILE_ROW_CLASS,
@@ -66,6 +67,7 @@ export function SkillContentEditor({
   onFilesChange,
   readOnly = false,
   readOnlyMarker = true,
+  downloadName,
   className,
 }: {
   manifest: string | null;
@@ -80,6 +82,11 @@ export function SkillContentEditor({
    * page — so the marker does not repeat it.
    */
   readOnlyMarker?: boolean;
+  /**
+   * Names the .zip the bar's download button saves; the manifest's `name`,
+   * else "skill" or "plugin", when left out.
+   */
+  downloadName?: string;
   className?: string;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(() =>
@@ -329,9 +336,31 @@ export function SkillContentEditor({
     parsed.name !== null &&
     !isSpecCompliantSkillName(parsed.name);
 
+  // The trash is left out: only the files the skill or plugin holds now.
+  const download: WorkspaceDownload | null =
+    items.length > 0
+      ? {
+          name:
+            downloadName ||
+            parsed.name ||
+            (manifest !== null ? "skill" : "plugin"),
+          files: () => [
+            ...(manifest !== null
+              ? [{ path: MANIFEST_PATH, content: manifest }]
+              : []),
+            ...files.map((file) => ({
+              path: file.path,
+              content: file.content,
+              encoding: file.encoding,
+            })),
+          ],
+        }
+      : null;
+
   return (
     <FileWorkspace
       className={cn("min-h-0 flex-1", className)}
+      download={download}
       notice={
         nameNotPublishable && (
           <FileWorkspaceNotice title="Not publishable over MCP">

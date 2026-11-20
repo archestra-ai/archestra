@@ -320,6 +320,7 @@ function isSettingsRecordPath(pathname: string) {
 const SETTINGS_RECORD_PATHS = [
   /^\/settings\/roles\/[^/]+/,
   /^\/settings\/service-accounts\/[^/]+/,
+  /^\/settings\/oauth-clients\/[^/]+/,
 ];
 
 function GuardrailsDescription() {

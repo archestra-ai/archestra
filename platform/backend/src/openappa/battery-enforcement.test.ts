@@ -483,7 +483,30 @@ requires = { audience = { contains = ["self"] } }
       // named like the battery's host keeps its own identity.
       "mcp-named-like-the-host": `mcp/claude-code/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n`,
     };
-    const dispatched = await replay({ organizationId, scenarios });
+    // A replay takes at most 32 scenario files, so Cursor's run on their own.
+    const cursorScenarios = {
+      // Cursor's shell is Shell; the proxy and its hook copy \`command\` to \`cmd\`.
+      "cursor-credentials": `host/archestra/Shell {\n  command: "cat ~/.aws/credentials"\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "cursor-git-push": `host/archestra/Shell {\n  command: "git push origin main"\n  cmd: "git push origin main"\n}\nexpect allow\n`,
+      // Cursor's edit tool is StrReplace; its \`path\` gets a \`file_path\` copy.
+      "cursor-edit-claude-settings": `host/archestra/StrReplace {\n  path: "/home/me/.claude/settings.json"\n  file_path: "/home/me/.claude/settings.json"\n}\nexpect allow\n`,
+      "cursor-edit-readme": `host/archestra/StrReplace {\n  path: "/repo/README.md"\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      // Cursor's Guardrails hooks: an agent cannot change them on its own.
+      "cursor-edit-hooks": `host/archestra/StrReplace {\n  path: "/home/me/.cursor/hooks.json"\n  file_path: "/home/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-edit-hooks-windows": `host/archestra/StrReplace {\n  path: "C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n  file_path: "C:/Users/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-write-hook-helper": `host/archestra/Write {\n  path: "C:\\\\Users\\\\me\\\\.cursor\\\\archestra\\\\guardrails-hook.mjs"\n  file_path: "C:/Users/me/.cursor/archestra/guardrails-hook.mjs"\n}\nexpect allow\n`,
+      "cursor-remove-hooks": `host/archestra/Shell {\n  command: "rm ~/.cursor/hooks.json"\n  cmd: "rm ~/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-remove-hooks-windows": `host/archestra/Shell {\n  command: "Remove-Item C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n  cmd: "Remove-Item C:\\\\Users\\\\me\\\\.cursor\\\\hooks.json"\n}\nexpect allow\n`,
+      // Cursor's hooks report Write and Delete with \`file_path\`; the hook
+      // host spells a Windows path with forward slashes.
+      "cursor-hook-write-hooks": `host/archestra/Write {\n  file_path: "C:/Users/me/.cursor/hooks.json"\n  content: "{}"\n}\nexpect allow\n`,
+      "cursor-delete-hooks": `host/archestra/Delete {\n  file_path: "C:/Users/me/.cursor/hooks.json"\n}\nexpect allow\n`,
+      "cursor-delete-hook-helper": `host/archestra/Delete {\n  file_path: "/home/me/.cursor/archestra/guardrails.json"\n}\nexpect allow\n`,
+    };
+    const dispatched = {
+      ...(await replay({ organizationId, scenarios })),
+      ...(await replay({ organizationId, scenarios: cursorScenarios })),
+    };
 
     // A session narrowed to its requester sends the probe to review.
     expect(
@@ -522,6 +545,18 @@ requires = { audience = { contains = ["self"] } }
       "cowork-credentials": ["allow", "authority human-approval"],
       "cowork-git-push": ["claude-code.bash-repository-requirements"],
       "cowork-fetch-docs": ["allow", "allow"],
+      "cursor-credentials": ["allow", "authority human-approval"],
+      "cursor-git-push": ["claude-code.bash-repository-requirements"],
+      "cursor-edit-claude-settings": ["authority human-approval"],
+      "cursor-edit-readme": ["allow", "allow"],
+      "cursor-edit-hooks": ["authority human-approval"],
+      "cursor-edit-hooks-windows": ["authority human-approval"],
+      "cursor-write-hook-helper": ["authority human-approval"],
+      "cursor-remove-hooks": ["authority human-approval"],
+      "cursor-remove-hooks-windows": ["authority human-approval"],
+      "cursor-hook-write-hooks": ["authority human-approval"],
+      "cursor-delete-hooks": ["authority human-approval"],
+      "cursor-delete-hook-helper": ["authority human-approval"],
       "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "spawn-after-read-env": ["allow", "allow", "allow"],
       workflow: [UNDECLARED_TOOL_ANNOTATOR],

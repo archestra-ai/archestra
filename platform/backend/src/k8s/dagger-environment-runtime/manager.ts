@@ -17,6 +17,7 @@ import {
   getK8sNamespace,
   isK8sConfigured,
   isK8sNotFoundError,
+  isKubeconfigFilePending,
   loadKubeConfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
@@ -176,6 +177,9 @@ class DaggerEnvironmentRuntimeManager {
    */
   async reconcileAll(): Promise<void> {
     if (!this.isEnabled()) return;
+    // Only the Docker quickstart starts before its kubeconfig exists, and it
+    // names a runner host, so there is no engine to provision or prune.
+    if (isKubeconfigFilePending()) return;
     let environments: Environment[];
     try {
       environments = await EnvironmentModel.listAll();

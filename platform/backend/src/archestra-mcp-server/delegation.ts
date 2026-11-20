@@ -656,7 +656,7 @@ const WITHHELD_SUBAGENT_RETURN =
 // Shown to the person in the conversation; the caller's model reads the
 // runtime's notice in its place.
 const DEFERRED_SUBAGENT_RETURN =
-  "The subagent finished. Guardrails holds its answer until this agent accepts or discards it.";
+  "The subagent finished. The agent is reviewing its answer before using it.";
 
 const DEFERRED_SUBAGENT_BRIEF =
   "Guardrails notices you clear while working are not part of your answer: leave them out. Mention a notice only when what it blocked stayed blocked.";

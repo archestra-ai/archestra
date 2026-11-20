@@ -1012,6 +1012,34 @@ tests:
           path: spec.template.spec.containers[0].image
           value: "archestra/platform:1.6.1"
 
+  - it: should pass the bootstrap service accounts as JSON
+    documentIndex: 1
+    set:
+      archestra.bootstrap.serviceAccounts:
+        - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
+          name: crossplane
+          role: member
+          federatedCredentials:
+            - name: crossplane provider
+              issuer: https://oidc.example.com
+              audience: https://archestra.example.com
+              subject: system:serviceaccount:crossplane-system:provider-archestra
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP
+            value: '[{"federatedCredentials":[{"audience":"https://archestra.example.com","issuer":"https://oidc.example.com","name":"crossplane provider","subject":"system:serviceaccount:crossplane-system:provider-archestra"}],"id":"6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10","name":"crossplane","role":"member"}]'
+
+  - it: should not set ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP
+          any: true
+
   - it: should not set ARCHESTRA_RELEASE_IMAGE_DIGESTS for a chart built outside a release
     documentIndex: 1
     asserts:

@@ -5,8 +5,12 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { appaGitHost } from "./appa-git-host";
-import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
+import { appaGitHost, shownFailure } from "./appa-git-host";
+import {
+  FinishSetupNotice,
+  useFinishSetupPieces,
+  useRefusalHold,
+} from "./finish-setup-dialog";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -26,14 +30,13 @@ export function GithubManagedPolicyNotice({
   const { data } = useAppaGithubSync();
   const pieces = useFinishSetupPieces();
   const git = appaGitHost(data);
-  const source = data?.source;
-  const failed = Boolean(source?.lastSyncError);
+  const failed = useSyncFailureShown();
   const validations = validationDirectory !== undefined;
   const href = managedSourceUrl(data, validationDirectory);
 
   // Setup still waits on something, a pull request to merge among it: the
   // one Finish setup notice, as on the Git sync settings.
-  if (!failed && pieces)
+  if (pieces && !failed)
     return healthyOnly ? null : <FinishSetupNotice pieces={pieces} />;
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.
@@ -74,7 +77,7 @@ export function GithubManagedPolicyNotice({
   }
   if (healthyOnly) return null;
 
-  return (
+  const notice = (
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
       <span className="font-medium">
@@ -122,6 +125,30 @@ export function GithubManagedPolicyNotice({
       </InlineNoticeText>
     </InlineNotice>
   );
+  // A failed sync outranks the rest of the setup. A permission the App
+  // lacks is not what failed here (that refusal is never a failure of its
+  // own), so its notice stays beside the failure.
+  return failed && pieces?.permissions.length ? (
+    <div className="space-y-2">
+      <FinishSetupNotice pieces={pieces} />
+      {notice}
+    </div>
+  ) : (
+    notice
+  );
+}
+
+/**
+ * Whether the Guardrails pages announce the last sync as failed. GitHub
+ * refusing the App for a permission it lacks is not a failure of its own to
+ * announce: the Finish setup notice says what the App lacks. Until GitHub
+ * has said what the App holds, a refusal is not announced either, so the
+ * failure never shows first only to give way to that notice.
+ */
+export function useSyncFailureShown(): boolean {
+  const source = useAppaGithubSync().data?.source;
+  const hold = useRefusalHold(source, useFinishSetupPieces());
+  return Boolean(shownFailure(source, source?.lastSyncError, hold.held));
 }
 
 /** Where the validations (or, without a directory, the policy file) live in the repository. */

@@ -17,6 +17,7 @@ import {
   LoaderCircle,
   Lock,
   Plus,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import type * as React from "react";
@@ -28,6 +29,7 @@ import {
   GitProviderLogo,
   SetupStepper,
 } from "@/components/git/git-setup-chrome";
+import { ClickPath } from "@/components/github-app-setup/click-path";
 import {
   openGithubWindow,
   postManifest,
@@ -712,11 +714,15 @@ export function GithubSyncSetupDialog({
                 : "Create an empty repository"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {openedTemplate
-                ? "Created it on GitHub? Continue to connect it."
-                : github?.dotCom
-                  ? "Keep it private."
-                  : "Keep it private, without a README or other files."}
+              {openedTemplate ? (
+                <span>Created it on GitHub? Continue to connect it.</span>
+              ) : (
+                <ClickPath
+                  steps={
+                    github?.dotCom ? NEW_REPOSITORY_PATH : EMPTY_REPOSITORY_PATH
+                  }
+                />
+              )}
             </p>
           </div>
           {openedTemplate ? (
@@ -909,7 +915,7 @@ export function GithubSyncSetupDialog({
               <ManifestRow
                 index={2}
                 title="Install it on the policy repository"
-                hint="On GitHub, choose Only select repositories, then your policy repository."
+                hint={<ClickPath steps={INSTALL_PATH} />}
                 locked={!createdApp && !installed}
                 inlineAction
                 waiting={waiting === "install" || install.isPending}
@@ -1078,119 +1084,108 @@ export function GithubSyncSetupDialog({
               <Label htmlFor="github-sync-repo">
                 {gitlab ? "Project" : "Repository"}
               </Label>
-              <FieldDescription>
-                {gitlab
-                  ? "Projects the token can reach."
-                  : `The repositories the ${appLabel ? `${appLabel} App` : "selected App"} can access.`}
-                {repositories.data?.manageUrl ? (
-                  <>
-                    {" "}
-                    <span>Don't see yours?</span>{" "}
-                    <a
-                      href={repositories.data.manageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
-                    >
-                      <span>Change its access on GitHub</span>
-                      <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                    <span>, then </span>
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="xs"
-                      className="h-auto gap-1 px-0 align-baseline text-xs font-medium text-foreground"
-                      disabled={repositories.isFetching}
-                      onClick={refreshRepositories}
-                      aria-live="polite"
-                    >
-                      {/* The word never changes width, or the link would wrap
-                        onto its own line: a spinner covers it while loading,
-                        and it turns green for a moment once done. */}
-                      <span className="relative">
-                        <span
-                          className={cn(
-                            repositories.isFetching && "invisible",
-                            refreshed &&
-                              "text-emerald-600 dark:text-emerald-500",
-                          )}
-                        >
-                          refresh
-                        </span>
-                        {repositories.isFetching && (
-                          <LoaderCircle
-                            className="absolute inset-0 m-auto size-3 animate-spin"
-                            aria-hidden
-                          />
-                        )}
-                      </span>
-                      {repositories.isFetching ? (
-                        <span className="sr-only">Refreshing</span>
-                      ) : refreshed ? (
-                        <span className="sr-only">Refreshed</span>
-                      ) : null}
-                    </Button>
-                    <span>.</span>
-                  </>
-                ) : null}
-              </FieldDescription>
+              {gitlab ? (
+                <FieldDescription>
+                  Projects the token can reach.
+                </FieldDescription>
+              ) : repositories.data?.manageUrl ? (
+                // The dialog's header already says whose repositories these are.
+                <FieldDescription>
+                  <span>Don't see yours?</span>{" "}
+                  <RepositoryAccessPath
+                    manageUrl={repositories.data.manageUrl}
+                  />
+                </FieldDescription>
+              ) : null}
               {repositories.isPending ? (
                 <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
                   <LoaderCircle className="size-3.5 animate-spin" />
                   <span>Loading repositories…</span>
                 </div>
               ) : repositories.data?.repositories.length ? (
-                <SearchableSelect
-                  id="github-sync-repo"
-                  className={cn(
-                    "h-10 w-full",
-                    repoStatus === "missing" && "border-destructive",
-                  )}
-                  value={repo}
-                  onValueChange={setRepo}
-                  aria-invalid={
-                    repoStatus === "missing" || repoStatus === "unreachable"
-                  }
-                  placeholder={
-                    gitlab ? "Choose a project" : "Choose a repository"
-                  }
-                  searchPlaceholder={
-                    gitlab ? "Search projects…" : "Search repositories…"
-                  }
-                  emptyMessage={
-                    gitlab ? "No project matches." : "No repository matches."
-                  }
-                  listClassName="max-h-72"
-                  items={[
-                    ...repositories.data.repositories.map((entry) => ({
-                      value: entry.fullName,
-                      label: entry.fullName,
-                      searchText: `${entry.fullName} ${entry.description ?? ""}`,
-                      content: <RepositoryOption repository={entry} />,
-                      selectedContent: (
-                        <RepositoryOption repository={entry} compact />
-                      ),
-                    })),
-                    // Keep the gone repository visible, marked, but not pickable.
-                    ...(repoStatus === "missing" &&
-                    !repositories.data.repositories.some(
-                      (entry) => entry.fullName === repo,
-                    )
-                      ? [
-                          {
-                            value: repo,
-                            label: repo,
-                            disabled: true,
-                            content: <MissingRepositoryOption repo={repo} />,
-                            selectedContent: (
-                              <MissingRepositoryOption repo={repo} />
-                            ),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
+                // The refresh sits beside the list it reads again.
+                <div className="flex items-center gap-2">
+                  <SearchableSelect
+                    id="github-sync-repo"
+                    className={cn(
+                      "h-10 min-w-0 flex-1",
+                      repoStatus === "missing" && "border-destructive",
+                    )}
+                    value={repo}
+                    onValueChange={setRepo}
+                    aria-invalid={
+                      repoStatus === "missing" || repoStatus === "unreachable"
+                    }
+                    placeholder={
+                      gitlab ? "Choose a project" : "Choose a repository"
+                    }
+                    searchPlaceholder={
+                      gitlab ? "Search projects…" : "Search repositories…"
+                    }
+                    emptyMessage={
+                      gitlab ? "No project matches." : "No repository matches."
+                    }
+                    listClassName="max-h-72"
+                    items={[
+                      ...repositories.data.repositories.map((entry) => ({
+                        value: entry.fullName,
+                        label: entry.fullName,
+                        searchText: `${entry.fullName} ${entry.description ?? ""}`,
+                        content: <RepositoryOption repository={entry} />,
+                        selectedContent: (
+                          <RepositoryOption repository={entry} compact />
+                        ),
+                      })),
+                      // Keep the gone repository visible, marked, but not pickable.
+                      ...(repoStatus === "missing" &&
+                      !repositories.data.repositories.some(
+                        (entry) => entry.fullName === repo,
+                      )
+                        ? [
+                            {
+                              value: repo,
+                              label: repo,
+                              disabled: true,
+                              content: <MissingRepositoryOption repo={repo} />,
+                              selectedContent: (
+                                <MissingRepositoryOption repo={repo} />
+                              ),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                  {repositories.data.manageUrl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      disabled={repositories.isFetching}
+                      onClick={refreshRepositories}
+                      aria-live="polite"
+                    >
+                      {refreshed ? (
+                        <Check
+                          className="text-emerald-600 dark:text-emerald-500"
+                          aria-hidden
+                        />
+                      ) : (
+                        <RefreshCw
+                          className={cn(
+                            repositories.isFetching && "animate-spin",
+                          )}
+                          aria-hidden
+                        />
+                      )}
+                      <span>Refresh</span>
+                      {repositories.isFetching ? (
+                        <span className="sr-only">Refreshing</span>
+                      ) : refreshed ? (
+                        <span className="sr-only">Refreshed</span>
+                      ) : null}
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
                 <InlineNotice
                   variant={repositories.isError ? "error" : "warning"}
@@ -1202,11 +1197,18 @@ export function GithubSyncSetupDialog({
                       : "No repositories yet"}
                   </span>
                   <InlineNoticeText className="flex-1">
-                    {repositories.isError
-                      ? repositories.error.message
-                      : gitlab
-                        ? "The token can't reach any project."
-                        : `${appLabel ? `The ${appLabel} App` : "The App"} can't access any. Give it access on GitHub.`}
+                    {repositories.isError ? (
+                      <span>{repositories.error.message}</span>
+                    ) : gitlab ? (
+                      <span>The token can't reach any project.</span>
+                    ) : (
+                      <span>
+                        {`${appLabel ? `The ${appLabel} App` : "The App"} can't access any.`}{" "}
+                        <RepositoryAccessPath
+                          manageUrl={repositories.data?.manageUrl ?? null}
+                        />
+                      </span>
+                    )}
                   </InlineNoticeText>
                   <Button
                     type="button"
@@ -1684,6 +1686,37 @@ function AppIconStack({ icons }: { icons: (string | null)[] }) {
   );
 }
 
+/**
+ * Where an installed App's repositories are chosen on GitHub: the first
+ * step opens that page when its address is known.
+ */
+function RepositoryAccessPath({ manageUrl }: { manageUrl: string | null }) {
+  return (
+    <ClickPath
+      steps={[
+        manageUrl
+          ? {
+              key: "access",
+              label: (
+                <a
+                  href={manageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  <span>Repository access</span>
+                  <ExternalLink className="size-3" aria-hidden />
+                </a>
+              ),
+            }
+          : "Repository access",
+        "Select repositories",
+        "Save",
+      ]}
+    />
+  );
+}
+
 // GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
 function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
   return (
@@ -1967,3 +2000,18 @@ const DEFAULT_SELF_SERVICE_FOLDER = "mcp";
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";
+
+/** GitHub's install page: the App gets the policy repository and no other. */
+const INSTALL_PATH = [
+  "Only select repositories",
+  "Select repositories",
+  { key: "repository", label: "your policy repository" },
+  "Install",
+];
+/** GitHub's new repository page, opened with the owner, name and Private set. */
+const NEW_REPOSITORY_PATH = ["Private", "Create repository"];
+const EMPTY_REPOSITORY_PATH = [
+  "Private",
+  { key: "empty", label: "no README or other files" },
+  "Create repository",
+];

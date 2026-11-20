@@ -890,6 +890,7 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaGithubAppPermissions: "getAppaGithubAppPermissions",
   GetAppaSelfService: "getAppaSelfService",
   GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
   GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",

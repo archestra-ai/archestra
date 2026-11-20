@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import {
   useIsMutating,
   useMutation,
@@ -29,16 +33,47 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
-/** The GitHub App's permissions against what self-service needs, on demand. */
+type AppaGithubAppGrants = NonNullable<
+  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
+>;
+
+/**
+ * The GitHub App's grants, each with whether the App's settings ask for it
+ * now. Asked for and not granted: the installation has still to accept the
+ * change. `requested` is absent when the settings could not be read.
+ */
+export type AppaGithubAppPermissions = Omit<
+  AppaGithubAppGrants,
+  "permissions"
+> & {
+  permissions: Array<
+    AppaGithubAppGrants["permissions"][number] & { requested?: boolean }
+  >;
+};
+
+/**
+ * The GitHub App's permissions as GitHub grants them now. The Git sync card
+ * and every setup step read this one answer; every Git sync action reads it
+ * again, since it invalidates the queries under the same key. Whoever shows
+ * it shows its error too, so a failed read raises no toast.
+ */
 export function useAppaGithubAppGrants(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
-    enabled,
+    enabled: enabled && canRead === true,
     queryKey: [...appaGithubSyncQueryKey, "app-grants"],
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
-      throwOnApiError(error);
+      // The endpoint is not in the API reference yet, so the generated
+      // client has no function for it.
+      const { data, error } = await archestraApiClient.get<{
+        200: AppaGithubAppPermissions | null;
+      }>({ url: "/api/openappa/github-sync/app-permissions" });
+      throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
+    staleTime: 60_000,
   });
 }
 

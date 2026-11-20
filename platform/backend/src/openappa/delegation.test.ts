@@ -756,6 +756,51 @@ describe("stripping delegation markers", () => {
     });
   });
 
+  test("Chat and Responses: a resumed spawn prompt loses its child reference", () => {
+    // Grok resume appends the marker, then the short child reference.
+    const reference =
+      "▄█▄▄▄█▄  started subagent AAA-AAAA@abcdefghijklmnopqrstuv";
+    const prompt = `${PROMPT}\n\n${mint()}\n\n${reference}`;
+    const chat = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "c1",
+              type: "function",
+              function: {
+                name: "task",
+                arguments: JSON.stringify({ description: "d", prompt }),
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const responses = {
+      input: [
+        {
+          type: "function_call",
+          call_id: "c2",
+          name: "spawn_subagent",
+          arguments: JSON.stringify({ prompt }),
+        },
+      ],
+    };
+
+    stripDelegationMarkers({ family: "openai:chatCompletions", body: chat });
+    stripDelegationMarkers({ family: "openai:responses", body: responses });
+
+    expect(
+      JSON.parse(chat.messages[0].tool_calls[0].function.arguments),
+    ).toEqual({ description: "d", prompt: PROMPT });
+    expect(JSON.parse(responses.input[0].arguments)).toEqual({
+      prompt: PROMPT,
+    });
+  });
+
   test.each([
     "functions.spawn_agent",
     "builtin:spawn_agent",

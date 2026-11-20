@@ -666,7 +666,11 @@ function stripTextArgument(
 ): boolean {
   const value = args[field];
   if (typeof value !== "string") return false;
-  const stripped = stripMarkerLines(stripChildTrajectoryReceipts(value).text);
+  const stripped = stripMarkerLines(
+    stripChildTrajectoryReceipts(
+      stripChildTrajectoryReferences(value, { collectReferences: false }).text,
+    ).text,
+  );
   if (stripped === value) return false;
   args[field] = stripped;
   return true;

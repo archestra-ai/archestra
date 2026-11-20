@@ -10,6 +10,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { decodeCursor } from "@/database/utils/pagination";
 import type {
@@ -19,7 +20,17 @@ import type {
   ScheduleTriggerRunKind,
   ScheduleTriggerRunStatus,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import TaskModel from "./task";
+
+export function decodeScheduleRunCursor(cursor?: string) {
+  const position = decodeCursor(cursor);
+  return position &&
+    z.uuid().safeParse(position.id).success &&
+    !Number.isNaN(Date.parse(position.value))
+    ? { value: position.value, id: position.id }
+    : null;
+}
 
 class ScheduleTriggerRunModel {
   /** Claim one due tick, persist its result and queue its work atomically. */
@@ -136,6 +147,50 @@ class ScheduleTriggerRunModel {
     });
   }
 
+  static async createManualRunMcpNative(params: {
+    trigger: Pick<
+      ScheduleTrigger,
+      "id" | "organizationId" | "projectId" | "agentId" | "actorUserId"
+    >;
+    initiatedByUserId: string;
+    signal: AbortSignal;
+  }): Promise<ScheduleTriggerRun | null> {
+    const { trigger, initiatedByUserId, signal } = params;
+    const { id, organizationId, projectId, agentId, actorUserId } = trigger;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const timestamp = z.iso.datetime().transform((value) => new Date(value));
+    const created = z
+      .object({ id: z.uuid(), startedAt: timestamp, createdAt: timestamp })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/create-manual-schedule-run",
+          json: JSON.stringify({
+            target: { id, organizationId, projectId, agentId, actorUserId },
+            initiatedByUserId,
+          }),
+        }),
+      );
+    if (!created) return null;
+    return {
+      ...created,
+      organizationId,
+      triggerId: id,
+      initiatedByUserId,
+      runKind: "manual",
+      status: "running",
+      completedAt: null,
+      chatConversationId: null,
+      runtimeTaskId: null,
+      error: null,
+      blockedBy: null,
+      artifact: null,
+    };
+  }
+
   static async countByTrigger(params: {
     organizationId: string;
     triggerId: string;
@@ -191,12 +246,8 @@ class ScheduleTriggerRunModel {
         eq(schema.scheduleTriggerRunsTable.runKind, params.runKind),
       );
 
-    const position = decodeCursor(params.cursor);
-    if (
-      position &&
-      z.uuid().safeParse(position.id).success &&
-      !Number.isNaN(Date.parse(position.value))
-    ) {
+    const position = decodeScheduleRunCursor(params.cursor);
+    if (position) {
       conditions.push(
         sql`(${schema.scheduleTriggerRunsTable.createdAt}, ${schema.scheduleTriggerRunsTable.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`,
       );

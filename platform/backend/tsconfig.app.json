@@ -508,6 +508,7 @@
     "src/clients/bedrock-credentials.ts",
     "src/clients/llm-upstream-dispatcher.ts",
     "src/clients/llm-upstream-fetch.ts",
+    "src/clients/rust-openai-stream.ts",
     // The models projects' files (tsconfig.models.json,
     // tsconfig.models-agents.json, tsconfig.models-upper.json).
     "src/models/**",

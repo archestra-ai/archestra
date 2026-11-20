@@ -1,0 +1,9 @@
+[package]
+name = "archestra-worker"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+archestra-db = { path = "../archestra-db" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }

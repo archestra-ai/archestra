@@ -9,8 +9,7 @@ import type {
 
 /** Receipts are independent of log content, encryption and retention. */
 export default class InteractionBillingModel {
-  static async claim(params: {
-    tx: Transaction;
+  static receipt(params: {
     interactionId: string;
     usage: PricedBillingUsage;
     attribution: BillingAttribution;
@@ -24,9 +23,8 @@ export default class InteractionBillingModel {
       connectorId: string | null;
       serviceAccountId: string | null;
     };
-  }): Promise<boolean> {
+  }) {
     const {
-      tx,
       interactionId,
       usage,
       attribution,
@@ -85,25 +83,35 @@ export default class InteractionBillingModel {
         }),
       )
       .digest("hex");
+    return {
+      interactionId,
+      fingerprint,
+      usage,
+      organizationId: attribution.organizationId,
+      environmentId: attribution.environmentId,
+      userId,
+      billingTeamId,
+      billingMode,
+      // First settlement owns the snapshot; mutable labels are deliberately
+      // excluded from the billing identity used to recognize retries.
+      attributionLabels: params.attributionLabels,
+      entities: attribution.entities.map(({ entityType, entityId }) => ({
+        entityType,
+        entityId,
+      })),
+    };
+  }
+
+  static async claim(
+    params: {
+      tx: Transaction;
+    } & Parameters<typeof InteractionBillingModel.receipt>[0],
+  ): Promise<boolean> {
+    const { tx, interactionId } = params;
+    const receipt = InteractionBillingModel.receipt(params);
     const [claimed] = await tx
       .insert(schema.interactionBillingTable)
-      .values({
-        interactionId,
-        fingerprint,
-        usage,
-        organizationId: attribution.organizationId,
-        environmentId: attribution.environmentId,
-        userId,
-        billingTeamId,
-        billingMode,
-        // First settlement owns the snapshot; mutable labels are deliberately
-        // excluded from the billing identity used to recognize retries.
-        attributionLabels: params.attributionLabels,
-        entities: attribution.entities.map(({ entityType, entityId }) => ({
-          entityType,
-          entityId,
-        })),
-      })
+      .values(receipt)
       .onConflictDoNothing()
       .returning({ id: schema.interactionBillingTable.interactionId });
     if (claimed) return true;
@@ -111,7 +119,7 @@ export default class InteractionBillingModel {
       .select()
       .from(schema.interactionBillingTable)
       .where(eq(schema.interactionBillingTable.interactionId, interactionId));
-    if (!existing || existing.fingerprint !== fingerprint) {
+    if (!existing || existing.fingerprint !== receipt.fingerprint) {
       throw new Error(
         "Interaction billing identity conflicts with an existing settlement",
       );

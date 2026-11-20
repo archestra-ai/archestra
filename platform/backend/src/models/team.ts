@@ -13,7 +13,9 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { requestScope } from "@/auth/request-scope";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { qualified } from "@/database/utils/qualified-column";
@@ -29,8 +31,14 @@ import type {
   TeamMemberListItem,
   UpdateTeam,
 } from "@/types";
-import { ApiError } from "@/types";
+import {
+  ApiError,
+  SelectTeamExternalGroupSchema,
+  SelectTeamMemberSchema,
+  SelectTeamSchema,
+} from "@/types";
 import type { TeamMemberRole } from "@/types/team-role";
+import { callRustApi } from "@/utils/rust-api";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentLabelModel from "./agent-label";
 import CreatedByModel from "./created-by";
@@ -192,6 +200,51 @@ class TeamModel {
       members: creatorMembership ? [creatorMembership] : [],
       labels: await TeamLabelModel.getLabelsForTeam(teamId),
     };
+  }
+
+  static async createNative(
+    input: Parameters<typeof TeamModel.create>[0],
+    signal: AbortSignal,
+  ): Promise<Team | null> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const { createdBy, createdByServiceAccountId } =
+      await CreatedByModel.forInsert({
+        data: {
+          organizationId: input.organizationId,
+          createdBy: input.createdBy,
+        },
+        userIdField: "createdBy",
+      });
+    signal.throwIfAborted();
+    const id = z
+      .uuid()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/create-team",
+          json: JSON.stringify({
+            name: input.name,
+            description: input.description,
+            roles: input.roles ?? [],
+            organizationId: input.organizationId,
+            parentId: input.parentId,
+            createdBy,
+            createdByServiceAccountId,
+            labels: Object.fromEntries(
+              (input.labels ?? []).map(({ key, value }) => [key, value]),
+            ),
+          }),
+        }),
+      );
+    if (!id) return null;
+    const [team, labels] = await Promise.all([
+      TeamModel.findById(id, { includeMembers: false }),
+      TeamLabelModel.getLabelsForTeam(id),
+    ]);
+    if (!team) throw new Error("Created team could not be read");
+    return { ...team, labels };
   }
 
   /**
@@ -454,6 +507,63 @@ class TeamModel {
     };
   }
 
+  static async updateNative(params: {
+    id: string;
+    organizationId: string;
+    input: Pick<UpdateTeam, "name" | "description" | "parentId" | "roles"> & {
+      labels?: LabelWithDetails[];
+    };
+    signal: AbortSignal;
+  }) {
+    const {
+      id,
+      organizationId,
+      signal,
+      input: { labels, ...fields },
+    } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const team = SelectTeamSchema.pick({
+      id: true,
+      name: true,
+      description: true,
+      parentId: true,
+      roles: true,
+      organizationId: true,
+      createdBy: true,
+    })
+      .extend({
+        createdAt: z.iso.datetime(),
+        updatedAt: z.iso.datetime(),
+        memberCount: z.int().nonnegative(),
+      })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/edit-team",
+          json: JSON.stringify({
+            id,
+            organizationId,
+            fields,
+            labels:
+              labels &&
+              Object.fromEntries(labels.map(({ key, value }) => [key, value])),
+          }),
+        }),
+      );
+    if (!team) return null;
+    if (labels !== undefined)
+      AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    return {
+      ...team,
+      labels: (await TeamLabelModel.getLabelsForTeam(team.id)).map(
+        ({ key, value }) => ({ key, value }),
+      ),
+    };
+  }
+
   /**
    * Delete a team
    */
@@ -466,6 +576,24 @@ class TeamModel {
     const deleted = rows.length > 0;
     logger.debug({ id, deleted }, "TeamModel.delete: completed");
     return deleted;
+  }
+
+  static async deleteNative(params: {
+    teamId: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...scope } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-team",
+        json: JSON.stringify(scope),
+      }),
+    );
   }
 
   /**
@@ -663,6 +791,28 @@ class TeamModel {
     return member;
   }
 
+  static async addMemberNative(params: {
+    teamId: string;
+    organizationId: string;
+    userId: string;
+    role?: TeamMemberRole;
+    signal: AbortSignal;
+  }): Promise<TeamMember | "unique_violation" | null> {
+    const { signal, role = MEMBER_ROLE_NAME, ...scope } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return NativeTeamMemberSchema.nullable()
+      .or(z.literal("unique_violation"))
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/add-team-member",
+          json: JSON.stringify({ ...scope, role }),
+        }),
+      );
+  }
+
   static async updateMemberRole(params: {
     teamId: string;
     userId: string;
@@ -694,6 +844,28 @@ class TeamModel {
     return member ?? null;
   }
 
+  static async updateMemberRoleNative(params: {
+    teamId: string;
+    organizationId: string;
+    userId: string;
+    role: TeamMemberRole;
+    signal: AbortSignal;
+  }): Promise<TeamMember | "last_admin" | null> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return NativeTeamMemberSchema.nullable()
+      .or(z.literal("last_admin"))
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/update-team-member-role",
+          json: JSON.stringify(input),
+        }),
+      );
+  }
+
   /**
    * Remove a member from a team
    */
@@ -715,6 +887,25 @@ class TeamModel {
       "TeamModel.removeMember: completed",
     );
     return removed;
+  }
+
+  static async removeMemberNative(params: {
+    teamId: string;
+    organizationId: string;
+    userId: string;
+    signal: AbortSignal;
+  }) {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.enum(["removed", "not_found", "last_admin"]).parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/remove-team-member",
+        json: JSON.stringify(input),
+      }),
+    );
   }
 
   /**
@@ -1274,6 +1465,55 @@ class TeamModel {
     );
     return group;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async addExternalGroupNative(params: {
+    teamId: string;
+    organizationId: string;
+    groupIdentifier: string;
+    identityProviderId: string | null;
+    role?: TeamMemberRole;
+    signal: AbortSignal;
+  }): Promise<TeamExternalGroup | "unique_violation" | null> {
+    const { signal, role = MEMBER_ROLE_NAME, ...scope } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return SelectTeamExternalGroupSchema.extend({
+      createdAt: z.iso.datetime().transform((value) => new Date(value)),
+    })
+      .nullable()
+      .or(z.literal("unique_violation"))
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/add-team-external-group",
+          json: JSON.stringify({ ...scope, role }),
+        }),
+      );
+  }
+
+  static async removeExternalGroupNative(params: {
+    teamId: string;
+    organizationId: string;
+    selector: { kind: "id" | "identifier"; value: string };
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/remove-team-external-group",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Remove a Team Sync group link from a team
@@ -1864,6 +2104,10 @@ const memberCountTeamMembers = alias(
   schema.teamMembersTable,
   "member_count_team_member",
 );
+
+const NativeTeamMemberSchema = SelectTeamMemberSchema.extend({
+  createdAt: z.iso.datetime().transform((value) => new Date(value)),
+});
 
 /**
  * Correlated count of a team's members, evaluated in the same statement as the

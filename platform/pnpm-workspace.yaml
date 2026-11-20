@@ -4,6 +4,7 @@ packages:
   - "frontend"
   - "shared"
   - "archestra-rs/napi-loader"
+  - "archestra-rs/archestra-db-rs"
   - "archestra-rs/sandbox-rs"
   - "archestra-rs/openappa-rs"
   - "archestra-rs/app-runtime-rs"

@@ -174,6 +174,7 @@ import {
   captureServerExtensions,
   type DirectServerSession,
 } from "./mcp-server-extensions";
+import { nativeRemoteMcpFetch, remoteMcpCall } from "./rust-mcp-remote";
 
 type PassiveMcpClient = {
   execute: <T>(operation: (client: Client) => Promise<T>) => Promise<
@@ -502,6 +503,9 @@ type CachedServerState = {
 
 /** Options for {@link McpClient.executeToolCallForOwner}. */
 interface ExecuteToolCallForOwnerOptions {
+  gatewayExecution?:
+    | { kind: "request"; disconnect: AbortSignal }
+    | { kind: "task" };
   conversationId?: string;
   identityProviderRedirectPath?: string;
   elicitationHandler?: McpElicitationHandler;
@@ -1117,6 +1121,7 @@ class McpClient {
         connectionKey = `${connectionKey}:elicitation`;
       }
 
+      let cancellationRecorded = false;
       const executeToolCall = async (
         getTransport: () => Promise<Transport>,
         currentSecrets: Record<string, unknown>,
@@ -1126,7 +1131,21 @@ class McpClient {
         // cached client may already be a fresh one a sibling call is using.
         let attemptClient: Client | undefined;
         let attemptSessionId: string | undefined;
+        const gatewayExecution =
+          catalogItem.serverType === "remote"
+            ? options?.gatewayExecution
+            : undefined;
+        const gatewayDisconnect =
+          gatewayExecution?.kind === "request"
+            ? gatewayExecution.disconnect
+            : undefined;
+        const abortSignal =
+          gatewayDisconnect && options?.abortSignal
+            ? AbortSignal.any([gatewayDisconnect, options.abortSignal])
+            : (gatewayDisconnect ?? options?.abortSignal);
+        let nativeCall: ReturnType<typeof remoteMcpCall.getStore>;
         try {
+          abortSignal?.throwIfAborted();
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
           ).refresh_token;
@@ -1139,6 +1158,7 @@ class McpClient {
 
           if (shouldRefreshBeforeCall) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              abortSignal,
               secretId,
               staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
@@ -1286,22 +1306,49 @@ class McpClient {
           // the timeout even though nobody is waiting on it.
           const upstreamTimeoutMs =
             options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs;
-          const result = await llmProxyTiming.hijackedUpstream(() =>
-            callWhileServerAnswers({
-              client,
-              timeoutMs: upstreamTimeoutMs,
-              signal: options?.abortSignal,
-              request: (signal) =>
-                client.callTool(
-                  {
-                    name: targetToolName,
-                    arguments: toolCall.arguments,
-                  },
-                  undefined,
-                  { signal, timeout: upstreamTimeoutMs },
-                ),
-            }),
-          );
+          const socketPath = config.database.rustAuditLogSocket;
+          const stopNative = new AbortController();
+          if (
+            config.mcpGateway.rustDiscoverEnabled &&
+            socketPath &&
+            gatewayExecution &&
+            abortSignal &&
+            client.transport instanceof StreamableHTTPClientTransport &&
+            catalogItem.serverUrl
+          ) {
+            nativeCall = {
+              socketPath,
+              endpoint: new URL(catalogItem.serverUrl).href,
+              sessionId: client.transport.sessionId,
+              signal: AbortSignal.any([
+                stopNative.signal,
+                abortSignal,
+                AbortSignal.timeout(upstreamTimeoutMs),
+              ]),
+              dispatched: false,
+            };
+          }
+          const run = () =>
+            llmProxyTiming.hijackedUpstream(() =>
+              callWhileServerAnswers({
+                client,
+                timeoutMs: upstreamTimeoutMs,
+                signal: abortSignal,
+                request: (signal) =>
+                  client.callTool(
+                    {
+                      name: targetToolName,
+                      arguments: toolCall.arguments,
+                    },
+                    undefined,
+                    { signal, timeout: upstreamTimeoutMs },
+                  ),
+              }),
+            );
+          const result = await (nativeCall
+            ? remoteMcpCall.run(nativeCall, run)
+            : run()
+          ).finally(() => stopNative.abort());
 
           const isOAuthServer = !!catalogItem.oauthConfig;
           const toolResultAuthError = isAuthRelatedToolResult(result);
@@ -1313,6 +1360,7 @@ class McpClient {
             !isRetry
           ) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              abortSignal,
               secretId,
               staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
@@ -1394,16 +1442,19 @@ class McpClient {
           // the AI SDK's abandoned tool-execute promise, so the write races
           // process shutdown; for a background-task cancel the promise is held
           // by the task's detached continuation and the write is reliable.
-          if (options?.abortSignal?.aborted) {
-            await this.persistToolCall({
-              owner,
-              mcpServerName,
-              toolCall,
-              toolResult: this.buildCancelledResult(toolCall, authInfo),
-              authInfo,
-              encryptedChatContent,
-              startedAt,
-            });
+          if (abortSignal?.aborted) {
+            if (!cancellationRecorded) {
+              cancellationRecorded = true;
+              await this.persistToolCall({
+                owner,
+                mcpServerName,
+                toolCall,
+                toolResult: this.buildCancelledResult(toolCall, authInfo),
+                authInfo,
+                encryptedChatContent,
+                startedAt,
+              });
+            }
             throw error;
           }
 
@@ -1453,7 +1504,17 @@ class McpClient {
           // fresh session.
           const isStaleSession = isStaleSessionError(error);
 
-          if (isStaleSession && !isRetry) {
+          const confirmedExpiredNativeSession =
+            nativeCall?.dispatched &&
+            attemptSessionId &&
+            isStaleSession &&
+            error instanceof StreamableHTTPError &&
+            error.code === 404;
+          if (
+            !isRetry &&
+            ((!nativeCall?.dispatched && isStaleSession) ||
+              confirmedExpiredNativeSession)
+          ) {
             // Check if another concurrent call is already recovering this
             // connection (e.g. multiple browser-stream ticks firing at once).
             // If so, wait for it and reuse the fresh client it creates.
@@ -1564,6 +1625,7 @@ class McpClient {
 
           if (canAttemptRecovery) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              abortSignal,
               secretId,
               staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
@@ -3124,6 +3186,8 @@ class McpClient {
 
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, headers);
+        const endpoint = new URL(catalogItem.serverUrl);
+        const dispatch = nativeRemoteMcpFetch(endpoint);
 
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3132,31 +3196,29 @@ class McpClient {
           ? awsIamMcpSigner.signingFetch({
               config: catalogItem.awsIamConfig,
               agentId: requireAwsIamIdentity(awsIamIdentity),
+              dispatch: onHttpFailure ? undefined : dispatch,
             })
           : undefined;
         // SPDX-SnippetEnd
-        return new StreamableHTTPClientTransport(
-          new URL(catalogItem.serverUrl),
-          {
-            requestInit: { headers: new Headers(headers) },
-            // Discovery diagnostics are deliberately limited to status and a
-            // known Bearer error code. Never retain an upstream body or header.
-            fetch: onHttpFailure
-              ? async (url, init) => {
-                  const response = await (baseFetch ?? fetch)(url, init);
-                  if (!response.ok) {
-                    onHttpFailure({
-                      status: response.status,
-                      authError: getMcpDiscoveryAuthError(
-                        response.headers.get("www-authenticate"),
-                      ),
-                    });
-                  }
-                  return response;
+        return new StreamableHTTPClientTransport(endpoint, {
+          requestInit: { headers: new Headers(headers) },
+          // Discovery diagnostics are deliberately limited to status and a
+          // known Bearer error code. Never retain an upstream body or header.
+          fetch: onHttpFailure
+            ? async (url, init) => {
+                const response = await (baseFetch ?? fetch)(url, init);
+                if (!response.ok) {
+                  onHttpFailure({
+                    status: response.status,
+                    authError: getMcpDiscoveryAuthError(
+                      response.headers.get("www-authenticate"),
+                    ),
+                  });
                 }
-              : baseFetch,
-          },
-        );
+                return response;
+              }
+            : (baseFetch ?? dispatch),
+        });
       }
     }
 
@@ -3646,6 +3708,7 @@ class McpClient {
    * @returns The result of the retried tool call, or null if refresh failed
    */
   private async attemptTokenRefreshAndRetry(params: {
+    abortSignal?: AbortSignal;
     secretId: string;
     /** The secret the failing call was built with. */
     staleSecrets: Record<string, unknown>;
@@ -3771,6 +3834,7 @@ class McpClient {
 
       return await executeRetry(getUpdatedTransport, updatedSecret);
     } catch (retryError) {
+      if (params.abortSignal?.aborted) throw retryError;
       const retryErrorMsg =
         retryError instanceof Error ? retryError.message : String(retryError);
       logger.error(

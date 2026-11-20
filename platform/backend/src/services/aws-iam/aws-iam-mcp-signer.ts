@@ -50,6 +50,7 @@ class AwsIamMcpSigner {
   signingFetch(params: {
     config: AwsIamMcpAuthConfig;
     agentId: string | null;
+    dispatch?: typeof fetch;
   }): typeof fetch {
     return async (input, init) => {
       const credentials = await this.getCredentials(params);
@@ -61,10 +62,15 @@ class AwsIamMcpSigner {
         // hide upstream failures behind delays.
         retries: 0,
       });
-      return client.fetch(
-        input instanceof Request ? input : input.toString(),
-        init,
-      );
+      const signed = await client.sign(input, init);
+      if (params.dispatch && typeof init?.body === "string") {
+        return params.dispatch(signed.url, {
+          ...init,
+          headers: signed.headers,
+          signal: signed.signal,
+        });
+      }
+      return fetch(signed);
     };
   }
 

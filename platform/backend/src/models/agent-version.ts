@@ -1,6 +1,16 @@
 import { createHash, createHmac } from "node:crypto";
 import type { PaginationQuery } from "@archestra/shared";
-import { and, asc, count, desc, eq, lt } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  lt,
+  sql,
+} from "drizzle-orm";
+import { z } from "zod";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
@@ -15,6 +25,7 @@ import {
   type AgentVersion,
   type AgentVersionMetadata,
 } from "@/types/agent-version";
+import { callRustApi } from "@/utils/rust-api";
 
 type AgentRow = typeof schema.agentsTable.$inferSelect;
 
@@ -360,6 +371,73 @@ class AgentVersionModel {
   ): Promise<{ version: number; forked: boolean } | null> {
     try {
       return await AgentVersionModel.forkIfChanged(agentId);
+    } catch (error) {
+      logger.error(
+        { error, agentId },
+        "Agent version fork failed; skipping (config change already committed)",
+      );
+      return null;
+    }
+  }
+
+  static async persistGatewayVersionBestEffort(params: {
+    agentId: string;
+    organizationId: string;
+    initial?: true;
+  }): Promise<number | null> {
+    const { agentId, organizationId } = params;
+    try {
+      const prepared = await withDbTransaction(async (tx) => {
+        await tx.setTransaction({
+          isolationLevel: "repeatable read",
+          accessMode: "read only",
+        });
+        const table = schema.agentsTable;
+        const [agent] = await tx
+          .select({
+            ...getTableColumns(table),
+            rowRevision: sql<string>`${table}.xmin::text`,
+          })
+          .from(table)
+          .where(
+            and(
+              eq(table.id, agentId),
+              eq(table.organizationId, organizationId),
+              eq(table.agentType, "mcp_gateway"),
+              params.initial ? eq(table.latestVersion, 0) : undefined,
+            ),
+          );
+        return agent && !agent.deletedAt
+          ? {
+              rowRevision: agent.rowRevision,
+              expectedVersion: agent.latestVersion,
+              snapshot: await AgentVersionModel.buildConfigSnapshot(tx, agent),
+            }
+          : null;
+      });
+      if (!prepared) return null;
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath)
+        throw new Error("Rust MCP tool socket is not configured");
+      return z
+        .int()
+        .positive()
+        .nullable()
+        .parse(
+          await callRustApi({
+            socketPath,
+            path: "/internal/v1/mcp/tools/gateway-version",
+            json: JSON.stringify({
+              agentId,
+              organizationId,
+              ...prepared,
+              retain: MAX_VERSIONS_PER_AGENT,
+              contentHash: AgentVersionModel.computeContentHash(
+                prepared.snapshot,
+              ),
+            }),
+          }),
+        );
     } catch (error) {
       logger.error(
         { error, agentId },

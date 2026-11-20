@@ -5,6 +5,8 @@ import {
   type PartialUIMessage,
 } from "@archestra/shared";
 import type { UIMessage } from "ai";
+import { z } from "zod";
+import config from "@/config";
 import {
   AgentModel,
   ConversationChatErrorModel,
@@ -19,6 +21,7 @@ import type {
   ScheduleTriggerRun,
 } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import { callRustApi } from "@/utils/rust-api";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -338,6 +341,7 @@ export async function readRunTranscript(params: {
   organizationId: string;
   /** The requesting viewer, which may differ from the schedule's actor. */
   userId: string;
+  nativeSignal?: AbortSignal;
 }): Promise<{
   source:
     | "conversation"
@@ -356,6 +360,15 @@ export async function readRunTranscript(params: {
         viewer: { kind: "caller", userId, organizationId },
       })
     : null;
+  if (params.nativeSignal) {
+    return readNativeRunTranscript({
+      trigger,
+      run,
+      organizationId,
+      conversation,
+      signal: params.nativeSignal,
+    });
+  }
   if (conversation?.encryptedChat) return { source: "encrypted", messages: [] };
   const stored = runExecutionMessages(
     (conversation?.messages ?? []) as PartialUIMessage[],
@@ -409,6 +422,69 @@ export async function readRunTranscript(params: {
 }
 
 // === internal ===
+
+const NativeTranscriptSchema = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("encrypted") }),
+  z.object({ source: z.literal("conversation"), count: z.int().nonnegative() }),
+  z.object({ source: z.literal("interactions"), id: z.uuid() }),
+  z.object({ source: z.literal("runtime"), count: z.int().nonnegative() }),
+  z.object({ source: z.literal("pending"), count: z.int().nonnegative() }),
+  z.object({ source: z.literal("none") }),
+]);
+
+async function readNativeRunTranscript(params: {
+  trigger: ScheduleTrigger;
+  run: ScheduleTriggerRun;
+  organizationId: string;
+  conversation: Conversation | null;
+  signal: AbortSignal;
+}): ReturnType<typeof readRunTranscript> {
+  const { trigger, run, organizationId, conversation, signal } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const messages = (conversation?.messages ?? []) as PartialUIMessage[];
+  const selected = NativeTranscriptSchema.parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/get-schedule-trigger-run-transcript",
+      json: JSON.stringify({
+        organizationId,
+        agentId: trigger.agentId,
+        runId: run.id,
+        encrypted: Boolean(conversation?.encryptedChat),
+        roles: messages.map(({ role }) =>
+          role === "user" || role === "assistant" ? role : "other",
+        ),
+        running: run.status === "running",
+        runtime: Boolean(run.runtimeTaskId),
+        completedAtMs: run.completedAt?.getTime() ?? null,
+      }),
+      signal,
+    }),
+  );
+  signal.throwIfAborted();
+  if (selected.source === "interactions") {
+    const turn = await InteractionModel.findById({
+      id: selected.id,
+      organizationId,
+      scheduledTurn: {
+        profileId: trigger.agentId,
+        sessionId: `scheduled-${run.id}`,
+      },
+    });
+    signal.throwIfAborted();
+    if (!turn)
+      throw new Error("Selected scheduled interaction is no longer available");
+    return {
+      source: selected.source,
+      messages: buildMessagesFromInteractions([turn], trigger.messageTemplate),
+    };
+  }
+  return {
+    source: selected.source,
+    messages: "count" in selected ? messages.slice(0, selected.count) : [],
+  };
+}
 
 /**
  * The messages of the scheduled execution itself. A run's chat stays open for

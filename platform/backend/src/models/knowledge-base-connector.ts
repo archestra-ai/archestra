@@ -12,6 +12,8 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, softDelete } from "@/database/soft-delete";
@@ -21,10 +23,12 @@ import type {
   KnowledgeBaseConnector,
   UpdateKnowledgeBaseConnector,
 } from "@/types";
+import { SelectKnowledgeBaseConnectorSchema } from "@/types";
 import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types/knowledge-connector";
+import { callRustApi } from "@/utils/rust-api";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import InteractionUserActivityModel from "./interaction-user-activity";
@@ -54,26 +58,7 @@ class KnowledgeBaseConnectorModel {
     let query = db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(
-        and(
-          notDeleted(schema.knowledgeBaseConnectorsTable),
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            params.organizationId,
-          ),
-          await buildVisibilityFilter({
-            organizationId: params.organizationId,
-            canReadAll: params.canReadAll,
-            userId: params.viewerUserId,
-            principal: params.viewerPrincipal,
-            teamIds: params.viewerTeamIds,
-            scope: params.visibilityScope,
-          }),
-          params.environmentId !== undefined
-            ? connectorInEnvironmentPredicate(params.environmentId)
-            : undefined,
-        ),
-      )
+      .where(await organizationListFilter(params))
       // `id` breaks `createdAt` ties, which this paginates over: `createdAt`
       // defaults to now(), the transaction timestamp, so rows inserted together
       // are stamped identically and LIMIT/OFFSET over a non-total order can
@@ -92,6 +77,18 @@ class KnowledgeBaseConnectorModel {
     }
 
     return await query;
+  }
+
+  static async findAuthorizedListIds(
+    params: Parameters<
+      typeof KnowledgeBaseConnectorModel.findByOrganization
+    >[0],
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.knowledgeBaseConnectorsTable.id })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(await organizationListFilter(params));
+    return rows.map(({ id }) => id);
   }
 
   static async countByOrganization(organizationId: string): Promise<number> {
@@ -485,6 +482,70 @@ class KnowledgeBaseConnectorModel {
     });
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async createMcpNative(params: {
+    agentId: string;
+    data: Pick<
+      InsertKnowledgeBaseConnector,
+      | "organizationId"
+      | "environmentId"
+      | "name"
+      | "description"
+      | "connectorType"
+      | "config"
+      | "syncPermissionsFromSource"
+      | "createdBy"
+    >;
+    initialPermissionGrants: ResourcePermissionGrant[];
+    signal: AbortSignal;
+  }): Promise<KnowledgeBaseConnector> {
+    const { data, agentId, initialPermissionGrants, signal } = params;
+    const {
+      organizationId,
+      name,
+      description,
+      connectorType,
+      config: settings,
+      environmentId,
+    } = data;
+    const creator = await CreatedByModel.forInsert({
+      data,
+      userIdField: "createdBy",
+    });
+    const grants = ResourcePermissionPolicyModel.initialGrants({
+      resource: "knowledgeConnector",
+      authorId: CreatedByModel.id(creator, creator.createdBy) ?? null,
+      grants: initialPermissionGrants,
+    });
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return parseNativeConnector(
+      z.string().parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/create-knowledge-connector",
+          json: JSON.stringify({
+            organizationId,
+            agentId,
+            environmentId,
+            name,
+            description,
+            connectorType,
+            config: settings,
+            syncPermissionsFromSource: syncSwitchFor(data) ?? false,
+            createdBy: creator.createdBy,
+            createdByServiceAccountId: creator.createdByServiceAccountId,
+            grants,
+          }),
+        }),
+      ),
+    );
+  }
+  // SPDX-SnippetEnd
+
   /**
    * `notDeleted`-filtered like every read: a soft-deleted connector is gone, so
    * a write must not land on it either. Returns null when nothing matched. The
@@ -514,6 +575,79 @@ class KnowledgeBaseConnectorModel {
 
     return result ?? null;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async updateMcpNative(params: {
+    existing: KnowledgeBaseConnector;
+    data: Pick<
+      UpdateKnowledgeBaseConnector,
+      "name" | "description" | "config" | "visibility" | "teamIds" | "enabled"
+    >;
+    clearCheckpoint: boolean;
+    signal: AbortSignal;
+  }): Promise<KnowledgeBaseConnector | null> {
+    const { existing, data, clearCheckpoint, signal } = params;
+    const {
+      id,
+      organizationId,
+      environmentId,
+      connectorType,
+      config: settings,
+      visibility,
+      teamIds,
+      enabled,
+      syncPermissionsFromSource,
+    } = existing;
+    const {
+      name,
+      description,
+      config: nextConfig,
+      visibility: nextVisibility,
+      teamIds: nextTeamIds,
+      enabled: nextEnabled,
+    } = data;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const raw = z
+      .string()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/update-knowledge-connector",
+          json: JSON.stringify({
+            id,
+            organizationId,
+            environmentId,
+            expected: {
+              connectorType,
+              config: settings,
+              visibility,
+              teamIds,
+              enabled,
+              syncPermissionsFromSource,
+            },
+            patch: {
+              name,
+              config: nextConfig,
+              visibility: nextVisibility,
+              teamIds: nextTeamIds,
+              enabled: nextEnabled,
+              ...(description !== undefined && {
+                description: { value: description },
+              }),
+              syncPermissionsFromSource: syncSwitchFor(data),
+              clearCheckpoint,
+            },
+          }),
+        }),
+      );
+    return raw === null ? null : parseNativeConnector(raw);
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Advance the connector's sync checkpoint, gated atomically on the given run
@@ -701,6 +835,29 @@ class KnowledgeBaseConnectorModel {
     return count > 0;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async deleteMcpNative(params: {
+    id: string;
+    organizationId: string;
+    environmentId: string | null;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-knowledge-connector",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Restore: clears `deleted_at` AND sets `enabled = false` in the same
    * UPDATE. Not the shared stamp-removal helper on purpose: the stored secret
@@ -883,6 +1040,33 @@ class KnowledgeBaseConnectorModel {
 
     return true;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async writeKnowledgeBaseAssignmentMcpNative(params: {
+    action: "assign" | "unassign";
+    connectorId: string;
+    knowledgeBaseId: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { action, signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path:
+          action === "assign"
+            ? "/internal/v1/mcp/tools/assign-connector-to-knowledge-base"
+            : "/internal/v1/mcp/tools/unassign-connector-from-knowledge-base",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 
   static async unassignFromKnowledgeBase(
     connectorId: string,
@@ -1177,6 +1361,25 @@ class KnowledgeBaseConnectorModel {
 
 export default KnowledgeBaseConnectorModel;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function parseNativeConnector(raw: string): KnowledgeBaseConnector {
+  const timestamp = z.iso.datetime().transform((value) => new Date(value));
+  return SelectKnowledgeBaseConnectorSchema.extend({
+    config: z.custom<KnowledgeBaseConnector["config"]>(
+      (value) =>
+        typeof value === "object" && value !== null && !Array.isArray(value),
+    ),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    lastSyncAt: timestamp.nullable(),
+    lastPermissionSyncAt: timestamp.nullable(),
+    deletedAt: z.null(),
+  }).parse(JSON.parse(raw));
+}
+// SPDX-SnippetEnd
+
 /**
  * Which access notion a visibility-filtered read serves.
  * - `management` (default): the connector itself (lists, detail, config),
@@ -1296,6 +1499,27 @@ const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
  * visibility input that still carries it (`auto-sync-permissions`). Undefined
  * when the write touches neither, so the stored switch stays as it is.
  */
+async function organizationListFilter(
+  params: Parameters<typeof KnowledgeBaseConnectorModel.findByOrganization>[0],
+) {
+  const table = schema.knowledgeBaseConnectorsTable;
+  return and(
+    notDeleted(table),
+    eq(table.organizationId, params.organizationId),
+    await buildVisibilityFilter({
+      organizationId: params.organizationId,
+      canReadAll: params.canReadAll,
+      userId: params.viewerUserId,
+      principal: params.viewerPrincipal,
+      teamIds: params.viewerTeamIds,
+      scope: params.visibilityScope,
+    }),
+    params.environmentId !== undefined
+      ? connectorInEnvironmentPredicate(params.environmentId)
+      : undefined,
+  );
+}
+
 function syncSwitchFor(data: {
   syncPermissionsFromSource?: boolean;
   visibility?: string;

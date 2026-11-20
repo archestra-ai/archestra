@@ -402,6 +402,8 @@ export async function handleCreateResource<
   );
 
   try {
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
 
     if (!args.name || args.name.trim() === "") {
@@ -433,6 +435,7 @@ export async function handleCreateResource<
       // The retired visibility column is NOT NULL; nothing reads it. Who can
       // reach the agent is its initial grants alone.
       scope: "personal",
+      organizationId: context.organizationId,
       labels,
       agentType: targetAgentType,
       environmentId: await resolveNewAgentEnvironmentId({
@@ -526,8 +529,24 @@ export async function handleCreateResource<
       });
       // SPDX-SnippetEnd
     }
+    const nativeGateway =
+      targetAgentType === "mcp_gateway" &&
+      context.organizationId &&
+      context.userId &&
+      !context.tokenAuth?.serviceAccountId &&
+      execution?.native
+        ? { organizationId: context.organizationId, signal: execution.signal }
+        : undefined;
     const created = await AgentModel.create(createParams, context.userId, {
       initialPermissionGrants: args.initialGrants ?? [],
+      nativeGatewayWrite: nativeGateway,
+      nativeAgentWrite:
+        targetAgentType === "agent" &&
+        context.organizationId &&
+        context.userId &&
+        execution?.native
+          ? { organizationId: context.organizationId, signal: execution.signal }
+          : undefined,
     });
     if (created.networkPolicy) {
       syncAgentNetworkRuntimes({
@@ -543,7 +562,11 @@ export async function handleCreateResource<
     const subAgentResults =
       (targetAgentType === "agent" || targetAgentType === "mcp_gateway") &&
       (args.subAgentIds?.length ?? 0) > 0
-        ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
+        ? await assignSubAgentDelegations(
+            created.id,
+            args.subAgentIds ?? [],
+            nativeGateway,
+          )
         : [];
 
     const editLink = buildEditLink(targetAgentType, created.id);
@@ -562,6 +585,9 @@ export async function handleCreateResource<
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, `creating ${toolLabel}`);
   }
@@ -592,7 +618,13 @@ export async function handleGetResource<
       return errorResult("either id or name parameter is required");
     }
 
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     let record: Agent | null | undefined;
+    let target: Awaited<ReturnType<typeof AgentModel.findMcpDetailTarget>> =
+      null;
+    let nameTarget: Awaited<ReturnType<typeof AgentModel.findMcpNameNative>> =
+      null;
 
     const isAdmin =
       context.userId && context.organizationId
@@ -612,86 +644,102 @@ export async function handleGetResource<
         : null;
 
     if (args.id) {
-      record = await AgentModel.findById(args.id, context.userId, isAdmin);
+      if (execution?.native) {
+        target = await AgentModel.findMcpDetailTarget({
+          id: args.id,
+          userId: context.userId,
+          isAgentAdmin: isAdmin,
+        });
+      } else {
+        record = await AgentModel.findById(args.id, context.userId, isAdmin);
+      }
       // findById doesn't support excludeOtherPersonalAgents, so we guard here.
       // MCP tools only need the caller's own personal agents to be visible,
       // even though admins can see all personal agents in the UI.
+      const candidate = target ?? record;
       if (
-        record &&
+        candidate &&
         context.userId &&
-        record.authorId !== context.userId &&
+        candidate.authorId !== context.userId &&
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         (
           await ResourcePermissionPolicyModel.findAudience({
-            organizationId: record.organizationId,
+            organizationId: candidate.organizationId,
             resource:
-              record.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-            scope: record.id,
+              candidate.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: candidate.id,
           })
         ).audience === "personal" &&
         // SPDX-SnippetEnd
         !checker?.allowsScoped?.({
           agentType: expectedType,
-          agentId: record.id,
+          agentId: candidate.id,
           action: "read",
         })
       ) {
         record = null;
+        target = null;
       }
     } else if (args.name) {
-      const results = await AgentModel.findAllPaginated(
-        { limit: 1, offset: 0 },
-        undefined,
-        {
-          organizationId: context.organizationId,
+      const authorization =
+        checker && context.organizationId
+          ? {
+              organizationId: context.organizationId,
+              baseReadTypes: checker.hasBaseAction?.(expectedType, "read")
+                ? [expectedType]
+                : [],
+            }
+          : undefined;
+      if (execution?.native && context.organizationId) {
+        nameTarget = await AgentModel.findMcpNameNative({
           name: args.name,
-          agentType: expectedType,
-          ...(checker && context.organizationId
-            ? {
-                authorization: {
-                  organizationId: context.organizationId,
-                  baseReadTypes: checker.hasBaseAction?.(expectedType, "read")
-                    ? [expectedType]
-                    : [],
-                },
-              }
-            : {}),
-          // Hide other users' personal agents from MCP tools. Only the
-          // caller's own personal agents need to be visible, even though
-          // admins can see all personal agents in the UI.
-          excludeOtherPersonalAgents: true,
-        },
-        context.userId,
-        isAdmin,
-      );
-
-      if (results.data.length > 0) {
+          expectedType,
+          organizationId: context.organizationId,
+          authorization,
+          userId: context.userId,
+          isAgentAdmin: isAdmin,
+          signal: execution.signal,
+        });
+      } else {
+        const results = await AgentModel.findAllPaginated(
+          { limit: 1, offset: 0 },
+          undefined,
+          {
+            organizationId: context.organizationId,
+            name: args.name,
+            agentType: expectedType,
+            authorization,
+            excludeOtherPersonalAgents: true,
+          },
+          context.userId,
+          isAdmin,
+        );
         record = results.data[0];
       }
     }
 
-    if (
-      record &&
-      (!context.organizationId ||
-        record.organizationId !== context.organizationId)
-    ) {
-      record = null;
-    }
-
-    if (!record) {
+    const authorizedTarget = target ?? nameTarget ?? record;
+    const notFound = () => {
       // only agents have a discovery tool; proxies/gateways have no list tool.
       const steer =
         expectedType === "agent"
           ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
           : "";
       return errorResult(`${getLabel} not found.${steer}`);
+    };
+    if (
+      !authorizedTarget ||
+      !context.organizationId ||
+      authorizedTarget.organizationId !== context.organizationId
+    ) {
+      return notFound();
     }
 
-    if (record.agentType !== expectedType) {
+    if (authorizedTarget.agentType !== expectedType) {
       return errorResult(
-        `The requested entity is a ${record.agentType}, not a ${expectedType}.`,
+        `The requested entity is a ${authorizedTarget.agentType}, not a ${expectedType}.`,
       );
     }
 
@@ -703,11 +751,25 @@ export async function handleGetResource<
         organizationId: context.organizationId,
         userId: context.userId,
         resource: expectedType === "agent" ? "agent" : "mcpGateway",
-        scope: record.id,
+        scope: authorizedTarget.id,
         action: "read",
       });
       // SPDX-SnippetEnd
     }
+    if (target && execution?.native) {
+      record = await AgentModel.readMcpDetailNative({
+        target,
+        expectedType,
+        userId: context.userId,
+        signal: execution.signal,
+      });
+    }
+    if (nameTarget && execution?.native) {
+      execution.signal.throwIfAborted();
+      record = await AgentModel.readMcpNameDetail(nameTarget, context.userId);
+      execution.signal.throwIfAborted();
+    }
+    if (!record) return notFound();
     const canReadSkills =
       expectedType === "agent" && context.organizationId && context.userId
         ? (
@@ -745,6 +807,8 @@ export async function handleGetResource<
 
     return structuredSuccessResult(record, JSON.stringify(record, null, 2));
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, `getting ${getLabel}`);
   }
 }
@@ -795,6 +859,8 @@ export async function handleEditResource<
       return errorResult("user/organization context not available.");
     }
 
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     const existingAgent = await AgentModel.findById(args.id);
     if (
       !existingAgent ||
@@ -891,9 +957,17 @@ export async function handleEditResource<
       }
     }
 
+    const nativeEdit = execution?.native
+      ? {
+          agentType: expectedType,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        }
+      : undefined;
     const updated = await AgentModel.update(
       args.id,
       updateData as Parameters<typeof AgentModel.update>[1],
+      { nativeMcpEdit: nativeEdit },
     );
 
     if (!updated) {
@@ -916,7 +990,11 @@ export async function handleEditResource<
     const subAgentResults =
       (expectedType === "agent" || expectedType === "mcp_gateway") &&
       (args.subAgentIds?.length ?? 0) > 0
-        ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
+        ? await assignSubAgentDelegations(
+            args.id,
+            args.subAgentIds ?? [],
+            expectedType === "mcp_gateway" ? nativeEdit : undefined,
+          )
         : [];
 
     const editLink = buildEditLink(expectedType, updated.id);
@@ -935,6 +1013,9 @@ export async function handleEditResource<
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, `editing ${toolLabel}`);
   }

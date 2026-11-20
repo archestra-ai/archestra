@@ -21,6 +21,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   dropHiddenAgents,
@@ -29,6 +30,7 @@ import {
   gatedDelegationToolsFence,
   hiddenAgentsAmong,
 } from "@/auth/permission-gated";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -39,6 +41,7 @@ import type {
   AgentTool,
   AgentToolFilters,
   AgentToolSortBy,
+  AgentType,
   CredentialResolutionMode,
   InsertAgentTool,
   InternalMcpCatalogServerType,
@@ -48,9 +51,11 @@ import type {
   UpdateAgentTool,
 } from "@/types";
 import { ApiError } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import AgentTeamModel from "./agent-team";
 import AgentVersionModel from "./agent-version";
 import McpServerUserModel from "./mcp-server-user";
+import { type McpToolReloadScope, writeMcpToolReload } from "./mcp-tool-reload";
 
 class AgentToolModel {
   // ============================================================================
@@ -147,6 +152,29 @@ class AgentToolModel {
       await AgentVersionModel.forkIfChangedBestEffort(agentId);
     }
     return !!created;
+  }
+
+  static async assignGatewayDelegationNative(params: {
+    agentId: string;
+    targetAgentId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const inserted = z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/assign-gateway-delegation",
+        json: JSON.stringify({
+          agentId: params.agentId,
+          targetAgentId: params.targetAgentId,
+          organizationId: params.organizationId,
+        }),
+      }),
+    );
+    if (inserted) {
+      await AgentVersionModel.persistGatewayVersionBestEffort(params);
+    }
   }
 
   /**
@@ -522,6 +550,73 @@ class AgentToolModel {
     }
     return deleted;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async assignMcpNative(params: {
+    organizationId: string;
+    agentId: string;
+    agentType: AgentType;
+    environmentId: string | null;
+    toolId: string;
+    mcpServerId: string | null;
+    credentialResolutionMode: "static" | "dynamic";
+    signal: AbortSignal;
+  }): Promise<"changed" | "unchanged"> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const outcome = z.enum(["changed", "unchanged", "scope_changed"]).parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/assign-agent-tool",
+        json: JSON.stringify(input),
+      }),
+    );
+    if (outcome === "scope_changed") {
+      throw new ApiError(409, "The target agent's assignment scope changed");
+    }
+    return outcome;
+  }
+
+  static async removeMcpNative(params: {
+    organizationId: string;
+    agentId: string;
+    agentType: AgentType;
+    environmentId: string | null;
+    toolId: string;
+    mode: "auto" | "custom";
+    signal: AbortSignal;
+  }): Promise<void> {
+    const { signal, ...input } = params;
+    if (input.mode === "custom") {
+      await AgentToolModel.requireRemovableTools([input.toolId]);
+    }
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const outcome = z.enum(["removed", "scope_changed", "tool_gone"]).parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/remove-agent-tool",
+        json: JSON.stringify(input),
+      }),
+    );
+    switch (outcome) {
+      case "scope_changed":
+        throw new ApiError(
+          409,
+          "The target agent's environment or tool mode changed",
+        );
+      case "tool_gone":
+        throw new ApiError(400, "One or more excluded tools no longer exist");
+      case "removed":
+        return;
+    }
+  }
+  // SPDX-SnippetEnd
 
   static async deleteAllForAgent(agentId: string): Promise<number> {
     const result = await db
@@ -986,6 +1081,42 @@ class AgentToolModel {
         );
     }
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async attachDeploymentToolsNative(params: {
+    scope: McpToolReloadScope;
+    agentIds: string[];
+    toolIds: string[];
+    environmentId: string | null;
+  }): Promise<void> {
+    const { scope, ...batch } = params;
+    if (!batch.agentIds.length || !batch.toolIds.length) return;
+    const table = schema.agentToolsTable;
+    const [existing] = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          inArray(table.agentId, batch.agentIds),
+          inArray(table.toolId, batch.toolIds),
+        ),
+      )
+      .limit(1);
+    await writeMcpToolReload(scope, {
+      kind: "attachDeploymentTools",
+      ...batch,
+      phase: "insert",
+    });
+    if (existing)
+      await writeMcpToolReload(scope, {
+        kind: "attachDeploymentTools",
+        ...batch,
+        phase: "repin",
+      });
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Creates a new agent-tool assignment or updates credentials if it already exists.

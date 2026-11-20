@@ -11,6 +11,7 @@ import {
   desc,
   eq,
   exists,
+  getTableColumns,
   ilike,
   inArray,
   isNotNull,
@@ -21,7 +22,9 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -46,8 +49,10 @@ import type {
   UpdateInternalMcpCatalog,
 } from "@/types";
 import { ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS } from "@/types/enterprise-managed-credentials";
+import { callRustApi } from "@/utils/rust-api";
 import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
+import AgentLabelModel from "./agent-label";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
@@ -764,8 +769,9 @@ class InternalMcpCatalogModel {
       organizationId?: string;
       /** Not a hidden runtime variant or legacy preset row. */
       rootOnly?: boolean;
+      includeWriteRevision?: boolean;
     },
-  ): Promise<InternalMcpCatalog | null> {
+  ): Promise<(InternalMcpCatalog & { writeRevision?: string }) | null> {
     const {
       expandSecrets = true,
       userId,
@@ -789,7 +795,12 @@ class InternalMcpCatalogModel {
     }
 
     const [dbItem] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.internalMcpCatalogTable),
+        ...(options?.includeWriteRevision
+          ? { writeRevision: sql<string>`xmin::text` }
+          : {}),
+      })
       .from(schema.internalMcpCatalogTable)
       .where(
         and(
@@ -807,7 +818,7 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const catalogItem: InternalMcpCatalog = {
+    const catalogItem = {
       ...dbItem,
       labels,
       teams,
@@ -1491,6 +1502,194 @@ class InternalMcpCatalogModel {
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async editDescriptionMcpNative(params: {
+    existing: Pick<
+      InternalMcpCatalog,
+      "id" | "organizationId" | "environmentId"
+    >;
+    data: Partial<
+      Pick<
+        UpdateInternalMcpCatalog,
+        | "icon"
+        | "description"
+        | "docsUrl"
+        | "repository"
+        | "version"
+        | "instructions"
+        | "labels"
+      >
+    >;
+    signal: AbortSignal;
+  }): Promise<InternalMcpCatalog | "duplicate_label" | null> {
+    const {
+      existing,
+      data: { labels, ...fields },
+      signal,
+    } = params;
+    const { id, organizationId, environmentId } = existing;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const result = z.enum(["updated", "not_found", "duplicate_label"]).parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/edit-mcp-description",
+        json: JSON.stringify({
+          id,
+          organizationId,
+          environmentId,
+          fields,
+          labels,
+        }),
+      }),
+    );
+    if (result === "not_found") return null;
+    if (result === "duplicate_label") return result;
+    if (labels !== undefined) {
+      AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    }
+    return await InternalMcpCatalogModel.findById(id, { expandSecrets: false });
+  }
+
+  static async editConfigMcpNative(params: {
+    existing: Pick<
+      InternalMcpCatalog,
+      "id" | "organizationId" | "environmentId"
+    > & {
+      writeRevision?: string;
+    };
+    data: Pick<
+      Partial<UpdateInternalMcpCatalog>,
+      | "serverType"
+      | "serverUrl"
+      | "requiresAuth"
+      | "authDescription"
+      | "authFields"
+      | "oauthConfig"
+      | "localConfig"
+      | "deploymentSpecYaml"
+      | "installationCommand"
+      | "userConfig"
+      | "localConfigSecretId"
+      | "clientSecretId"
+    >;
+    signal: AbortSignal;
+  }): Promise<InternalMcpCatalog | null> {
+    const { id, organizationId, environmentId, writeRevision } =
+      params.existing;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath || !writeRevision)
+      throw new Error("Missing native catalog write context");
+    params.signal.throwIfAborted();
+    const updated = z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/edit-mcp-config",
+        json: JSON.stringify({
+          id,
+          organizationId,
+          environmentId,
+          revision: writeRevision,
+          fields: params.data,
+        }),
+      }),
+    );
+    return updated
+      ? await InternalMcpCatalogModel.findById(id, { expandSecrets: false })
+      : null;
+  }
+
+  static async createMcpNative(params: {
+    data: InsertInternalMcpCatalog;
+    organizationId: string;
+    authorId: string;
+    initialPermissionGrants: ResourcePermissionGrant[];
+    signal: AbortSignal;
+  }): Promise<InternalMcpCatalog> {
+    const { data, organizationId, authorId, initialPermissionGrants, signal } =
+      params;
+    const {
+      name,
+      environmentId,
+      labels,
+      icon,
+      description,
+      docsUrl,
+      repository,
+      version,
+      instructions,
+      serverType,
+      serverUrl,
+      requiresAuth,
+      authDescription,
+      authFields,
+      oauthConfig,
+      localConfig,
+      deploymentSpecYaml,
+      installationCommand,
+      userConfig,
+      localConfigSecretId,
+      clientSecretId,
+    } = data;
+    const creator = await CreatedByModel.forInsert({
+      data: { organizationId, authorId },
+      userIdField: "authorId",
+    });
+    const grants = ResourcePermissionPolicyModel.initialGrants({
+      resource: "mcpRegistry",
+      authorId: creator.authorId ?? null,
+      grants: initialPermissionGrants,
+    });
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const id = z.uuid().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/create-mcp-server",
+        json: JSON.stringify({
+          ...creator,
+          name,
+          environmentId,
+          labels: labels ?? [],
+          grants,
+          metadata: {
+            icon,
+            description,
+            docsUrl,
+            repository,
+            version,
+            instructions,
+          },
+          config: {
+            serverType,
+            serverUrl,
+            requiresAuth,
+            authDescription,
+            authFields,
+            oauthConfig,
+            localConfig,
+            deploymentSpecYaml,
+            installationCommand,
+            userConfig,
+            localConfigSecretId,
+            clientSecretId,
+          },
+        }),
+      }),
+    );
+    if (labels?.length) AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    const created = await InternalMcpCatalogModel.findById(id, {
+      expandSecrets: false,
+    });
+    if (!created) throw new Error("Created catalog item not found");
+    return created;
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Record the catalog item's image as `pending` admin approval. Compare-and-set:

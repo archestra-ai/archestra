@@ -22,7 +22,30 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
   organizationId: string;
   access: ScheduleTriggerAccess;
 }): Promise<ScheduleTrigger> {
-  const trigger = await ScheduleTriggerModel.findById(params.id);
+  return authorizeScheduleTrigger(
+    params,
+    await ScheduleTriggerModel.findById(params.id),
+  );
+}
+
+export async function findAccessibleScheduleTriggerTargetOrThrow(
+  params: Parameters<typeof findAccessibleScheduleTriggerOrThrow>[0],
+) {
+  return authorizeScheduleTrigger(
+    params,
+    await ScheduleTriggerModel.findAccessTarget(params.id),
+  );
+}
+
+async function authorizeScheduleTrigger<
+  T extends Pick<
+    ScheduleTrigger,
+    "organizationId" | "projectId" | "actorUserId"
+  >,
+>(
+  params: Parameters<typeof findAccessibleScheduleTriggerOrThrow>[0],
+  trigger: T | null,
+): Promise<T> {
   if (!trigger || trigger.organizationId !== params.organizationId) {
     throw new ApiError(404, "Schedule trigger not found");
   }
@@ -130,11 +153,20 @@ export async function hasProjectScheduleOversight(params: {
 export async function startManualScheduleTriggerRun(params: {
   trigger: ScheduleTrigger;
   initiatedByUserId: string;
+  nativeSignal?: AbortSignal;
 }): Promise<ScheduleTriggerRun> {
-  const run = await ScheduleTriggerRunModel.createManualRun({
-    trigger: params.trigger,
-    initiatedByUserId: params.initiatedByUserId,
-  });
+  const { trigger, initiatedByUserId, nativeSignal } = params;
+  const run = nativeSignal
+    ? await ScheduleTriggerRunModel.createManualRunMcpNative({
+        trigger,
+        initiatedByUserId,
+        signal: nativeSignal,
+      })
+    : await ScheduleTriggerRunModel.createManualRun({
+        trigger,
+        initiatedByUserId,
+      });
+  if (!run) throw new ApiError(404, "Schedule trigger not found");
 
   await taskQueueService.enqueue({
     taskType: "schedule_trigger_run_execute",

@@ -12,7 +12,9 @@ import {
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -34,7 +36,11 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
-import { BudgetCleanupIntervalSchema, CreateLimitSchema } from "@/types";
+import {
+  BudgetCleanupIntervalSchema,
+  CreateLimitSchema,
+  SelectLimitSchema,
+} from "@/types";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -46,6 +52,7 @@ import {
   sumMoney,
 } from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
+import { callRustApi } from "@/utils/rust-api";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
 import CacheEntryModel from "./cache-entry";
@@ -150,6 +157,77 @@ const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "calendar_month";
 
 /** A limit row with its labels attached, as the listing endpoint returns it. */
 type LimitWithLabels = Limit & { labels: LabelWithDetails[] };
+type McpLimitPatch = Pick<
+  UpdateLimit,
+  | "limitType"
+  | "limitValue"
+  | "model"
+  | "cleanupInterval"
+  | "behavior"
+  | "reason"
+>;
+const NativeLimitTimestamp = z.iso
+  .datetime()
+  .transform((value) => new Date(value));
+const NativeLimitSchema = SelectLimitSchema.extend({
+  createdAt: NativeLimitTimestamp,
+  updatedAt: NativeLimitTimestamp,
+  lastCleanup: NativeLimitTimestamp.nullable(),
+});
+
+function isThroughputType(type: LimitType | undefined): boolean {
+  return (
+    type === "requests_per_minute" ||
+    type === "tokens_per_minute" ||
+    type === "requests" ||
+    type === "tokens"
+  );
+}
+
+function validateLimitPatch(
+  existing: Limit,
+  patch: Partial<UpdateLimit>,
+): void {
+  if (
+    isThroughputType(existing.limitType) ||
+    isThroughputType(patch.limitType) ||
+    existing.cleanupInterval === "minute" ||
+    patch.cleanupInterval === "minute" ||
+    existing.limitType === "token_cost" ||
+    patch.behavior !== undefined
+  ) {
+    if (!CreateLimitSchema.safeParse({ ...existing, ...patch }).success)
+      throw new ApiError(400, "Invalid limit configuration");
+  }
+  if (
+    patch.limitType &&
+    patch.limitType !== existing.limitType &&
+    patch.limitType !== existing.limitType.replace("_per_minute", "")
+  ) {
+    throw new ApiError(
+      400,
+      "Create a separate limit to change its throughput dimension",
+    );
+  }
+  if (
+    (patch.entityType && patch.entityType !== existing.entityType) ||
+    (patch.entityId && patch.entityId !== existing.entityId)
+  ) {
+    throw new ApiError(400, "Create a separate limit to change its scope");
+  }
+}
+
+function normalizeLimitCreate(data: CreateLimit) {
+  return data.limitType === "requests_per_minute" ||
+    data.limitType === "tokens_per_minute" ||
+    data.limitType === "requests" ||
+    data.limitType === "tokens" ||
+    data.limitType === "token_cost" ||
+    data.cleanupInterval === "minute" ||
+    data.behavior === "soft"
+    ? CreateLimitSchema.parse(data)
+    : data;
+}
 
 class LimitModel {
   // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
@@ -169,27 +247,14 @@ class LimitModel {
   static async create(
     data: CreateLimit & { teamManaged?: boolean },
   ): Promise<LimitWithLabels> {
-    if (
-      data.limitType === "requests_per_minute" ||
-      data.limitType === "tokens_per_minute" ||
-      data.limitType === "requests" ||
-      data.limitType === "tokens" ||
-      data.limitType === "token_cost" ||
-      data.cleanupInterval === "minute" ||
-      data.behavior === "soft"
-    ) {
-      // Parsing validates the request fields; the server-set flag is not one.
-      data = {
-        ...CreateLimitSchema.parse(data),
-        teamManaged: data.teamManaged,
-      };
-    }
-    const { labels, ...columns } = data;
+    const { labels, ...columns } = normalizeLimitCreate(data);
     const [limit] = await db
       .insert(schema.limitsTable)
       .values({
         ...columns,
-        cleanupInterval: data.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        teamManaged: data.teamManaged,
+        cleanupInterval:
+          columns.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
       })
       .returning();
 
@@ -207,6 +272,41 @@ class LimitModel {
     }
 
     return { ...limit, labels: await LimitLabelModel.getLabelsFor(limit.id) };
+  }
+
+  static async createMcpNative(
+    data: CreateLimit,
+    scope: {
+      organizationId: string;
+      signal: AbortSignal;
+    },
+  ): Promise<LimitWithLabels> {
+    const input = normalizeLimitCreate(data);
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    scope.signal.throwIfAborted();
+    const limit = NativeLimitSchema.nullable().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/create-limit",
+        json: JSON.stringify({
+          organizationId: scope.organizationId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          limitType: input.limitType,
+          limitValue: input.limitValue,
+          behavior: input.behavior ?? "hard",
+          model: input.model,
+          cleanupInterval:
+            input.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+          mcpServerName: input.mcpServerName,
+          toolName: input.toolName,
+          reason: input.reason,
+        }),
+      }),
+    );
+    if (!limit) throw new ApiError(404, "Limit entity not found.");
+    return { ...limit, labels: [] };
   }
 
   /**
@@ -652,43 +752,7 @@ class LimitModel {
         return [];
       }
 
-      if (
-        [existingLimit.limitType, patchData.limitType].some(
-          (type) =>
-            type === "requests_per_minute" ||
-            type === "tokens_per_minute" ||
-            type === "requests" ||
-            type === "tokens",
-        ) ||
-        patchData.cleanupInterval === "minute" ||
-        existingLimit.cleanupInterval === "minute" ||
-        existingLimit.limitType === "token_cost" ||
-        patchData.behavior !== undefined
-      ) {
-        const validated = CreateLimitSchema.safeParse({
-          ...existingLimit,
-          ...patchData,
-        });
-        if (!validated.success)
-          throw new ApiError(400, "Invalid limit configuration");
-      }
-      if (
-        patchData.limitType &&
-        patchData.limitType !== existingLimit.limitType &&
-        patchData.limitType !==
-          existingLimit.limitType.replace("_per_minute", "")
-      ) {
-        throw new ApiError(
-          400,
-          "Create a separate limit to change its throughput dimension",
-        );
-      }
-      if (
-        (patchData.entityType &&
-          patchData.entityType !== existingLimit.entityType) ||
-        (patchData.entityId && patchData.entityId !== existingLimit.entityId)
-      )
-        throw new ApiError(400, "Create a separate limit to change its scope");
+      validateLimitPatch(existingLimit, patchData);
 
       const shouldResetUsage =
         patchData.cleanupInterval !== undefined &&
@@ -748,11 +812,68 @@ class LimitModel {
     return { ...limit, labels: await LimitLabelModel.getLabelsFor(id) };
   }
 
+  static async patchForMcp(
+    id: string,
+    data: McpLimitPatch,
+    native?: {
+      organizationId: string;
+      signal: AbortSignal;
+    },
+  ): Promise<LimitWithLabels | null> {
+    if (!native) return LimitModel.patch(id, data);
+    const table = schema.limitsTable;
+    const [existing] = await db
+      .select({
+        ...getTableColumns(table),
+        revision: sql<string>`${table}.xmin::text`,
+      })
+      .from(table)
+      .where(eq(table.id, id));
+    if (!existing) return null;
+    native.signal.throwIfAborted();
+    const patch = data.model?.length === 0 ? { ...data, model: null } : data;
+    validateLimitPatch(existing, patch);
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const limit = NativeLimitSchema.nullable().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/update-limit",
+        json: JSON.stringify({
+          id,
+          organizationId: native.organizationId,
+          revision: existing.revision,
+          patch,
+        }),
+      }),
+    );
+    if (!limit) return null;
+    return { ...limit, labels: await LimitLabelModel.getLabelsFor(id) };
+  }
+
   /**
    * Delete a limit
    */
   static async delete(id: string): Promise<boolean> {
     return (await LimitModel.deleteMany([id])).length > 0;
+  }
+
+  static async deleteMcpNative(params: {
+    id: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-limit",
+        json: JSON.stringify(input),
+      }),
+    );
   }
 
   /** Deletes an already organization-fenced batch in one statement. */
@@ -991,14 +1112,36 @@ class LimitModel {
    * each of `teamIds` and one organization: a team's when the agent has teams,
    * otherwise the agent's own.
    */
-  static async recordInteractionTokenUsage(params: {
-    agentId: string;
-    teamIds: string[];
-    entities: Array<{ entityType: LimitEntityType; entityId: string }>;
-    model: string;
-    inputTokens: number;
-    outputTokens: number;
-  }): Promise<void> {
+  static async recordInteractionTokenUsage(
+    params: {
+      agentId: string;
+      teamIds: string[];
+      entities: Array<{ entityType: LimitEntityType; entityId: string }>;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+    },
+    native = false,
+  ): Promise<void> {
+    if (native) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath) throw new Error("Rust API socket is not configured");
+      const json = JSON.stringify(params);
+      await retryOnceOnDeadlock(async () => {
+        const outcome = z.enum(["written", "deadlock"]).parse(
+          await callRustApi({
+            socketPath,
+            path: "/internal/v1/interactions/record-legacy-usage",
+            json,
+          }),
+        );
+        if (outcome === "deadlock")
+          throw Object.assign(new Error("Interaction legacy usage deadlock"), {
+            code: "40P01",
+          });
+      });
+      return;
+    }
     const { agentId, teamIds, entities, ...usage } = params;
     const team = schema.teamsTable;
     const agent = schema.agentsTable;

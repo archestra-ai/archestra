@@ -156,6 +156,16 @@ importers:
         specifier: ^3.4.0
         version: 3.6.2(@emnapi/runtime@1.11.3)(@types/node@25.9.1)
 
+  archestra-rs/archestra-db-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.11.3)(@types/node@25.9.1)
+
   archestra-rs/image-rs:
     dependencies:
       '@archestra/napi-loader':
@@ -245,6 +255,9 @@ importers:
       '@archestra/app-runtime-rs':
         specifier: workspace:*
         version: link:../archestra-rs/app-runtime-rs
+      '@archestra/archestra-db-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/archestra-db-rs
       '@archestra/image-rs':
         specifier: workspace:*
         version: link:../archestra-rs/image-rs

@@ -11,7 +11,11 @@ import {
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, AgentVersionModel } from "@/models";
-import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { agentToolSurfaceChanged } from "@/models/agent-tool-surface";
+import {
+  assignToolToAgent,
+  validateAssignment,
+} from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
@@ -265,6 +269,7 @@ async function handleBulkAssignTool(params: {
     // it would buy no isolation while refusing catalog-less legacy rows, which
     // no environment predicate matches.
 
+    let nativeWrites = Promise.resolve();
     const results = await Promise.allSettled(
       assignments.map(async (assignment) => {
         const targetId = getBulkAssignmentTargetId(assignment);
@@ -295,11 +300,42 @@ async function handleBulkAssignTool(params: {
           agentType: target.agentType,
         });
 
-        return assignToolToAgent({
+        const input = {
           agentId: targetId,
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
+        };
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const execution = context.gatewayExecution;
+        if (execution?.native) {
+          const validationError = await validateAssignment(input);
+          if (validationError) return validationError;
+          const write = nativeWrites.then(() =>
+            AgentToolModel.assignMcpNative({
+              agentId: input.agentId,
+              toolId: input.toolId,
+              mcpServerId: input.mcpServerId ?? null,
+              credentialResolutionMode: input.resolveAtCallTime
+                ? "dynamic"
+                : "static",
+              organizationId,
+              agentType: target.agentType,
+              environmentId: target.environmentId,
+              signal: execution.signal,
+            }),
+          );
+          nativeWrites = write.then(
+            () => {},
+            () => {},
+          );
+          return (await write) === "unchanged" ? ("duplicate" as const) : null;
+        }
+        // SPDX-SnippetEnd
+        return assignToolToAgent({
+          ...input,
           // One version for the whole batch, forked below.
           deferVersionFork: true,
         });
@@ -329,9 +365,12 @@ async function handleBulkAssignTool(params: {
         }
       } else if (result.status === "rejected") {
         const error =
-          result.reason instanceof Error
-            ? result.reason.message
-            : "Unknown error";
+          context.gatewayExecution?.signal.aborted &&
+          result.reason === context.gatewayExecution.signal.reason
+            ? "Tool call cancelled"
+            : result.reason instanceof Error
+              ? result.reason.message
+              : "Unknown error";
         failed.push({ [idField]: entityId, toolId, error });
       }
     });
@@ -389,6 +428,9 @@ async function handleBulkRemoveTool(params: {
         ),
     );
 
+    // The private API has a single database connection. Keep each batch from
+    // exhausting its checkout queue without coupling independent outcomes.
+    let nativeWrites = Promise.resolve();
     const results = await Promise.allSettled(
       removals.map(async (removal) => {
         const target = targetAgents.get(removal.agentId);
@@ -416,7 +458,39 @@ async function handleBulkRemoveTool(params: {
         // Auto-tool mode: deleting an assignment row is a no-op (dynamic access
         // re-permits), so removal means adding an exclusion. Custom mode: delete
         // the assignment row; a missing row means the tool was not assigned.
-        if (accessAllByAgent.get(removal.agentId)) {
+        const auto = accessAllByAgent.get(removal.agentId) ?? false;
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const execution = context.gatewayExecution;
+        if (execution?.native) {
+          if (auto) {
+            await agentToolExclusionsService.validateToolIds(
+              [removal.toolId],
+              organizationId,
+            );
+          } else if (
+            !(await AgentToolModel.exists(removal.agentId, removal.toolId))
+          ) {
+            return "not_assigned" as const;
+          }
+          const write = nativeWrites.then(() =>
+            AgentToolModel.removeMcpNative({
+              ...removal,
+              organizationId,
+              agentType: target.agentType,
+              environmentId: target.environmentId,
+              mode: auto ? "auto" : "custom",
+              signal: execution.signal,
+            }),
+          );
+          nativeWrites = write.catch(() => {});
+          await write;
+          if (auto) agentToolSurfaceChanged(removal.agentId);
+          return "removed" as const;
+        }
+        // SPDX-SnippetEnd
+        if (auto) {
           await agentToolExclusionsService.addExclusions({
             agentId: removal.agentId,
             organizationId,
@@ -459,9 +533,12 @@ async function handleBulkRemoveTool(params: {
         }
       } else {
         const error =
-          result.reason instanceof Error
-            ? result.reason.message
-            : "Unknown error";
+          context.gatewayExecution?.signal.aborted &&
+          result.reason === context.gatewayExecution.signal.reason
+            ? "Tool call cancelled"
+            : result.reason instanceof Error
+              ? result.reason.message
+              : "Unknown error";
         failed.push({ agentId, toolId, error });
       }
     });

@@ -1,5 +1,9 @@
 import type { TargetInstallCaller } from "@/clients/mcp-client";
 import { McpServerToolDescriptionModel } from "@/models";
+import {
+  type McpToolReloadScope,
+  writeMcpToolReload,
+} from "@/models/mcp-tool-reload";
 import type { Tool } from "@/types";
 
 /**
@@ -23,24 +27,33 @@ export async function recordInstallToolDescriptions(params: {
   mcpServerId: string;
   syncedTools: Array<Pick<Tool, "id" | "rawName" | "description">>;
   reported: Array<{ rawToolName?: string; description: string | null }>;
+  nativeReload?: McpToolReloadScope;
 }): Promise<void> {
   const reportedByRawName = new Map(
     params.reported.flatMap((tool) =>
       tool.rawToolName ? [[tool.rawToolName, tool.description] as const] : [],
     ),
   );
-  await McpServerToolDescriptionModel.replaceForServer({
-    mcpServerId: params.mcpServerId,
-    descriptions: params.syncedTools.map((tool) => ({
-      toolId: tool.id,
-      // A row matched by a concurrent sync may hold another installation's
-      // text, so prefer what this installation reported for the tool.
-      description:
-        tool.rawName !== null && reportedByRawName.has(tool.rawName)
-          ? (reportedByRawName.get(tool.rawName) ?? null)
-          : tool.description,
-    })),
-  });
+  const descriptions = params.syncedTools.map((tool) => ({
+    toolId: tool.id,
+    // A row matched by a concurrent sync may hold another installation's
+    // text, so prefer what this installation reported for the tool.
+    description:
+      tool.rawName !== null && reportedByRawName.has(tool.rawName)
+        ? (reportedByRawName.get(tool.rawName) ?? null)
+        : tool.description,
+  }));
+  if (params.nativeReload) {
+    await writeMcpToolReload(params.nativeReload, {
+      kind: "descriptions",
+      descriptions,
+    });
+  } else {
+    await McpServerToolDescriptionModel.replaceForServer({
+      mcpServerId: params.mcpServerId,
+      descriptions,
+    });
+  }
 }
 
 /**

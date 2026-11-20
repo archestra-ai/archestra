@@ -5,8 +5,10 @@ import {
   type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { isGlobalAdmin } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -53,12 +55,22 @@ import type {
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import {
   nextAvailableName,
   sanitizeUploadFilename,
 } from "@/utils/upload-filename";
 
 /** Who a project reaches, which is what its default agent must cover. */
+const NativeProjectSummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  owner_name: z.string().nullable(),
+  conversation_count: z.int().nonnegative(),
+  created_at: z.iso.datetime(),
+});
+
 type ProjectShareAudience = {
   visibility: ProjectVisibility | null;
   teamIds: string[];
@@ -312,6 +324,85 @@ class ProjectService {
     return { data, total };
   }
 
+  async listMcpNative(params: {
+    organizationId: string;
+    userId: string;
+    isProjectAdmin?: boolean;
+    search?: string;
+    access?: ResourceAccessSelection;
+    limit: number;
+    signal: AbortSignal;
+  }) {
+    const { organizationId, userId, access, signal } = params;
+    const candidates = await ProjectAccessModel.listMcpCandidates({
+      organizationId,
+      userId,
+      principal: await ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId,
+        userId,
+      }),
+      includeOversight: params.isProjectAdmin,
+      reachableOnly: access?.relations === undefined,
+      access,
+    });
+    signal.throwIfAborted();
+    if (candidates.length === 0) return { data: [], total: 0 };
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const page = z
+      .object({
+        total: z.int().nonnegative(),
+        rows: z.array(NativeProjectSummarySchema),
+      })
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/list-projects",
+          json: JSON.stringify({
+            organizationId,
+            userId,
+            projectIds: candidates.map(({ id }) => id),
+            ownerIds: candidates.map((row) => row.userId),
+            search: params.search?.trim().toLowerCase() || undefined,
+            limit: params.limit,
+          }),
+          signal,
+        }),
+      );
+    const byId = new Map(
+      candidates.map((candidate) => [candidate.id, candidate]),
+    );
+    signal.throwIfAborted();
+    const labels = await ProjectLabelModel.getLabelsForMany(
+      page.rows.map(({ id }) => id),
+    );
+    signal.throwIfAborted();
+    return {
+      total: page.total,
+      data: page.rows.map((row) => {
+        const candidate = byId.get(row.id);
+        if (!candidate) throw new Error("Unexpected project in native list");
+        const viewerRole: ProjectViewerRole =
+          candidate.userId === userId
+            ? "owner"
+            : candidate.accessible
+              ? "shared"
+              : "admin";
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          ownerName: row.owner_name,
+          conversationCount: row.conversation_count,
+          createdAt: new Date(row.created_at),
+          labels: labels.get(row.id) ?? [],
+          visibility: candidate.visibility ?? null,
+          viewerRole,
+        };
+      }),
+    };
+  }
+
   /**
    * Org-wide list of soft-deleted projects for an overseer of every project — the oversight
    * companion to {@link restore}. Non-admins get nothing. Every row is
@@ -429,6 +520,71 @@ class ProjectService {
       defaultAgent: reachableDefaultAgent,
       createdAt: project.createdAt,
       deletedAt: project.deletedAt,
+    };
+  }
+
+  async getMcpDetailNative(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    signal: AbortSignal;
+  }) {
+    const { id, organizationId, userId, signal } = params;
+    const project = await this.requireReadable({
+      id,
+      organizationId,
+      userId,
+    });
+    const viewerRole = project.userId === userId ? "owner" : "shared";
+    const appIds = await AppAccessModel.getUserAccessibleAppIds({
+      organizationId,
+      userId,
+    });
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const row = NativeProjectSummarySchema.extend({
+      apps: z.array(
+        z.object({
+          id: z.uuid(),
+          name: z.string(),
+          description: z.string().nullable(),
+        }),
+      ),
+    })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/get-project",
+          json: JSON.stringify({
+            id: project.id,
+            organizationId,
+            ownerId: project.userId,
+            appIds,
+          }),
+          signal,
+        }),
+      );
+    if (!row) throw new ApiError(404, "Project not found");
+    signal.throwIfAborted();
+    const [audience, labels] = await Promise.all([
+      ProjectAccessModel.findAudience(project),
+      ProjectLabelModel.getLabelsFor(project.id),
+    ]);
+    signal.throwIfAborted();
+    return {
+      project: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        visibility: audience.visibility,
+        viewerRole,
+        ownerName: row.owner_name,
+        labels,
+        conversationCount: row.conversation_count,
+        createdAt: new Date(row.created_at),
+      },
+      apps: row.apps,
     };
   }
 
@@ -899,6 +1055,7 @@ class ProjectService {
     appId: string;
     organizationId: string;
     userId: string;
+    nativeSignal?: AbortSignal;
   }): Promise<void> {
     const project = await this.requireReadable(params);
     const app = await AppModel.findByIdInOrg(
@@ -915,11 +1072,21 @@ class ProjectService {
     ) {
       throw new ApiError(404, "App not found");
     }
-    await ProjectAppModel.link({
+    const link = {
       projectId: project.id,
       appId: app.id,
       linkedBy: params.userId,
-    });
+    };
+    if (params.nativeSignal) {
+      const linked = await ProjectAppModel.linkNative({
+        ...link,
+        organizationId: params.organizationId,
+        signal: params.nativeSignal,
+      });
+      if (!linked) throw new ApiError(404, "Project or app not found");
+    } else {
+      await ProjectAppModel.link(link);
+    }
   }
 
   /**
@@ -931,12 +1098,17 @@ class ProjectService {
     appId: string;
     organizationId: string;
     userId: string;
+    nativeSignal?: AbortSignal;
   }): Promise<void> {
     const project = await this.requireReadable(params);
-    const removed = await ProjectAppModel.unlink({
-      projectId: project.id,
-      appId: params.appId,
-    });
+    const link = { projectId: project.id, appId: params.appId };
+    const removed = params.nativeSignal
+      ? await ProjectAppModel.unlinkNative({
+          ...link,
+          organizationId: params.organizationId,
+          signal: params.nativeSignal,
+        })
+      : await ProjectAppModel.unlink(link);
     if (!removed) throw new ApiError(404, "App is not linked to this project");
   }
 

@@ -1,8 +1,10 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
+import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { callRustApi } from "@/utils/rust-api";
 
 /**
  * Keeps `agents.last_used_at` current. The two log writers
@@ -18,7 +20,21 @@ class AgentUsageModel {
   static async recordUse(params: {
     agentId: string;
     usedAt: Date;
+    native?: boolean;
   }): Promise<void> {
+    if (params.native) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath) throw new Error("Rust API socket is not configured");
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/interactions/stamp-agent-use",
+        json: JSON.stringify({
+          agentId: params.agentId,
+          usedAt: params.usedAt,
+        }),
+      });
+      return;
+    }
     await db
       .update(schema.agentsTable)
       .set({
@@ -50,6 +66,7 @@ class AgentUsageModel {
   static recordUseInBackground(params: {
     agentId: string | null | undefined;
     usedAt: Date;
+    native?: boolean;
   }): void {
     const { agentId, usedAt } = params;
     if (!agentId) return;
@@ -62,7 +79,11 @@ class AgentUsageModel {
     }
     AgentUsageModel.recentStamps.set(agentId, usedAt.getTime());
     trackBackgroundWork(
-      AgentUsageModel.recordUse({ agentId, usedAt }).catch((error) => {
+      AgentUsageModel.recordUse({
+        agentId,
+        usedAt,
+        native: params.native,
+      }).catch((error) => {
         // Let the next use retry instead of waiting out the interval.
         AgentUsageModel.recentStamps.delete(agentId);
         logger.error(

@@ -249,7 +249,7 @@ class KnowledgeSourceAccessControlService {
 
   canAccessKnowledgeBase(
     accessControl: KnowledgeSourceAccessControlContext,
-    knowledgeBase: KnowledgeBase,
+    knowledgeBase: Pick<KnowledgeBase, "id">,
   ) {
     return this.hasScopedAccess({
       accessControl,
@@ -261,7 +261,7 @@ class KnowledgeSourceAccessControlService {
 
   canAccessConnector(
     accessControl: KnowledgeSourceAccessControlContext,
-    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
+    connector: Pick<KnowledgeBaseConnector, "id">,
   ) {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

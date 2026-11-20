@@ -2101,6 +2101,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                 call: routedCall,
                 adapter: binding.adapter,
                 mint,
+                delegationBinding: binding.spawnerNativeId
+                  ? {
+                      spawnerNativeId: binding.spawnerNativeId,
+                      callerId: session.caller_id,
+                    }
+                  : undefined,
               })
             : undefined;
         const resumeArgs = argumentRecordOf(routedCall.arguments);
@@ -6167,6 +6173,7 @@ function withDelegationMarker(params: {
   call: ToolCall;
   adapter: AppaClientAdapter;
   mint: (prompt: string, callId: string) => string | undefined;
+  delegationBinding?: LlmProxyToolCallAnnotation["delegationBinding"];
 }): { call: ToolCall; annotation: LlmProxyToolCallAnnotation } | undefined {
   const { call } = params;
   if (!params.adapter.isSpawnTool(call.name, call.namespace, call.arguments))
@@ -6205,6 +6212,7 @@ function withDelegationMarker(params: {
       name: call.name,
       field: spawn.field,
       appended,
+      delegationBinding: params.delegationBinding,
     },
   };
 }

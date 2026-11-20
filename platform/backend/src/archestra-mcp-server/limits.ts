@@ -8,8 +8,9 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, LimitModel } from "@/models";
+import { AgentModel, LimitLabelModel, LimitModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit } from "@/services/limit";
 import {
@@ -18,8 +19,10 @@ import {
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
+  SelectLimitSchema,
   UuidIdSchema,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
@@ -165,21 +168,30 @@ const registry = defineArchestraTools([
         ) {
           return errorResult("Limit entity not found.");
         }
-        const limit = await createLimit({
-          entityType: args.entity_type,
-          entityId: args.entity_id,
-          limitType: args.limit_type,
-          behavior: args.behavior ?? "hard",
-          limitValue: args.limit_value,
-          model:
-            args.model && Array.isArray(args.model) && args.model.length > 0
-              ? args.model
-              : null,
-          cleanupInterval: args.cleanup_interval,
-          mcpServerName: args.mcp_server_name,
-          toolName: args.tool_name,
-          reason: args.reason?.trim() || null,
-        });
+        const execution = context.gatewayExecution;
+        const limit = await createLimit(
+          {
+            entityType: args.entity_type,
+            entityId: args.entity_id,
+            limitType: args.limit_type,
+            behavior: args.behavior ?? "hard",
+            limitValue: args.limit_value,
+            model:
+              args.model && Array.isArray(args.model) && args.model.length > 0
+                ? args.model
+                : null,
+            cleanupInterval: args.cleanup_interval,
+            mcpServerName: args.mcp_server_name,
+            toolName: args.tool_name,
+            reason: args.reason?.trim() || null,
+          },
+          execution?.native
+            ? {
+                organizationId: context.organizationId,
+                signal: execution.signal,
+              }
+            : undefined,
+        );
 
         return structuredSuccessResult(
           { limit },
@@ -197,6 +209,9 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return catchError(error, "creating limit");
       }
     },
@@ -234,12 +249,22 @@ const registry = defineArchestraTools([
         if (!context.organizationId) {
           return errorResult("Organization context is required.");
         }
-        const limits = await LimitModel.findAll(
-          args.entity_type,
-          args.entity_id,
-          args.limit_type,
-          context.organizationId,
-        );
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
+        const limits = execution?.native
+          ? await readNativeLimits({
+              organizationId: context.organizationId,
+              entityType: args.entity_type,
+              entityId: args.entity_id,
+              limitType: args.limit_type,
+              signal: execution.signal,
+            })
+          : await LimitModel.findAll(
+              args.entity_type,
+              args.entity_id,
+              args.limit_type,
+              context.organizationId,
+            );
 
         if (limits.length === 0) {
           return structuredSuccessResult(
@@ -286,6 +311,8 @@ const registry = defineArchestraTools([
           `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
         );
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "getting limits");
       }
     },
@@ -331,7 +358,7 @@ const registry = defineArchestraTools([
       );
 
       try {
-        const updateData: Record<string, unknown> = {};
+        const updateData: Parameters<typeof LimitModel.patchForMcp>[1] = {};
         if (args.limit_type !== undefined)
           updateData.limitType = args.limit_type;
         if (args.model !== undefined) updateData.model = args.model;
@@ -358,7 +385,17 @@ const registry = defineArchestraTools([
         )
           return errorResult("Limit not found.");
 
-        const limit = await LimitModel.patch(args.id, updateData);
+        const execution = context.gatewayExecution;
+        const limit = await LimitModel.patchForMcp(
+          args.id,
+          updateData,
+          execution?.native
+            ? {
+                organizationId: context.organizationId,
+                signal: execution.signal,
+              }
+            : undefined,
+        );
 
         if (!limit) {
           return errorResult(`Limit with ID ${args.id} not found.`);
@@ -373,6 +410,9 @@ const registry = defineArchestraTools([
           }`,
         );
       } catch (error) {
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return catchError(error, "updating limit");
       }
     },
@@ -407,7 +447,14 @@ const registry = defineArchestraTools([
           ))
         )
           return errorResult("Limit not found.");
-        const deleted = await LimitModel.delete(args.id);
+        const execution = context.gatewayExecution;
+        const deleted = execution?.native
+          ? await LimitModel.deleteMcpNative({
+              id: args.id,
+              organizationId: context.organizationId,
+              signal: execution.signal,
+            })
+          : await LimitModel.delete(args.id);
 
         if (!deleted) {
           return errorResult(`Limit with ID ${args.id} not found.`);
@@ -418,6 +465,9 @@ const registry = defineArchestraTools([
           `Successfully deleted limit with ID: ${args.id}`,
         );
       } catch (error) {
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return catchError(error, "deleting limit");
       }
     },
@@ -469,8 +519,9 @@ const registry = defineArchestraTools([
       }
 
       try {
+        context.gatewayExecution?.signal.throwIfAborted();
         const llmProxy = await AgentModel.getOrgLlmProxy(organizationId);
-        const usage = await LimitModel.getAgentTokenUsage(llmProxy.id);
+        const usage = await readToolTokenUsage(llmProxy.id, context);
 
         return structuredSuccessResult(
           {
@@ -482,6 +533,8 @@ const registry = defineArchestraTools([
           `Token usage for the LLM Proxy:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
         );
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "getting LLM proxy token usage");
       }
     },
@@ -508,7 +561,7 @@ async function handleGetTokenUsage(params: {
 
   try {
     const targetId = args.id || contextAgent.id;
-    const usage = await LimitModel.getAgentTokenUsage(targetId);
+    const usage = await readToolTokenUsage(targetId, context);
 
     return structuredSuccessResult(
       {
@@ -520,6 +573,68 @@ async function handleGetTokenUsage(params: {
       `Token usage for agent ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "getting agent token usage");
   }
+}
+
+async function readToolTokenUsage(agentId: string, context: ArchestraContext) {
+  const execution = context.gatewayExecution;
+  execution?.signal.throwIfAborted();
+  if (!execution?.native) return LimitModel.getAgentTokenUsage(agentId);
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const usage = z
+    .object({
+      totalInputTokens: z.number(),
+      totalOutputTokens: z.number(),
+    })
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/agent-token-usage",
+        json: JSON.stringify({ agentId }),
+        signal: execution.signal,
+      }),
+    );
+  return {
+    ...usage,
+    totalTokens: usage.totalInputTokens + usage.totalOutputTokens,
+  };
+}
+
+async function readNativeLimits(params: {
+  organizationId: string;
+  entityType?: z.infer<typeof LimitEntityTypeSchema>;
+  entityId?: string;
+  limitType?: z.infer<typeof LimitTypeSchema>;
+  signal: AbortSignal;
+}) {
+  const { signal, ...query } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const rows = z
+    .array(
+      SelectLimitSchema.extend({
+        createdAt: z.iso.datetime().transform((value) => new Date(value)),
+        updatedAt: z.iso.datetime().transform((value) => new Date(value)),
+        lastCleanup: z.iso
+          .datetime()
+          .transform((value) => new Date(value))
+          .nullable(),
+      }),
+    )
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/get-limits",
+        json: JSON.stringify(query),
+        signal,
+      }),
+    );
+  const labels = await LimitLabelModel.getLabelsForMany(
+    rows.map(({ id }) => id),
+  );
+  return rows.map((row) => ({ ...row, labels: labels.get(row.id) ?? [] }));
 }

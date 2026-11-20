@@ -17,13 +17,16 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import config from "@/config";
 import { createCursorPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { ScheduleTriggerModel, ScheduleTriggerRunModel } from "@/models";
+import { decodeScheduleRunCursor } from "@/models/schedule-trigger-run";
 import { projectService } from "@/services/project";
 import {
   findAccessibleScheduleTriggerOrThrow,
   findAccessibleScheduleTriggerRunOrThrow,
+  findAccessibleScheduleTriggerTargetOrThrow,
   hasProjectScheduleOversight,
   startManualScheduleTriggerRun,
 } from "@/services/schedule-trigger-access";
@@ -43,6 +46,7 @@ import {
   CreateScheduleTriggerBodySchema,
   UpdateScheduleTriggerBodySchema,
 } from "@/types/schedule-trigger-input";
+import { callRustApi } from "@/utils/rust-api";
 import {
   catchError,
   defineArchestraTool,
@@ -280,11 +284,14 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const identity = requireUserContext(context);
       if ("error" in identity) return identity.error;
+      const execution = context.gatewayExecution;
+      const nativeSignal = execution?.native ? execution.signal : undefined;
       try {
         const { trigger, created } = args.project_id
           ? {
               trigger: await createScheduleTrigger({
                 ...identity,
+                nativeSignal,
                 body: CreateScheduleTriggerBodySchema.parse(
                   toScheduleBody(args),
                 ),
@@ -293,6 +300,7 @@ const registry = defineArchestraTools([
             }
           : await createScheduleTriggerWithProject({
               ...identity,
+              nativeSignal,
               body: {
                 name: args.name,
                 agentId: args.agent_id ?? context.agent.id,
@@ -308,6 +316,8 @@ const registry = defineArchestraTools([
           created,
         });
       } catch (error) {
+        if (nativeSignal?.aborted && error === nativeSignal.reason)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "create scheduled task");
       }
     },
@@ -324,9 +334,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const identity = requireUserContext(context);
       if ("error" in identity) return identity.error;
+      const execution = context.gatewayExecution;
+      const nativeSignal = execution?.native ? execution.signal : undefined;
       try {
         const trigger = await updateScheduleTrigger({
           ...identity,
+          nativeSignal,
           id: args.schedule_trigger_id,
           body: UpdateScheduleTriggerBodySchema.parse(toScheduleBody(args)),
         });
@@ -335,6 +348,8 @@ const registry = defineArchestraTools([
           message_template: trigger.messageTemplate,
         });
       } catch (error) {
+        if (nativeSignal?.aborted && error === nativeSignal.reason)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "update scheduled task");
       }
     },
@@ -355,10 +370,19 @@ const registry = defineArchestraTools([
           id: args.schedule_trigger_id,
           access: "delete",
         });
-        const success = await ScheduleTriggerModel.delete(trigger.id);
+        const execution = context.gatewayExecution;
+        const success = execution?.native
+          ? await ScheduleTriggerModel.deleteMcpNative(
+              trigger,
+              execution.signal,
+            )
+          : await ScheduleTriggerModel.delete(trigger.id);
         if (!success) throw new ApiError(404, "Schedule trigger not found");
         return structuredSuccessResult({ success });
       } catch (error) {
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "delete scheduled task");
       }
     },
@@ -411,6 +435,8 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = identity;
 
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         // Mirrors GET /api/schedule-triggers: the caller's own schedules by
         // default, the whole org only for a scheduled-task admin, and a
         // project's schedules once the project read has authorized them.
@@ -431,22 +457,41 @@ const registry = defineArchestraTools([
           actorUserId = undefined;
         }
 
-        const triggers = await ScheduleTriggerModel.listByOrganization({
+        const query = {
           organizationId,
           limit: (args.limit ?? DEFAULT_LIMIT) + 1,
           cursor: args.cursor,
           enabled: args.enabled,
-          agentIds: args.agent_id ? [args.agent_id] : undefined,
-          actorUserId,
-          projectId: args.project_id,
-        });
+        };
+        const triggers = execution?.native
+          ? await readNativeTriggerPage({
+              ...query,
+              agentId: args.agent_id,
+              scope: args.project_id
+                ? { kind: "project", projectId: args.project_id }
+                : actorUserId === undefined
+                  ? { kind: "organization" }
+                  : { kind: "actor", userId: actorUserId },
+              signal: execution.signal,
+            })
+          : (
+              await ScheduleTriggerModel.listByOrganization({
+                ...query,
+                agentIds: args.agent_id ? [args.agent_id] : undefined,
+                actorUserId,
+                projectId: args.project_id,
+              })
+            ).map((row) => ({
+              summary: toTriggerSummary(row),
+              cursorCreatedAt: row.cursorCreatedAt,
+            }));
 
         const page = createCursorPaginatedResult(
           triggers,
           { limit: args.limit ?? DEFAULT_LIMIT },
-          (row) => ({ value: row.cursorCreatedAt, id: row.id }),
+          (row) => ({ value: row.cursorCreatedAt, id: row.summary.id }),
         );
-        const summaries = page.data.map(toTriggerSummary);
+        const summaries = page.data.map(({ summary }) => summary);
         return structuredSuccessResult(
           { schedule_triggers: summaries, pagination: page.pagination },
           (summaries.length === 0
@@ -463,6 +508,8 @@ const registry = defineArchestraTools([
             `\nPagination: ${JSON.stringify(page.pagination)}`,
         );
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "listing scheduled tasks");
       }
     },
@@ -487,17 +534,40 @@ const registry = defineArchestraTools([
       if ("error" in identity) return identity.error;
 
       try {
-        const trigger = await findAccessibleScheduleTriggerOrThrow({
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
+        const access = {
           id: args.schedule_trigger_id,
           userId: identity.userId,
           organizationId: identity.organizationId,
-          access: "read",
-        });
+          access: "read" as const,
+        };
+        if (execution?.native) {
+          const target =
+            await findAccessibleScheduleTriggerTargetOrThrow(access);
+          const socketPath = config.database.rustAuditLogSocket;
+          if (!socketPath)
+            throw new Error("Rust MCP tool socket is not configured");
+          const trigger = GetScheduleTriggerOutputSchema.nullable().parse(
+            await callRustApi({
+              socketPath,
+              path: "/internal/v1/mcp/tools/get-schedule-trigger",
+              json: JSON.stringify(target),
+              signal: execution.signal,
+            }),
+          );
+          return trigger
+            ? structuredSuccessResult(trigger)
+            : errorResult("Schedule trigger not found");
+        }
+        const trigger = await findAccessibleScheduleTriggerOrThrow(access);
         return structuredSuccessResult({
           ...toTriggerSummary(trigger),
           message_template: trigger.messageTemplate,
         });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "reading the scheduled task");
       }
     },
@@ -533,26 +603,34 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = identity;
 
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const trigger = await findAccessibleScheduleTriggerOrThrow({
           id: args.schedule_trigger_id,
           userId,
           organizationId,
           access: "read",
         });
-        const runs = await ScheduleTriggerRunModel.listByTrigger({
+        const query = {
           organizationId,
           triggerId: trigger.id,
           limit: (args.limit ?? DEFAULT_LIMIT) + 1,
           cursor: args.cursor,
           status: args.status,
-        });
+        };
+        const runs = execution?.native
+          ? await readNativeRunPage(query, execution.signal)
+          : (await ScheduleTriggerRunModel.listByTrigger(query)).map((row) => ({
+              summary: toRunSummary(row),
+              cursorCreatedAt: row.cursorCreatedAt,
+            }));
 
         const page = createCursorPaginatedResult(
           runs,
           { limit: args.limit ?? DEFAULT_LIMIT },
-          (row) => ({ value: row.cursorCreatedAt, id: row.id }),
+          (row) => ({ value: row.cursorCreatedAt, id: row.summary.id }),
         );
-        const summaries = page.data.map(toRunSummary);
+        const summaries = page.data.map(({ summary }) => summary);
         return structuredSuccessResult(
           { runs: summaries, pagination: page.pagination },
           (summaries.length === 0
@@ -568,6 +646,8 @@ const registry = defineArchestraTools([
             `\nPagination: ${JSON.stringify(page.pagination)}`,
         );
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "listing scheduled task runs");
       }
     },
@@ -593,6 +673,33 @@ const registry = defineArchestraTools([
       if ("error" in identity) return identity.error;
 
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
+        if (execution?.native) {
+          const trigger = await findAccessibleScheduleTriggerOrThrow({
+            id: args.schedule_trigger_id,
+            userId: identity.userId,
+            organizationId: identity.organizationId,
+            access: "read",
+          });
+          const socketPath = config.database.rustAuditLogSocket;
+          if (!socketPath)
+            throw new Error("Rust MCP tool socket is not configured");
+          const run = ScheduleTriggerRunSummarySchema.nullable().parse(
+            await callRustApi({
+              socketPath,
+              path: "/internal/v1/mcp/tools/get-schedule-trigger-run",
+              json: JSON.stringify({
+                organizationId: identity.organizationId,
+                triggerId: trigger.id,
+                runId: args.run_id,
+              }),
+              signal: execution.signal,
+            }),
+          );
+          if (!run) return errorResult("Schedule trigger run not found");
+          return structuredSuccessResult(run);
+        }
         const run = await findAccessibleScheduleTriggerRunOrThrow({
           triggerId: args.schedule_trigger_id,
           runId: args.run_id,
@@ -602,6 +709,8 @@ const registry = defineArchestraTools([
         });
         return structuredSuccessResult(toRunSummary(run));
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "reading the scheduled task run");
       }
     },
@@ -635,6 +744,8 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = identity;
 
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const trigger = await findAccessibleScheduleTriggerOrThrow({
           id: args.schedule_trigger_id,
           userId,
@@ -670,8 +781,14 @@ const registry = defineArchestraTools([
           run,
           organizationId,
           userId,
+          nativeSignal: execution?.native ? execution.signal : undefined,
         });
-        const { messages, truncated } = condenseTranscript(transcript.messages);
+        const { messages, truncated } = execution?.native
+          ? await condenseNativeTranscript(
+              transcript.messages,
+              execution.signal,
+            )
+          : condenseTranscript(transcript.messages);
         return structuredSuccessResult({
           run: toRunSummary(run),
           session_id: `scheduled-${run.id}`,
@@ -680,6 +797,8 @@ const registry = defineArchestraTools([
           truncated,
         });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "reading the scheduled task run transcript");
       }
     },
@@ -745,6 +864,8 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const identity = requireUserContext(context);
       if ("error" in identity) return identity.error;
+      const execution = context.gatewayExecution;
+      const nativeSignal = execution?.native ? execution.signal : undefined;
 
       try {
         const trigger = await findAccessibleScheduleTriggerOrThrow({
@@ -756,6 +877,7 @@ const registry = defineArchestraTools([
         const run = await startManualScheduleTriggerRun({
           trigger,
           initiatedByUserId: identity.userId,
+          nativeSignal,
         });
         logger.info(
           { triggerId: trigger.id, runId: run.id },
@@ -766,6 +888,8 @@ const registry = defineArchestraTools([
           `Started "${trigger.name}" (run id=${run.id}). Poll get_schedule_trigger_run for the outcome.`,
         );
       } catch (error) {
+        if (nativeSignal?.aborted && error === nativeSignal.reason)
+          return errorResult("Tool call cancelled");
         return apiErrorOr(error, "starting the scheduled task");
       }
     },
@@ -823,9 +947,15 @@ async function setEnabled(params: {
       organizationId: identity.organizationId,
       access: "update",
     });
-    const updated = await ScheduleTriggerModel.update(trigger.id, {
-      enabled: params.enabled,
-    });
+    const execution = params.context.gatewayExecution;
+    const data = { enabled: params.enabled };
+    const updated = execution?.native
+      ? await ScheduleTriggerModel.updateMcpNative({
+          existing: trigger,
+          data,
+          signal: execution.signal,
+        })
+      : await ScheduleTriggerModel.update(trigger.id, data);
     if (!updated) {
       return errorResult("Schedule trigger not found");
     }
@@ -834,8 +964,46 @@ async function setEnabled(params: {
       `${params.enabled ? "Enabled" : "Disabled"} "${updated.name}".`,
     );
   } catch (error) {
+    const signal = params.context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return apiErrorOr(error, `${verb} the scheduled task`);
   }
+}
+
+async function readNativeTriggerPage(params: {
+  organizationId: string;
+  limit: number;
+  cursor?: string;
+  enabled?: boolean;
+  agentId?: string;
+  scope:
+    | { kind: "actor"; userId: string }
+    | { kind: "project"; projectId: string }
+    | { kind: "organization" };
+  signal: AbortSignal;
+}) {
+  const { signal, cursor, ...query } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return z
+    .array(
+      z.object({
+        summary: ScheduleTriggerSummarySchema,
+        cursorCreatedAt: z.string(),
+      }),
+    )
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/list-schedule-triggers",
+        json: JSON.stringify({
+          ...query,
+          position: decodeScheduleRunCursor(cursor),
+        }),
+        signal,
+      }),
+    );
 }
 
 function toTriggerSummary(trigger: ScheduleTrigger) {
@@ -871,11 +1039,59 @@ function toRunSummary(run: ScheduleTriggerRun) {
   };
 }
 
+async function readNativeRunPage(
+  query: Parameters<typeof ScheduleTriggerRunModel.listByTrigger>[0],
+  signal: AbortSignal,
+) {
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const { cursor, ...filters } = query;
+  return z
+    .array(
+      z.object({
+        summary: ScheduleTriggerRunSummarySchema,
+        cursorCreatedAt: z.string(),
+      }),
+    )
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/list-schedule-trigger-runs",
+        json: JSON.stringify({
+          ...filters,
+          position: decodeScheduleRunCursor(cursor),
+        }),
+        signal,
+      }),
+    );
+}
+
 /**
  * Keeps a transcript small enough to return inline: long values are shortened
  * and, past the part budget, the oldest parts are dropped so the failure at
  * the end of the run stays visible.
  */
+async function condenseNativeTranscript(
+  messages: Parameters<typeof condenseTranscript>[0],
+  signal: AbortSignal,
+) {
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return GetScheduleTriggerRunTranscriptOutputSchema.pick({
+    messages: true,
+    truncated: true,
+  }).parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/condense-schedule-transcript",
+      json: JSON.stringify(
+        messages.map(({ role, parts }) => ({ role, parts })),
+      ),
+      signal,
+    }),
+  );
+}
+
 function condenseTranscript(
   messages: ReadonlyArray<{ role: string; parts: ReadonlyArray<unknown> }>,
 ): {

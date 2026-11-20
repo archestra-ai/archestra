@@ -22,6 +22,7 @@ import {
   type ModelPoolRetrySettings,
 } from "@archestra/shared/model-pool-retries";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import { canUseRustOpenAiChatRelay } from "@/clients/rust-openai-stream";
 import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
@@ -67,6 +68,8 @@ export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 export interface UpstreamAttempt {
   /** The terminal pool failure already has an interaction and settled spend. */
   interactionRecorded?: boolean;
+  /** The Rust relay owns this attempt even when no response frame arrived. */
+  nativeOpenAiDispatched?: boolean;
   modelAliases?: string[];
   billingEndpoint?: "fireworks" | "other";
   requestedModel?: string;
@@ -95,6 +98,7 @@ export interface PlannedMember {
   memberId: string;
   providerApiKeyId: string;
   provider: SupportedProvider;
+  nativeOpenAiQuotaEligible?: true;
   modelId: string;
   priority: number;
   weight: number;
@@ -171,6 +175,7 @@ export async function planModelPool(params: {
    */
   poolId?: string;
   inbound: PoolWire;
+  streaming?: boolean;
   caller: ModelPoolCaller;
   /** Set when the Unified Model API already let this caller use the pool. */
   grantedPoolId?: string;
@@ -207,6 +212,23 @@ export async function planModelPool(params: {
   const keys = await LlmProviderApiKeyModel.findByIds([
     ...new Set(allEnabled.map((member) => member.providerApiKeyId)),
   ]);
+  const nativeOpenAiKeys = new Set(
+    params.streaming && params.inbound === "openai-chat"
+      ? keys
+          .filter(
+            (key) =>
+              key.provider === "openai" &&
+              key.credentialKind === "api_key" &&
+              key.secretId &&
+              canUseRustOpenAiChatRelay(
+                key.inferenceBaseUrl ??
+                  key.baseUrl ??
+                  config.llm.openai.baseUrl,
+              ),
+          )
+          .map((key) => key.id)
+      : [],
+  );
   const usableKeys = new Set(
     keys
       .filter(
@@ -259,6 +281,10 @@ export async function planModelPool(params: {
         memberId: member.id,
         providerApiKeyId: member.providerApiKeyId,
         provider: member.provider,
+        ...(member.provider === "openai" &&
+          nativeOpenAiKeys.has(member.providerApiKeyId) && {
+            nativeOpenAiQuotaEligible: true as const,
+          }),
         modelId: member.modelId,
         priority: member.priority,
         weight: member.weight,
@@ -426,6 +452,7 @@ export async function openThroughModelPool<T>(params: {
     attempt.attempt = attempted + 1;
     attempt.failureReason = undefined;
     attempt.interactionRecorded = undefined;
+    attempt.nativeOpenAiDispatched = undefined;
     attempt.cutOff = undefined;
     attempt.startedAt = attempted > 0 ? Date.now() : undefined;
     try {

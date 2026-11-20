@@ -5,6 +5,7 @@ import { isDatabaseHealthy } from "@/database";
 import { openappaReadiness } from "@/openappa/service";
 import type { SandboxRuntimeStatus } from "@/sandbox-runtime/sandbox-runtime-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import { nativeServicesReady } from "@/utils/rust-readiness";
 import { HEALTH_PATH, READY_PATH } from "./route-paths";
 
 const { name, version } = config.api;
@@ -111,6 +112,14 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      if (!(await nativeServicesReady())) {
+        return reply.status(503).send({
+          name,
+          version,
+          status: "degraded",
+          database: "connected",
+        });
+      }
       const openappa = await openappaReadiness();
       switch (openappa.state) {
         case "disabled":

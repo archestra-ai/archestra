@@ -315,6 +315,7 @@ COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
 COPY archestra-rs/openappa-rs/package.json archestra-rs/openappa-rs/
 COPY archestra-rs/router-rs/package.json archestra-rs/router-rs/
+COPY archestra-rs/archestra-db-rs/package.json archestra-rs/archestra-db-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -358,11 +359,19 @@ COPY archestra-rs/image-rs/Cargo.toml archestra-rs/image-rs/build.rs ./archestra
 COPY archestra-rs/openappa-rs/Cargo.toml archestra-rs/openappa-rs/build.rs ./archestra-rs/openappa-rs/
 COPY archestra-rs/router-core/Cargo.toml ./archestra-rs/router-core/
 COPY archestra-rs/router-rs/Cargo.toml archestra-rs/router-rs/build.rs ./archestra-rs/router-rs/
+COPY archestra-rs/archestra-db/Cargo.toml ./archestra-rs/archestra-db/
+COPY archestra-rs/archestra-db-rs/Cargo.toml archestra-rs/archestra-db-rs/build.rs ./archestra-rs/archestra-db-rs/
+COPY archestra-rs/archestra-worker/Cargo.toml ./archestra-rs/archestra-worker/
+COPY archestra-rs/archestra-api/Cargo.toml ./archestra-rs/archestra-api/
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs openappa-rs router-core router-rs; do \
+    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs openappa-rs router-core router-rs archestra-db archestra-db-rs; do \
       mkdir -p "archestra-rs/${crate}/src"; \
       printf 'pub fn dependency_cache_placeholder() {}\n' > "archestra-rs/${crate}/src/lib.rs"; \
+    done && \
+    for crate in archestra-worker archestra-api; do \
+      mkdir -p "archestra-rs/${crate}/src"; \
+      printf 'fn main() {}\n' > "archestra-rs/${crate}/src/main.rs"; \
     done && \
     cd archestra-rs && \
     case "${TARGETARCH}" in \
@@ -370,7 +379,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
       arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
       *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
-    for package in app_runtime_rs image_rs sandbox_rs openappa_rs router_rs; do \
+    for package in app_runtime_rs image_rs sandbox_rs openappa_rs router_rs archestra_db_rs archestra-api archestra-worker; do \
       RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
         --target "${RUST_TARGET}" -p "${package}"; \
     done
@@ -386,6 +395,7 @@ COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/ap
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
 COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/openappa-rs/node_modules
 COPY --from=deps /app/archestra-rs/router-rs/node_modules ./archestra-rs/router-rs/node_modules
+COPY --from=deps /app/archestra-rs/archestra-db-rs/node_modules ./archestra-rs/archestra-db-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/vendor/dagger-sdk-0.21.11 ./archestra-rs/vendor/dagger-sdk-0.21.11
@@ -399,6 +409,10 @@ COPY archestra-rs/image-rs ./archestra-rs/image-rs
 COPY archestra-rs/openappa-rs ./archestra-rs/openappa-rs
 COPY archestra-rs/router-core ./archestra-rs/router-core
 COPY archestra-rs/router-rs ./archestra-rs/router-rs
+COPY archestra-rs/archestra-db ./archestra-rs/archestra-db
+COPY archestra-rs/archestra-db-rs ./archestra-rs/archestra-db-rs
+COPY archestra-rs/archestra-worker ./archestra-rs/archestra-worker
+COPY archestra-rs/archestra-api ./archestra-rs/archestra-api
 
 # These tasks stay outside Turbo's shared cache because their artifacts are
 # platform-specific. This Docker layer is architecture-scoped and exportable,
@@ -413,7 +427,24 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
          --filter @archestra/app-runtime-rs \
          --filter @archestra/image-rs \
          --filter @archestra/openappa-rs \
-         --filter @archestra/router-rs build
+         --filter @archestra/router-rs \
+         --filter @archestra/archestra-db-rs build
+
+ARG TARGETARCH
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
+    cd archestra-rs && \
+    case "${TARGETARCH}" in \
+      amd64) RUST_TARGET=x86_64-alpine-linux-musl ;; \
+      arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
+      *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    touch archestra-api/src/main.rs archestra-worker/src/main.rs archestra-db/src/lib.rs && \
+    RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
+      --target "${RUST_TARGET}" -p archestra-api -p archestra-worker && \
+    install -D -m 0755 "target/${RUST_TARGET}/release/archestra-api" /prod/bin/archestra-api && \
+    install -D -m 0755 "target/${RUST_TARGET}/release/archestra-worker" /prod/bin/archestra-worker
 
 # The constrained frontend build uses the dev-lite Bash entrypoint.
 RUN apk add --no-cache bash
@@ -690,6 +721,7 @@ VOLUME /var/lib/postgresql/data /app/data
 # or `pnpm install` are needed in this stage.
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/scripts/start-supervised-service.sh /app/start-supervised-service.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
 # slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
 # mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
@@ -708,6 +740,8 @@ RUN wget -O /app/agent-sandbox.quickstart.yaml \
     echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
+COPY docker/supervisord/archestra-api.conf /etc/supervisord.archestra-api.conf
+COPY docker/supervisord/archestra-worker.conf /etc/supervisord.archestra-worker.conf
 
 # CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
 # /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
@@ -725,6 +759,7 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # tree replaces the previous per-crate .node/index.cjs copy choreography and
 # the runtime `pnpm install`.
 COPY --from=builder /prod/backend ./backend
+COPY --from=builder-base /prod/bin/ /usr/local/bin/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # The M-Files VAF Add On package built from this checkout's source (versioned
@@ -765,7 +800,8 @@ EXPOSE 5432 9000 9050 3000
 # /chat, and rendering a page fetches appearance settings from the backend,
 # which put two request log lines into `docker logs` every 30 seconds.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/default-favicon.ico || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/default-favicon.ico && \
+        { [ "$ARCHESTRA_SERVER_MANAGE_RUST_SERVICES" != "true" ] || wget -q --spider http://127.0.0.1:9000/ready; }
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

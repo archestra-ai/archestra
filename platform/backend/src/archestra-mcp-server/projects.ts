@@ -244,6 +244,8 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = context;
 
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         // Without `access`, `isProjectAdmin` is deliberately not passed: the
         // service drops admin-oversight rows anyway, so a project admin sees
         // exactly what they can access — same as everyone else. An explicit
@@ -258,15 +260,20 @@ const registry = defineArchestraTools([
               action: "update",
             })
           : undefined;
-        const { data: shown, total } = await projectService.list({
+        const query = {
           organizationId,
           userId,
           isProjectAdmin,
           search: args.query,
           access: toolAccessSelection(args),
           limit: MAX_LISTED_PROJECTS,
-          offset: 0,
-        });
+        };
+        const { data: shown, total } = execution?.native
+          ? await projectService.listMcpNative({
+              ...query,
+              signal: execution.signal,
+            })
+          : await projectService.list({ ...query, offset: 0 });
         const summary =
           shown.length === 0
             ? "No projects matched."
@@ -284,6 +291,8 @@ const registry = defineArchestraTools([
           summary,
         );
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "listing projects");
       }
     },
@@ -320,11 +329,16 @@ const registry = defineArchestraTools([
         // project admin list a foreign project's files that the file tools then
         // refuse to read (they authorize on owner/share alone), so the whole
         // headless project surface stays on one access rule.
-        const project = await projectService.get({
-          id: args.project_id,
-          organizationId,
-          userId,
-        });
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
+        const access = { id: args.project_id, organizationId, userId };
+        const native = execution?.native
+          ? await projectService.getMcpDetailNative({
+              ...access,
+              signal: execution.signal,
+            })
+          : null;
+        const project = native?.project ?? (await projectService.get(access));
         const [{ content }, files, apps] = await Promise.all([
           projectService.getInstructions({
             id: project.id,
@@ -332,8 +346,10 @@ const registry = defineArchestraTools([
             userId,
           }),
           projectService.listFiles({ id: project.id, organizationId, userId }),
-          projectService.listApps({ id: project.id, organizationId, userId }),
+          native?.apps ??
+            projectService.listApps({ id: project.id, organizationId, userId }),
         ]);
+        execution?.signal.throwIfAborted();
 
         const truncated = content.length > MAX_INLINED_INSTRUCTIONS_CHARS;
         const instructions = truncated
@@ -382,6 +398,8 @@ const registry = defineArchestraTools([
       } catch (error) {
         // "Project not found" (the 404 that also covers "no access") is the
         // actionable answer; surface it verbatim.
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         if (error instanceof ApiError) {
           return errorResult(error.message);
         }
@@ -409,6 +427,9 @@ const registry = defineArchestraTools([
           appId: args.app_id,
           organizationId: context.organizationId,
           userId: context.userId,
+          nativeSignal: context.gatewayExecution?.native
+            ? context.gatewayExecution.signal
+            : undefined,
         });
         return structuredSuccessResult(
           { project_id: args.project_id, app_id: args.app_id, linked: true },
@@ -416,6 +437,9 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return catchError(error, "linking the app");
       }
     },
@@ -438,6 +462,9 @@ const registry = defineArchestraTools([
           appId: args.app_id,
           organizationId: context.organizationId,
           userId: context.userId,
+          nativeSignal: context.gatewayExecution?.native
+            ? context.gatewayExecution.signal
+            : undefined,
         });
         return structuredSuccessResult(
           { project_id: args.project_id, app_id: args.app_id, linked: false },
@@ -445,6 +472,9 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         return catchError(error, "unlinking the app");
       }
     },
@@ -457,7 +487,20 @@ export const tools = registry.tools;
 // === Internal helpers ===
 
 /** Project row → the compact shape both project read tools return. */
-function toProjectSummary(project: ProjectListItem) {
+function toProjectSummary(
+  project: Pick<
+    ProjectListItem,
+    | "id"
+    | "name"
+    | "description"
+    | "visibility"
+    | "viewerRole"
+    | "ownerName"
+    | "labels"
+    | "conversationCount"
+    | "createdAt"
+  >,
+) {
   return {
     id: project.id,
     name: project.name,

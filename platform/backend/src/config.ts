@@ -2675,6 +2675,8 @@ const config = {
       process.env.ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION === "true",
   },
   mcpGateway: {
+    rustDiscoverEnabled:
+      process.env.ARCHESTRA_MCP_GATEWAY_RUST_DISCOVER_ENABLED === "true",
     endpoint: "/v1/mcp",
     /**
      * Per-request timeout (ms) for an upstream MCP tool call made through the
@@ -3052,6 +3054,12 @@ const config = {
   analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
+    rustAuditLogEnabled:
+      process.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED === "true",
+    rustAuditLogSocket:
+      process.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET?.trim() || undefined,
+    rustSiteNotificationEnabled:
+      process.env.ARCHESTRA_DATABASE_RUST_SITE_NOTIFICATION_ENABLED === "true",
     poolMax: parseDatabasePoolMax(process.env.ARCHESTRA_DATABASE_POOL_MAX),
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
@@ -3977,6 +3985,8 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    rustOpenAiStreamEnabled:
+      process.env.ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED === "true",
     upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
       ? parsePositiveInt(
           process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
@@ -4130,6 +4140,8 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT,
       100,
     ),
+    rustRollupWorker:
+      process.env.ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED === "true",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,
@@ -4447,6 +4459,8 @@ const config = {
     ),
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  manageRustServices:
+    process.env.ARCHESTRA_SERVER_MANAGE_RUST_SERVICES === "true",
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   // Instance-wide banner (markdown) shown at the top of the UI. Unlike
   // maintenanceMode it does not affect request handling.

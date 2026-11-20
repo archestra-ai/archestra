@@ -54,10 +54,13 @@ tests:
             secretRef:
               name: database-pool
 
-  - it: uses automatic sizing when explicitly chosen for unrelated bulk variables
+  - it: uses automatic sizing with a bulk import and explicitly disabled native pools
     set:
       archestra.database.poolMaxFromEnvFrom: false
       archestra.database.connectionBudget: 90
+      archestra.env.ARCHESTRA_SERVER_MANAGE_RUST_SERVICES: "false"
+      archestra.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED: "false"
+      archestra.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET: ""
       archestra.envFrom:
         - configMapRef:
             name: application-settings

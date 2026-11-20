@@ -764,6 +764,7 @@ export async function buildAgentMcpToolList(params: {
  */
 export async function createAgentServer(params: {
   grokToolNames?: boolean;
+  gatewayExecution?: { native: boolean; signal: AbortSignal };
   openappaSession?: import("@/openappa/service").OpenAppaSession;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
@@ -1205,6 +1206,13 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const runArchestraTool = () =>
                 executeArchestraTool(name, args, {
+                  gatewayExecution: params.gatewayExecution && {
+                    native: params.gatewayExecution.native,
+                    signal: AbortSignal.any([
+                      params.gatewayExecution.signal,
+                      extra.signal,
+                    ]),
+                  },
                   openappaSession: params.openappaSession,
                   currentToolCallId: params.currentToolCallId,
                   agent: { id: agent.id, name: agent.name },
@@ -1369,6 +1377,14 @@ export async function createAgentServer(params: {
                   // await; whether the upstream stops working is up to the
                   // upstream (stateless HTTP servers run on — see tasks.ts).
                   abortSignal: taskAbortSignal,
+                  gatewayExecution:
+                    params.gatewayExecution &&
+                    (taskEligible
+                      ? { kind: "task" }
+                      : {
+                          kind: "request",
+                          disconnect: params.gatewayExecution.signal,
+                        }),
                   // A call that may detach is bounded by the task TTL, not the
                   // synchronous patience window (see mcp-client).
                   ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),

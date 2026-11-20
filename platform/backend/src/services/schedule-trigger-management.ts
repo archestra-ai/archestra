@@ -28,8 +28,9 @@ export async function createScheduleTriggerWithProject(params: {
   > & { agentId: string };
   userId: string;
   organizationId: string;
+  nativeSignal?: AbortSignal;
 }): Promise<{ trigger: ScheduleTrigger; created: boolean }> {
-  const { body, userId, organizationId } = params;
+  const { body, userId, organizationId, nativeSignal } = params;
   if (!(await userHasPermission(userId, organizationId, "project", "create"))) {
     throw new ApiError(
       403,
@@ -42,6 +43,7 @@ export async function createScheduleTriggerWithProject(params: {
   z.string().max(PROJECT_INSTRUCTIONS_MAX_LENGTH).parse(body.messageTemplate);
   let project: Project;
   try {
+    nativeSignal?.throwIfAborted();
     project = await projectService.create({
       organizationId,
       userId,
@@ -59,6 +61,7 @@ export async function createScheduleTriggerWithProject(params: {
     throw error;
   }
   try {
+    nativeSignal?.throwIfAborted();
     await projectService.setInstructions({
       id: project.id,
       organizationId,
@@ -70,6 +73,7 @@ export async function createScheduleTriggerWithProject(params: {
       organizationId,
       userId,
       body: { ...body, projectId: project.id },
+      nativeSignal,
     });
     return { trigger, created: true };
   } catch (error) {
@@ -92,8 +96,9 @@ export async function createScheduleTrigger(params: {
   body: z.infer<typeof CreateScheduleTriggerBodySchema>;
   userId: string;
   organizationId: string;
+  nativeSignal?: AbortSignal;
 }) {
-  const { body, userId, organizationId } = params;
+  const { body, userId, organizationId, nativeSignal } = params;
   const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
     userId,
     organizationId,
@@ -142,7 +147,7 @@ export async function createScheduleTrigger(params: {
     agentId = defaultAgent.id;
   }
 
-  const trigger = await ScheduleTriggerModel.create({
+  const input = {
     organizationId,
     name: body.name,
     agentId,
@@ -152,9 +157,10 @@ export async function createScheduleTrigger(params: {
     timezone: body.timezone,
     enabled: body.enabled ?? true,
     actorUserId: userId,
-  });
-
-  return trigger;
+  };
+  return nativeSignal
+    ? ScheduleTriggerModel.createMcpNative(input, nativeSignal)
+    : ScheduleTriggerModel.create(input);
 }
 
 export async function updateScheduleTrigger(params: {
@@ -162,8 +168,9 @@ export async function updateScheduleTrigger(params: {
   body: z.infer<typeof UpdateScheduleTriggerBodySchema>;
   userId: string;
   organizationId: string;
+  nativeSignal?: AbortSignal;
 }) {
-  const { id, body, userId, organizationId } = params;
+  const { id, body, userId, organizationId, nativeSignal } = params;
   const existing = await findAccessibleScheduleTriggerOrThrow({
     id,
     userId,
@@ -233,7 +240,13 @@ export async function updateScheduleTrigger(params: {
     });
   }
 
-  const updated = await ScheduleTriggerModel.update(id, body);
+  const updated = nativeSignal
+    ? await ScheduleTriggerModel.updateMcpNative({
+        existing,
+        data: body,
+        signal: nativeSignal,
+      })
+    : await ScheduleTriggerModel.update(id, body);
 
   if (!updated) {
     throw new ApiError(404, "Schedule trigger not found");

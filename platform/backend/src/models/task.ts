@@ -146,9 +146,16 @@ class TaskModel {
    */
   static async resetStuckTasks(
     timeoutMs: number,
+    excludedTaskTypes: readonly TaskType[] = [],
   ): Promise<StuckTaskTransition[]> {
     const timeoutSeconds = timeoutMs / 1000;
     const timeoutError = "Task timed out (worker stopped heartbeating)";
+    const excluded = excludedTaskTypes.length
+      ? sql`AND task_type NOT IN (${sql.join(
+          excludedTaskTypes.map((type) => sql`${type}`),
+          sql`, `,
+        )})`
+      : sql``;
 
     const { rows: dead } = await db.execute<StuckTaskTransition>(sql`
       UPDATE tasks
@@ -156,6 +163,7 @@ class TaskModel {
           last_error = ${timeoutError},
           completed_at = NOW()
       WHERE status = 'processing'
+        ${excluded}
         AND COALESCE(heartbeat_at, started_at) < NOW() - make_interval(secs => ${timeoutSeconds})
         AND attempt >= max_attempts
         AND NOT (
@@ -179,6 +187,7 @@ class TaskModel {
             END
           ) * INTERVAL '1 millisecond'
       WHERE status = 'processing'
+        ${excluded}
         AND COALESCE(heartbeat_at, started_at) < NOW() - make_interval(secs => ${timeoutSeconds})
         AND (
           attempt < max_attempts

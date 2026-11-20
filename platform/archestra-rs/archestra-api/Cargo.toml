@@ -1,0 +1,25 @@
+[package]
+name = "archestra-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+archestra-db = { path = "../archestra-db" }
+async-stream = "0.3"
+axum = "0.8"
+base64 = "0.22"
+diesel = { version = "~2.3.0", default-features = false }
+futures-util = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
+ring = "0.17"
+ryu-js = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+subtle = "2"
+time = { version = "0.3", features = ["formatting", "macros"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+
+[dev-dependencies]
+tempfile = "3"

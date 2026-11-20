@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import type {
   HookEvent,
@@ -7,7 +9,12 @@ import type {
   InsertHookFile,
   UpdateHookFile,
 } from "@/types/hook";
-import { InsertHookFileSchema, UpdateHookFileSchema } from "@/types/hook";
+import {
+  InsertHookFileSchema,
+  SelectHookFileSchema,
+  UpdateHookFileSchema,
+} from "@/types/hook";
+import { callRustApi } from "@/utils/rust-api";
 import AgentModel from "./agent";
 import AgentVersionModel from "./agent-version";
 
@@ -31,6 +38,19 @@ class HookFileModel {
     // Hooks are part of the agent config snapshot — fork a version.
     await AgentVersionModel.forkIfChangedBestEffort(row.agentId);
     return row;
+  }
+
+  static async createMcpNative(
+    data: InsertHookFile,
+    signal: AbortSignal,
+  ): Promise<HookFile | "unique_violation" | null> {
+    const input = InsertHookFileSchema.parse(data);
+    return writeMcpHook({
+      path: "/internal/v1/mcp/tools/create-hook",
+      json: JSON.stringify({ ...input, enabled: input.enabled ?? true }),
+      organizationId: input.organizationId,
+      signal,
+    });
   }
 
   static async findById(
@@ -110,6 +130,20 @@ class HookFileModel {
     return row ?? null;
   }
 
+  static async updateMcpNative(params: {
+    target: { id: string; agentId: string; organizationId: string };
+    data: UpdateHookFile;
+    signal: AbortSignal;
+  }): Promise<HookFile | "unique_violation" | null> {
+    const { target, data, signal } = params;
+    return writeMcpHook({
+      path: "/internal/v1/mcp/tools/update-hook",
+      json: JSON.stringify({ target, data: UpdateHookFileSchema.parse(data) }),
+      organizationId: target.organizationId,
+      signal,
+    });
+  }
+
   /**
    * Replace the agent's entire hook set in one transaction. Rows are keyed by
    * `(agent_id, event, file_name)` and carry no FK referents, so a
@@ -175,6 +209,50 @@ class HookFileModel {
     }
     return rows.length > 0;
   }
+
+  static async deleteMcpNative(params: {
+    id: string;
+    agentId: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const deleted = z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-hook",
+        json: JSON.stringify(input),
+      }),
+    );
+    if (deleted) await AgentVersionModel.forkIfChangedBestEffort(input.agentId);
+    return deleted;
+  }
 }
 
 export default HookFileModel;
+
+async function writeMcpHook(params: {
+  path:
+    | "/internal/v1/mcp/tools/create-hook"
+    | "/internal/v1/mcp/tools/update-hook";
+  json: string;
+  organizationId: string;
+  signal: AbortSignal;
+}): Promise<HookFile | "unique_violation" | null> {
+  const { path, json, organizationId, signal } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  signal.throwIfAborted();
+  const timestamp = z.iso.datetime().transform((value) => new Date(value));
+  const hook = SelectHookFileSchema.omit({ organizationId: true })
+    .extend({ createdAt: timestamp, updatedAt: timestamp })
+    .nullable()
+    .or(z.literal("unique_violation"))
+    .parse(await callRustApi({ socketPath, path, json }));
+  if (!hook || hook === "unique_violation") return hook;
+  await AgentVersionModel.forkIfChangedBestEffort(hook.agentId);
+  return { ...hook, organizationId };
+}

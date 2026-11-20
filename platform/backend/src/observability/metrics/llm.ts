@@ -727,7 +727,7 @@ export function getObservableFetch(
   provider: SupportedProvider,
   profile: GatewayAgent,
   source: InteractionSource,
-  options?: { reportTokens?: boolean },
+  options?: { reportTokens?: boolean; upstreamFetch?: typeof llmUpstreamFetch },
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -743,9 +743,10 @@ export function getObservableFetch(
       },
       `[${provider}Proxy] outbound request headers`,
     );
+    const upstreamFetch = options?.upstreamFetch ?? llmUpstreamFetch;
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return llmUpstreamFetch(url, init, dispatcher);
+      return upstreamFetch(url, init, dispatcher);
     }
 
     // Extract model from request body if available
@@ -764,7 +765,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await llmUpstreamFetch(url, init, dispatcher);
+      response = await upstreamFetch(url, init, dispatcher);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 

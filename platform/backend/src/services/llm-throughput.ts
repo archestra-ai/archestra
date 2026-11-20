@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared/model-constants";
+import config from "@/config";
 import logger from "@/logging";
 import LlmThroughputModel, {
   type ThroughputReceipt,
@@ -6,6 +7,7 @@ import LlmThroughputModel, {
 import { reportLimitStorageError } from "@/observability/metrics/limit";
 import type { Limit, LimitEntityType } from "@/types/limit";
 import type { UsageView } from "@/types/llm-provider";
+import { callRustApi } from "@/utils/rust-api";
 
 export class ThroughputError extends Error {
   interactionRecorded = false;
@@ -49,10 +51,10 @@ export class LlmThroughput {
     },
   ) {}
 
-  async admit(_request?: unknown): Promise<void> {
+  async admit(_request?: unknown, native = false): Promise<void> {
     if (this.admitted) return;
     try {
-      const result = await LlmThroughputModel.admit(this.scope);
+      const result = await LlmThroughputModel.admit(this.scope, native);
       if ("denied" in result) {
         throw new ThroughputError({
           status: result.denied.limitType === "token_cost" ? 402 : 429,
@@ -86,6 +88,7 @@ export class LlmThroughput {
     model: string,
     subscription: boolean,
     modelAliases?: string[],
+    native = false,
   ): Promise<void> {
     if (!this.scope.attemptSpendRules) return;
     // Failed attempts settle before the next member replaces this receipt.
@@ -99,20 +102,40 @@ export class LlmThroughput {
       rules: this.scope.attemptSpendRules,
       attemptSpendRules: undefined,
     });
-    await attempt.admit();
+    await attempt.admit(undefined, native);
     this.attemptSpend = attempt;
   }
 
   async settleSpend(
     cost: string | number | null | undefined,
     billingMode?: "metered" | "subscription",
+    native = false,
   ): Promise<void> {
     if (this.scope.attemptSpendRules) {
-      await this.attemptSpend?.settleSpend(cost, billingMode);
+      await this.attemptSpend?.settleSpend(cost, billingMode, native);
       return;
     }
     if (!this.reservation || cost == null) return;
     try {
+      if (native) {
+        if (!this.reservation.limits.some(({ money }) => money)) return;
+        const socketPath = config.database.rustAuditLogSocket;
+        if (!socketPath)
+          throw new Error("Rust settlement socket is not configured");
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/interactions/settle-minute-spend",
+          json: JSON.stringify({
+            receiptId: this.reservation.id,
+            limitIds: this.reservation.limits.map(({ id }) => id),
+            spend: Number(cost),
+            billingMode:
+              billingMode ??
+              (this.reservation.subscription ? "subscription" : "metered"),
+          }),
+        });
+        return;
+      }
       await LlmThroughputModel.reconcile({
         reservation: this.reservation,
         tokens: 0,
@@ -126,10 +149,24 @@ export class LlmThroughput {
     }
   }
 
-  async cancelBeforeSend(): Promise<void> {
-    await this.attemptSpend?.cancelBeforeSend();
+  async cancelBeforeSend(native = false): Promise<void> {
+    await this.attemptSpend?.cancelBeforeSend(native);
     if (!this.reservation) return;
     try {
+      if (native) {
+        const socketPath = config.database.rustAuditLogSocket;
+        if (!socketPath)
+          throw new Error("Rust settlement socket is not configured");
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/interactions/refund-unsent",
+          json: JSON.stringify({
+            receiptId: this.reservation.id,
+            limitIds: this.reservation.limits.map(({ id }) => id),
+          }),
+        });
+        return;
+      }
       await LlmThroughputModel.reconcile({
         reservation: this.reservation,
         tokens: 0,
@@ -144,7 +181,10 @@ export class LlmThroughput {
     }
   }
 
-  async reconcile(usage: UsageView | null | undefined): Promise<void> {
+  async reconcile(
+    usage: UsageView | null | undefined,
+    native = false,
+  ): Promise<void> {
     if (!this.reservation || !usage) return;
     // This provider exposes only locally synthesized token metrics.
     if (this.scope.provider === "microsoft-365-copilot") return;
@@ -175,6 +215,21 @@ export class LlmThroughput {
         : Math.max(primary, components);
     if (!Number.isSafeInteger(tokens)) return;
     try {
+      if (native) {
+        const socketPath = config.database.rustAuditLogSocket;
+        if (!socketPath)
+          throw new Error("Rust settlement socket is not configured");
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/interactions/reconcile-tokens",
+          json: JSON.stringify({
+            receiptId: this.reservation.id,
+            limitIds: this.reservation.limits.map(({ id }) => id),
+            tokens,
+          }),
+        });
+        return;
+      }
       await LlmThroughputModel.reconcile({
         reservation: this.reservation,
         tokens,

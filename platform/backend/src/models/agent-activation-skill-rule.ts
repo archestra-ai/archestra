@@ -1,4 +1,6 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
@@ -6,6 +8,7 @@ import type {
   AgentActivationSkillReference,
   AgentActivationSkillRuleDisposition,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 
 export type AgentActivationSkillPolicyRule = {
   disposition: AgentActivationSkillRuleDisposition;
@@ -161,6 +164,33 @@ class AgentActivationSkillRuleModel {
       tx: params.tx,
     });
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async patchMcpNative(params: {
+    agentId: string;
+    organizationId: string;
+    expectedRevision: number;
+    replacement: Pick<
+      AgentActivationSkillPolicySnapshot,
+      "mode" | "rules"
+    > | null;
+    signal: AbortSignal;
+  }) {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.enum(["not_found", "conflict", "unchanged", "updated"]).parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/patch-agent-skill-policy",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 }
 
 function referenceToColumns(reference: AgentActivationSkillReference) {

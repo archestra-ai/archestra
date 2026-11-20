@@ -11,6 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { decodeCursor } from "@/database/utils/pagination";
@@ -19,7 +20,8 @@ import type {
   ScheduleTrigger,
   UpdateScheduleTrigger,
 } from "@/types";
-import { InsertScheduleTriggerSchema } from "@/types";
+import { ApiError, InsertScheduleTriggerSchema } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import {
   normalizeCronExpression,
   normalizeTimezone,
@@ -145,18 +147,72 @@ class ScheduleTriggerModel {
     return trigger ?? null;
   }
 
+  static async findAccessTarget(id: string) {
+    const trigger = schema.scheduleTriggersTable;
+    const [row] = await db
+      .select({
+        id: trigger.id,
+        organizationId: trigger.organizationId,
+        projectId: trigger.projectId,
+        actorUserId: trigger.actorUserId,
+      })
+      .from(trigger)
+      .innerJoin(
+        schema.agentsTable,
+        and(
+          eq(trigger.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .where(eq(trigger.id, id));
+    return row ?? null;
+  }
+
   static async create(data: InsertScheduleTrigger): Promise<ScheduleTrigger> {
-    const parsed = InsertScheduleTriggerSchema.parse(data);
     const [created] = await db
       .insert(schema.scheduleTriggersTable)
-      .values({
-        ...parsed,
-        cronExpression: normalizeCronExpression(parsed.cronExpression),
-        timezone: normalizeTimezone(parsed.timezone),
-      })
+      .values(normalizeScheduleTriggerInsert(data))
       .returning();
 
     return (await ScheduleTriggerModel.findById(created.id)) ?? created;
+  }
+
+  static async createMcpNative(
+    data: Omit<InsertScheduleTrigger, "lastExecutedAt"> & { projectId: string },
+    signal: AbortSignal,
+  ): Promise<ScheduleTrigger> {
+    const { lastExecutedAt: _, ...columns } =
+      normalizeScheduleTriggerInsert(data);
+    const input = {
+      ...columns,
+      projectId: data.projectId,
+      enabled: columns.enabled ?? true,
+    };
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const created = z
+      .object({
+        id: z.uuid(),
+        createdAt: z.iso.datetime().transform((value) => new Date(value)),
+      })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/create-schedule-trigger",
+          json: JSON.stringify(input),
+        }),
+      );
+    if (!created)
+      throw new ApiError(404, "Schedule project or agent not found");
+    return (
+      (await ScheduleTriggerModel.findById(created.id)) ?? {
+        ...input,
+        ...created,
+        lastExecutedAt: null,
+      }
+    );
   }
 
   static async update(
@@ -165,15 +221,7 @@ class ScheduleTriggerModel {
   ): Promise<ScheduleTrigger | null> {
     const [updated] = await db
       .update(schema.scheduleTriggersTable)
-      .set({
-        ...data,
-        ...(data.cronExpression !== undefined && {
-          cronExpression: normalizeCronExpression(data.cronExpression),
-        }),
-        ...(data.timezone !== undefined && {
-          timezone: normalizeTimezone(data.timezone),
-        }),
-      })
+      .set(normalizeScheduleTriggerPatch(data))
       .where(eq(schema.scheduleTriggersTable.id, id))
       .returning({ id: schema.scheduleTriggersTable.id });
 
@@ -184,6 +232,59 @@ class ScheduleTriggerModel {
     return await ScheduleTriggerModel.findById(updated.id);
   }
 
+  static async updateMcpNative(params: {
+    existing: ScheduleTrigger;
+    data: Pick<
+      Partial<UpdateScheduleTrigger>,
+      | "name"
+      | "agentId"
+      | "projectId"
+      | "enabled"
+      | "cronExpression"
+      | "timezone"
+      | "messageTemplate"
+    >;
+    signal: AbortSignal;
+  }): Promise<ScheduleTrigger | null> {
+    const { existing, data, signal } = params;
+    const {
+      id,
+      organizationId,
+      projectId,
+      agentId,
+      actorUserId,
+      cronExpression,
+      timezone,
+      messageTemplate,
+    } = existing;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const updated = z
+      .uuid()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/update-schedule-trigger",
+          json: JSON.stringify({
+            id,
+            organizationId,
+            expected: {
+              projectId,
+              agentId,
+              actorUserId,
+              cronExpression,
+              timezone,
+              messageTemplate,
+            },
+            patch: normalizeScheduleTriggerPatch(data),
+          }),
+        }),
+      );
+    return updated ? ScheduleTriggerModel.findById(updated) : null;
+  }
+
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.scheduleTriggersTable)
@@ -191,6 +292,32 @@ class ScheduleTriggerModel {
       .returning({ id: schema.scheduleTriggersTable.id });
 
     return result.length > 0;
+  }
+
+  static async deleteMcpNative(
+    trigger: Pick<
+      ScheduleTrigger,
+      "id" | "organizationId" | "projectId" | "agentId" | "actorUserId"
+    >,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const { id, organizationId, projectId, agentId, actorUserId } = trigger;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-schedule-trigger",
+        json: JSON.stringify({
+          id,
+          organizationId,
+          projectId,
+          agentId,
+          actorUserId,
+        }),
+      }),
+    );
   }
 
   static async findDueTriggers(now: Date): Promise<ScheduleTrigger[]> {
@@ -276,6 +403,27 @@ class ScheduleTriggerModel {
 }
 
 export default ScheduleTriggerModel;
+
+function normalizeScheduleTriggerInsert(data: InsertScheduleTrigger) {
+  const parsed = InsertScheduleTriggerSchema.parse(data);
+  return {
+    ...parsed,
+    cronExpression: normalizeCronExpression(parsed.cronExpression),
+    timezone: normalizeTimezone(parsed.timezone),
+  };
+}
+
+function normalizeScheduleTriggerPatch(data: Partial<UpdateScheduleTrigger>) {
+  return {
+    ...data,
+    ...(data.cronExpression !== undefined && {
+      cronExpression: normalizeCronExpression(data.cronExpression),
+    }),
+    ...(data.timezone !== undefined && {
+      timezone: normalizeTimezone(data.timezone),
+    }),
+  };
+}
 
 function buildListFilters(
   params: Pick<

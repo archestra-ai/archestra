@@ -15,6 +15,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
@@ -38,6 +39,7 @@ import type {
   TeamMemberListItem,
 } from "@/types";
 import { TeamMemberRoleSchema, UuidIdSchema } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import { AgentLabelOutputSchema, LabelInputSchema } from "./agent-resources";
 import {
   catchError,
@@ -666,7 +668,7 @@ async function handleCreateTeam(params: {
       organizationId: context.organizationId,
       userId: context.userId,
     });
-    const team = await TeamModel.create({
+    const input = {
       name: args.name,
       roles: args.roles,
       description: args.description,
@@ -674,11 +676,15 @@ async function handleCreateTeam(params: {
       createdBy: context.userId,
       parentId: args.parent_id,
       labels: args.labels ? deduplicateLabels(args.labels) : undefined,
-    });
+    };
+    const execution = context.gatewayExecution;
+    const team = execution?.native
+      ? await TeamModel.createNative(input, execution.signal)
+      : await TeamModel.create(input);
+    if (!team) return teamParentValidationError("parent_not_found");
 
-    // A freshly created team has exactly one member: its creator, added as a
-    // team admin by TeamModel.create.
-    const serialized = serializeTeam(team, team.members?.length ?? 0);
+    // Only a human creator gets a membership in the create transaction.
+    const serialized = serializeTeam(team, team.createdBy ? 1 : 0);
     return structuredSuccessResult(
       { team: serialized },
       `Successfully created team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
@@ -686,6 +692,9 @@ async function handleCreateTeam(params: {
       }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "creating team");
   }
 }
@@ -705,6 +714,7 @@ async function handleGetTeam(params: {
   }
 
   try {
+    context.gatewayExecution?.signal.throwIfAborted();
     const team = args.id
       ? await findTeamInOrg(args.id, context.organizationId)
       : args.name
@@ -724,13 +734,23 @@ async function handleGetTeam(params: {
       return readDenied;
     }
 
-    // findByName/getTeamForOrg do not hydrate members or labels; fetch both
-    // explicitly.
-    const [members, labels] = await Promise.all([
-      TeamModel.getTeamMembers(team.id),
+    const [detail, labels] = await Promise.all([
+      context.gatewayExecution?.native
+        ? readNativeTeams(
+            context.organizationId,
+            { kind: "authorizedTeam", teamId: team.id },
+            context.gatewayExecution.signal,
+          ).then(([row]) => row)
+        : TeamModel.getTeamMembers(team.id).then((members) =>
+            serializeTeam(team, members.length),
+          ),
       TeamLabelModel.getLabelsForTeam(team.id),
     ]);
-    const serialized = serializeTeam({ ...team, labels }, members.length);
+    if (!detail) return errorResult(`Team with ID ${team.id} not found.`);
+    const serialized = {
+      ...detail,
+      labels: labels.map(({ key, value }) => ({ key, value })),
+    };
     return structuredSuccessResult(
       { team: serialized },
       `Team ID: ${serialized.id}\nName: ${serialized.name}${
@@ -738,6 +758,8 @@ async function handleGetTeam(params: {
       }\nMembers: ${serialized.memberCount}${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "getting team");
   }
 }
@@ -757,33 +779,29 @@ async function handleListTeams(params: {
   }
 
   try {
-    // Non-manager visibility filtering below relies on `findByOrganization`
-    // hydrating each team's `members` relation.
-    const teams = await TeamModel.findByOrganization(context.organizationId);
-    // Org-level team managers see every team; everyone else only the teams
-    // they belong to (mirrors the REST GET /api/teams behavior).
+    context.gatewayExecution?.signal.throwIfAborted();
     const isManager = await isOrgTeamManager(context);
-    const visible = isManager
-      ? teams
-      : teams.filter((team) =>
-          team.members?.some((member) => member.userId === context.userId),
-        );
+    const visible = await listVisibleTeams({
+      context,
+      organizationId: context.organizationId,
+      isManager,
+    });
 
     const nameFilter = args.name?.toLowerCase();
     const filtered = nameFilter
       ? visible.filter((team) => team.name.toLowerCase().includes(nameFilter))
       : visible;
 
-    // findByOrganization hydrates members but not labels; batch-fetch them.
     const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
       filtered.map((team) => team.id),
     );
-    const serialized = filtered.map((team) =>
-      serializeTeam(
-        { ...team, labels: labelsByTeam.get(team.id) ?? [] },
-        team.members?.length ?? 0,
-      ),
-    );
+    const serialized = filtered.map((team) => ({
+      ...team,
+      labels: (labelsByTeam.get(team.id) ?? []).map(({ key, value }) => ({
+        key,
+        value,
+      })),
+    }));
 
     if (serialized.length === 0) {
       return structuredSuccessResult(
@@ -806,8 +824,62 @@ async function handleListTeams(params: {
       `Found ${serialized.length} team(s):\n\n${formatted}`,
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing teams");
   }
+}
+
+async function listVisibleTeams(params: {
+  context: ArchestraContext;
+  organizationId: string;
+  isManager: boolean;
+}): Promise<Omit<z.infer<typeof TeamOutputItemSchema>, "labels">[]> {
+  const { context, organizationId, isManager } = params;
+  const execution = context.gatewayExecution;
+  if (execution?.native) {
+    if (isManager)
+      return readNativeTeams(
+        organizationId,
+        { kind: "organization" },
+        execution.signal,
+      );
+    if (!context.userId) return [];
+    return readNativeTeams(
+      organizationId,
+      { kind: "member", userId: context.userId },
+      execution.signal,
+    );
+  }
+  const teams = await TeamModel.findByOrganization(organizationId);
+  return teams
+    .filter(
+      (team) =>
+        isManager ||
+        team.members?.some((member) => member.userId === context.userId),
+    )
+    .map((team) => serializeTeam(team, team.members?.length ?? 0));
+}
+
+async function readNativeTeams(
+  organizationId: string,
+  scope:
+    | { kind: "organization" }
+    | { kind: "member"; userId: string }
+    | { kind: "authorizedTeam"; teamId: string },
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted();
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return z.array(TeamOutputItemSchema.omit({ labels: true })).parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/list-teams",
+      json: JSON.stringify({ organizationId, scope }),
+      signal,
+    }),
+  );
 }
 
 async function handleEditTeam(params: {
@@ -862,7 +934,7 @@ async function handleEditTeam(params: {
       organizationId: context.organizationId,
       userId: context.userId,
     });
-    const updated = await TeamModel.update(args.id, {
+    const input = {
       ...(args.roles !== undefined ? { roles: args.roles } : {}),
       ...(args.name !== undefined ? { name: args.name } : {}),
       ...(args.description !== undefined
@@ -872,13 +944,23 @@ async function handleEditTeam(params: {
       ...(args.labels !== undefined
         ? { labels: deduplicateLabels(args.labels) }
         : {}),
-    });
+    };
+    const execution = context.gatewayExecution;
+    const serialized = execution?.native
+      ? await TeamModel.updateNative({
+          id: args.id,
+          organizationId: context.organizationId,
+          input,
+          signal: execution.signal,
+        })
+      : await TeamModel.update(args.id, input).then(
+          (team) => team && serializeTeam(team, team.members?.length ?? 0),
+        );
 
-    if (!updated) {
+    if (!serialized) {
       return errorResult(`Team with ID ${args.id} not found.`);
     }
 
-    const serialized = serializeTeam(updated, updated.members?.length ?? 0);
     return structuredSuccessResult(
       { team: serialized },
       `Successfully updated team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
@@ -886,6 +968,9 @@ async function handleEditTeam(params: {
       }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "updating team");
   }
 }
@@ -921,7 +1006,14 @@ async function handleDeleteTeam(params: {
       return errorResult(`Team with ID ${args.id} not found.`);
     }
 
-    const deleted = await TeamModel.delete(args.id);
+    const execution = context.gatewayExecution;
+    const deleted = execution?.native
+      ? await TeamModel.deleteNative({
+          teamId: args.id,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })
+      : await TeamModel.delete(args.id);
     if (!deleted) {
       return errorResult(`Team with ID ${args.id} not found.`);
     }
@@ -931,6 +1023,9 @@ async function handleDeleteTeam(params: {
       `Successfully deleted team with ID: ${args.id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "deleting team");
   }
 }
@@ -950,6 +1045,7 @@ async function handleListTeamMembers(params: {
   }
 
   try {
+    context.gatewayExecution?.signal.throwIfAborted();
     const team = await findTeamInOrg(args.team_id, context.organizationId);
     if (!team) {
       return errorResult(`Team with ID ${args.team_id} not found.`);
@@ -960,8 +1056,14 @@ async function handleListTeamMembers(params: {
       return readDenied;
     }
 
-    const members = await TeamModel.getTeamMembersWithUsers(args.team_id);
-    const serialized = members.map(serializeMember);
+    const execution = context.gatewayExecution;
+    const serialized = execution?.native
+      ? await readNativeTeamMembers({
+          organizationId: context.organizationId,
+          teamId: team.id,
+          signal: execution.signal,
+        })
+      : (await TeamModel.getTeamMembersWithUsers(team.id)).map(serializeMember);
 
     if (serialized.length === 0) {
       return structuredSuccessResult(
@@ -982,8 +1084,29 @@ async function handleListTeamMembers(params: {
       `Team "${team.name}" has ${serialized.length} member(s):\n\n${formatted}`,
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing team members");
   }
+}
+
+async function readNativeTeamMembers(params: {
+  organizationId: string;
+  teamId: string;
+  signal: AbortSignal;
+}) {
+  const { organizationId, teamId, signal } = params;
+  signal.throwIfAborted();
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return z.array(TeamMemberOutputItemSchema).parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/list-team-members",
+      json: JSON.stringify({ organizationId, teamId }),
+      signal,
+    }),
+  );
 }
 
 async function handleAddTeamMember(params: {
@@ -1041,11 +1164,24 @@ async function handleAddTeamMember(params: {
       organizationId: context.organizationId,
       userId: context.userId,
     });
-    const member = await TeamModel.addMember(
-      args.team_id,
-      orgUser.id,
-      args.role,
-    );
+    const execution = context.gatewayExecution;
+    const member = execution?.native
+      ? await TeamModel.addMemberNative({
+          teamId: team.id,
+          organizationId: context.organizationId,
+          userId: orgUser.id,
+          role: args.role,
+          signal: execution.signal,
+        })
+      : await TeamModel.addMember(args.team_id, orgUser.id, args.role);
+    if (member === "unique_violation")
+      return errorResult(
+        "A record with the same value already exists (adding team member)",
+      );
+    if (!member)
+      return errorResult(
+        `Team with ID ${args.team_id} or organization member not found.`,
+      );
 
     const serialized = serializeMember(member);
     return structuredSuccessResult(
@@ -1053,6 +1189,9 @@ async function handleAddTeamMember(params: {
       `Successfully added ${orgUser.name ?? orgUser.email} to team "${team.name}" as ${serialized.role}.`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "adding team member");
   }
 }
@@ -1095,12 +1234,21 @@ async function handleUpdateTeamMemberRole(params: {
       return lastAdminError;
     }
 
-    const member = await TeamModel.updateMemberRole({
+    const input = {
       teamId: args.team_id,
       userId: args.user_id,
       role: args.role,
-    });
+    };
+    const execution = context.gatewayExecution;
+    const member = execution?.native
+      ? await TeamModel.updateMemberRoleNative({
+          ...input,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })
+      : await TeamModel.updateMemberRole(input);
 
+    if (member === "last_admin") return lastAdminDenied();
     if (!member) {
       return errorResult("Team member not found.");
     }
@@ -1111,6 +1259,9 @@ async function handleUpdateTeamMemberRole(params: {
       `Successfully updated member ${args.user_id} in team "${team.name}" to ${serialized.role}.`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "updating team member role");
   }
 }
@@ -1153,8 +1304,19 @@ async function handleRemoveTeamMember(params: {
       return lastAdminError;
     }
 
-    const removed = await TeamModel.removeMember(args.team_id, args.user_id);
-    if (!removed) {
+    const execution = context.gatewayExecution;
+    const outcome = execution?.native
+      ? await TeamModel.removeMemberNative({
+          teamId: team.id,
+          organizationId: context.organizationId,
+          userId: args.user_id,
+          signal: execution.signal,
+        })
+      : (await TeamModel.removeMember(args.team_id, args.user_id))
+        ? "removed"
+        : "not_found";
+    if (outcome === "last_admin") return lastAdminDenied();
+    if (outcome === "not_found") {
       return errorResult("Team member not found.");
     }
 
@@ -1181,6 +1343,9 @@ async function handleRemoveTeamMember(params: {
       `Successfully removed member ${args.user_id} from team "${team.name}".`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "removing team member");
   }
 }
@@ -1204,6 +1369,7 @@ async function handleListTeamExternalGroups(params: {
     if (licenseDenied) {
       return licenseDenied;
     }
+    context.gatewayExecution?.signal.throwIfAborted();
 
     const team = await findTeamInOrg(args.team_id, context.organizationId);
     if (!team) {
@@ -1215,8 +1381,20 @@ async function handleListTeamExternalGroups(params: {
       return readDenied;
     }
 
-    const groups = await TeamModel.getExternalGroups(args.team_id);
-    const serialized = groups.map(serializeExternalGroup);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const serialized = execution?.native
+      ? await readNativeExternalGroups({
+          organizationId: context.organizationId,
+          teamId: team.id,
+          signal: execution.signal,
+        })
+      : (await TeamModel.getExternalGroups(team.id)).map(
+          serializeExternalGroup,
+        );
+    // SPDX-SnippetEnd
 
     if (serialized.length === 0) {
       return structuredSuccessResult(
@@ -1234,9 +1412,34 @@ async function handleListTeamExternalGroups(params: {
       `Team "${team.name}" has ${serialized.length} Team Sync group link(s):\n\n${formatted}`,
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing team external groups");
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function readNativeExternalGroups(params: {
+  organizationId: string;
+  teamId: string;
+  signal: AbortSignal;
+}) {
+  const { organizationId, teamId, signal } = params;
+  signal.throwIfAborted();
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return z.array(TeamExternalGroupOutputItemSchema).parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/list-team-external-groups",
+      json: JSON.stringify({ organizationId, teamId }),
+      signal,
+    }),
+  );
+}
+// SPDX-SnippetEnd
 
 async function handleAddTeamExternalGroup(params: {
   args: z.infer<typeof AddTeamExternalGroupToolArgsSchema>;
@@ -1301,12 +1504,26 @@ async function handleAddTeamExternalGroup(params: {
       return errorResult("This group is already linked to this team.");
     }
 
-    const externalGroup = await TeamModel.addExternalGroup({
+    const input = {
       teamId: args.team_id,
       groupIdentifier: normalizedGroupIdentifier,
       identityProviderId,
       role: args.role,
-    });
+    };
+    const execution = context.gatewayExecution;
+    const externalGroup = execution?.native
+      ? await TeamModel.addExternalGroupNative({
+          ...input,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })
+      : await TeamModel.addExternalGroup(input);
+    if (externalGroup === "unique_violation")
+      return errorResult(
+        "A record with the same value already exists (adding team external group)",
+      );
+    if (!externalGroup)
+      return errorResult("Team or identity provider not found.");
 
     const serialized = serializeExternalGroup(externalGroup);
     return structuredSuccessResult(
@@ -1314,6 +1531,9 @@ async function handleAddTeamExternalGroup(params: {
       `Linked group "${serialized.groupIdentifier}" to team "${team.name}" as ${serialized.role}.\n\nLink ID: ${serialized.id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "adding team external group");
   }
 }
@@ -1352,15 +1572,26 @@ async function handleRemoveTeamExternalGroup(params: {
       return manageDenied;
     }
 
-    // Schema validation guarantees one of group_id/group_identifier is set.
-    // Stored identifiers are lowercase-normalized on add; match that.
-    const removed = args.group_id
-      ? await TeamModel.removeExternalGroupById(args.team_id, args.group_id)
-      : args.group_identifier !== undefined &&
-        (await TeamModel.removeExternalGroup(
-          args.team_id,
-          args.group_identifier.toLowerCase(),
-        ));
+    const selector = args.group_id
+      ? { kind: "id" as const, value: args.group_id }
+      : args.group_identifier === undefined
+        ? null
+        : {
+            kind: "identifier" as const,
+            value: args.group_identifier.toLowerCase(),
+          };
+    if (!selector) return errorResult("Team Sync group link not found.");
+    const execution = context.gatewayExecution;
+    const removed = execution?.native
+      ? await TeamModel.removeExternalGroupNative({
+          teamId: team.id,
+          organizationId: context.organizationId,
+          selector,
+          signal: execution.signal,
+        })
+      : selector.kind === "id"
+        ? await TeamModel.removeExternalGroupById(team.id, selector.value)
+        : await TeamModel.removeExternalGroup(team.id, selector.value);
 
     if (!removed) {
       return errorResult("Team Sync group link not found.");
@@ -1371,6 +1602,9 @@ async function handleRemoveTeamExternalGroup(params: {
       `Successfully unlinked the group from team "${team.name}".`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "removing team external group");
   }
 }
@@ -1388,9 +1622,11 @@ async function checkNotRemovingLastAdmin(params: {
   if (check.ok) {
     return null;
   }
-  return errorResult(
-    check.reason === "last_admin"
-      ? "Cannot remove the last admin from a team."
-      : "Team member not found.",
-  );
+  return check.reason === "last_admin"
+    ? lastAdminDenied()
+    : errorResult("Team member not found.");
+}
+
+function lastAdminDenied(): CallToolResult {
+  return errorResult("Cannot remove the last admin from a team.");
 }

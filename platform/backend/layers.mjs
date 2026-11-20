@@ -59,6 +59,7 @@ const layerTable = [
       // reader they share with the proxy.
       "src/clients/llm-upstream-dispatcher.ts",
       "src/clients/llm-upstream-fetch.ts",
+      "src/clients/rust-openai-stream.ts",
       "src/routes/proxy/adapters/responses-usage.ts",
     ],
     project: "tsconfig.core.json",

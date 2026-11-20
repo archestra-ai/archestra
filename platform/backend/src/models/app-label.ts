@@ -1,6 +1,9 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import AgentLabelModel from "./agent-label";
 
 class AppLabelModel {
@@ -152,6 +155,37 @@ class AppLabelModel {
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async syncAppLabelsMcpNative(params: {
+    id: string;
+    organizationId: string;
+    sessionKey?: string;
+    labels: LabelWithDetails[];
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, labels, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const replaced = z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/set-app-labels",
+        json: JSON.stringify({
+          ...input,
+          labels: Object.fromEntries(
+            labels.map(({ key, value }) => [key, value]),
+          ),
+        }),
+      }),
+    );
+    if (replaced) AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    return replaced;
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Get all label keys used by apps within an organization

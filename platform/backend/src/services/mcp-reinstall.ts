@@ -23,6 +23,8 @@ import type {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
+type NativeReload = { organizationId: string; signal: AbortSignal };
+
 /**
  * Checks if a catalog edit requires a manual reinstall.
  *
@@ -494,6 +496,7 @@ async function syncToolsForServer(
   server: McpServer,
   catalogItem: InternalMcpCatalog,
   options?: {
+    nativeReload?: NativeReload;
     getTools?: (params: {
       server: McpServer;
       catalogItem: InternalMcpCatalog;
@@ -533,6 +536,7 @@ async function syncToolsForServer(
     return { created, updated: [], unchanged, deleted: [] };
   }
 
+  options?.nativeReload?.signal.throwIfAborted();
   const toolNameFor = await mintCatalogToolNames({
     catalogId: catalogItem.id,
     rawToolNames: tools.map((tool) => tool.name),
@@ -550,7 +554,20 @@ async function syncToolsForServer(
     rawToolName: tool.name,
   }));
 
-  const syncResult = await ToolModel.syncToolsForCatalog(toolsToSync);
+  // Cancel before the first write. Once admitted, finish the existing write
+  // sequence without redispatching or trying to undo committed statements.
+  options?.nativeReload?.signal.throwIfAborted();
+  const nativeReload = options?.nativeReload
+    ? {
+        organizationId: options.nativeReload.organizationId,
+        serverId: server.id,
+        catalogId: catalogItem.id,
+      }
+    : undefined;
+  const syncResult = await ToolModel.syncToolsForCatalog(
+    toolsToSync,
+    nativeReload,
+  );
   await recordInstallToolDescriptions({
     mcpServerId: server.id,
     syncedTools: [
@@ -559,6 +576,7 @@ async function syncToolsForServer(
       ...syncResult.unchanged,
     ],
     reported: toolsToSync,
+    nativeReload,
   });
   await refreshMcpSkillMetadata({
     catalogId: catalogItem.id,
@@ -615,7 +633,7 @@ export async function reloadToolsForServer(
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  options?: { wake: boolean },
+  options?: { wake?: boolean; nativeReload?: NativeReload },
   // SPDX-SnippetEnd
 ): Promise<{
   created: number;
@@ -641,7 +659,7 @@ export async function reloadToolsForServer(
     if (options?.wake ?? true) {
       return mcpActiveUseTracker.trackActiveUse(server.id, async () => {
         await McpServerRuntimeManager.ensureAwake(server.id);
-        const result = await syncToolsForServer(server, catalogItem);
+        const result = await syncToolsForServer(server, catalogItem, options);
         return {
           created: result.created.length,
           updated: result.updated.length,
@@ -658,7 +676,7 @@ export async function reloadToolsForServer(
     }
   }
   // SPDX-SnippetEnd
-  const result = await syncToolsForServer(server, catalogItem);
+  const result = await syncToolsForServer(server, catalogItem, options);
   return {
     created: result.created.length,
     updated: result.updated.length,

@@ -3,7 +3,13 @@ import logger from "@/logging";
 import { port } from "@/models/ports";
 import TaskModel from "@/models/task";
 import * as metrics from "@/observability/metrics";
-import type { InsertTask, Task, TaskHandler, TaskLane } from "@/types";
+import type {
+  InsertTask,
+  Task,
+  TaskHandler,
+  TaskLane,
+  TaskType,
+} from "@/types";
 import { TASK_LANES } from "@/types";
 import PERIODIC_TASK_DEFINITIONS from "./periodic-tasks";
 
@@ -75,6 +81,7 @@ export class TaskQueueService {
     }
 
     for (const def of PERIODIC_TASK_DEFINITIONS) {
+      if (this.externalTaskTypes().includes(def.taskType)) continue;
       try {
         const exists = await TaskModel.hasPendingOrProcessingByType(
           def.taskType,
@@ -230,7 +237,10 @@ export class TaskQueueService {
     if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
       this.lastStuckSweepAt = Date.now();
       // Reset tasks whose worker stopped heartbeating
-      const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
+      const swept = await TaskModel.resetStuckTasks(
+        STUCK_TASK_TIMEOUT_MS,
+        this.externalTaskTypes(),
+      );
       if (swept.length > 0) {
         metrics.taskQueue.reportStuckTasksReset(swept.length);
         logger.warn(
@@ -252,8 +262,11 @@ export class TaskQueueService {
     // independently so no lane can head-of-line-block or starve another.
     for (const lane of LANES) {
       const cap = this.laneCap(lane);
+      const taskTypes = TASK_LANES[lane].filter(
+        (type) => !this.externalTaskTypes().includes(type),
+      );
       while (!this.stopping && this.laneCounts[lane] < cap) {
-        const task = await TaskModel.dequeue(TASK_LANES[lane]);
+        const task = await TaskModel.dequeue(taskTypes);
         if (!task) break; // lane empty — move on to the next lane
 
         // Track immediately so a concurrent stopWorker sees this task.
@@ -284,6 +297,10 @@ export class TaskQueueService {
           });
       }
     }
+  }
+
+  private externalTaskTypes(): readonly TaskType[] {
+    return config.kb.rustRollupWorker ? ["llm_usage_rollup"] : [];
   }
 
   private laneCap(lane: TaskLane): number {

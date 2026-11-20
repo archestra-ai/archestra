@@ -12,6 +12,8 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
@@ -26,6 +28,7 @@ import {
 import type { LabelWithDetails } from "@/types/label";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isUniqueConstraintError } from "@/utils/db";
+import { callRustApi } from "@/utils/rust-api";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
 import AppLabelModel from "./app-label";
@@ -601,6 +604,66 @@ class AppModel {
     return tx ? await run(tx) : await withDbTransaction(run);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async scaffoldMcpNative(params: {
+    app: Pick<
+      InsertApp,
+      | "organizationId"
+      | "authorId"
+      | "name"
+      | "description"
+      | "creationGraceSessionKey"
+      | "authoringSessionId"
+    > & { slug: string; templateId: string; enabled: boolean; locked: boolean };
+    payload: VersionPayload;
+    initialPermissionGrants: ResourcePermissionGrant[];
+    signal: AbortSignal;
+  }): Promise<Pick<AppRow, "id" | "name" | "description">> {
+    const { app, payload, initialPermissionGrants, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const creator = await CreatedByModel.forInsert({
+      data: app,
+      userIdField: "authorId",
+    });
+    const json = JSON.stringify({
+      ...creator,
+      grants: ResourcePermissionPolicyModel.initialGrants({
+        resource: "app",
+        authorId: creator.authorId ?? null,
+        grants: initialPermissionGrants,
+      }),
+      ...payload,
+      contentHash: AppVersionModel.computeContentHash(payload),
+    });
+    // Once submitted, finish the admitted creation and backing setup without replay.
+    signal.throwIfAborted();
+    const row = z
+      .object({
+        id: z.uuid(),
+        name: z.string(),
+        description: z.string().nullable(),
+      })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/scaffold-app",
+          json,
+        }),
+      );
+    if (row === null) {
+      throw Object.assign(new Error("Duplicate app name"), {
+        code: "23505",
+        constraint: "apps_org_author_name_uidx",
+      });
+    }
+    return row;
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Link an app to its backing MCP server. The optional `tx` scopes only this
    * app-row update; the backing catalog/server/tool are created separately (no
@@ -657,6 +720,33 @@ class AppModel {
       .returning({ id: schema.appsTable.id });
     return row ? await AppModel.findById(id) : null;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async setLockedMcpNative(params: {
+    id: string;
+    organizationId: string;
+    locked: boolean;
+    sessionKey?: string;
+    signal: AbortSignal;
+  }): Promise<Pick<App, "id" | "name" | "locked"> | null> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z
+      .object({ id: z.uuid(), name: z.string(), locked: z.boolean() })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/set-app-lock",
+          json: JSON.stringify(input),
+        }),
+      );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Let one authoring session keep building an app its creation locked or
@@ -761,10 +851,10 @@ class AppModel {
         params.expectedLatestVersion !== undefined &&
         app.latestVersion !== params.expectedLatestVersion
       ) {
-        throw new ApiError(
-          409,
-          `App ${params.id} has moved to version ${app.latestVersion}; the change was based on version ${params.expectedLatestVersion}. Refresh the app and retry.`,
-          "app_version_conflict",
+        throw appVersionConflict(
+          params.id,
+          params.expectedLatestVersion,
+          app.latestVersion,
         );
       }
 
@@ -859,6 +949,79 @@ class AppModel {
     return ok ? await AppModel.findById(params.id) : null;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async refineMcpNative(params: {
+    id: string;
+    organizationId: string;
+    sessionKey?: string;
+    spec: NonNullable<App["spec"]>;
+    signal: AbortSignal;
+  }): Promise<App | null> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const json = JSON.stringify(input);
+    signal.throwIfAborted();
+    const updated = z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/refine-app",
+        json,
+      }),
+    );
+    return updated ? AppModel.findById(input.id) : null;
+  }
+
+  static async writeMcpVersionNative(params: {
+    id: string;
+    organizationId: string;
+    sessionKey?: string;
+    version: VersionPayload;
+    expectedLatestVersion: number;
+    signal: AbortSignal;
+  }): Promise<App | null> {
+    const { version, signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const json = JSON.stringify({
+      ...input,
+      ...version,
+      contentHash: AppVersionModel.computeContentHash(version),
+    });
+    signal.throwIfAborted();
+    const outcome = z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("notFound") }),
+        z.object({
+          kind: z.literal("conflict"),
+          latestVersion: z.number().int(),
+        }),
+        z.object({ kind: z.literal("applied") }),
+      ])
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/edit-app",
+          json,
+        }),
+      );
+    switch (outcome.kind) {
+      case "notFound":
+        return null;
+      case "conflict":
+        throw appVersionConflict(
+          input.id,
+          input.expectedLatestVersion,
+          outcome.latestVersion,
+        );
+      case "applied":
+        return AppModel.findById(input.id);
+    }
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Soft-delete an app (frees its name for re-use via the partial unique
    * indexes). Apps have no restore, so the row stays only for history and its
@@ -885,6 +1048,29 @@ class AppModel {
     };
     return tx ? run(tx) : withDbTransaction(run);
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async deleteMcpNative(params: {
+    id: string;
+    organizationId: string;
+    sessionKey?: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-app",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Hard-remove a just-created app and its version rows. Used only to roll back
@@ -1013,6 +1199,18 @@ class AppModel {
     };
     // SPDX-SnippetEnd
   }
+}
+
+function appVersionConflict(
+  id: string,
+  expected: number,
+  latest: number,
+): ApiError {
+  return new ApiError(
+    409,
+    `App ${id} has moved to version ${latest}; the change was based on version ${expected}. Refresh the app and retry.`,
+    "app_version_conflict",
+  );
 }
 
 /**

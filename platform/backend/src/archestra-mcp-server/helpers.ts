@@ -148,6 +148,7 @@ export async function assignToolAssignments(
 export async function assignSubAgentDelegations(
   agentId: string,
   subAgentIds: string[],
+  nativeGateway?: { organizationId: string },
 ): Promise<SubAgentResult[]> {
   const results: SubAgentResult[] = [];
   for (const subAgentId of subAgentIds) {
@@ -165,10 +166,15 @@ export async function assignSubAgentDelegations(
         results.push({ id: subAgentId, status: "self_delegation_blocked" });
         continue;
       }
-      await AgentToolModel.assignDelegation({
-        agentId: agentId,
-        targetAgentId: subAgentId,
-      });
+      const assignment = { agentId, targetAgentId: subAgentId };
+      if (nativeGateway) {
+        await AgentToolModel.assignGatewayDelegationNative({
+          ...assignment,
+          ...nativeGateway,
+        });
+      } else {
+        await AgentToolModel.assignDelegation(assignment);
+      }
       results.push({ id: subAgentId, status: "success" });
     } catch (error) {
       logger.error(

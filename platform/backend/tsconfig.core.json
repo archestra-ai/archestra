@@ -20,6 +20,7 @@
     "src/clients/bedrock-credentials.ts",
     "src/clients/llm-upstream-dispatcher.ts",
     "src/clients/llm-upstream-fetch.ts",
+    "src/clients/rust-openai-stream.ts",
     "src/routes/proxy/adapters/responses-usage.ts"
   ],
   "include": [

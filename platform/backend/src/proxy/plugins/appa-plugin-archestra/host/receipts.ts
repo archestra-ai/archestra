@@ -112,7 +112,7 @@ export class OpenappaReceipts {
   attachToStream(
     adapter: Pick<
       LLMStreamAdapter<unknown, unknown>,
-      "setCompactionContext" | "setTextSuffix"
+      "setCompactionContext" | "setTextSuffix" | "nativeOpenAiSettlement"
     >,
     options: { buffered: boolean },
   ): void {
@@ -129,7 +129,8 @@ export class OpenappaReceipts {
         }
         if (session && text.length > 0) {
           this.sessionReceiptPrepared = true;
-          if (!options.buffered) markSessionReceiptIssued(session);
+          if (!options.buffered && !adapter.nativeOpenAiSettlement)
+            markSessionReceiptIssued(session);
           parts.push(session.footer);
         }
         return parts.join("\n");

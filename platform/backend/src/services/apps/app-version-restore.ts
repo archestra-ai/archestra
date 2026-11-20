@@ -9,11 +9,10 @@ import { ApiError, type App } from "@/types";
  * a no-op. Current validation still applies so history cannot bypass newer
  * authoring safeguards.
  */
-export async function restoreAppVersion(params: {
-  appId: string;
-  version: number;
-  baseVersion: number;
-}): Promise<{ app: App; warnings: string[] }> {
+export async function restoreAppVersion(
+  params: { appId: string; version: number; baseVersion: number },
+  native?: { organizationId: string; sessionKey?: string; signal: AbortSignal },
+): Promise<{ app: App; warnings: string[] }> {
   const source = await AppVersionModel.findByAppAndVersion(
     params.appId,
     params.version,
@@ -29,11 +28,18 @@ export async function restoreAppVersion(params: {
     html: source.html,
     uiPermissions: source.uiPermissions,
   });
-  const app = await AppModel.update({
+  const write = {
     id: params.appId,
     version: validated.payload,
     expectedLatestVersion: params.baseVersion,
-  });
+  };
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const app = native
+    ? await AppModel.writeMcpVersionNative({ ...write, ...native })
+    : await AppModel.update(write);
+  // SPDX-SnippetEnd
   if (!app) {
     throw new ApiError(404, `No app found with id ${params.appId}.`);
   }

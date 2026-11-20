@@ -1,8 +1,31 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import SiteNotificationModel from "@/models/site-notification";
-import { ApiError, constructResponseSchema } from "@/types";
+import { auditLogExporter } from "@/observability/audit-log-export";
+import {
+  ApiError,
+  constructResponseSchema,
+  SelectAuditLogSchema,
+} from "@/types";
+import { extractAuditSourceIp } from "@/utils/audit-snapshot";
+import { callRustApi } from "@/utils/rust-api";
+
+const NotificationSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  expiresAt: z.string().nullable(),
+  createdAt: z.string(),
+  isActive: z.boolean(),
+});
+const CommittedNotificationSchema = z.object({
+  notification: NotificationSchema,
+  audit: SelectAuditLogSchema.extend({
+    createdAt: z.coerce.date(),
+    occurredAt: z.coerce.date(),
+  }),
+});
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -92,19 +115,44 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           expiresAt: z.string().datetime().optional(),
           isActive: z.boolean().optional(),
         }),
-        response: constructResponseSchema(
-          z.object({
-            id: z.string(),
-            content: z.string(),
-            expiresAt: z.string().nullable(),
-            createdAt: z.string(),
-            isActive: z.boolean(),
-          }),
-        ),
+        response: constructResponseSchema(NotificationSchema),
       },
     },
     async (request, reply) => {
       const organizationId = request.organizationId;
+
+      if (config.database.rustSiteNotificationEnabled) {
+        const socketPath = config.database.rustAuditLogSocket;
+        if (!socketPath) throw new ApiError(503, "Rust API is not configured");
+        const result = await callRustApi({
+          socketPath,
+          path: "/internal/v1/site-notification/replace",
+          json: JSON.stringify({
+            ...request.body,
+            organizationId,
+            audit: {
+              actorId: request.user.id,
+              actorType:
+                request.authMethod === "api_key" ||
+                request.authMethod === "service_account"
+                  ? request.authMethod
+                  : "user",
+              actorName: request.user.name ?? null,
+              actorEmail: request.user.email,
+              impersonatedBy: request.impersonatedBy ?? null,
+              requestId: request.id,
+              occurredAt: (request.auditOccurredAt ?? new Date()).toISOString(),
+              sourceIp: extractAuditSourceIp(request),
+              userAgent: request.headers["user-agent"] ?? null,
+            },
+          }),
+        });
+        // Axum committed the success record in the same transaction.
+        request.auditSkip = true;
+        const committed = CommittedNotificationSchema.parse(result);
+        auditLogExporter.export(committed.audit);
+        return reply.send(committed.notification);
+      }
 
       const notification = await SiteNotificationModel.replaceCurrent({
         organizationId,

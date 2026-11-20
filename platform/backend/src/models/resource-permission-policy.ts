@@ -27,9 +27,12 @@ import {
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { readConfig } from "@/services/config-cache";
+import { callRustApi } from "@/utils/rust-api";
 import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
@@ -492,30 +495,11 @@ export default class ResourcePermissionPolicyModel {
           : []),
       );
     }
-    const author: PermissionSubject | null = params.authorId
-      ? params.authorId.startsWith("service-account:")
-        ? {
-            type: "serviceAccount",
-            id: params.authorId.slice("service-account:".length),
-          }
-        : { type: "user", id: params.authorId }
-      : null;
-    const grants = asPresets(
-      author
-        ? [
-            ...initialGrants.filter(
-              (grant) =>
-                grant.subject.type !== author.type ||
-                grant.subject.id !== author.id,
-            ),
-            {
-              subject: author,
-              actions: resourcePermissionPresets.manage.actions,
-            },
-          ]
-        : initialGrants,
-      params.resource,
-    );
+    const grants = ResourcePermissionPolicyModel.initialGrants({
+      resource: params.resource,
+      authorId: params.authorId,
+      grants: initialGrants,
+    });
     await params.tx.insert(schema.resourcePermissionPoliciesTable).values({
       organizationId: params.organizationId,
       resource: params.resource,
@@ -526,6 +510,37 @@ export default class ResourcePermissionPolicyModel {
       // of their own (see organizationAccessCondition).
       legacyOrganizationAudience: params.publishToOrganization === true,
     });
+  }
+
+  static initialGrants(params: {
+    resource: ScopedResource;
+    authorId: string | null;
+    grants: ResourcePermissionGrant[];
+  }): ResourcePermissionGrant[] {
+    const author: PermissionSubject | null = params.authorId
+      ? params.authorId.startsWith("service-account:")
+        ? {
+            type: "serviceAccount",
+            id: params.authorId.slice("service-account:".length),
+          }
+        : { type: "user", id: params.authorId }
+      : null;
+    return asPresets(
+      author
+        ? [
+            ...params.grants.filter(
+              (grant) =>
+                grant.subject.type !== author.type ||
+                grant.subject.id !== author.id,
+            ),
+            {
+              subject: author,
+              actions: resourcePermissionPresets.manage.actions,
+            },
+          ]
+        : params.grants,
+      params.resource,
+    );
   }
 
   static async findForSubjects(params: {
@@ -1287,6 +1302,42 @@ export default class ResourcePermissionPolicyModel {
       .where(and(policyCondition(params), eq(table.revision, params.revision)))
       .returning();
     return updated ?? null;
+  }
+
+  static async replaceAppMcpNative(
+    params: {
+      organizationId: string;
+      scope: string;
+      revision: number;
+      grants: ResourcePermissionGrant[];
+    },
+    signal: AbortSignal,
+  ) {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const grants = asPresets(params.grants, "app");
+    const json = JSON.stringify({
+      appId: params.scope,
+      organizationId: params.organizationId,
+      revision: params.revision,
+      grants,
+    });
+    signal.throwIfAborted();
+    const revision = z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/publish-app",
+          json,
+        }),
+      );
+    return revision === null
+      ? null
+      : { revision, grants, legacyOrganizationAudience: false };
   }
 
   /**

@@ -647,9 +647,10 @@ const registry = defineArchestraTools([
       let app: App | null;
       // App names are unique per author (apps_org_author_name_uidx); a duplicate
       // fails this insert before any backing is created.
-      let created: Awaited<ReturnType<typeof AppModel.create>>;
+      let created: Parameters<typeof createAppBacking>[0]["app"];
+      const execution = context.gatewayExecution;
       try {
-        created = await AppModel.create({
+        const create = {
           initialPermissionGrants: args.initialGrants ?? [],
           app: {
             organizationId,
@@ -677,8 +678,24 @@ const registry = defineArchestraTools([
             authoringSessionId: interactionSessionId ?? null,
           },
           payload,
-        });
+        };
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        created = execution?.native
+          ? await AppModel.scaffoldMcpNative({
+              ...create,
+              signal: execution.signal,
+            })
+          : await AppModel.create(create);
+        // SPDX-SnippetEnd
       } catch (error) {
+        if (
+          execution?.native &&
+          execution.signal.aborted &&
+          error === execution.signal.reason
+        )
+          return errorResult("Tool call cancelled");
         if (isUniqueConstraintError(error, "apps_org_author_name_uidx")) {
           const existingId = await AppModel.findIdByOrgAuthorName({
             organizationId,
@@ -882,10 +899,22 @@ const registry = defineArchestraTools([
 
       let persisted = false;
       if (args.spec) {
-        const updated = await AppModel.update({
-          id: args.appId,
-          patch: { spec: args.spec },
-        });
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const execution = context.gatewayExecution;
+        if (execution?.native && execution.signal.aborted)
+          return errorResult("Tool call cancelled");
+        const updated = execution?.native
+          ? await AppModel.refineMcpNative({
+              id: app.id,
+              organizationId,
+              sessionKey: auth.sessionKey,
+              spec: args.spec,
+              signal: execution.signal,
+            })
+          : await AppModel.update({ id: app.id, patch: { spec: args.spec } });
+        // SPDX-SnippetEnd
         if (!updated) {
           return errorResult(
             `Failed to persist the spec for app ${args.appId}.`,
@@ -1137,8 +1166,22 @@ const registry = defineArchestraTools([
       });
       if ("error" in gate) return gate.error;
 
+      const execution = context.gatewayExecution;
       try {
-        const restored = await restoreAppVersion(args);
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const restored = await restoreAppVersion(
+          args,
+          execution?.native
+            ? {
+                organizationId: auth.organizationId,
+                sessionKey: auth.sessionKey,
+                signal: execution.signal,
+              }
+            : undefined,
+        );
+        // SPDX-SnippetEnd
         const { app } = restored;
         const noOp = app.latestVersion === args.baseVersion;
         const warningsNote = formatWarningsNote(restored.warnings);
@@ -1162,6 +1205,12 @@ const registry = defineArchestraTools([
             : `Restored app "${escapeAppNameForModelText(app.name)}" from version ${args.version} as new head version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${warningsNote}`,
         );
       } catch (error) {
+        if (
+          execution?.native &&
+          execution.signal.aborted &&
+          error === execution.signal.reason
+        )
+          return errorResult("Tool call cancelled");
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
       }
@@ -1406,13 +1455,32 @@ const registry = defineArchestraTools([
       }
 
       let updated: Awaited<ReturnType<typeof AppModel.update>>;
+      const execution = context.gatewayExecution;
       try {
-        updated = await AppModel.update({
+        const edit = {
           id: args.appId,
           version,
           expectedLatestVersion: mergedOntoHeadVersion ?? baseVersion,
-        });
+        };
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        updated = execution?.native
+          ? await AppModel.writeMcpVersionNative({
+              ...edit,
+              organizationId: auth.organizationId,
+              sessionKey: auth.sessionKey,
+              signal: execution.signal,
+            })
+          : await AppModel.update(edit);
+        // SPDX-SnippetEnd
       } catch (error) {
+        if (
+          execution?.native &&
+          execution.signal.aborted &&
+          error === execution.signal.reason
+        )
+          return errorResult("Tool call cancelled");
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
       }
@@ -1524,16 +1592,37 @@ const registry = defineArchestraTools([
       });
       if (!resolution.ok) return errorResult(resolution.error);
 
+      const failure = () =>
+        errorResult(
+          `Failed to set tools for app "${escapeAppNameForModelText(app.name)}" (${app.id}).`,
+        );
+      const execution = context.gatewayExecution;
       try {
-        await replaceAppToolAssignments(app.id, resolution.tools ?? []);
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (execution?.native) {
+          const applied = await AppToolModel.replaceAssignmentsMcpNative({
+            id: app.id,
+            organizationId: auth.organizationId,
+            environmentId: app.environmentId,
+            sessionKey: auth.sessionKey,
+            toolIds: (resolution.tools ?? []).map(({ id }) => id),
+            signal: execution.signal,
+          });
+          if (!applied) return failure();
+        } else {
+          // SPDX-SnippetEnd
+          await replaceAppToolAssignments(app.id, resolution.tools ?? []);
+        }
       } catch (error) {
+        if (execution?.signal.aborted && error === execution.signal.reason)
+          return errorResult("Tool call cancelled");
         logger.warn(
           { err: error, appId: app.id },
           "set_app_tools: tool assignment failed",
         );
-        return errorResult(
-          `Failed to set tools for app "${escapeAppNameForModelText(app.name)}" (${app.id}).`,
-        );
+        return failure();
       }
 
       const toolsParts = toolsResultParts(resolution.tools);
@@ -1560,7 +1649,25 @@ const registry = defineArchestraTools([
       // One value per key is a table invariant (PK is (app_id, key_id)), so
       // collapse repeats before the write rather than failing the call.
       const labels = deduplicateLabels(args.labels);
-      await AppLabelModel.syncAppLabels(app.id, labels);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const execution = context.gatewayExecution;
+      if (execution?.native) {
+        if (execution.signal.aborted) return errorResult("Tool call cancelled");
+        const replaced = await AppLabelModel.syncAppLabelsMcpNative({
+          id: app.id,
+          organizationId: auth.organizationId,
+          sessionKey: auth.sessionKey,
+          signal: execution.signal,
+          labels,
+        });
+        if (!replaced)
+          return errorResult(`Failed to set labels for app ${app.id}.`);
+      } else {
+        // SPDX-SnippetEnd
+        await AppLabelModel.syncAppLabels(app.id, labels);
+      }
 
       return structuredSuccessResult(
         { id: app.id, labels },
@@ -1596,7 +1703,23 @@ const registry = defineArchestraTools([
         allowLocked: true,
       });
       if ("error" in gate) return gate.error;
-      const updated = await AppModel.setLocked(args.appId, args.locked);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const execution = context.gatewayExecution;
+      if (execution?.native && execution.signal.aborted) {
+        return errorResult("Tool call cancelled");
+      }
+      const updated = execution?.native
+        ? await AppModel.setLockedMcpNative({
+            id: gate.app.id,
+            organizationId: auth.organizationId,
+            locked: args.locked,
+            sessionKey: auth.sessionKey,
+            signal: execution.signal,
+          })
+        : await AppModel.setLocked(gate.app.id, args.locked);
+      // SPDX-SnippetEnd
       if (!updated) {
         return errorResult(`Failed to update the lock for app ${args.appId}.`);
       }
@@ -1699,6 +1822,7 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
+      const execution = context.gatewayExecution;
       try {
         const teamIds =
           args.scope === "team"
@@ -1741,13 +1865,18 @@ const registry = defineArchestraTools([
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.updatePolicy({
-          ...key,
-          revision: policy.revision,
-          grants,
-        });
+        await ResourcePermissions.updatePolicy(
+          { ...key, revision: policy.revision, grants },
+          execution?.native ? execution.signal : undefined,
+        );
         // SPDX-SnippetEnd
       } catch (error) {
+        if (
+          execution?.native &&
+          execution.signal.aborted &&
+          error === execution.signal.reason
+        )
+          return errorResult("Tool call cancelled");
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
       }
@@ -1958,7 +2087,21 @@ const registry = defineArchestraTools([
       });
       if ("error" in gate) return gate.error;
       const { app } = gate;
-      const deleted = await AppModel.delete(args.appId);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const execution = context.gatewayExecution;
+      if (execution?.native && execution.signal.aborted)
+        return errorResult("Tool call cancelled");
+      const deleted = execution?.native
+        ? await AppModel.deleteMcpNative({
+            id: app.id,
+            organizationId: auth.organizationId,
+            sessionKey: auth.sessionKey,
+            signal: execution.signal,
+          })
+        : await AppModel.delete(app.id);
+      // SPDX-SnippetEnd
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
       }

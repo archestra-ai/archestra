@@ -7,6 +7,7 @@ import type { CreateLimit, LimitEntityType, LimitType } from "@/types/limit";
 
 export async function createLimit(
   data: CreateLimit & { teamManaged?: boolean },
+  nativeMcp?: { organizationId: string; signal: AbortSignal },
 ) {
   if (data.entityType === "agent" && data.limitType === "token_cost") {
     const agent = await AgentModel.findById(data.entityId);
@@ -17,7 +18,9 @@ export async function createLimit(
       );
     }
   }
-  return LimitModel.create(data);
+  return nativeMcp
+    ? LimitModel.createMcpNative(data, nativeMcp)
+    : LimitModel.create(data);
 }
 
 /**

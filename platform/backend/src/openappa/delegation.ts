@@ -154,6 +154,23 @@ export function isDelegationMarkerItem(value: unknown): boolean {
   );
 }
 
+export function readDelegationMarkerLine(
+  line: string,
+  prompt: string,
+): AppaDelegationMarker | undefined {
+  const match = MARKER_LINE.exec(line);
+  if (!match) return undefined;
+  const token = parseMarkerToken(match[1]);
+  if (!token) return undefined;
+  return {
+    token: match[1],
+    parentId: match[2],
+    promptDigest: digestOf(prompt),
+    spawnCallId: token.spawnCallId,
+    runtimeSessionId: token.runtimeSessionId,
+  };
+}
+
 /**
  * Collects markers from opening user/agent task messages in wire order.
  * Ignores system messages, tool results, and client notifications.

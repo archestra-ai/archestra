@@ -1,9 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { observeLimitCheck } from "@/observability/metrics/limit";
-import type { Limit, LimitEntityType } from "@/types/limit";
+import {
+  type Limit,
+  LimitBehaviorSchema,
+  LimitCleanupIntervalSchema,
+  type LimitEntityType,
+  LimitEntityTypeSchema,
+  LimitTypeSchema,
+} from "@/types/limit";
+import { callRustApi } from "@/utils/rust-api";
 import {
   readBucket,
   refundableCharge,
@@ -16,21 +26,53 @@ import {
 } from "./limit-entity-scope";
 
 /** Once-only accounting receipt; only request-count capacity is reserved. */
-export type ThroughputReceipt = {
-  id: string;
-  expiresAt: number;
-  subscription?: boolean;
-  limits: Array<{
-    id: string;
-    token: boolean;
-    generation: string;
-    released: number;
-    amount: number;
-    money?: boolean;
-    epoch?: string;
-    periodEnd?: number;
-  }>;
-};
+const ThroughputReceiptSchema = z.object({
+  id: z.uuid(),
+  expiresAt: z.number(),
+  subscription: z.boolean().optional(),
+  limits: z.array(
+    z.object({
+      id: z.uuid(),
+      token: z.boolean(),
+      generation: z.string(),
+      released: z.number(),
+      amount: z.number(),
+      money: z.boolean().optional(),
+      epoch: z.string().optional(),
+      periodEnd: z.number().optional(),
+    }),
+  ),
+});
+export type ThroughputReceipt = z.infer<typeof ThroughputReceiptSchema>;
+
+const AdmissionObservations = z.array(
+  z.object({
+    id: z.uuid(),
+    entityId: z.string(),
+    entityType: LimitEntityTypeSchema,
+    limitType: LimitTypeSchema,
+    limitValue: z.number().int(),
+    cleanupInterval: LimitCleanupIntervalSchema,
+    behavior: LimitBehaviorSchema,
+    exceeded: z.boolean(),
+    usage: z.number(),
+  }),
+);
+const NativeAdmissionSchema = z.union([
+  z.object({
+    reservation: ThroughputReceiptSchema.nullable(),
+    observations: AdmissionObservations,
+  }),
+  z.object({
+    denied: z.object({
+      entityType: LimitEntityTypeSchema,
+      limitType: LimitTypeSchema,
+      oversized: z.boolean(),
+      retryAfter: z.number().int().positive(),
+    }),
+    observations: AdmissionObservations,
+  }),
+]);
 
 type ThroughputAdmission =
   | { reservation: ThroughputReceipt | null }
@@ -45,14 +87,17 @@ type ThroughputAdmission =
 
 /** Shared leaky buckets, capacity one minute's allowance; no request queue. */
 class LlmThroughputModel {
-  static async admit(params: {
-    entities: Array<{ entityType: LimitEntityType; entityId: string }>;
-    model: string;
-    modelAliases?: string[];
-    subscription?: boolean;
-    /** These entities' rules, already read fresh by this request. */
-    rules?: Limit[];
-  }): Promise<ThroughputAdmission> {
+  static async admit(
+    params: {
+      entities: Array<{ entityType: LimitEntityType; entityId: string }>;
+      model: string;
+      modelAliases?: string[];
+      subscription?: boolean;
+      /** These entities' rules, already read fresh by this request. */
+      rules?: Limit[];
+    },
+    native = false,
+  ): Promise<ThroughputAdmission> {
     const rules =
       params.rules ?? (await LlmThroughputModel.findRules(params.entities));
     if (
@@ -61,6 +106,26 @@ class LlmThroughputModel {
       )
     )
       return { reservation: null };
+    if (native) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath)
+        throw new Error("Rust admission socket is not configured");
+      const { observations, ...result } = NativeAdmissionSchema.parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/interactions/admit-throughput",
+          json: JSON.stringify({
+            limitIds: rules.map(({ id }) => id),
+            entities: params.entities,
+            models: [params.model, ...(params.modelAliases ?? [])],
+            subscription: params.subscription ?? false,
+          }),
+        }),
+      );
+      for (const { exceeded, usage, ...rule } of observations)
+        observeLimitCheck(rule, exceeded, false, usage);
+      return result;
+    }
     const observations: Array<{
       rule: Limit;
       exceeded: boolean;

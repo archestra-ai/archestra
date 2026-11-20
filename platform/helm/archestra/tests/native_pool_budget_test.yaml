@@ -1,0 +1,92 @@
+suite: native database connection budget
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: fits 12 web and 6 worker pods at the exact budget with one native pool each
+    set:
+      <<: &split
+        archestra.horizontalPodAutoscaler.enabled: true
+        archestra.horizontalPodAutoscaler.maxReplicas: 5
+        archestra.worker.replicaCount: 2
+        archestra.deploymentStrategy.rollingUpdate.maxSurge: "25%"
+        archestra.worker.deploymentStrategy.rollingUpdate.maxSurge: 2
+        archestra.env.ARCHESTRA_SERVER_MANAGE_RUST_SERVICES: "true"
+        archestra.env.ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED: "true"
+        archestra.env.ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED: "true"
+      archestra.database.connectionBudget: 252 # 18 × (13 + 1)
+    asserts:
+      - contains: &oneQueryConnection
+          path: spec.template.spec.containers[0].env
+          content: {name: ARCHESTRA_DATABASE_POOL_MAX, value: "1"}
+        template: archestra-platform.yaml
+        documentIndex: 1
+      - contains: *oneQueryConnection
+        template: archestra-worker.yaml
+
+  - it: rejects one connection below the split deployment minimum
+    template: migration-job.yaml
+    set:
+      <<: *split
+      archestra.database.connectionBudget: 251
+    asserts:
+      - failedTemplate: {}
+
+  - it: reserves native rollup connections only in the worker Deployment
+    set:
+      <<: *split
+      archestra.env.ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED: "false"
+      archestra.database.connectionBudget: 240 # 18 × 13 + 6
+    asserts:
+      - contains: *oneQueryConnection
+        template: archestra-platform.yaml
+        documentIndex: 1
+      - contains: *oneQueryConnection
+        template: archestra-worker.yaml
+
+  - it: reserves two pools per combined pod and counts all native API paths once
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.worker.enabled: false
+      archestra.replicaCount: 2
+      archestra.env.ARCHESTRA_SERVER_MANAGE_RUST_SERVICES: "true"
+      archestra.env.ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED: "true"
+      archestra.env.ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED: "true"
+      archestra.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED: "true"
+      archestra.env.ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET: /run/archestra/api.sock
+      archestra.database.connectionBudget: 75 # 5 × (13 + 2)
+    asserts:
+      - contains: *oneQueryConnection
+
+  - it: reserves for a Secret-backed rollup setting and a ConfigMap-backed API feature
+    template: migration-job.yaml
+    set:
+      <<: *split
+      archestra.env.ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED: "false"
+      archestra.env.ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED: "false"
+      archestra.envFromSecrets:
+        - {name: ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED, secretName: feature-flags, secretKey: rollup}
+      archestra.envWithValueFrom:
+        - name: ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED
+          valueFrom:
+            configMapKeyRef: {name: native-settings, key: stream}
+      archestra.database.connectionBudget: 251
+    asserts:
+      - failedTemplate: {}
+
+  - it: reserves conservatively for an unreadable bulk import when auto-sizing is explicit
+    set:
+      archestra.database.poolMaxFromEnvFrom: false
+      archestra.envFrom:
+        - configMapRef: {name: application-settings}
+      archestra.database.connectionBudget: 90 # 6 × (13 + 2)
+    asserts:
+      - contains: *oneQueryConnection
+        template: archestra-platform.yaml
+        documentIndex: 1
+      - contains: *oneQueryConnection
+        template: archestra-worker.yaml

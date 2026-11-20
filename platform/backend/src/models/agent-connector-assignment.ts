@@ -1,7 +1,10 @@
 import { and, count, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
 import { idArrayCondition } from "./id-array-condition";
@@ -72,13 +75,49 @@ class AgentConnectorAssignmentModel {
       .insert(schema.agentConnectorAssignmentsTable)
       .values({ agentId, connectorId })
       .onConflictDoNothing();
-    agentKnowledgeSourcesCache.invalidate(agentId);
-    // Connectors are part of the config snapshot — fork a version.
-    // (AgentModel.update goes through syncForAgent, not here, so no double fork.)
-    await AgentVersionModel.forkIfChangedBestEffort(agentId);
-
+    await AgentConnectorAssignmentModel.refreshAfterWrite(agentId, {
+      forkVersion: true,
+    });
     return true;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async writeAssignmentMcpNative(
+    params: {
+      agentId: string;
+      connectorId: string;
+      organizationId: string;
+      signal: AbortSignal;
+    } & (
+      | { action: "assign"; environmentId: string | null }
+      | { action: "unassign" }
+    ),
+  ): Promise<boolean> {
+    const { action, signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const result = await callRustApi({
+      socketPath,
+      path:
+        action === "assign"
+          ? "/internal/v1/mcp/tools/assign-connector-to-agent"
+          : "/internal/v1/mcp/tools/unassign-connector-from-agent",
+      json: JSON.stringify(input),
+    });
+    const forkVersion =
+      action === "assign"
+        ? z.boolean().parse(result) || null
+        : z.boolean().nullable().parse(result);
+    if (forkVersion === null) return false;
+    await AgentConnectorAssignmentModel.refreshAfterWrite(input.agentId, {
+      forkVersion,
+    });
+    return true;
+  }
+  // SPDX-SnippetEnd
 
   static async unassign(
     agentId: string,
@@ -96,11 +135,11 @@ class AgentConnectorAssignmentModel {
         agentId: schema.agentConnectorAssignmentsTable.agentId,
       });
 
-    agentKnowledgeSourcesCache.invalidate(agentId);
-    if (rows.length > 0) {
-      await AgentVersionModel.forkIfChangedBestEffort(agentId);
-    }
-    return rows.length > 0;
+    const removed = rows.length > 0;
+    await AgentConnectorAssignmentModel.refreshAfterWrite(agentId, {
+      forkVersion: removed,
+    });
+    return removed;
   }
 
   static async unassignAllFromAgent(agentId: string): Promise<number> {
@@ -307,6 +346,14 @@ class AgentConnectorAssignmentModel {
       map.set(row.agentId, list);
     }
     return map;
+  }
+
+  private static async refreshAfterWrite(
+    agentId: string,
+    { forkVersion }: { forkVersion: boolean },
+  ): Promise<void> {
+    agentKnowledgeSourcesCache.invalidate(agentId);
+    if (forkVersion) await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 }
 

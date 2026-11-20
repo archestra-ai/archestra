@@ -100,6 +100,8 @@ export interface CreateClientOptions {
    * finishes. Provider clients must forward it to their upstream requests.
    */
   abortSignal?: AbortSignal;
+  /** The stream was submitted to the Rust OpenAI relay, not the Node fallback. */
+  onNativeOpenAiDispatch?: () => void;
   /**
    * Model the client is being built for. Only providers whose endpoint depends
    * on the model read it — Gemini in Vertex AI mode, where the location that
@@ -371,12 +373,18 @@ export interface StreamAccumulatorState {
   };
 }
 
+export type OpenAiPolicyOutput =
+  | { kind: "text"; text: string }
+  | { kind: "tools"; calls: StreamAccumulatorState["toolCalls"] };
+
 /**
  * Result of processing a stream chunk
  */
 export interface ChunkProcessingResult {
   /** SSE data to send to client immediately (null if should be held) */
   sseData: string | Uint8Array | null;
+  /** Resolves a native receipt prefix before its first content frame is released. */
+  resolveNativeSSE?: (signal: AbortSignal) => Promise<string>;
   /** Whether this chunk contains tool call data (held for policy evaluation) */
   isToolCallChunk: boolean;
   /** Whether this is the final chunk */
@@ -403,6 +411,8 @@ export interface ChunkProcessingResult {
  * @typeParam TResponse - Provider-specific response type
  */
 export interface LLMStreamAdapter<TChunk, TResponse> {
+  /** True only when this attempt consumed frames from the private Rust relay. */
+  readonly nativeOpenAiSettlement?: boolean;
   /** Provider name */
   readonly provider: SupportedProvider;
 
@@ -482,6 +492,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * Returns provider-specific events that form a valid complete response.
    */
   formatCompleteTextSSE(text: string): (string | Uint8Array)[];
+  formatNativePolicySSE?(
+    output: OpenAiPolicyOutput,
+    signal: AbortSignal,
+  ): Promise<string[]>;
 
   /** Reset client-visible indexing after buffered content is discarded. */
   prepareResponseReplacement?(): void;
@@ -535,6 +549,7 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 
   /** Format the stream end marker */
   formatEndSSE(): string | Uint8Array;
+  formatNativeEndSSE?(signal: AbortSignal): Promise<string>;
 
   // ---------------------------------------------------------------------------
   // Build Response

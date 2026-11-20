@@ -50,6 +50,8 @@ import {
   UuidOrSlugSchema,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
+import { callRustApi } from "@/utils/rust-api";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
   clientCapabilityKey,
@@ -79,15 +81,25 @@ import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
   buildGatewayInstructions,
+  buildGatewayServerCapabilities,
   extractTraceContext,
   isDiscoverRequest,
   isMethodRemovedForRevision,
+  LEGACY_MCP_PROTOCOL_REVISION,
+  LIST_CACHE_TTL_MS,
+  MCP_CLIENT_CAPABILITIES_META_KEY,
+  MCP_CLIENT_INFO_META_KEY,
+  MCP_METHOD_HEADER,
+  MCP_NAME_HEADER,
   MCP_PROTOCOL_VERSION_HEADER,
+  MCP_PROTOCOL_VERSION_META_KEY,
   type McpProtocolRevision,
   type ProtocolResolution,
   resolveProtocolRevision,
+  SDK_SUPPORTED_PROTOCOL_VERSIONS,
   SERVER_DISCOVER_METHOD,
   STATELESS_MCP_PROTOCOL_REVISION,
+  SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
   withCompleteResultEnvelope,
 } from "./protocol";
@@ -96,6 +108,7 @@ import {
   isSubscriptionsListenRequest,
   parseSubscriptionFilter,
   runSubscriptionStream,
+  SUBSCRIPTIONS_LISTEN_METHOD,
 } from "./subscriptions";
 import { handleTaskMethod, isTaskMethod } from "./tasks";
 import {
@@ -461,6 +474,10 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      gatewayExecution: {
+        native: config.mcpGateway.rustDiscoverEnabled,
+        signal: clientDisconnectSignal({ request, reply }),
+      },
       grokToolNames:
         /^grok-cli\//i.test(String(request.headers["user-agent"] ?? "")) ||
         request.headers["x-archestra-agent-id"] === "grok-build",
@@ -1168,10 +1185,31 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // Negotiate the protocol revision before touching the body. A 2025-11-25
       // client is unaffected: it declares nothing, sends no routing headers,
       // and resolves to the legacy revision.
-      const resolution = resolveProtocolRevision({
-        headers: request.headers,
-        body: request.body as Record<string, unknown>,
-      });
+      let native: Awaited<ReturnType<typeof dispatchMcpInRust>> | undefined;
+      if (config.mcpGateway.rustDiscoverEnabled) {
+        try {
+          native = await dispatchMcpInRust(request);
+        } catch (err) {
+          fastify.log.warn({ err }, "Rust MCP dispatch failed");
+          reply.status(502);
+          return {
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "MCP dispatch unavailable" },
+            id: request.body.id ?? null,
+          };
+        }
+      }
+      const resolution =
+        native?.kind === "route"
+          ? native.resolution
+          : native?.kind === "unsupported"
+            ? native
+            : native?.kind === "mismatch"
+              ? { revision: native.revision, declaredExplicitly: false }
+              : resolveProtocolRevision({
+                  headers: request.headers,
+                  body: request.body as Record<string, unknown>,
+                });
 
       if ("code" in resolution) {
         reply.status(400);
@@ -1186,11 +1224,15 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         };
       }
 
-      const routingError = validateRoutingHeaders({
-        headers: request.headers,
-        body: request.body as Record<string, unknown>,
-        resolution,
-      });
+      const routingError = native
+        ? native.kind === "mismatch"
+          ? native
+          : null
+        : validateRoutingHeaders({
+            headers: request.headers,
+            body: request.body as Record<string, unknown>,
+            resolution,
+          });
 
       if (routingError) {
         reply.status(400);
@@ -1259,11 +1301,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // method-not-found rather than an answer from a surface it opted out
       // of; legacy clients are untouched.
       const bodyMethod = (request.body as { method?: string })?.method;
+      const target = native?.kind === "route" ? native.target : undefined;
       if (
-        isMethodRemovedForRevision({
-          method: bodyMethod,
-          revision: resolution.revision,
-        })
+        target
+          ? target === "removed"
+          : isMethodRemovedForRevision({
+              method: bodyMethod,
+              revision: resolution.revision,
+            })
       ) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         return {
@@ -1281,8 +1326,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // capability mechanics do not exist earlier, so a legacy client falls
       // through to the SDK and gets method-not-found.
       if (
-        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
-        isTaskMethod(request.body)
+        target
+          ? target === "task"
+          : resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+            isTaskMethod(request.body)
       ) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         const outcome = await handleTaskMethod({
@@ -1312,7 +1359,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // notification spelling of these methods falls through to the SDK
       // transport, which answers 202 with no body — a notification must never
       // get a JSON-RPC response.
-      if (skillsSurfaceEnabled() && isSkillMethod(request.body)) {
+      if (
+        target
+          ? target === "skill"
+          : skillsSurfaceEnabled() && isSkillMethod(request.body)
+      ) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         // Nothing downstream of here turns a throw into a JSON-RPC error: this
         // surface is dispatched ahead of the SDK, so an unexpected failure
@@ -1358,8 +1409,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // the stateless revision: a legacy client falls through to the SDK and
       // gets method-not-found, since the method does not exist there.
       if (
-        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
-        isSubscriptionsListenRequest(request.body)
+        target
+          ? target === "subscription"
+          : resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+            isSubscriptionsListenRequest(request.body)
       ) {
         const subscriptionId =
           (request.body as { id?: string | number })?.id ?? null;
@@ -1381,20 +1434,73 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
           reply,
           agentId: profileId,
           subscriptionId,
+          nativeSocket: native ? config.database.rustAuditLogSocket : undefined,
           requested: parseSubscriptionFilter(request.body),
           caller: {
             userId: tokenAuth.userId,
             organizationId: tokenAuth.organizationId,
+          },
+          onAcknowledged: (notifications) => {
+            trackBackgroundWork(
+              McpToolCallModel.create({
+                agentId: profileId,
+                mcpServerName: "mcp-gateway",
+                method: SUBSCRIPTIONS_LISTEN_METHOD,
+                toolCall: null,
+                toolResult: { notifications },
+                userId: tokenAuth.userId ?? null,
+                oauthClientId: tokenAuth.oauthClientId ?? null,
+                runId: readHeader(request, RUN_ID_HEADER) ?? null,
+                source: gatewayCallSource(request),
+              }).catch((err) =>
+                fastify.log.warn({ err }, "Failed to audit MCP subscription"),
+              ),
+            );
           },
         });
         return;
       }
 
       // `server/discover` replaces the `initialize` handshake under 2026-07-28.
-      // The SDK on this version has no handler for it, so answer it here from
-      // the same capability builder `initialize` uses.
-      if (isDiscoverRequest(request.body)) {
+      // Both implementations advertise the capabilities `initialize` uses.
+      if (target ? target === "discover" : isDiscoverRequest(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        const id = request.body.id ?? null;
+        const agent = await lookups.gatewayAgent(profileId);
+        const inputs = {
+          agentId: profileId,
+          version: config.api.version,
+          revision: resolution.revision,
+          instructions: buildGatewayInstructions(agent?.description),
+        };
+        let result: unknown;
+        if (config.mcpGateway.rustDiscoverEnabled) {
+          try {
+            const socketPath = config.database.rustAuditLogSocket;
+            if (!socketPath)
+              throw new Error("Rust API socket is not configured");
+            result = await callRustApi({
+              socketPath,
+              path: "/internal/v1/mcp/discover",
+              json: JSON.stringify({
+                ...inputs,
+                supportedVersions: SUPPORTED_MCP_PROTOCOL_REVISIONS,
+                capabilities: buildGatewayServerCapabilities(inputs.revision),
+                ttlMs: LIST_CACHE_TTL_MS,
+              }),
+            });
+          } catch (err) {
+            fastify.log.warn({ err }, "Rust MCP discovery failed");
+            reply.status(502);
+            return {
+              jsonrpc: "2.0",
+              error: { code: -32603, message: "MCP discovery unavailable" },
+              id,
+            };
+          }
+        } else {
+          result = buildDiscoverResult(inputs);
+        }
         // Clients probe discover on a short timeout (Claude Code allows at
         // most five seconds), so the handshake log never delays the reply.
         trackBackgroundWork(
@@ -1420,18 +1526,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             runId: readHeader(request, RUN_ID_HEADER),
           }),
         );
-        // One primary-key read, memoized for the rest of this request.
-        const agent = await lookups.gatewayAgent(profileId);
-        return {
-          jsonrpc: "2.0",
-          result: buildDiscoverResult({
-            agentId: profileId,
-            version: config.api.version,
-            revision: resolution.revision,
-            instructions: buildGatewayInstructions(agent?.description),
-          }),
-          id: (request.body as { id?: string | number })?.id ?? null,
-        };
+        return { jsonrpc: "2.0", result, id };
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
@@ -1510,6 +1605,81 @@ function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
     internalCallProvenance(request).inProcess
     ? "chat"
     : "api";
+}
+
+const nativeMcpRevision = z.enum([
+  LEGACY_MCP_PROTOCOL_REVISION,
+  STATELESS_MCP_PROTOCOL_REVISION,
+]);
+const nativeMcpDispatch = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("unsupported"),
+    code: z.number(),
+    message: z.string(),
+    data: z.object({ supported: z.array(z.string()), requested: z.string() }),
+  }),
+  z.object({
+    kind: z.literal("mismatch"),
+    revision: nativeMcpRevision,
+    code: z.number(),
+    message: z.string(),
+  }),
+  z.object({
+    kind: z.literal("route"),
+    resolution: z.object({
+      revision: nativeMcpRevision,
+      declaredExplicitly: z.boolean(),
+      declaredVersion: z.string().optional(),
+    }),
+    target: z.enum([
+      "removed",
+      "task",
+      "skill",
+      "subscription",
+      "discover",
+      "sdk",
+    ]),
+  }),
+]);
+
+async function dispatchMcpInRust(
+  request: FastifyRequest<{ Body: Record<string, unknown> }>,
+) {
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust API socket is not configured");
+  const { body } = request;
+  const record = (value: unknown) =>
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const asString = (value: unknown) =>
+    typeof value === "string" ? value : undefined;
+  const params = record(body.params);
+  const meta = record(params._meta);
+  // Only routing metadata crosses the socket, never credentials or arguments.
+  return nativeMcpDispatch.parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/dispatch",
+      json: JSON.stringify({
+        headerVersion: readHeader(request, MCP_PROTOCOL_VERSION_HEADER),
+        headerMethod: readHeader(request, MCP_METHOD_HEADER),
+        headerName: readHeader(request, MCP_NAME_HEADER),
+        metaVersion: asString(meta[MCP_PROTOCOL_VERSION_META_KEY]),
+        hasClientMeta:
+          MCP_CLIENT_INFO_META_KEY in meta ||
+          MCP_CLIENT_CAPABILITIES_META_KEY in meta,
+        method: asString(body.method),
+        name: asString(params.name),
+        uri: asString(params.uri),
+        taskId: asString(params.taskId),
+        hasId: "id" in body,
+        isRequest: body.id !== undefined && body.id !== null,
+        sdkVersions: SDK_SUPPORTED_PROTOCOL_VERSIONS,
+        skillsEnabled: skillsSurfaceEnabled(),
+      }),
+    }),
+  );
 }
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {

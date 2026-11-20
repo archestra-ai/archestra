@@ -670,6 +670,7 @@ export class ResourcePermissions {
       revision: number;
       grants: ResourcePermissionGrant[];
     },
+    nativeAppWrite?: AbortSignal,
   ) {
     if (params.resource === "conversation" || params.resource === "agentRun") {
       if (
@@ -720,11 +721,10 @@ export class ResourcePermissions {
         ? ResourcePermissionPolicyModel.find(params)
         : Promise.resolve(undefined),
     ]);
-    const policy = await ResourcePermissions.replace({
-      ...params,
-      authority: effective.grants,
-      subjects: actorSubjects,
-    });
+    const policy = await ResourcePermissions.replace(
+      { ...params, authority: effective.grants, subjects: actorSubjects },
+      nativeAppWrite,
+    );
     // An app's backing install follows the app's audience.
     if (params.resource === "app" && params.scope !== "*") {
       await resyncAppBackingInstallScope({
@@ -896,6 +896,7 @@ export class ResourcePermissions {
       /** The caller's subjects, when the request has read them already. */
       subjects?: PermissionSubject[];
     },
+    nativeAppWrite?: AbortSignal,
   ) {
     await CredentialResourcePermissions.validatePolicy(params);
     const current = await ResourcePermissionPolicyModel.find(params);
@@ -947,7 +948,14 @@ export class ResourcePermissions {
     }
     await ResourcePermissions.assertSomeoneStillManages(params);
     await ResourcePermissions.validateRecipients(params);
-    const policy = await ResourcePermissionPolicyModel.replace(params);
+    if (nativeAppWrite && (params.resource !== "app" || params.scope === "*"))
+      throw new Error("Native policy replacement requires an app scope");
+    const policy = nativeAppWrite
+      ? await ResourcePermissionPolicyModel.replaceAppMcpNative(
+          params,
+          nativeAppWrite,
+        )
+      : await ResourcePermissionPolicyModel.replace(params);
     if (!policy)
       throw new ApiError(
         409,

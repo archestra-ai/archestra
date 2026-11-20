@@ -583,7 +583,7 @@ const NOT_FOUND_MESSAGE =
  * Read from the SDK rather than re-listed here, so an SDK upgrade that adds or
  * drops a revision cannot silently disagree with what the gateway accepts.
  */
-const SDK_SUPPORTED_PROTOCOL_VERSIONS: readonly string[] =
+export const SDK_SUPPORTED_PROTOCOL_VERSIONS: readonly string[] =
   SUPPORTED_PROTOCOL_VERSIONS;
 
 function readHeader(

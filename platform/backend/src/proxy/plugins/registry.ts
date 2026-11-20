@@ -8,12 +8,16 @@ import {
 import { resolveChildTrajectoryReferences } from "@/openappa/child-trajectory-reference";
 import { stripChildTrajectoryReferences } from "@/openappa/child-trajectory-reference-format";
 import {
+  type AppaDelegationMarker,
   collectDelegationMarkers,
+  isDelegatedPrompt,
   isDelegationMarkerItem,
   isDelegationMarkerLine,
+  readDelegationMarkerLine,
   verifyDelegatedPrompt,
 } from "@/openappa/delegation";
 import {
+  canonicalRuntimeToolArguments,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   verifyRuntimeToolProof,
 } from "@/openappa/runtime-tool-claims";
@@ -22,6 +26,7 @@ import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { canonicalJson } from "@/openappa/wire";
 import type { CommonToolResult, HostedToolCall } from "@/types";
 import { ApiError } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 
 /**
  * Public extension contract for cross-cutting LLM proxy behavior.
@@ -105,6 +110,7 @@ export type LlmProxyToolCallAnnotation = {
   appended: string | Record<string, unknown>;
   /** Caller scope for resolving a retained continuation proof. */
   continuationCallerId?: string;
+  delegationBinding?: { spawnerNativeId: string; callerId?: string };
 };
 
 /** A signed execution proof added after the host approved the original arguments. */
@@ -307,14 +313,27 @@ export class LlmProxyPluginRegistry {
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
+    options?: { nativePolicy?: boolean; signal?: AbortSignal },
   ): Promise<LlmProxyToolCallsOutcome> {
     let toolCalls = context.toolCalls;
     const plugins = this.hasPlugins() ? this.getSessionPlugins(context) : [];
+    const socketPath = options?.nativePolicy
+      ? config.database.rustAuditLogSocket
+      : undefined;
+    if (options?.nativePolicy && !socketPath)
+      throw new Error("Rust tool policy socket is not configured");
+    const phases =
+      socketPath && plugins.length > 0
+        ? await nativePolicyPhases(socketPath, plugins, options?.signal)
+        : {
+            rewrite: plugins.filter((plugin) => !plugin.finalizesToolCalls),
+            prepare: plugins,
+            finalize: plugins.filter((plugin) => plugin.finalizesToolCalls),
+          };
     // Rewriters run first, then preparers; a finalizer such as APPA sees
     // exactly those calls before it records any reservation for execution.
-    for (const plugin of plugins.filter(
-      (plugin) => !plugin.finalizesToolCalls,
-    )) {
+    for (const plugin of phases.rewrite) {
+      options?.signal?.throwIfAborted();
       const result = await this.invoke(plugin, "onToolCalls", {
         ...context,
         toolCalls,
@@ -323,7 +342,8 @@ export class LlmProxyPluginRegistry {
       if (result.decision === "refuse") return result;
       toolCalls = result.toolCalls;
     }
-    for (const plugin of plugins) {
+    for (const plugin of phases.prepare) {
+      options?.signal?.throwIfAborted();
       const prepared = await this.invoke(plugin, "onPrepareToolCalls", {
         ...context,
         toolCalls,
@@ -333,9 +353,8 @@ export class LlmProxyPluginRegistry {
       toolCalls = prepared.toolCalls;
     }
     let blocked: readonly { id: string; name: string; reason: string }[] = [];
-    for (const plugin of plugins.filter(
-      (plugin) => plugin.finalizesToolCalls,
-    )) {
+    for (const plugin of phases.finalize) {
+      options?.signal?.throwIfAborted();
       // Capture values before the callback: retaining object references would
       // let an in-place mutation evade the post-validation rewrite check.
       const given = new Map(
@@ -354,6 +373,41 @@ export class LlmProxyPluginRegistry {
         toolCalls,
       })) ?? { decision: "allow" as const, toolCalls };
       if (result.decision === "refuse") return result;
+      if (socketPath) {
+        const verdict = await callRustApi({
+          socketPath,
+          path: "/internal/v1/openai/policy-finalizer",
+          signal: options?.signal,
+          json: JSON.stringify({
+            original: [...given].map(([id, snapshot]) => ({ id, ...snapshot })),
+            returned: result.toolCalls.map(
+              ({ id, name, namespace, reviewDetails, arguments: args }) => ({
+                id,
+                name,
+                namespace,
+                reviewDetails,
+                arguments: canonicalJson(args),
+              }),
+            ),
+            substitutions: [
+              ...(result.blocked ?? []),
+              ...(result.rewritten ?? []),
+            ],
+            annotations: result.annotated ?? [],
+            proofs: result.runtimeProofs ?? [],
+          }),
+        });
+        if (verdict === "authorized") {
+          toolCalls = result.toolCalls;
+          if (result.blocked?.length) blocked = [...blocked, ...result.blocked];
+          continue;
+        }
+        if (verdict !== "verify_proofs")
+          throw new Error(
+            `Finalizer ${plugin.id} failed native policy validation`,
+          );
+        // The host checks attachment shape; Rust verifies runtime proof claims.
+      }
       // A finalizer cannot release a tool call that policies never evaluated.
       // Every returned call must match one of the input calls:
       // - Untouched
@@ -432,12 +486,14 @@ export class LlmProxyPluginRegistry {
           runtimeProof &&
           original.name === call.name &&
           original.namespace === call.namespace &&
-          addsOnlyRuntimeProof({
+          (await addsOnlyRuntimeProof({
             before: original.arguments,
             after: canonicalJson(call.arguments),
             attachment: runtimeProof,
             organizationId: context.organizationId,
-          })
+            socketPath,
+            signal: options?.signal,
+          }))
         ) {
           runtimeProofs.delete(call.id);
           continue;
@@ -452,6 +508,8 @@ export class LlmProxyPluginRegistry {
             after: canonicalJson(call.arguments),
             annotation,
             organizationId: context.organizationId,
+            socketPath,
+            signal: options?.signal,
           }))
         ) {
           throw new Error(
@@ -745,16 +803,100 @@ export function getLlmProxyPluginRegistry(): LlmProxyPluginRegistry {
  * Returns true if `after` differs from `before` only by the appended delegation marker.
  * Compares canonical JSON representations to prevent unverified mutations.
  */
+async function nativePolicyPhases(
+  socketPath: string,
+  plugins: readonly LlmProxyPlugin[],
+  signal?: AbortSignal,
+) {
+  const order = await callRustApi({
+    socketPath,
+    path: "/internal/v1/openai/policy-order",
+    signal,
+    json: JSON.stringify(plugins.map((plugin) => !!plugin.finalizesToolCalls)),
+  });
+  if (!order || typeof order !== "object")
+    throw new Error("Invalid native tool policy order");
+  const read = (phase: "rewrite" | "prepare" | "finalize") => {
+    const indices: unknown = Reflect.get(order, phase);
+    if (!Array.isArray(indices))
+      throw new Error("Missing native tool policy phase");
+    return indices.map((index: unknown) => {
+      const plugin =
+        typeof index === "number" && Number.isInteger(index)
+          ? plugins[index]
+          : undefined;
+      if (!plugin) throw new Error("Invalid native tool policy plugin index");
+      return plugin;
+    });
+  };
+  return {
+    rewrite: read("rewrite"),
+    prepare: read("prepare"),
+    finalize: read("finalize"),
+  };
+}
+
 async function appendsOnlyMarker(params: {
   before: string;
   after: string;
   annotation: LlmProxyToolCallAnnotation;
   organizationId: string;
+  socketPath?: string;
+  signal?: AbortSignal;
 }): Promise<boolean> {
   const before = argumentRecord(params.before);
   const after = argumentRecord(params.after);
   if (!before || !after) return false;
   const { field, appended } = params.annotation;
+  if (params.socketPath) {
+    const verdict = await callRustApi({
+      socketPath: params.socketPath,
+      path: "/internal/v1/openai/delegation-attachment",
+      json: JSON.stringify({
+        before,
+        after,
+        field,
+        appended,
+        organizationId: params.organizationId,
+        id: params.annotation.id,
+        name: params.annotation.name,
+        binding: params.annotation.delegationBinding,
+      }),
+      signal: params.signal,
+    });
+    if (verdict === "authorized") return true;
+    const prompt = before[field];
+    return (
+      verdict === "continuation" &&
+      typeof appended === "string" &&
+      typeof prompt === "string" &&
+      (await isContinuationSuffix(
+        appended,
+        prompt,
+        params.organizationId,
+        params.annotation.continuationCallerId,
+        params.socketPath,
+        params.signal,
+      ))
+    );
+  }
+  const verifyMarker = async (line: string, prompt: string) => {
+    const binding = params.annotation.delegationBinding;
+    if (!binding) return isDelegationMarkerLine(line);
+    const marker = readDelegationMarkerLine(line, prompt);
+    if (!marker || marker.spawnCallId !== params.annotation.id) return false;
+    const result = verifyDelegatedPrompt({
+      marker,
+      organizationId: params.organizationId,
+      ...binding,
+    });
+    return (
+      !!result &&
+      (result.promptDigest === marker.promptDigest ||
+        (result.promptDigest === undefined &&
+          isDelegatedPrompt("", marker.promptDigest)))
+    );
+  };
   const keys = Object.keys(before).sort();
   if (canonicalJson(keys) !== canonicalJson(Object.keys(after).sort()))
     return false;
@@ -772,7 +914,8 @@ async function appendsOnlyMarker(params: {
       typeof was === "string" &&
       was.trim().length > 0 &&
       appended.startsWith("\n\n") &&
-      (isDelegationMarkerLine(appended.slice(2)) ||
+      now === was + appended &&
+      ((await verifyMarker(appended.slice(2), was)) ||
         (params.annotation.name === "spawn_subagent" &&
           field === "prompt" &&
           typeof before.resume_from === "string" &&
@@ -781,15 +924,16 @@ async function appendsOnlyMarker(params: {
             was,
             params.organizationId,
             params.annotation.continuationCallerId,
-          )))) &&
-      now === was + appended
+          ))))
     );
   }
   return (
     Array.isArray(was) &&
     was.length > 0 &&
     isDelegationMarkerItem(appended) &&
-    canonicalJson(now) === canonicalJson([...was, appended])
+    canonicalJson(now) === canonicalJson([...was, appended]) &&
+    typeof appended.text === "string" &&
+    (await verifyMarker(appended.text, ""))
   );
 }
 
@@ -799,7 +943,10 @@ async function isContinuationSuffix(
   prompt: string,
   organizationId: string,
   callerId?: string,
+  socketPath?: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  signal?.throwIfAborted();
   const compact = stripChildTrajectoryReferences(suffix);
   const stripped = stripChildTrajectoryReceipts(compact.text);
   if (compact.references.length) {
@@ -822,12 +969,14 @@ async function isContinuationSuffix(
     stripped.receipts.length !== 1 ||
     !receipt ||
     !isDelegationMarkerLine(stripped.text.slice(2)) ||
-    !verifyChildTrajectoryReceipt({
-      receipt,
-      organizationId,
-      callerId: receipt.callerId,
-      spawnerNativeId: receipt.spawnerNativeId,
-    })
+    receipt.organizationId !== organizationId ||
+    (!socketPath &&
+      !verifyChildTrajectoryReceipt({
+        receipt,
+        organizationId,
+        callerId: receipt.callerId,
+        spawnerNativeId: receipt.spawnerNativeId,
+      }))
   )
     return false;
   const [marker] = collectDelegationMarkers({
@@ -838,12 +987,42 @@ async function isContinuationSuffix(
     marker !== undefined &&
     marker.parentId === receipt.parentId &&
     marker.spawnCallId === receipt.spawnCallId &&
-    !!verifyDelegatedPrompt({
-      marker,
-      organizationId,
-      callerId: receipt.callerId,
-      spawnerNativeId: receipt.spawnerNativeId,
-    })
+    (socketPath
+      ? await verifyNativeDelegation({
+          socketPath,
+          marker,
+          organizationId,
+          callerId: receipt.callerId,
+          spawnerNativeId: receipt.spawnerNativeId,
+          receiptToken: receipt.token,
+          signal,
+        })
+      : !!verifyDelegatedPrompt({
+          marker,
+          organizationId,
+          callerId: receipt.callerId,
+          spawnerNativeId: receipt.spawnerNativeId,
+        }))
+  );
+}
+
+async function verifyNativeDelegation(params: {
+  socketPath: string;
+  marker: AppaDelegationMarker;
+  organizationId: string;
+  callerId?: string;
+  spawnerNativeId: string;
+  receiptToken?: string;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  const { socketPath, marker, signal, ...binding } = params;
+  return (
+    (await callRustApi({
+      socketPath,
+      path: "/internal/v1/openai/delegation-proof",
+      signal,
+      json: JSON.stringify({ ...marker, ...binding }),
+    })) === true
   );
 }
 
@@ -879,12 +1058,14 @@ async function loadConfiguredLlmProxyPlugins(): Promise<
 }
 
 /** Only the signed proof may differ from the arguments the policies approved. */
-function addsOnlyRuntimeProof(params: {
+async function addsOnlyRuntimeProof(params: {
   before: string;
   after: string;
   attachment: LlmProxyRuntimeToolProof;
   organizationId: string;
-}): boolean {
+  socketPath?: string;
+  signal?: AbortSignal;
+}): Promise<boolean> {
   const before = argumentRecord(params.before);
   const after = argumentRecord(params.after);
   if (!before || !after) return false;
@@ -895,12 +1076,57 @@ function addsOnlyRuntimeProof(params: {
   const signedArgs = attachment.wrapped
     ? readRunToolArgs(after.tool_args)
     : after;
-  if (
-    !originalArgs ||
-    !signedArgs ||
-    Object.hasOwn(originalArgs, RUNTIME_TOOL_PROOF_ARGUMENT)
-  )
-    return false;
+  if (!originalArgs || !signedArgs) return false;
+  if (params.socketPath) {
+    const snapshot = (
+      args: Record<string, unknown>,
+      envelope: Record<string, unknown>,
+    ) => {
+      const { tool_args, ...rest } = envelope;
+      return {
+        fields: Object.fromEntries(
+          Object.entries(args).map(([key, value]) => [
+            key,
+            key === RUNTIME_TOOL_PROOF_ARGUMENT
+              ? JSON.stringify(value)
+              : canonicalRuntimeToolArguments({ value }),
+          ]),
+        ),
+        wrapper: attachment.wrapped
+          ? {
+              form: typeof tool_args === "string" ? "string" : "object",
+              envelope: canonicalRuntimeToolArguments({ value: rest }),
+            }
+          : undefined,
+      };
+    };
+    if (attachment.session.organization_id !== params.organizationId)
+      return false;
+    return (
+      true ===
+      (await callRustApi({
+        socketPath: params.socketPath,
+        path: "/internal/v1/openai/runtime-proof-attachment",
+        json: JSON.stringify({
+          before: snapshot(originalArgs, before),
+          after: snapshot(signedArgs, after),
+          binding: {
+            proof: "",
+            organizationId: params.organizationId,
+            callerId: attachment.session.caller_id,
+            sessionId: attachment.session.session_id,
+            parentId: attachment.session.parent_id,
+            callId: withoutTrajectoryStamp(attachment.id),
+            action: attachment.action,
+            arguments: canonicalRuntimeToolArguments(originalArgs),
+            spawn: attachment.spawn,
+          },
+        }),
+        signal: params.signal,
+      }))
+    );
+  }
+  if (Object.hasOwn(originalArgs, RUNTIME_TOOL_PROOF_ARGUMENT)) return false;
   const { [RUNTIME_TOOL_PROOF_ARGUMENT]: proof, ...remaining } = signedArgs;
   if (canonicalJson(originalArgs) !== canonicalJson(remaining)) return false;
   if (attachment.wrapped) {

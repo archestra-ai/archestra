@@ -99,6 +99,7 @@ import type { AgentOptionFilters } from "@/types/agent";
 import type { SuggestedPromptInput } from "@/types/agent-suggested-prompt";
 import type { LabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
+import { callRustApi } from "@/utils/rust-api";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import A2aRemoteAgentModel from "./a2a-remote-agent";
@@ -109,6 +110,7 @@ import AgentExcludedSkillModel from "./agent-excluded-skill";
 import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
+import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentLabelModel from "./agent-label";
 import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
@@ -859,6 +861,8 @@ class AgentModel {
       skipCreationDefaultTools?: boolean;
       /** Caller will fork version 1 after completing a staged create policy. */
       deferInitialVersionFork?: boolean;
+      nativeGatewayWrite?: { signal: AbortSignal };
+      nativeAgentWrite?: { organizationId: string; signal: AbortSignal };
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -890,33 +894,51 @@ class AgentModel {
         ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
         : undefined;
 
-    const [createdAgent] = await AgentModel.insertWithSlugRetry(
-      {
-        ...agent,
-        // A staged policy is always inserted fail-closed. The policy service
-        // installs its exact rules and flips to the requested mode before the
-        // create route returns.
-        ...(activationSkillPolicy && {
-          activationSkillMode: "manual" as const,
-        }),
-        ...(enableAccessAllTools && { accessAllTools: false }),
-        // The insert type carries the input shape; store the normalized policy.
-        networkPolicy: agent.networkPolicy
-          ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
-          : agent.networkPolicy,
-        subagentLoadBalancing: agent.subagentLoadBalancing
-          ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
-          : agent.subagentLoadBalancing,
-        organizationId,
-        ...(slug && { slug }),
-        ...(authorId && { authorId }),
-      },
-      {
-        grants: options?.initialPermissionGrants,
-        grantAuthor: options?.grantAuthor,
-        publishToOrganization: options?.publishToOrganization,
-      },
-    );
+    const values = {
+      ...agent,
+      // A staged policy is always inserted fail-closed. The policy service
+      // installs its exact rules and flips to the requested mode before the
+      // create route returns.
+      ...(activationSkillPolicy && {
+        activationSkillMode: "manual" as const,
+      }),
+      ...(enableAccessAllTools && { accessAllTools: false }),
+      // The insert type carries the input shape; store the normalized policy.
+      networkPolicy: agent.networkPolicy
+        ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
+        : agent.networkPolicy,
+      subagentLoadBalancing: agent.subagentLoadBalancing
+        ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
+        : agent.subagentLoadBalancing,
+      organizationId,
+      ...(slug && { slug }),
+      ...(authorId && { authorId }),
+    };
+    const permissions = {
+      grants: options?.initialPermissionGrants,
+      grantAuthor: options?.grantAuthor,
+      publishToOrganization: options?.publishToOrganization,
+    };
+    const nativeGatewayWrite = options?.nativeGatewayWrite;
+    const createdAgent = nativeGatewayWrite
+      ? await AgentModel.insertGatewayNative({
+          values,
+          grants: permissions.grants ?? [],
+          labels: labels ?? [],
+          knowledgeBaseIds: knowledgeBaseIds ?? [],
+          connectorIds: connectorIds ?? [],
+          defaultToolIds: options?.skipCreationDefaultTools
+            ? []
+            : await ToolModel.getCreationDefaultToolIds(organizationId),
+          signal: nativeGatewayWrite.signal,
+        })
+      : options?.nativeAgentWrite?.organizationId === organizationId
+        ? await AgentModel.insertAgentNative(
+            values,
+            permissions.grants ?? [],
+            options.nativeAgentWrite.signal,
+          )
+        : (await AgentModel.insertWithSlugRetry(values, permissions))[0];
 
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
@@ -929,25 +951,29 @@ class AgentModel {
       await AgentUserModel.syncAgentUsers(createdAgent.id, users);
     }
 
-    // Assign labels to the agent if provided
-    if (labels && labels.length > 0) {
-      await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
-    }
-
-    // Assign knowledge bases if provided
-    if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
-      await AgentKnowledgeBaseModel.syncForAgent(
-        createdAgent.id,
-        knowledgeBaseIds,
-      );
-    }
-
-    // Assign connectors if provided
-    if (connectorIds && connectorIds.length > 0) {
-      await AgentConnectorAssignmentModel.syncForAgent(
-        createdAgent.id,
-        connectorIds,
-      );
+    if (nativeGatewayWrite) {
+      if (knowledgeBaseIds?.length || connectorIds?.length) {
+        agentKnowledgeSourcesCache.invalidate(createdAgent.id);
+      }
+      if (labels?.length) {
+        AgentLabelModel.pruneKeysAndValues().catch(() => {});
+      }
+    } else {
+      if (labels?.length) {
+        await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
+      }
+      if (knowledgeBaseIds?.length) {
+        await AgentKnowledgeBaseModel.syncForAgent(
+          createdAgent.id,
+          knowledgeBaseIds,
+        );
+      }
+      if (connectorIds?.length) {
+        await AgentConnectorAssignmentModel.syncForAgent(
+          createdAgent.id,
+          connectorIds,
+        );
+      }
     }
 
     // Sync suggested prompts if provided
@@ -968,7 +994,7 @@ class AgentModel {
     // the same flags the frontend create form reads, so the pre-selected set
     // in the form and the server-side assignment cannot drift. Skipped by
     // clone/import, which install their own authoritative assignment set.
-    if (!options?.skipCreationDefaultTools) {
+    if (!nativeGatewayWrite && !options?.skipCreationDefaultTools) {
       const organization = await OrganizationModel.getById(organizationId);
       const creationDefaultShortNames = new Set<ArchestraToolShortName>(
         getCreationDefaultArchestraToolShortNames({
@@ -1012,24 +1038,35 @@ class AgentModel {
     // pre-fill failure rolls the flip back rather than committing an All-mode
     // agent without its exclusion baseline.
     if (enableAccessAllTools) {
-      const [flipped] = await withDbTransaction(async (tx) => {
-        if (!options?.skipExclusionPrefill) {
-          await AgentExcludedToolModel.prefillForAllToolsMode(
-            createdAgent.id,
-            tx,
-          );
+      if (nativeGatewayWrite && !options?.skipExclusionPrefill) {
+        const row = await AgentExcludedToolModel.enableOnNewGatewayNative({
+          id: createdAgent.id,
+          organizationId,
+        });
+        Object.assign(
+          createdAgent,
+          decodeMcpDetailRow(row, getTableColumns(schema.agentsTable)),
+        );
+      } else {
+        const [flipped] = await withDbTransaction(async (tx) => {
+          if (!options?.skipExclusionPrefill) {
+            await AgentExcludedToolModel.prefillForAllToolsMode(
+              createdAgent.id,
+              tx,
+            );
+          }
+          return tx
+            .update(schema.agentsTable)
+            .set({
+              accessAllTools: true,
+              toolExposureMode: "search_and_run_only",
+            })
+            .where(eq(schema.agentsTable.id, createdAgent.id))
+            .returning();
+        });
+        if (flipped) {
+          Object.assign(createdAgent, flipped);
         }
-        return tx
-          .update(schema.agentsTable)
-          .set({
-            accessAllTools: true,
-            toolExposureMode: "search_and_run_only",
-          })
-          .where(eq(schema.agentsTable.id, createdAgent.id))
-          .returning();
-      });
-      if (flipped) {
-        Object.assign(createdAgent, flipped);
       }
     }
 
@@ -1039,11 +1076,16 @@ class AgentModel {
     // initialization. Best-effort: a versioning failure must never fail the
     // create itself.
     if (!options?.deferInitialVersionFork) {
-      const fork = await AgentVersionModel.forkIfChangedBestEffort(
-        createdAgent.id,
-      );
-      if (fork) {
-        createdAgent.latestVersion = fork.version;
+      const version = nativeGatewayWrite
+        ? await AgentVersionModel.persistGatewayVersionBestEffort({
+            agentId: createdAgent.id,
+            organizationId,
+            initial: true,
+          })
+        : (await AgentVersionModel.forkIfChangedBestEffort(createdAgent.id))
+            ?.version;
+      if (version != null) {
+        createdAgent.latestVersion = version;
       }
     }
 
@@ -4085,6 +4127,184 @@ class AgentModel {
     const assignedTools = rows
       .map((row) => row.tools)
       .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+    return AgentModel.hydrateDetail(agent, assignedTools, userId);
+  }
+
+  static async findMcpDetailTarget(params: {
+    id: string;
+    userId?: string;
+    isAgentAdmin: boolean;
+  }) {
+    const { id, userId, isAgentAdmin } = params;
+    if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin)))
+      return null;
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({
+        id: table.id,
+        organizationId: table.organizationId,
+        authorId: table.authorId,
+        agentType: table.agentType,
+      })
+      .from(table)
+      .where(and(eq(table.id, id), notDeleted(table)));
+    return row ?? null;
+  }
+
+  static async findMcpNameNative(params: {
+    name: string;
+    expectedType: "agent" | "mcp_gateway";
+    organizationId: string;
+    userId?: string;
+    isAgentAdmin: boolean;
+    authorization?: AgentListFilters["authorization"];
+    signal: AbortSignal;
+  }) {
+    const {
+      name,
+      expectedType,
+      organizationId,
+      userId,
+      isAgentAdmin,
+      authorization,
+      signal,
+    } = params;
+    const table = schema.agentsTable;
+    const where = await AgentModel.buildListWhereClause({
+      filters: {
+        organizationId,
+        name,
+        agentType: expectedType,
+        excludeOtherPersonalAgents: true,
+        authorization,
+      },
+      userId,
+      isAgentAdmin,
+    });
+    const candidates = await db
+      .select({
+        id: table.id,
+        authorId: table.authorId,
+        personal: userId
+          ? sql<boolean>`(${table.authorId} = ${userId} AND ${agentAudienceIs("personal")})`
+          : sql<boolean>`false`,
+      })
+      .from(table)
+      .where(where);
+    signal.throwIfAborted();
+    if (!candidates.length) return null;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const id = z
+      .uuid()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/get-agent-by-name",
+          json: JSON.stringify({
+            organizationId,
+            agentType: expectedType,
+            pattern: `%${escapeLikePattern(name)}%`,
+            candidateIds: candidates.map((candidate) => candidate.id),
+            personalIds: candidates
+              .filter((candidate) => candidate.personal)
+              .map((candidate) => candidate.id),
+          }),
+          signal,
+        }),
+      );
+    const target = candidates.find((candidate) => candidate.id === id);
+    return target
+      ? {
+          id: target.id,
+          authorId: target.authorId,
+          organizationId,
+          agentType: expectedType,
+        }
+      : null;
+  }
+
+  static async readMcpNameDetail(
+    target: NonNullable<
+      Awaited<ReturnType<typeof AgentModel.findMcpNameNative>>
+    >,
+    userId?: string,
+  ): Promise<AgentListItem | null> {
+    const [agent] = await AgentModel.findEnrichedAgents({
+      agentIds: [target.id],
+      userId,
+      includeTools: true,
+    });
+    return agent?.organizationId === target.organizationId &&
+      agent.agentType === target.agentType &&
+      agent.authorId === target.authorId &&
+      !agent.deletedAt
+      ? agent
+      : null;
+  }
+
+  static async readMcpDetailNative(params: {
+    target: NonNullable<
+      Awaited<ReturnType<typeof AgentModel.findMcpDetailTarget>>
+    >;
+    expectedType: "agent" | "mcp_gateway";
+    userId?: string;
+    signal: AbortSignal;
+  }): Promise<Agent | null> {
+    const { target, expectedType, userId, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const row = z
+      .object({ agent: z.string(), tools: z.array(z.string()) })
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/get-agent",
+          json: JSON.stringify({
+            id: target.id,
+            organizationId: target.organizationId,
+            authorId: target.authorId,
+            agentType: expectedType,
+          }),
+          signal,
+        }),
+      );
+    if (!row) return null;
+    const agent = decodeMcpDetailRow(
+      row.agent,
+      getTableColumns(schema.agentsTable),
+    ) as typeof schema.agentsTable.$inferSelect;
+    if (
+      agent.id !== target.id ||
+      agent.organizationId !== target.organizationId ||
+      agent.authorId !== target.authorId ||
+      agent.agentType !== expectedType ||
+      agent.deletedAt !== null
+    ) {
+      throw new Error(
+        "Native agent detail does not match the authorized target",
+      );
+    }
+    const tools = row.tools.map(
+      (raw) =>
+        decodeMcpDetailRow(
+          raw,
+          getTableColumns(schema.toolsTable),
+        ) as typeof schema.toolsTable.$inferSelect,
+    );
+    signal.throwIfAborted();
+    const result = await AgentModel.hydrateDetail(agent, tools, userId);
+    signal.throwIfAborted();
+    return result;
+  }
+
+  private static async hydrateDetail(
+    agent: typeof schema.agentsTable.$inferSelect,
+    assignedTools: Array<typeof schema.toolsTable.$inferSelect>,
+    userId?: string,
+  ): Promise<Agent> {
     const tools = userId
       ? await dropHiddenTools(assignedTools, {
           userId,
@@ -4093,10 +4313,10 @@ class AgentModel {
       : assignedTools;
 
     const [teams, labels, knowledgeBaseIds, connectorIds] = await Promise.all([
-      AgentTeamModel.getTeamDetailsForAgent(id),
-      AgentLabelModel.getLabelsForAgent(id),
-      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
-      AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      AgentLabelModel.getLabelsForAgent(agent.id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(agent.id),
+      AgentConnectorAssignmentModel.getConnectorIds(agent.id),
     ]);
 
     const result: Agent = {
@@ -4625,6 +4845,11 @@ class AgentModel {
        * must re-read the agent afterwards.
        */
       deferVersionFork?: boolean;
+      nativeMcpEdit?: {
+        agentType: "agent" | "mcp_gateway";
+        organizationId: string;
+        signal: AbortSignal;
+      };
     },
   ): Promise<Agent | null> {
     let updatedAgent:
@@ -4651,6 +4876,16 @@ class AgentModel {
       return null;
     }
 
+    const native = options?.nativeMcpEdit;
+    const nativeGateway =
+      native?.agentType === "mcp_gateway" ? native : undefined;
+    if (
+      native &&
+      (existingAgent.agentType !== native.agentType ||
+        existingAgent.organizationId !== native.organizationId)
+    )
+      return null;
+
     // Keep the all-tools ⇒ progressive-loading invariant on every update path:
     // if the agent's effective accessAllTools is on, force search_and_run_only.
     // Only mutate when there is an actual inconsistency to fix, so unrelated
@@ -4660,6 +4895,7 @@ class AgentModel {
     const effectiveToolExposureMode =
       agent.toolExposureMode ?? existingAgent.toolExposureMode;
     if (
+      !native &&
       effectiveAccessAllTools &&
       effectiveToolExposureMode !== "search_and_run_only"
     ) {
@@ -4692,29 +4928,42 @@ class AgentModel {
       !options?.skipExclusionPrefill;
 
     // Only update agent table if there are fields to update
-    if (Object.keys(agent).length > 0) {
+    native?.signal.throwIfAborted();
+    if (
+      Object.keys(agent).length > 0 ||
+      (native &&
+        effectiveAccessAllTools &&
+        effectiveToolExposureMode !== "search_and_run_only")
+    ) {
       const updateWhere = and(
         eq(schema.agentsTable.id, id),
         notDeleted(schema.agentsTable),
       );
-      const [row] = prefillsExclusions
-        ? await withDbTransaction(async (tx) => {
-            await AgentModel.lockRowForUpdate(id, tx);
-            const rows = await tx
-              .update(schema.agentsTable)
-              .set(agent)
-              .where(updateWhere)
-              .returning();
-            if (rows.length > 0) {
-              await AgentExcludedToolModel.prefillForAllToolsMode(id, tx);
-            }
-            return rows;
+      const row = native
+        ? await AgentModel.patchMcpAgentNative({
+            existingAgent,
+            agentType: native.agentType,
+            patch: agent,
+            signal: native.signal,
           })
-        : await db
-            .update(schema.agentsTable)
-            .set(agent)
-            .where(updateWhere)
-            .returning();
+        : (prefillsExclusions
+            ? await withDbTransaction(async (tx) => {
+                await AgentModel.lockRowForUpdate(id, tx);
+                const rows = await tx
+                  .update(schema.agentsTable)
+                  .set(agent)
+                  .where(updateWhere)
+                  .returning();
+                if (rows.length > 0) {
+                  await AgentExcludedToolModel.prefillForAllToolsMode(id, tx);
+                }
+                return rows;
+              })
+            : await db
+                .update(schema.agentsTable)
+                .set(agent)
+                .where(updateWhere)
+                .returning())[0];
 
       if (!row) {
         return null;
@@ -4758,19 +5007,51 @@ class AgentModel {
       await AgentUserModel.syncAgentUsers(id, users);
     }
 
-    // Sync label assignments if labels is provided
-    if (labels !== undefined) {
-      await AgentLabelModel.syncAgentLabels(id, labels);
-    }
-
-    // Sync knowledge base assignments if knowledgeBaseIds is provided
-    if (knowledgeBaseIds !== undefined) {
-      await AgentKnowledgeBaseModel.syncForAgent(id, knowledgeBaseIds);
-    }
-
-    // Sync connector assignments if connectorIds is provided
-    if (connectorIds !== undefined) {
-      await AgentConnectorAssignmentModel.syncForAgent(id, connectorIds);
+    if (nativeGateway) {
+      if (
+        labels !== undefined ||
+        knowledgeBaseIds !== undefined ||
+        connectorIds !== undefined
+      ) {
+        const socketPath = config.database.rustAuditLogSocket;
+        if (!socketPath)
+          throw new Error("Rust MCP tool socket is not configured");
+        const applied = z.boolean().parse(
+          await callRustApi({
+            socketPath,
+            path: "/internal/v1/mcp/tools/edit-gateway-assignments",
+            json: JSON.stringify({
+              id,
+              organizationId: nativeGateway.organizationId,
+              labels:
+                labels === undefined
+                  ? undefined
+                  : Object.fromEntries(
+                      labels.map(({ key, value }) => [key, value]),
+                    ),
+              knowledgeBaseIds,
+              connectorIds,
+            }),
+          }),
+        );
+        if (!applied) return null;
+        if (labels !== undefined) {
+          AgentLabelModel.pruneKeysAndValues().catch(() => {});
+        }
+        if (knowledgeBaseIds !== undefined || connectorIds !== undefined) {
+          agentKnowledgeSourcesCache.invalidate(id);
+        }
+      }
+    } else {
+      if (labels !== undefined) {
+        await AgentLabelModel.syncAgentLabels(id, labels);
+      }
+      if (knowledgeBaseIds !== undefined) {
+        await AgentKnowledgeBaseModel.syncForAgent(id, knowledgeBaseIds);
+      }
+      if (connectorIds !== undefined) {
+        await AgentConnectorAssignmentModel.syncForAgent(id, connectorIds);
+      }
     }
 
     // Sync suggested prompts if provided
@@ -4787,9 +5068,14 @@ class AgentModel {
     // update skips the agents-row write yet still changes config. Best-effort:
     // a versioning failure must never fail the update itself.
     if (!options?.deferVersionFork) {
-      const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
-      if (fork && updatedAgent) {
-        updatedAgent.latestVersion = fork.version;
+      const version = nativeGateway
+        ? await AgentVersionModel.persistGatewayVersionBestEffort({
+            agentId: id,
+            organizationId: nativeGateway.organizationId,
+          })
+        : (await AgentVersionModel.forkIfChangedBestEffort(id))?.version;
+      if (version != null && updatedAgent) {
+        updatedAgent.latestVersion = version;
       }
     }
 
@@ -5788,6 +6074,178 @@ class AgentModel {
     }
 
     return baseSlug;
+  }
+
+  private static async patchMcpAgentNative(params: {
+    existingAgent: typeof schema.agentsTable.$inferSelect;
+    agentType: "agent" | "mcp_gateway";
+    patch: Partial<UpdateAgent>;
+    signal: AbortSignal;
+  }): Promise<typeof schema.agentsTable.$inferSelect | null> {
+    const { existingAgent, agentType, patch, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    const raw = z
+      .string()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path:
+            agentType === "agent"
+              ? "/internal/v1/mcp/tools/edit-agent"
+              : "/internal/v1/mcp/tools/edit-gateway",
+          json: JSON.stringify({
+            id: existingAgent.id,
+            organizationId: existingAgent.organizationId,
+            isPersonalGateway: existingAgent.isPersonalGateway,
+            ...AgentExcludedToolModel.nativePrefillScope(
+              existingAgent.isPersonalGateway,
+            ),
+            patch: {
+              name: patch.name,
+              description: patch.description,
+              icon: patch.icon,
+              tool_exposure_mode: patch.toolExposureMode,
+              access_all_tools: patch.accessAllTools,
+              access_all_subagents: patch.accessAllSubagents,
+              subagent_load_balancing: patch.subagentLoadBalancing,
+              system_prompt: patch.systemPrompt,
+              runtime: patch.runtime,
+              network_policy: patch.networkPolicy,
+              llm_api_key_id: patch.llmApiKeyId,
+              model_id: patch.modelId,
+            },
+          }),
+        }),
+      );
+    return raw === null
+      ? null
+      : (decodeMcpDetailRow(
+          raw,
+          getTableColumns(schema.agentsTable),
+        ) as typeof schema.agentsTable.$inferSelect);
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  private static async insertAgentNative(
+    values: typeof schema.agentsTable.$inferInsert,
+    grants: ResourcePermissionGrant[],
+    signal: AbortSignal,
+  ): Promise<typeof schema.agentsTable.$inferSelect> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const creator = await CreatedByModel.forInsert({
+      data: {
+        organizationId: values.organizationId,
+        authorId: values.authorId,
+      },
+      userIdField: "authorId",
+    });
+    const json = JSON.stringify({
+      ...creator,
+      name: values.name,
+      environmentId: values.environmentId,
+      description: values.description,
+      icon: values.icon,
+      systemPrompt: values.systemPrompt,
+      toolExposureMode: values.toolExposureMode,
+      accessAllSubagents: values.accessAllSubagents,
+      subagentLoadBalancing: values.subagentLoadBalancing,
+      runtime: values.runtime,
+      networkPolicy: values.networkPolicy,
+      llmApiKeyId: values.llmApiKeyId,
+      modelId: values.modelId,
+      grants: ResourcePermissionPolicyModel.initialGrants({
+        resource: "agent",
+        authorId: creator.authorId ?? null,
+        grants,
+      }),
+    });
+    // Do not abort or replay an admitted insert; finish setup and audit it.
+    signal.throwIfAborted();
+    const raw = z
+      .string()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/create-agent",
+          json,
+        }),
+      );
+    if (raw === null)
+      throw Object.assign(new Error("Duplicate agent record"), {
+        code: "23505",
+      });
+    return decodeMcpDetailRow(
+      raw,
+      getTableColumns(schema.agentsTable),
+    ) as typeof schema.agentsTable.$inferSelect;
+  }
+  // SPDX-SnippetEnd
+
+  private static async insertGatewayNative(params: {
+    values: typeof schema.agentsTable.$inferInsert;
+    grants: ResourcePermissionGrant[];
+    labels: LabelWithDetails[];
+    knowledgeBaseIds: string[];
+    connectorIds: string[];
+    defaultToolIds: string[];
+    signal: AbortSignal;
+  }): Promise<typeof schema.agentsTable.$inferSelect> {
+    const { values, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    const { slug, authorId, organizationId } = values;
+    if (!socketPath || !slug || !authorId || !organizationId)
+      throw new Error("Native gateway creation requires a scoped human caller");
+
+    const base = slug.replace(/-[a-f0-9]{6}$/, "");
+    const slugs = [
+      slug,
+      ...Array.from(
+        { length: 2 },
+        () => `${base}-${crypto.randomUUID().slice(0, 6)}`,
+      ),
+    ];
+    const json = JSON.stringify({
+      organizationId,
+      authorId,
+      slugs,
+      name: values.name,
+      environmentId: values.environmentId,
+      toolExposureMode: values.toolExposureMode,
+      accessAllSubagents: values.accessAllSubagents,
+      subagentLoadBalancing: values.subagentLoadBalancing,
+      labels: Object.fromEntries(
+        params.labels.map(({ key, value }) => [key, value]),
+      ),
+      knowledgeBaseIds: params.knowledgeBaseIds,
+      connectorIds: params.connectorIds,
+      defaultToolIds: params.defaultToolIds,
+      grants: ResourcePermissionPolicyModel.initialGrants({
+        resource: "mcpGateway",
+        authorId,
+        grants: params.grants,
+      }),
+    });
+    // Once sent, a disconnect must not abandon the confirmed insert before
+    // the caller finishes setup and audits the original operation.
+    signal.throwIfAborted();
+    const raw = z.string().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/create-gateway",
+        json,
+      }),
+    );
+    return decodeMcpDetailRow(
+      raw,
+      getTableColumns(schema.agentsTable),
+    ) as typeof schema.agentsTable.$inferSelect;
   }
 
   private static async insertWithSlugRetry(
@@ -6995,6 +7453,23 @@ const agentToolRefColumns = {
 };
 
 export default AgentModel;
+
+function decodeMcpDetailRow(raw: string, columns: Record<string, AnyPgColumn>) {
+  const row = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
+  return Object.fromEntries(
+    Object.entries(columns).map(([key, column]) => {
+      if (!Object.hasOwn(row, column.name))
+        throw new Error(`Missing native agent detail field ${column.name}`);
+      const value = row[column.name];
+      return [
+        key,
+        column.dataType === "date" && value !== null
+          ? new Date(`${z.string().parse(value)}Z`)
+          : value,
+      ];
+    }),
+  );
+}
 
 // The chat roster appears before the picker opens. Emoji and short URL icons
 // are cheap enough to keep inline; base64 image data is fetched only for the

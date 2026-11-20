@@ -123,6 +123,70 @@ class ProjectAccessModel {
       return { rows: [], total: 0 };
     }
     const table = schema.projectsTable;
+    const { where, visibility, accessible } =
+      ProjectAccessModel.listCriteria(params);
+    const page = db
+      .select({
+        id: table.id,
+        organizationId: table.organizationId,
+        userId: table.userId,
+        name: table.name,
+        description: table.description,
+        createdAt: table.createdAt,
+        deletedAt: table.deletedAt,
+        visibility,
+        accessible,
+      })
+      .from(table)
+      .where(where)
+      .orderBy(
+        ...(params.ownerFirst
+          ? [sql`(${table.userId} = ${params.userId}) DESC`]
+          : []),
+        desc(table.createdAt),
+        asc(table.id),
+      )
+      .$dynamic();
+    if (params.limit !== undefined) page.limit(params.limit);
+    if (params.offset) page.offset(params.offset);
+    const [rows, [{ total }]] = await Promise.all([
+      page,
+      db.select({ total: sql<number>`count(*)::int` }).from(table).where(where),
+    ]);
+    return {
+      rows: rows.map((row) => ({
+        ...row,
+        visibility: row.visibility ?? null,
+        accessible: row.accessible === true,
+      })),
+      total,
+    };
+  }
+
+  static async listMcpCandidates(
+    params: Pick<
+      Parameters<typeof ProjectAccessModel.listPage>[0],
+      | "userId"
+      | "organizationId"
+      | "principal"
+      | "includeOversight"
+      | "reachableOnly"
+      | "access"
+    >,
+  ) {
+    const table = schema.projectsTable;
+    const { where, visibility, accessible } =
+      ProjectAccessModel.listCriteria(params);
+    return db
+      .select({ id: table.id, userId: table.userId, visibility, accessible })
+      .from(table)
+      .where(where);
+  }
+
+  private static listCriteria(
+    params: Parameters<typeof ProjectAccessModel.listPage>[0],
+  ) {
+    const table = schema.projectsTable;
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -199,43 +263,12 @@ class ProjectAccessModel {
           : sql`NOT ${idIn(params.pins.ids)}`
         : undefined,
     );
-    const page = db
-      .select({
-        id: table.id,
-        organizationId: table.organizationId,
-        userId: table.userId,
-        name: table.name,
-        description: table.description,
-        createdAt: table.createdAt,
-        deletedAt: table.deletedAt,
-        visibility,
-        accessible: params.includeOversight
-          ? sql<boolean>`${accessible}`
-          : sql<boolean>`true`,
-      })
-      .from(table)
-      .where(where)
-      .orderBy(
-        ...(params.ownerFirst
-          ? [sql`(${table.userId} = ${params.userId}) DESC`]
-          : []),
-        desc(table.createdAt),
-        asc(table.id),
-      )
-      .$dynamic();
-    if (params.limit !== undefined) page.limit(params.limit);
-    if (params.offset) page.offset(params.offset);
-    const [rows, [{ total }]] = await Promise.all([
-      page,
-      db.select({ total: sql<number>`count(*)::int` }).from(table).where(where),
-    ]);
     return {
-      rows: rows.map((row) => ({
-        ...row,
-        visibility: row.visibility ?? null,
-        accessible: row.accessible === true,
-      })),
-      total,
+      where,
+      visibility,
+      accessible: params.includeOversight
+        ? sql<boolean>`${accessible}`
+        : sql<boolean>`true`,
     };
   }
 

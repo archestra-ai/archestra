@@ -75,10 +75,13 @@ import {
   KbDocumentMetadataFilterSchema,
   type KnowledgeBaseConnector,
   KnowledgeSourceVisibilitySchema,
+  SelectKnowledgeBaseConnectorSchema,
+  SelectKnowledgeBaseSchema,
   UpdateKnowledgeBaseConnectorSchema,
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import { archestraMcpBranding } from "./branding";
 import { dynamicAccessContext } from "./dynamic-tools";
 import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
@@ -960,26 +963,33 @@ async function handleCreateKnowledgeBase(params: {
       });
       // SPDX-SnippetEnd
     }
-    const kb = await KnowledgeBaseModel.create(
-      InsertKnowledgeBaseSchema.parse({
-        organizationId: context.organizationId,
-        name: args.name,
-        createdBy: context.userId ?? null,
-        description: args.description ?? null,
-      }),
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      {
-        initialPermissionGrants: args.initialGrants ?? [],
-      },
-      // SPDX-SnippetEnd
-    );
+    const data = InsertKnowledgeBaseSchema.parse({
+      organizationId: context.organizationId,
+      name: args.name,
+      createdBy: context.userId ?? null,
+      description: args.description ?? null,
+    });
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const initialPermissionGrants = args.initialGrants ?? [];
+    const kb = execution?.native
+      ? await KnowledgeBaseModel.createMcpNative({
+          data,
+          initialPermissionGrants,
+          signal: execution.signal,
+        })
+      : await KnowledgeBaseModel.create(data, { initialPermissionGrants });
+    // SPDX-SnippetEnd
     return structuredSuccessResult(
       { knowledgeBase: kb },
       `Knowledge base created successfully.\n\n${JSON.stringify(kb, null, 2)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "creating knowledge base");
   }
 }
@@ -995,19 +1005,24 @@ async function handleGetKnowledgeBases(params: {
       return errorResult("Organization context not available");
     }
 
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     const access = context.userId
       ? await knowledgeSourceAccessControlService.buildAccessControlContext({
           userId: context.userId,
           organizationId: context.organizationId,
         })
       : null;
-    const kbs = await KnowledgeBaseModel.findByOrganization({
+    const query = {
       canReadAll: access?.canReadAll ?? false,
       viewerTeamIds: access?.teamIds ?? [],
       viewerUserId: context.userId,
       organizationId: context.organizationId,
       access: toolAccessSelection(args),
-    });
+    };
+    const kbs = execution?.native
+      ? await readNativeKnowledgeBases(query, execution.signal)
+      : await KnowledgeBaseModel.findByOrganization(query);
     if (kbs.length === 0) {
       return structuredSuccessResult(
         { knowledgeBases: [] },
@@ -1019,6 +1034,8 @@ async function handleGetKnowledgeBases(params: {
       JSON.stringify(kbs, null, 2),
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing knowledge bases");
   }
 }
@@ -1034,6 +1051,32 @@ async function handleGetKnowledgeBase(params: {
       return errorResult("Organization context not available");
     }
 
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
+    if (execution?.native) {
+      if (
+        !(await canAccessKnowledgeBase({
+          knowledgeBase: {
+            id: args.id,
+            organizationId: context.organizationId,
+          },
+          organizationId: context.organizationId,
+          userId: context.userId,
+        }))
+      )
+        return knowledgeBaseNotFound(args.id);
+      const result = await readNativeKnowledgeBase({
+        organizationId: context.organizationId,
+        id: args.id,
+        signal: execution.signal,
+      });
+      return result
+        ? structuredSuccessResult(
+            { knowledgeBase: result },
+            JSON.stringify(result, null, 2),
+          )
+        : knowledgeBaseNotFound(args.id);
+    }
     const kb = await KnowledgeBaseModel.findById(args.id);
     if (
       !kb ||
@@ -1054,9 +1097,73 @@ async function handleGetKnowledgeBase(params: {
       JSON.stringify(result, null, 2),
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "getting knowledge base");
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const NativeKnowledgeBaseSchema = SelectKnowledgeBaseSchema.extend({
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  deletedAt: z.null(),
+});
+
+async function readNativeKnowledgeBases(
+  query: Parameters<typeof KnowledgeBaseModel.findAuthorizedListIds>[0],
+  signal: AbortSignal,
+) {
+  const ids = await KnowledgeBaseModel.findAuthorizedListIds(query);
+  signal.throwIfAborted();
+  if (ids.length === 0) return [];
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  return z.array(NativeKnowledgeBaseSchema).parse(
+    await callRustApi({
+      socketPath,
+      path: "/internal/v1/mcp/tools/get-knowledge-bases",
+      json: JSON.stringify({ organizationId: query.organizationId, ids }),
+      signal,
+    }),
+  );
+}
+
+async function readNativeKnowledgeBase(params: {
+  organizationId: string;
+  id: string;
+  signal: AbortSignal;
+}) {
+  const { signal, ...query } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const result = z
+    .object({
+      base: NativeKnowledgeBaseSchema,
+      hasUploadConnector: z.boolean(),
+      uploadedFilesEnvironmentId: z.string().nullable(),
+    })
+    .nullable()
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/get-knowledge-base",
+        json: JSON.stringify(query),
+        signal,
+      }),
+    );
+  return (
+    result && {
+      ...result.base,
+      ...(result.hasUploadConnector && {
+        uploadedFilesEnvironmentId: result.uploadedFilesEnvironmentId,
+      }),
+    }
+  );
+}
+// SPDX-SnippetEnd
 
 async function handleUpdateKnowledgeBase(params: {
   args: KnowledgeBaseUpdateToolArgs;
@@ -1069,7 +1176,9 @@ async function handleUpdateKnowledgeBase(params: {
       return errorResult("Organization context not available");
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: Parameters<
+      typeof KnowledgeBaseModel.updateMcpNative
+    >[0]["data"] = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (args.uploadedFilesEnvironmentId !== undefined) {
@@ -1105,7 +1214,15 @@ async function handleUpdateKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.id);
     }
-    const kb = await KnowledgeBaseModel.update(args.id, updates);
+    const execution = context.gatewayExecution;
+    const kb = execution?.native
+      ? await KnowledgeBaseModel.updateMcpNative({
+          id: existing.id,
+          organizationId: context.organizationId,
+          data: updates,
+          signal: execution.signal,
+        })
+      : await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
       return knowledgeBaseNotFound(args.id);
     }
@@ -1118,6 +1235,9 @@ async function handleUpdateKnowledgeBase(params: {
       `Knowledge base updated successfully.\n\n${JSON.stringify(result, null, 2)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "updating knowledge base");
   }
 }
@@ -1146,9 +1266,18 @@ async function handleDeleteKnowledgeBase(params: {
     }
     // Shared service so this MCP path runs the same side-effects (cache
     // invalidation) as the REST route — not a bare model soft-delete.
-    await deleteKnowledgeBase(args.id);
+    const execution = context.gatewayExecution;
+    await deleteKnowledgeBase(
+      args.id,
+      execution?.native
+        ? { organizationId: context.organizationId, signal: execution.signal }
+        : undefined,
+    );
     return successResult(`Knowledge base deleted: ${args.id}`);
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "deleting knowledge base");
   }
 }
@@ -1247,26 +1376,33 @@ async function handleCreateKnowledgeConnector(params: {
       });
       // SPDX-SnippetEnd
     }
-    const connector = await KnowledgeBaseConnectorModel.create(
-      InsertKnowledgeBaseConnectorSchema.parse({
-        organizationId: context.organizationId,
-        name: args.name,
-        connectorType: args.connector_type,
-        config: { type: args.connector_type, ...args.config },
-        description: args.description ?? null,
-        syncPermissionsFromSource: args.sync_permissions_from_source ?? false,
-        environmentId: agentEnvironmentId,
-        // The creator gets full access to the new connector.
-        createdBy: context.userId ?? null,
-      }),
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      {
-        initialPermissionGrants: args.initialGrants ?? [],
-      },
-      // SPDX-SnippetEnd
-    );
+    const data = InsertKnowledgeBaseConnectorSchema.parse({
+      organizationId: context.organizationId,
+      name: args.name,
+      connectorType: args.connector_type,
+      config: { type: args.connector_type, ...args.config },
+      description: args.description ?? null,
+      syncPermissionsFromSource: args.sync_permissions_from_source ?? false,
+      environmentId: agentEnvironmentId,
+      // The creator gets full access to the new connector.
+      createdBy: context.userId ?? null,
+    });
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const initialPermissionGrants = args.initialGrants ?? [];
+    const connector = execution?.native
+      ? await KnowledgeBaseConnectorModel.createMcpNative({
+          data,
+          initialPermissionGrants,
+          agentId: context.agent.id,
+          signal: execution.signal,
+        })
+      : await KnowledgeBaseConnectorModel.create(data, {
+          initialPermissionGrants,
+        });
+    // SPDX-SnippetEnd
     // Same lifecycle rule as the REST create route: a Perforce connector that
     // syncs permissions gets its shim now, not on its first pass.
     await reconcileP4ShimForConnector(connector.id);
@@ -1275,6 +1411,9 @@ async function handleCreateKnowledgeConnector(params: {
       `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "creating knowledge connector");
   }
 }
@@ -1289,6 +1428,8 @@ async function handleGetKnowledgeConnectors(params: {
       return errorResult("Organization context not available");
     }
 
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     const [access, agentEnvironmentId] = await Promise.all([
       context.userId
         ? knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -1300,13 +1441,16 @@ async function handleGetKnowledgeConnectors(params: {
     ]);
 
     // Environment isolation: a gateway only sees connectors in its own environment.
-    const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
+    const query = {
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
       viewerTeamIds: access?.teamIds,
       viewerUserId: access?.userId,
       environmentId: agentEnvironmentId,
-    });
+    };
+    const connectors = execution?.native
+      ? await readNativeKnowledgeConnectors(query, execution.signal)
+      : await KnowledgeBaseConnectorModel.findByOrganization(query);
     if (connectors.length === 0) {
       return structuredSuccessResult(
         { knowledgeConnectors: [] },
@@ -1318,6 +1462,8 @@ async function handleGetKnowledgeConnectors(params: {
       JSON.stringify(connectors, null, 2),
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing knowledge connectors");
   }
 }
@@ -1333,8 +1479,10 @@ async function handleGetKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const [connector, access, agentEnvironmentId] = await Promise.all([
-      KnowledgeBaseConnectorModel.findById(args.id),
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
+    const connectorId = args.id.toLowerCase();
+    const [access, agentEnvironmentId] = await Promise.all([
       context.userId
         ? knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: context.userId,
@@ -1344,15 +1492,25 @@ async function handleGetKnowledgeConnector(params: {
       AgentModel.findEnvironmentId(context.agent.id),
     ]);
     if (
+      access &&
+      !knowledgeSourceAccessControlService.canAccessConnector(access, {
+        id: connectorId,
+      })
+    )
+      return knowledgeConnectorNotFound(args.id);
+    const connector = execution?.native
+      ? await readNativeKnowledgeConnector({
+          id: connectorId,
+          organizationId: context.organizationId,
+          environmentId: agentEnvironmentId,
+          signal: execution.signal,
+        })
+      : await KnowledgeBaseConnectorModel.findById(connectorId);
+    if (
       !connector ||
       connector.organizationId !== context.organizationId ||
       // Environment isolation: a connector in another environment is invisible.
-      connector.environmentId !== agentEnvironmentId ||
-      (access &&
-        !knowledgeSourceAccessControlService.canAccessConnector(
-          access,
-          connector,
-        ))
+      connector.environmentId !== agentEnvironmentId
     ) {
       return knowledgeConnectorNotFound(args.id);
     }
@@ -1361,9 +1519,79 @@ async function handleGetKnowledgeConnector(params: {
       JSON.stringify(connector, null, 2),
     );
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "getting knowledge connector");
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const NativeKnowledgeConnectorSchema =
+  SelectKnowledgeBaseConnectorSchema.extend({
+    config: z.json(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+    lastSyncAt: z.iso.datetime().nullable(),
+    lastPermissionSyncAt: z.iso.datetime().nullable(),
+    deletedAt: z.null(),
+  });
+
+async function readNativeKnowledgeConnectors(
+  query: Parameters<
+    typeof KnowledgeBaseConnectorModel.findAuthorizedListIds
+  >[0] & {
+    environmentId: string | null;
+  },
+  signal: AbortSignal,
+) {
+  const ids = await KnowledgeBaseConnectorModel.findAuthorizedListIds(query);
+  signal.throwIfAborted();
+  if (ids.length === 0) return [];
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const data = await callRustApi({
+    socketPath,
+    path: "/internal/v1/mcp/tools/get-knowledge-connectors",
+    json: JSON.stringify({
+      organizationId: query.organizationId,
+      environmentId: query.environmentId,
+      ids,
+    }),
+    signal,
+  });
+  return z
+    .array(z.string())
+    .parse(data)
+    .map((row) => NativeKnowledgeConnectorSchema.parse(JSON.parse(row)));
+}
+
+async function readNativeKnowledgeConnector(params: {
+  id: string;
+  organizationId: string;
+  environmentId: string | null;
+  signal: AbortSignal;
+}) {
+  const { signal, ...query } = params;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const raw = z
+    .string()
+    .nullable()
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/get-knowledge-connector",
+        json: JSON.stringify(query),
+        signal,
+      }),
+    );
+  return raw === null
+    ? null
+    : NativeKnowledgeConnectorSchema.parse(JSON.parse(raw));
+}
+// SPDX-SnippetEnd
 
 async function handleUpdateKnowledgeConnector(params: {
   args: ConnectorUpdateToolArgs;
@@ -1493,10 +1721,18 @@ async function handleUpdateKnowledgeConnector(params: {
       existingConnector.config.type === "github" &&
       updates.config?.type === "github" &&
       githubSyncConfigurationChanged(existingConnector.config, updates.config);
-    const connector = await KnowledgeBaseConnectorModel.update(args.id, {
-      ...updates,
-      ...(githubConfigAffectsSync ? { checkpoint: null } : {}),
-    });
+    const execution = context.gatewayExecution;
+    const connector = execution?.native
+      ? await KnowledgeBaseConnectorModel.updateMcpNative({
+          existing: existingConnector,
+          data: updates,
+          clearCheckpoint: githubConfigAffectsSync,
+          signal: execution.signal,
+        })
+      : await KnowledgeBaseConnectorModel.update(args.id, {
+          ...updates,
+          ...(githubConfigAffectsSync ? { checkpoint: null } : {}),
+        });
     if (!connector) {
       return knowledgeConnectorNotFound(args.id);
     }
@@ -1538,6 +1774,9 @@ async function handleUpdateKnowledgeConnector(params: {
       `Knowledge connector updated successfully.\n\n${JSON.stringify(connector, null, 2)}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "updating knowledge connector");
   }
 }
@@ -1578,10 +1817,25 @@ async function handleDeleteKnowledgeConnector(params: {
     }
     // Shared service so this MCP path cancels queued syncs + invalidates the
     // cache identically to the REST route (a bare model soft-delete would skip
-    // both and orphan the queued syncs). The secret is preserved here too.
-    await deleteConnector(args.id);
+    // both and orphan the queued syncs). It also revokes the stored secret.
+    const execution = context.gatewayExecution;
+    const deleted = await deleteConnector(
+      existing.id,
+      execution?.native
+        ? {
+            organizationId: context.organizationId,
+            environmentId: existing.environmentId,
+            signal: execution.signal,
+          }
+        : undefined,
+    );
+    if (execution?.native && !deleted)
+      return knowledgeConnectorNotFound(args.id);
     return successResult(`Knowledge connector deleted: ${args.id}`);
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "deleting knowledge connector");
   }
 }
@@ -1626,10 +1880,21 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
-    const assigned = await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
-      args.connector_id,
-      args.knowledge_base_id,
-    );
+    const execution = context.gatewayExecution;
+    const assigned = execution?.native
+      ? await KnowledgeBaseConnectorModel.writeKnowledgeBaseAssignmentMcpNative(
+          {
+            action: "assign",
+            connectorId: connector.id,
+            knowledgeBaseId: knowledgeBase.id,
+            organizationId: context.organizationId,
+            signal: execution.signal,
+          },
+        )
+      : await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+          args.connector_id,
+          args.knowledge_base_id,
+        );
     if (!assigned) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
@@ -1637,6 +1902,9 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
       `Knowledge connector ${args.connector_id} assigned to knowledge base ${args.knowledge_base_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "assigning knowledge connector to knowledge base");
   }
 }
@@ -1662,19 +1930,37 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
     const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(
       args.connector_id,
     );
-    if (!kbIds.includes(args.knowledge_base_id)) {
+    const execution = context.gatewayExecution;
+    if (
+      !kbIds.includes(args.knowledge_base_id) ||
+      (execution?.native &&
+        !(await KnowledgeBaseConnectorModel.writeKnowledgeBaseAssignmentMcpNative(
+          {
+            action: "unassign",
+            connectorId: connector.id,
+            knowledgeBaseId: args.knowledge_base_id,
+            organizationId: context.organizationId,
+            signal: execution.signal,
+          },
+        )))
+    ) {
       return errorResult(
         `Knowledge connector ${args.connector_id} is not assigned to knowledge base ${args.knowledge_base_id}`,
       );
     }
-    await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(
-      args.connector_id,
-      args.knowledge_base_id,
-    );
+    if (!execution?.native) {
+      await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(
+        args.connector_id,
+        args.knowledge_base_id,
+      );
+    }
     return successResult(
       `Knowledge connector ${args.connector_id} unassigned from knowledge base ${args.knowledge_base_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(
       error,
       "unassigning knowledge connector from knowledge base",
@@ -1709,10 +1995,29 @@ async function handleAssignKnowledgeBaseToAgent(params: {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
 
-    const assigned = await AgentKnowledgeBaseModel.assign(
-      args.agent_id,
-      args.knowledge_base_id,
-    );
+    if (
+      !(await AgentModel.existsInOrganization({
+        id: args.agent_id,
+        organizationId: context.organizationId,
+      }))
+    ) {
+      return errorResult("Agent not found");
+    }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const assigned = execution?.native
+      ? await AgentKnowledgeBaseModel.writeAssignmentMcpNative({
+          action: "assign",
+          agentId: args.agent_id,
+          knowledgeBaseId: knowledgeBase.id,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })
+      : await AgentKnowledgeBaseModel.assign(args.agent_id, knowledgeBase.id);
+    // SPDX-SnippetEnd
     if (!assigned) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
@@ -1720,6 +2025,9 @@ async function handleAssignKnowledgeBaseToAgent(params: {
       `Knowledge base ${args.knowledge_base_id} assigned to agent ${args.agent_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "assigning knowledge base to agent");
   }
 }
@@ -1748,22 +2056,47 @@ async function handleUnassignKnowledgeBaseFromAgent(params: {
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
+    if (
+      !(await AgentModel.existsInOrganization({
+        id: args.agent_id,
+        organizationId: context.organizationId,
+      }))
+    ) {
+      return errorResult("Agent not found");
+    }
     const kbIds = await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
       args.agent_id,
     );
-    if (!kbIds.includes(args.knowledge_base_id)) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    if (
+      !kbIds.includes(knowledgeBase.id) ||
+      (execution?.native &&
+        !(await AgentKnowledgeBaseModel.writeAssignmentMcpNative({
+          action: "unassign",
+          agentId: args.agent_id,
+          knowledgeBaseId: knowledgeBase.id,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })))
+    ) {
       return errorResult(
         `Knowledge base ${args.knowledge_base_id} is not assigned to agent ${args.agent_id}`,
       );
     }
-    await AgentKnowledgeBaseModel.unassign(
-      args.agent_id,
-      args.knowledge_base_id,
-    );
+    if (!execution?.native) {
+      await AgentKnowledgeBaseModel.unassign(args.agent_id, knowledgeBase.id);
+    }
+    // SPDX-SnippetEnd
     return successResult(
       `Knowledge base ${args.knowledge_base_id} unassigned from agent ${args.agent_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "unassigning knowledge base from agent");
   }
 }
@@ -1781,27 +2114,45 @@ async function handleAssignKnowledgeConnectorToAgent(params: {
     // Environment isolation: a connector can only be assigned to an agent in the
     // same environment, otherwise the agent could never use it and the binding
     // would cross the environment boundary.
-    const [connector, targetAgentEnvironmentId] = await Promise.all([
+    const [connector, [targetAgent]] = await Promise.all([
       findManageableConnector({
         connectorId: args.connector_id,
         organizationId: context.organizationId,
         userId: context.userId,
       }),
-      AgentModel.findEnvironmentId(args.agent_id),
+      AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: context.organizationId,
+        agentIds: [args.agent_id],
+      }),
     ]);
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
     }
-    if (connector.environmentId !== targetAgentEnvironmentId) {
+    if (!targetAgent) return errorResult("Agent not found");
+    if (connector.environmentId !== targetAgent.environmentId) {
       return errorResult(
         "The connector and the agent are in different environments. Assign a connector from the agent's environment.",
       );
     }
 
-    const assigned = await AgentConnectorAssignmentModel.assign(
-      args.agent_id,
-      args.connector_id,
-    );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const assigned = execution?.native
+      ? await AgentConnectorAssignmentModel.writeAssignmentMcpNative({
+          action: "assign",
+          agentId: targetAgent.id,
+          connectorId: connector.id,
+          organizationId: context.organizationId,
+          environmentId: targetAgent.environmentId,
+          signal: execution.signal,
+        })
+      : await AgentConnectorAssignmentModel.assign(
+          targetAgent.id,
+          connector.id,
+        );
+    // SPDX-SnippetEnd
     if (!assigned) {
       return knowledgeConnectorNotFound(args.connector_id);
     }
@@ -1809,6 +2160,9 @@ async function handleAssignKnowledgeConnectorToAgent(params: {
       `Knowledge connector ${args.connector_id} assigned to agent ${args.agent_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "assigning knowledge connector to agent");
   }
 }
@@ -1831,22 +2185,47 @@ async function handleUnassignKnowledgeConnectorFromAgent(params: {
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
     }
+    if (
+      !(await AgentModel.existsInOrganization({
+        id: args.agent_id,
+        organizationId: context.organizationId,
+      }))
+    ) {
+      return errorResult("Agent not found");
+    }
     const connectorIds = await AgentConnectorAssignmentModel.getConnectorIds(
       args.agent_id,
     );
-    if (!connectorIds.includes(args.connector_id)) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    if (
+      !connectorIds.includes(connector.id) ||
+      (execution?.native &&
+        !(await AgentConnectorAssignmentModel.writeAssignmentMcpNative({
+          action: "unassign",
+          agentId: args.agent_id,
+          connectorId: connector.id,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })))
+    ) {
       return errorResult(
         `Knowledge connector ${args.connector_id} is not assigned to agent ${args.agent_id}`,
       );
     }
-    await AgentConnectorAssignmentModel.unassign(
-      args.agent_id,
-      args.connector_id,
-    );
+    if (!execution?.native) {
+      await AgentConnectorAssignmentModel.unassign(args.agent_id, connector.id);
+    }
+    // SPDX-SnippetEnd
     return successResult(
       `Knowledge connector ${args.connector_id} unassigned from agent ${args.agent_id}`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "unassigning knowledge connector from agent");
   }
 }

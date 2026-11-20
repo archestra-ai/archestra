@@ -1,0 +1,19 @@
+{
+  "name": "@archestra/archestra-db-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "files": ["index.cjs", "index.d.ts", "*.node"],
+  "scripts": {
+    "build": "napi build --release --platform --no-js",
+    "build:dev": "napi build --profile release-fast --platform --no-js"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.0"
+  }
+}

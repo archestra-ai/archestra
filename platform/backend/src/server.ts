@@ -193,6 +193,11 @@ import {
   drainBackgroundWork,
   trackBackgroundWork,
 } from "./utils/background-work";
+import {
+  ROLLUP_SHUTDOWN_BUDGET_MS,
+  startManagedRollupWorker,
+} from "./utils/managed-rollup-worker";
+import { nativeServicesReady } from "./utils/rust-readiness";
 
 async function flushShutdownTelemetry(): Promise<void> {
   if (!isMainModule) return;
@@ -1631,12 +1636,23 @@ const startWorker = async () => {
     // These routes handle their own auth (Bearer tokens / API keys) and are
     // not reachable from outside the pod — the K8s Service only targets platform pods.
     const healthServer = createFastifyInstance();
+    const manageRollupWorker =
+      config.manageRustServices &&
+      config.kb.rustRollupWorker &&
+      !process.env.ARCHESTRA_NATIVE_RUNTIME_DIR;
+    let rollupWorker: ReturnType<typeof startManagedRollupWorker> | undefined;
 
     healthServer.get("/health", async () => ({ status: "ok" }));
     healthServer.get("/ready", async (_request, reply) => {
       const dbHealthy = await isDatabaseHealthy();
       if (!dbHealthy) {
         return reply.status(503).send({ status: "error", reason: "database" });
+      }
+      if (
+        (manageRollupWorker && !rollupWorker?.running) ||
+        !(await nativeServicesReady(rollupWorker?.directory))
+      ) {
+        return reply.status(503).send({ status: "error", reason: "rust" });
       }
       const openappa = await openappaReadiness();
       switch (openappa.state) {
@@ -1671,18 +1687,28 @@ const startWorker = async () => {
     );
 
     let shuttingDown = false;
-    const gracefulShutdown = async (signal: string) => {
+    const gracefulShutdown = async (signal: string, exitCode = 0) => {
       if (shuttingDown) return;
       shuttingDown = true;
       logger.info(`Worker received ${signal}, shutting down...`);
       beginLlmProxyDrain(healthServer);
-      const forceExitTimeout = setTimeout(() => {
-        logger.warn("Worker shutdown timed out, forcing exit");
-        process.exit(1);
-      }, shutdownTimeoutMs());
+      const forceExitTimeout = setTimeout(
+        () => {
+          logger.warn("Worker shutdown timed out, forcing exit");
+          process.exit(1);
+        },
+        Math.max(
+          shutdownTimeoutMs(),
+          rollupWorker ? ROLLUP_SHUTDOWN_BUDGET_MS : 0,
+        ),
+      );
       const stoppedWorker = taskQueueService.stopWorker();
 
       try {
+        const rustStopped = rollupWorker?.stop().catch((err) => {
+          logger.error({ err }, "Rust rollup worker shutdown failed");
+          exitCode = 1;
+        });
         await Promise.all([drainLlmProxyRequests(healthServer), stoppedWorker]);
         await healthServer.close();
         await drainBackgroundWork();
@@ -1697,8 +1723,9 @@ const startWorker = async () => {
         await drainBackgroundWork();
         cacheManager.shutdown();
         await flushShutdownTelemetry();
+        await rustStopped;
         clearTimeout(forceExitTimeout);
-        process.exit(0);
+        process.exit(exitCode);
       } catch (error) {
         clearTimeout(forceExitTimeout);
         logger.error({ error }, "Worker shutdown error");
@@ -1708,6 +1735,11 @@ const startWorker = async () => {
 
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
     process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+    if (manageRollupWorker) {
+      rollupWorker = startManagedRollupWorker(() => {
+        void gracefulShutdown("Rust rollup worker exit", 1);
+      });
+    }
   } catch (err) {
     logger.error(err, "Worker failed to start");
     process.exit(1);

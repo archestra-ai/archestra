@@ -14,6 +14,7 @@ set -e
 KIND_CLUSTER=""
 # Track supervisord PID for cleanup
 SUPERVISOR_PID=""
+NATIVE_RUNTIME_DIR=""
 
 # Cleanup function for graceful shutdown
 # Usage: cleanup [exit_code]
@@ -28,6 +29,11 @@ cleanup() {
         echo "Stopping services..."
         kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
         wait "$SUPERVISOR_PID" 2>/dev/null || true
+    fi
+    if [ -n "$NATIVE_RUNTIME_DIR" ]; then
+        rm -f "$NATIVE_RUNTIME_DIR/migrated" "$NATIVE_RUNTIME_DIR/worker.ready" \
+            "$NATIVE_RUNTIME_DIR/api.sock" "$NATIVE_RUNTIME_DIR/supervisord.conf"
+        rmdir "$NATIVE_RUNTIME_DIR"
     fi
 
     # Delete KinD cluster if we created one in quickstart mode
@@ -399,6 +405,9 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+    if [ "${ARCHESTRA_SERVER_MANAGE_RUST_SERVICES:-}" = true ]; then
+        EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
+    fi
 
     # Append postgres program to supervisord config. /etc survives a container
     # restart, so append only once.
@@ -525,9 +534,28 @@ trap cleanup SIGTERM SIGINT
 ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS="$(node /app/shutdown-budget.mjs)"
 export ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS
 
+SUPERVISOR_CONFIG=/etc/supervisord.conf
+if [ "${ARCHESTRA_SERVER_MANAGE_RUST_SERVICES:-}" = true ] && [ -z "$ARCHESTRA_MAINTENANCE_MODE_MESSAGE" ]; then
+    NATIVE_RUNTIME_DIR=$(mktemp -d /run/archestra-native.XXXXXX)
+    export ARCHESTRA_NATIVE_RUNTIME_DIR="$NATIVE_RUNTIME_DIR"
+    SUPERVISOR_CONFIG="$ARCHESTRA_NATIVE_RUNTIME_DIR/supervisord.conf"
+    cp /etc/supervisord.conf "$SUPERVISOR_CONFIG"
+    if [ -n "$ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET" ] ||
+       [ "$ARCHESTRA_DATABASE_RUST_SITE_NOTIFICATION_ENABLED" = true ] ||
+       [ "$ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED" = true ] ||
+       [ "$ARCHESTRA_MCP_GATEWAY_RUST_DISCOVER_ENABLED" = true ]; then
+        export ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET="${ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET:-$ARCHESTRA_NATIVE_RUNTIME_DIR/api.sock}"
+        cat /etc/supervisord.archestra-api.conf >> "$SUPERVISOR_CONFIG"
+    fi
+    if [ "$ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED" = true ] &&
+       [ "${ARCHESTRA_PROCESS_TYPE:-}" != web ]; then
+        cat /etc/supervisord.archestra-worker.conf >> "$SUPERVISOR_CONFIG"
+    fi
+fi
+
 # Start supervisord in foreground but allow signal handling
 # Run in background and wait so trap can catch signals
-/usr/bin/supervisord -c /etc/supervisord.conf &
+/usr/bin/supervisord -c "$SUPERVISOR_CONFIG" &
 SUPERVISOR_PID=$!
 
 # Wait for supervisord to exit (or for a signal)

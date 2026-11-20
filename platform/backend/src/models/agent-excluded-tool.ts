@@ -1,11 +1,16 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  ARCHESTRA_TOOL_SHORT_NAMES,
   isPrefillExemptArchestraToolShortName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
 import { and, asc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
+import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { callRustApi } from "@/utils/rust-api";
 
 /**
  * Data access for per-agent single-tool exclusions (Auto-tool mode).
@@ -124,6 +129,36 @@ class AgentExcludedToolModel {
       agentIds: [agentId],
       executor: tx ?? db,
     });
+  }
+
+  static async enableOnNewGatewayNative(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<string> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    return z.string().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/enable-gateway-all-tools",
+        json: JSON.stringify({
+          ...params,
+          ...AgentExcludedToolModel.nativePrefillScope(false),
+        }),
+      }),
+    );
+  }
+
+  static nativePrefillScope(isPersonalGateway: boolean) {
+    const exemptNames = archestraMcpBranding.allowedServerNames.flatMap(
+      (serverName) =>
+        ARCHESTRA_TOOL_SHORT_NAMES.filter((name) =>
+          isPrefillExemptArchestraToolShortName(name, { isPersonalGateway }),
+        ).map(
+          (name) => `${serverName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`,
+        ),
+    );
+    return { catalogId: ARCHESTRA_MCP_CATALOG_ID, exemptNames };
   }
 
   /**

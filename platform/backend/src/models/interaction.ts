@@ -33,7 +33,9 @@ import {
   sum,
 } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
+import config from "@/config";
 import {
   encryptInteractionContent,
   readInteractionRow,
@@ -85,11 +87,13 @@ import type { InsertRoutingUsage } from "@/types/auto-routing";
 import {
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
+  InteractionSummarySchema,
 } from "@/types/interaction";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { isMediaUsage } from "@/utils/media-usage";
+import { callRustApi } from "@/utils/rust-api";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -99,7 +103,9 @@ import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionBillingModel from "./interaction-billing";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import InteractionSessionHeadModel from "./interaction-session-head";
-import InteractionUserActivityModel from "./interaction-user-activity";
+import InteractionUserActivityModel, {
+  encodeAppendPayload,
+} from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
@@ -196,6 +202,114 @@ async function findChatErrorsForSessionId(sessionId: string | null) {
   }
 
   return ConversationChatErrorModel.findByConversation(sessionId);
+}
+
+async function decodeInteractionDetail(
+  interaction: typeof schema.interactionsTable.$inferSelect,
+): Promise<Interaction> {
+  const reconstructed =
+    await InteractionDeltaManager.reconstructRow(interaction);
+  return {
+    ...interaction,
+    request: reconstructed.request,
+    processedRequest: reconstructed.processedRequest,
+    response: normalizeInteractionResponse(
+      interaction.type,
+      interaction.response,
+    ),
+    chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
+  } as Interaction;
+}
+
+const NativeInteractionRowSchema = z
+  .record(z.string(), z.unknown())
+  .and(z.object({ created_at: z.iso.datetime() }));
+const interactionColumnNames = Object.entries(
+  getTableColumns(schema.interactionsTable),
+);
+
+function decodeNativeInteractionRow(raw: string) {
+  const row = NativeInteractionRowSchema.parse(JSON.parse(raw));
+  // Keep the Drizzle projection order for the MCP text representation.
+  return Object.fromEntries(
+    interactionColumnNames.map(([key, column]) => {
+      if (!Object.hasOwn(row, column.name))
+        throw new Error(`Missing native interaction column ${column.name}`);
+      return [
+        key,
+        key === "createdAt" ? new Date(row.created_at) : row[column.name],
+      ];
+    }),
+  ) as typeof schema.interactionsTable.$inferSelect;
+}
+
+const NativeInteractionPageSchema = z.object({
+  total: z.int().nonnegative(),
+  rows: z.array(z.string()),
+});
+
+const NativeInteractionSummarySchema = InteractionSummarySchema.omit({
+  externalAgentIdLabel: true,
+  userMessagePreview: true,
+  responseToolNames: true,
+  responseToolCalls: true,
+  responseTextPreview: true,
+}).extend({
+  createdAt: z.iso.datetime(),
+  sessionPreview: z.unknown(),
+  encryptedChatConversationId: z.string().nullable(),
+});
+
+async function buildInteractionSummaryPage(
+  rows: Array<
+    Omit<z.infer<typeof NativeInteractionSummarySchema>, "createdAt"> & {
+      createdAt: Date;
+    }
+  >,
+  total: number,
+  pagination: PaginationQuery,
+): Promise<PaginatedResult<InteractionSummary>> {
+  const agentNamesMap = await getAgentNamesById(
+    extractAllAgentIdsFromExternalAgentIds(
+      rows.map(({ externalAgentId }) => externalAgentId),
+    ),
+  );
+  return createPaginatedResult(
+    rows.map(({ sessionPreview, encryptedChatConversationId, ...row }) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const read = readInteractionRow({
+        sessionPreview,
+        encryptedChatConversationId,
+      });
+      // SPDX-SnippetEnd
+      const preview = InteractionSessionPreviewSchema.safeParse(
+        read.sessionPreview,
+      );
+      return {
+        ...row,
+        externalAgentIdLabel: resolveExternalAgentIdLabel(
+          row.externalAgentId,
+          agentNamesMap,
+        ),
+        userMessagePreview: preview.success
+          ? preview.data.lastUserMessagePreview
+          : null,
+        responseToolNames: preview.success
+          ? (preview.data.responseToolNames ?? null)
+          : null,
+        responseToolCalls: preview.success
+          ? (preview.data.responseToolCalls ?? null)
+          : null,
+        responseTextPreview: preview.success
+          ? (preview.data.responseTextPreview ?? null)
+          : null,
+      };
+    }),
+    total,
+    pagination,
+  );
 }
 
 /**
@@ -690,12 +804,31 @@ class InteractionModel {
   static async record(
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
+    options?: { nativeOpenAiSettlement?: boolean },
   ): Promise<void> {
-    await InteractionModel.write({ data, auditContext, returnRow: false });
+    await InteractionModel.write({
+      data,
+      auditContext,
+      returnRow: false,
+      ...options,
+    });
   }
 
   /** Update only the routing outcome; usage was settled when the failed row was written. */
-  static async markPoolAttemptFailedOver(id: string): Promise<void> {
+  static async markPoolAttemptFailedOver(
+    id: string,
+    options?: { nativeOpenAiSettlement?: boolean },
+  ): Promise<void> {
+    if (options?.nativeOpenAiSettlement) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath) throw new Error("Rust API socket is not configured");
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/interactions/mark-pool-attempt-failed-over",
+        json: JSON.stringify({ interactionId: id }),
+      });
+      return;
+    }
     await db
       .update(schema.interactionsTable)
       .set({ attemptOutcome: "failed_over" })
@@ -729,6 +862,7 @@ class InteractionModel {
        * auxiliary calls (guardrails, tool-call repair) inside the session.
        */
       turnSource?: InteractionSource;
+      stableSessionOrder?: boolean;
     },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
@@ -817,7 +951,12 @@ class InteractionModel {
           ),
         )
         .where(whereClause)
-        .orderBy(orderByClause)
+        .orderBy(
+          orderByClause,
+          ...(filters?.stableSessionOrder
+            ? [asc(schema.interactionsTable.id)]
+            : []),
+        )
         .limit(pagination.limit)
         .offset(pagination.offset),
       db
@@ -829,7 +968,68 @@ class InteractionModel {
       ...interaction,
       profileId: activeProfileId,
     }));
+    return InteractionModel.buildFullInteractionPage(
+      data,
+      Number(total),
+      pagination,
+    );
+  }
 
+  static async findMcpSessionLogsNative(params: {
+    organizationId: string;
+    ownUserId?: string;
+    sessionId: string;
+    pagination: PaginationQuery;
+    signal: AbortSignal;
+  }): Promise<PaginatedResult<Interaction>> {
+    const { organizationId, ownUserId, sessionId, pagination, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const ungroupedId = isUuid(sessionId) ? sessionId : undefined;
+    const page = NativeInteractionPageSchema.parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/get-llm-session-logs",
+        json: JSON.stringify({
+          organizationId,
+          sessionId,
+          ungroupedId,
+          ...pagination,
+          viewer:
+            ownUserId === undefined
+              ? { kind: "administrator" }
+              : { kind: "owner", userId: ownUserId },
+        }),
+        signal,
+      }),
+    );
+    const rows = page.rows.map(decodeNativeInteractionRow);
+    if (
+      rows.some(
+        (row) =>
+          (ownUserId !== undefined && row.userId !== ownUserId) ||
+          (row.sessionId !== sessionId &&
+            !(row.sessionId === null && row.id === ungroupedId?.toLowerCase())),
+      )
+    )
+      throw new Error(
+        "Native interaction row does not match the requested scope",
+      );
+    signal.throwIfAborted();
+    const result = await InteractionModel.buildFullInteractionPage(
+      rows,
+      page.total,
+      pagination,
+    );
+    signal.throwIfAborted();
+    return result;
+  }
+
+  private static async buildFullInteractionPage(
+    data: Array<typeof schema.interactionsTable.$inferSelect>,
+    total: number,
+    pagination: PaginationQuery,
+  ): Promise<PaginatedResult<Interaction>> {
     // Resolve external agent IDs (including delegation chains) to agent names
     const allAgentIds = extractAllAgentIdsFromExternalAgentIds(
       data.map((i) => i.externalAgentId),
@@ -874,7 +1074,7 @@ class InteractionModel {
         requestType: "main" | "subagent";
         externalAgentIdLabel: string | null;
       })[],
-      Number(total),
+      total,
       pagination,
     );
   }
@@ -1048,49 +1248,65 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
-    const agentNamesMap = await getAgentNamesById(
-      extractAllAgentIdsFromExternalAgentIds(
-        rows.map((row) => row.externalAgentId),
-      ),
-    );
-    return createPaginatedResult(
-      rows.map(({ sessionPreview, encryptedChatConversationId, ...row }) => {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        // Locked-safe: a locked chat's preview stays a sentinel, which then
-        // fails the schema check and names nothing.
-        const read = readInteractionRow({
-          sessionPreview,
-          encryptedChatConversationId,
-        });
-        // SPDX-SnippetEnd
-        const preview = InteractionSessionPreviewSchema.safeParse(
-          read.sessionPreview,
-        );
-        return {
-          ...row,
-          externalAgentIdLabel: resolveExternalAgentIdLabel(
-            row.externalAgentId,
-            agentNamesMap,
-          ),
-          userMessagePreview: preview.success
-            ? preview.data.lastUserMessagePreview
-            : null,
-          responseToolNames: preview.success
-            ? (preview.data.responseToolNames ?? null)
-            : null,
-          responseToolCalls: preview.success
-            ? (preview.data.responseToolCalls ?? null)
-            : null,
-          responseTextPreview: preview.success
-            ? (preview.data.responseTextPreview ?? null)
-            : null,
-        };
+    return buildInteractionSummaryPage(rows, Number(total), pagination);
+  }
+
+  static async findMcpSummariesNative(params: {
+    pagination: PaginationQuery;
+    filters: NonNullable<
+      Parameters<typeof InteractionModel.findSummariesPaginated>[0]["filters"]
+    > & {
+      organizationId: string;
+    };
+    signal: AbortSignal;
+  }): Promise<PaginatedResult<InteractionSummary>> {
+    const { filters, pagination, signal } = params;
+    const {
+      profileId,
+      externalAgentId,
+      userId,
+      sessionId,
+      startDate,
+      endDate,
+      organizationId,
+    } = filters;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const page = NativeInteractionPageSchema.parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/list-llm-interactions",
+        json: JSON.stringify({
+          organizationId,
+          profileId,
+          externalAgentId: externalAgentId || undefined,
+          userId: userId || undefined,
+          sessionId: sessionId || undefined,
+          ungroupedId: sessionId && isUuid(sessionId) ? sessionId : undefined,
+          startDate,
+          endDate,
+          ...pagination,
+        }),
+        signal,
       }),
-      Number(total),
+    );
+    const rows = page.rows.map((raw) => {
+      const row: unknown = JSON.parse(raw);
+      const decoded = NativeInteractionSummarySchema.parse(row);
+      // Validation may reorder fields; the MCP text follows SQL projection order.
+      return {
+        ...(row as typeof decoded),
+        createdAt: new Date(decoded.createdAt),
+      };
+    });
+    signal.throwIfAborted();
+    const result = await buildInteractionSummaryPage(
+      rows,
+      page.total,
       pagination,
     );
+    signal.throwIfAborted();
+    return result;
   }
 
   /**
@@ -1173,13 +1389,21 @@ class InteractionModel {
   }
 
   static async findById(
-    idOrScope: string | { id: string; organizationId: string },
+    idOrScope:
+      | string
+      | {
+          id: string;
+          organizationId: string;
+          scheduledTurn?: { profileId: string; sessionId: string };
+        },
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<Interaction | null> {
     const id = typeof idOrScope === "string" ? idOrScope : idOrScope.id;
     const organizationId =
       typeof idOrScope === "string" ? undefined : idOrScope.organizationId;
+    const scheduledTurn =
+      typeof idOrScope === "string" ? undefined : idOrScope.scheduledTurn;
     const [row] = await db
       .select({
         interaction: schema.interactionsTable,
@@ -1196,6 +1420,16 @@ class InteractionModel {
       .where(
         and(
           eq(schema.interactionsTable.id, id),
+          ...(scheduledTurn
+            ? [
+                eq(schema.interactionsTable.profileId, scheduledTurn.profileId),
+                eq(schema.interactionsTable.sessionId, scheduledTurn.sessionId),
+                or(
+                  isNull(schema.interactionsTable.source),
+                  eq(schema.interactionsTable.source, "schedule-trigger"),
+                ),
+              ]
+            : []),
           ...(organizationId
             ? [interactionBelongsToOrganization(organizationId)]
             : []),
@@ -1231,27 +1465,53 @@ class InteractionModel {
       }
     }
 
-    const reconstructed = await InteractionDeltaManager.reconstructRow(
-      interaction as unknown as {
-        id: string;
-        threadId: string | null;
-        request: unknown;
-        processedRequest: unknown;
-      },
-    );
+    return decodeInteractionDetail(interaction);
+  }
 
-    return {
-      ...interaction,
-      request: reconstructed.request,
-      processedRequest: reconstructed.processedRequest,
-      // Coerce a stored response that no longer matches its provider schema
-      // into a serializable sentinel so a bad row can't 500 the detail route.
-      response: normalizeInteractionResponse(
-        interaction.type,
-        interaction.response,
-      ),
-      chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
-    } as Interaction;
+  static async findMcpDetailNative(params: {
+    id: string;
+    organizationId: string;
+    ownUserId?: string;
+    signal: AbortSignal;
+  }): Promise<Interaction | null> {
+    const { id, organizationId, ownUserId, signal } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const raw = z
+      .string()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/get-llm-interaction",
+          json: JSON.stringify({
+            id,
+            organizationId,
+            viewer:
+              ownUserId === undefined
+                ? { kind: "administrator" }
+                : { kind: "owner", userId: ownUserId },
+          }),
+          signal,
+        }),
+      );
+    if (raw === null) return null;
+    const interaction = decodeNativeInteractionRow(raw);
+    if (
+      interaction.id !== id.toLowerCase() ||
+      (ownUserId !== undefined && interaction.userId !== ownUserId)
+    ) {
+      return null;
+    }
+    signal.throwIfAborted();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    readInteractionRow(interaction);
+    // SPDX-SnippetEnd
+    const detail = await decodeInteractionDetail(interaction);
+    signal.throwIfAborted();
+    return detail;
   }
 
   static async getAllInteractionsForProfile(
@@ -1553,6 +1813,7 @@ class InteractionModel {
    */
   static async updateUsageAfterInteraction(
     interaction: InsertInteraction & { id: string },
+    native = false,
   ): Promise<void> {
     try {
       // Subscription-billed interactions (e.g. Claude Pro/Max OAuth credentials)
@@ -1632,14 +1893,17 @@ class InteractionModel {
         entityId ? [{ entityType, entityId }] : [],
       );
 
-      await LimitModel.recordInteractionTokenUsage({
-        agentId: interaction.profileId,
-        teamIds,
-        entities,
-        model,
-        inputTokens,
-        outputTokens,
-      });
+      await LimitModel.recordInteractionTokenUsage(
+        {
+          agentId: interaction.profileId,
+          teamIds,
+          entities,
+          model,
+          inputTokens,
+          outputTokens,
+        },
+        native,
+      );
     } catch (error) {
       logger.error({ error }, "Error updating usage limits after interaction");
       // Don't throw - usage tracking should not break interaction creation
@@ -1796,22 +2060,13 @@ class InteractionModel {
       endDate?: Date;
     },
   ): Promise<CursorPaginatedResult<SessionSummary>> {
-    const emptyPage = (): CursorPaginatedResult<SessionSummary> => ({
-      data: [],
-      pagination: {
-        limit: cursorQuery.limit,
-        hasNext: false,
-        nextCursor: null,
-      },
-    });
-
     const access = await InteractionModel.buildSessionConditions(
       requestingUserId,
       isAgentAdmin,
       filters ? { ...filters, organizationId: undefined } : undefined,
     );
     if (access === SESSION_ACCESS_DENIED) {
-      return emptyPage();
+      return InteractionModel.sessionCursorPage([], [], cursorQuery.limit);
     }
     const headWhereClause = filters?.organizationId
       ? and(
@@ -1839,7 +2094,7 @@ class InteractionModel {
     const hasNext = heads.length > cursorQuery.limit;
     const pageRows = hasNext ? heads.slice(0, cursorQuery.limit) : heads;
     if (pageRows.length === 0) {
-      return emptyPage();
+      return InteractionModel.sessionCursorPage([], [], cursorQuery.limit);
     }
 
     // The page's session keys bound phase 2 to a few hundred rows, but a
@@ -1854,7 +2109,115 @@ class InteractionModel {
       })),
       headWhereClause,
     );
+    return InteractionModel.sessionCursorPage(
+      heads,
+      summaries,
+      cursorQuery.limit,
+    );
+  }
 
+  static async getMcpSessionsNative(params: {
+    cursorQuery: CursorQuery;
+    filters: {
+      organizationId: string;
+      profileId?: string;
+      userId?: string;
+      sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    };
+    signal: AbortSignal;
+  }): Promise<CursorPaginatedResult<SessionSummary>> {
+    const { cursorQuery, filters, signal } = params;
+    const { organizationId, userId, sessionId, ...rest } = filters;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    const position = decodeCursor(cursorQuery.cursor);
+    const before =
+      position && !Number.isNaN(new Date(position.value).getTime())
+        ? position
+        : null;
+    const page = z
+      .object({
+        heads: z.array(
+          z.object({
+            sessionId: z.string().nullable(),
+            headId: z.uuid(),
+            headCreatedAt: z.iso.datetime(),
+          }),
+        ),
+        summaries: z.array(z.string()),
+      })
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/list-llm-sessions",
+          json: JSON.stringify({
+            ...rest,
+            organizationId,
+            userId: userId || undefined,
+            sessionId: sessionId || undefined,
+            ungroupedId: sessionId && isUuid(sessionId) ? sessionId : undefined,
+            before,
+            limit: cursorQuery.limit,
+            storedHeads: await InteractionSessionHeadModel.isComplete(),
+          }),
+          signal,
+        }),
+      );
+    const heads = page.heads.map((head) => ({
+      ...head,
+      headCreatedAt: new Date(head.headCreatedAt),
+      interactionId: head.sessionId ? null : head.headId,
+    }));
+    type Aggregate = Awaited<
+      ReturnType<typeof InteractionModel.readSessionAggregates>
+    >[number];
+    const aggregates = page.summaries.map((raw) => {
+      const { firstRequestTime, lastRequestTime, ...row } = JSON.parse(
+        raw,
+      ) as Omit<Aggregate, "firstRequestTime" | "lastRequestTime"> & {
+        firstRequestTime: string;
+        lastRequestTime: string;
+      };
+      return {
+        ...row,
+        firstRequestTime: new Date(firstRequestTime),
+        lastRequestTime: new Date(lastRequestTime),
+      };
+    });
+    signal.throwIfAborted();
+    const whereClause = and(
+      (await InteractionModel.buildSessionConditions(undefined, undefined, {
+        ...filters,
+        organizationId: undefined,
+      })) as SQL | undefined,
+      InteractionModel.sessionHeadOrganizationCondition(organizationId),
+    );
+    const summaries = await InteractionModel.enrichSessionAggregates(
+      aggregates,
+      whereClause,
+    );
+    signal.throwIfAborted();
+    return InteractionModel.sessionCursorPage(
+      heads,
+      summaries,
+      cursorQuery.limit,
+    );
+  }
+
+  private static sessionCursorPage(
+    heads: Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+      headCreatedAt: Date;
+      headId: string;
+    }>,
+    summaries: SessionSummary[],
+    limit: number,
+  ): CursorPaginatedResult<SessionSummary> {
+    const hasNext = heads.length > limit;
+    const pageRows = heads.slice(0, limit);
     // The summary query groups, so its row order is not the head order. Emit
     // in head order instead, because that is the order the cursor is cut from
     // — returning them in any other order would make the next page skip or
@@ -1875,7 +2238,7 @@ class InteractionModel {
     return {
       data,
       pagination: {
-        limit: cursorQuery.limit,
+        limit,
         hasNext,
         // No cursor past the end: it could only produce an empty page.
         nextCursor:
@@ -2555,6 +2918,20 @@ class InteractionModel {
     }>,
     whereClause: SQL | undefined,
   ): Promise<Array<SessionSummary & { totalDurationMs: number | null }>> {
+    const aggregates = await InteractionModel.readSessionAggregates(
+      sessionPage,
+      whereClause,
+    );
+    return InteractionModel.enrichSessionAggregates(aggregates, whereClause);
+  }
+
+  private static async readSessionAggregates(
+    sessionPage: Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+    }>,
+    whereClause: SQL | undefined,
+  ) {
     // Sessionless interactions each form their own group; real sessions group
     // by their shared session id.
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
@@ -2582,127 +2959,136 @@ class InteractionModel {
       : pageCondition;
 
     // PHASE 2: Aggregate and join only the sessions selected above.
-    const sessionsData = await db
-      .select({
-        sessionId: max(schema.interactionsTable.sessionId),
-        sessionSource: max(schema.interactionsTable.sessionSource),
-        source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
-        sources: sql<
-          InteractionSource[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
-        // For single interactions (no session), return the interaction ID for direct navigation
-        interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
-        requestCount: count(),
-        failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
-        totalDurationMs: sum(schema.interactionsTable.durationMs),
-        totalInputTokens: sum(schema.interactionsTable.inputTokens),
-        totalOutputTokens: sum(schema.interactionsTable.outputTokens),
-        totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
-        totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
-        // `totalCost` is the full list-price estimate across the session.
-        // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
-        // (metered = billed spend; subscription = flat-rate, not billed), so a
-        // session's Cost cell can show what was actually charged plus what the
-        // subscription-covered portion would have cost. A session may mix modes
-        // (e.g. a mid-session switch), so both filtered sums are needed.
-        totalCost: sum(schema.interactionsTable.cost),
-        totalBilledCost: sql<
-          string | null
-        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
-        totalSubscriptionCost: sql<
-          string | null
-        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
-        totalBaselineCost: sum(schema.interactionsTable.baselineCost),
-        totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
-        firstRequestTime: min(schema.interactionsTable.createdAt),
-        lastRequestTime: max(schema.interactionsTable.createdAt),
-        models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
-        // Attribute the session to its primary (non-built-in) agent. A chat
-        // session mixes the user's agent with built-in utility subagents (e.g.
-        // title generation), all sharing one session_id; without the FILTER,
-        // MAX(id) and MAX(name) could resolve to different interactions and
-        // surface the utility subagent. Preferring built_in = false keeps id
-        // and name from the same agent; COALESCE falls back to any agent for
-        // sessions that only ran built-in agents. API/Claude-Code sessions have
-        // a single profile per session, so this is a no-op for them.
-        profileId: sql<
-          string | null
-        >`COALESCE(MAX(${schema.agentsTable.id}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.id}::text))`,
-        profileName: sql<
-          string | null
-        >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
-        // Same preference as profileName, so the type names the same agent.
-        profileAgentType: sql<
-          string | null
-        >`COALESCE(MAX(${schema.agentsTable.agentType}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.agentType}::text))`,
-        externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
-        authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
-        authenticatedAppNames: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
-        // ARRAY_AGG (not STRING_AGG) — user names can contain commas
-        // (e.g. "Last, First" display names), so a delimited string can't
-        // be split back apart reliably
-        userNames: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
-        // Ids alongside names: two members can share a display name, which
-        // collapses them into a single entry above and leaves consumers
-        // matching on an ambiguous string. Ids identify the actual users.
-        userIds: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
-        // Both virtual-key columns, aggregated as ids and resolved to names in
-        // phase 3. A request can carry one of each: a standard key for the
-        // provider credential and a passthrough key for the acting user.
-        virtualKeyIds: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
-        copilotProviderApiKeyIds: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.providerApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
-        passthroughVirtualKeyIds: sql<
-          string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
-        // Title of the Archestra Chat conversation whose id is the session id.
-        // Looked up by primary key once per session: joining on
-        // `conversations.id::text` cannot use that key, so every page read
-        // the whole conversations table. The CASE keeps a non-uuid session id
-        // from reaching the cast (an invalid uuid would fail the query), and
-        // matches only the canonical lowercase form, as the text join did.
-        conversationTitle: sql<
-          string | null
-        >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
-        // The knowledge connector a knowledge:* row ran for, so the list can
-        // tell "Embedding documents" rows apart. Only when one connector owns
-        // every row; looked up by primary key once per session.
-        connectorName: sql<
-          string | null
-        >`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.connectorId}) = 1 THEN (SELECT ${schema.knowledgeBaseConnectorsTable.name} FROM ${schema.knowledgeBaseConnectorsTable} WHERE ${schema.knowledgeBaseConnectorsTable.id} = MAX(${schema.interactionsTable.connectorId}::text)::uuid) END`,
-      })
-      .from(schema.interactionsTable)
-      .leftJoin(
-        schema.agentsTable,
-        and(
-          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .leftJoin(
-        schema.usersTable,
-        eq(schema.interactionsTable.userId, schema.usersTable.id),
-      )
-      .where(pageWhereClause)
-      // A session is identified by its session id alone (COALESCE(session_id,
-      // id) for sessionless rows). profile_id / agent name must NOT be part of
-      // the group key: an Archestra Chat writes its title-generation call under
-      // a separate built-in subagent, so grouping by agent split one chat into
-      // two "sessions". This matches the `total` count above, which already
-      // counts distinct session ids only. Agent attribution is aggregated in
-      // the SELECT (MAX) instead of being part of the key.
-      .groupBy(sessionGroupExpr)
-      .orderBy(desc(max(schema.interactionsTable.createdAt)));
+    return (
+      db
+        .select({
+          sessionId: max(schema.interactionsTable.sessionId),
+          sessionSource: max(schema.interactionsTable.sessionSource),
+          source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
+          sources: sql<
+            InteractionSource[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
+          // For single interactions (no session), return the interaction ID for direct navigation
+          interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
+          requestCount: count(),
+          failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+          totalDurationMs: sum(schema.interactionsTable.durationMs),
+          totalInputTokens: sum(schema.interactionsTable.inputTokens),
+          totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
+          totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
+          // `totalCost` is the full list-price estimate across the session.
+          // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
+          // (metered = billed spend; subscription = flat-rate, not billed), so a
+          // session's Cost cell can show what was actually charged plus what the
+          // subscription-covered portion would have cost. A session may mix modes
+          // (e.g. a mid-session switch), so both filtered sums are needed.
+          totalCost: sum(schema.interactionsTable.cost),
+          totalBilledCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
+          totalSubscriptionCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
+          totalBaselineCost: sum(schema.interactionsTable.baselineCost),
+          totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
+          firstRequestTime: min(schema.interactionsTable.createdAt),
+          lastRequestTime: max(schema.interactionsTable.createdAt),
+          models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
+          // Attribute the session to its primary (non-built-in) agent. A chat
+          // session mixes the user's agent with built-in utility subagents (e.g.
+          // title generation), all sharing one session_id; without the FILTER,
+          // MAX(id) and MAX(name) could resolve to different interactions and
+          // surface the utility subagent. Preferring built_in = false keeps id
+          // and name from the same agent; COALESCE falls back to any agent for
+          // sessions that only ran built-in agents. API/Claude-Code sessions have
+          // a single profile per session, so this is a no-op for them.
+          profileId: sql<
+            string | null
+          >`COALESCE(MAX(${schema.agentsTable.id}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.id}::text))`,
+          profileName: sql<
+            string | null
+          >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
+          // Same preference as profileName, so the type names the same agent.
+          profileAgentType: sql<
+            string | null
+          >`COALESCE(MAX(${schema.agentsTable.agentType}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.agentType}::text))`,
+          externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
+          authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
+          authenticatedAppNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
+          // ARRAY_AGG (not STRING_AGG) — user names can contain commas
+          // (e.g. "Last, First" display names), so a delimited string can't
+          // be split back apart reliably
+          userNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
+          // Ids alongside names: two members can share a display name, which
+          // collapses them into a single entry above and leaves consumers
+          // matching on an ambiguous string. Ids identify the actual users.
+          userIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
+          // Both virtual-key columns, aggregated as ids and resolved to names in
+          // phase 3. A request can carry one of each: a standard key for the
+          // provider credential and a passthrough key for the acting user.
+          virtualKeyIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
+          copilotProviderApiKeyIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.providerApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
+          passthroughVirtualKeyIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
+          // Title of the Archestra Chat conversation whose id is the session id.
+          // Looked up by primary key once per session: joining on
+          // `conversations.id::text` cannot use that key, so every page read
+          // the whole conversations table. The CASE keeps a non-uuid session id
+          // from reaching the cast (an invalid uuid would fail the query), and
+          // matches only the canonical lowercase form, as the text join did.
+          conversationTitle: sql<
+            string | null
+          >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
+          // The knowledge connector a knowledge:* row ran for, so the list can
+          // tell "Embedding documents" rows apart. Only when one connector owns
+          // every row; looked up by primary key once per session.
+          connectorName: sql<
+            string | null
+          >`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.connectorId}) = 1 THEN (SELECT ${schema.knowledgeBaseConnectorsTable.name} FROM ${schema.knowledgeBaseConnectorsTable} WHERE ${schema.knowledgeBaseConnectorsTable.id} = MAX(${schema.interactionsTable.connectorId}::text)::uuid) END`,
+        })
+        .from(schema.interactionsTable)
+        .leftJoin(
+          schema.agentsTable,
+          and(
+            eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.interactionsTable.userId, schema.usersTable.id),
+        )
+        .where(pageWhereClause)
+        // A session is identified by its session id alone (COALESCE(session_id,
+        // id) for sessionless rows). profile_id / agent name must NOT be part of
+        // the group key: an Archestra Chat writes its title-generation call under
+        // a separate built-in subagent, so grouping by agent split one chat into
+        // two "sessions". This matches the `total` count above, which already
+        // counts distinct session ids only. Agent attribution is aggregated in
+        // the SELECT (MAX) instead of being part of the key.
+        .groupBy(sessionGroupExpr)
+        .orderBy(desc(max(schema.interactionsTable.createdAt)))
+    );
+  }
 
+  private static async enrichSessionAggregates(
+    sessionsData: Awaited<
+      ReturnType<typeof InteractionModel.readSessionAggregates>
+    >,
+    whereClause: SQL | undefined,
+  ): Promise<Array<SessionSummary & { totalDurationMs: number | null }>> {
     // PHASE 3: Batch fetch "last interaction" info for all sessions
     // This is much faster than ARRAY_AGG because:
     // 1. We only fetch for the paginated sessions (typically 10-50 rows)
@@ -3604,6 +3990,7 @@ class InteractionModel {
     data: InsertInteraction;
     auditContext?: EncryptedChatAuditContext | null;
     returnRow: boolean;
+    nativeOpenAiSettlement?: boolean;
   }) {
     const { data, auditContext, returnRow } = params;
     // Snapshot the environment from the agent at creation time (single funnel
@@ -3741,72 +4128,93 @@ class InteractionModel {
       decisionId: autoRoutingDecisionId,
       columns,
     });
+    const receipt =
+      billingUsage && billingAttribution
+        ? {
+            interactionId,
+            usage: billingUsage,
+            attribution: billingAttribution,
+            userId: data.userId ?? null,
+            billingTeamId: data.billingTeamId ?? null,
+            billingMode: data.billingMode ?? "metered",
+            attributionLabels: data.attributionLabels,
+            logIdentity: {
+              profileId: data.profileId,
+              appId: data.appId ?? null,
+              connectorId: data.connectorId ?? null,
+              serviceAccountId: data.serviceAccountId ?? null,
+            },
+          }
+        : undefined;
     const write = (tx?: Transaction) =>
       insertValues.userId == null
         ? insert(tx)
         : returnRow
           ? InteractionUserActivityModel.append(insertValues, tx)
           : InteractionUserActivityModel.appendReturningKey(insertValues, tx);
+    const nativeWrite = () =>
+      retryOnceOnDeadlock(() =>
+        recordWithRust({
+          row: encodeAppendPayload(insertValues),
+          receipt: receipt && InteractionBillingModel.receipt(receipt),
+          routingUsage,
+        }),
+      );
     const interaction =
-      billingUsage && billingAttribution
-        ? await retainDeletedBillingAttribution({
-            values: insertValues,
-            run: () =>
-              retryOnceOnDeadlock(() =>
-                withDbTransaction(async (tx) => {
-                  const claimed = await InteractionBillingModel.claim({
-                    tx,
-                    interactionId,
-                    usage: billingUsage,
-                    attribution: billingAttribution,
-                    userId: data.userId ?? null,
-                    billingTeamId: data.billingTeamId ?? null,
-                    billingMode: data.billingMode ?? "metered",
-                    attributionLabels: data.attributionLabels,
-                    logIdentity: {
-                      profileId: data.profileId,
-                      appId: data.appId ?? null,
-                      connectorId: data.connectorId ?? null,
-                      serviceAccountId: data.serviceAccountId ?? null,
-                    },
-                  });
-                  if (!claimed) {
-                    const [existing] = await tx
-                      .select()
-                      .from(schema.interactionsTable)
-                      .where(eq(schema.interactionsTable.id, interactionId));
-                    if (existing) return existing;
-                  }
-                  if (claimed) {
-                    const [legacy] = await tx
-                      .select({ id: schema.interactionsTable.id })
-                      .from(schema.interactionsTable)
-                      .where(eq(schema.interactionsTable.id, interactionId));
-                    if (legacy)
-                      throw new Error(
-                        "Cannot settle an interaction already written without a billing receipt",
-                      );
-                  }
-                  if (routingUsage)
-                    await RoutingUsageModel.record(tx, routingUsage);
-                  const created = await write(tx);
-                  if (claimed && data.billingMode !== "subscription") {
-                    await LimitModel.settleBillableUsage({
-                      tx,
-                      usage: billingUsage,
-                      attribution: billingAttribution,
-                    });
-                  }
-                  return created;
-                }),
-              ),
-          })
-        : routingUsage
-          ? await withDbTransaction(async (tx) => {
-              await RoutingUsageModel.record(tx, routingUsage);
-              return write(tx);
+      params.nativeOpenAiSettlement && !returnRow
+        ? receipt
+          ? await retainDeletedBillingAttribution({
+              values: insertValues,
+              run: nativeWrite,
             })
-          : await write();
+          : await nativeWrite()
+        : receipt
+          ? await retainDeletedBillingAttribution({
+              values: insertValues,
+              run: () =>
+                retryOnceOnDeadlock(() =>
+                  withDbTransaction(async (tx) => {
+                    const claimed = await InteractionBillingModel.claim({
+                      tx,
+                      ...receipt,
+                    });
+                    if (!claimed) {
+                      const [existing] = await tx
+                        .select()
+                        .from(schema.interactionsTable)
+                        .where(eq(schema.interactionsTable.id, interactionId));
+                      if (existing) return existing;
+                    }
+                    if (claimed) {
+                      const [legacy] = await tx
+                        .select({ id: schema.interactionsTable.id })
+                        .from(schema.interactionsTable)
+                        .where(eq(schema.interactionsTable.id, interactionId));
+                      if (legacy)
+                        throw new Error(
+                          "Cannot settle an interaction already written without a billing receipt",
+                        );
+                    }
+                    if (routingUsage)
+                      await RoutingUsageModel.record(tx, routingUsage);
+                    const created = await write(tx);
+                    if (claimed && data.billingMode !== "subscription") {
+                      await LimitModel.settleBillableUsage({
+                        tx,
+                        usage: receipt.usage,
+                        attribution: receipt.attribution,
+                      });
+                    }
+                    return created;
+                  }),
+                ),
+            })
+          : routingUsage
+            ? await withDbTransaction(async (tx) => {
+                await RoutingUsageModel.record(tx, routingUsage);
+                return write(tx);
+              })
+            : await write();
     // The RETURNING row is create's public return value, so callers never
     // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
     // very key that just encrypted them.
@@ -3831,6 +4239,10 @@ class InteractionModel {
       !hasAssistantTurn(sanitized.request)
     ) {
       await linkClaudeDesktopTitleInteractions({
+        nativeMainInteractionId:
+          params.nativeOpenAiSettlement && !returnRow
+            ? interaction.id
+            : undefined,
         profileId: sanitized.profileId,
         userId: sanitized.userId ?? null,
         sessionId: sanitized.sessionId,
@@ -3841,12 +4253,18 @@ class InteractionModel {
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
-    if (!billingUsage)
+    const native = params.nativeOpenAiSettlement && !returnRow;
+    if (
+      !billingUsage &&
+      (!native ||
+        ("recordLegacyUsage" in interaction && interaction.recordLegacyUsage))
+    )
       trackBackgroundWork(
         InteractionModel.updateUsageAfterInteraction(
           returnRow
             ? (interaction as InsertInteraction & { id: string })
             : { ...plaintext, id: interaction.id },
+          native,
         ).catch((error) => {
           logger.error(
             { error },
@@ -3858,6 +4276,7 @@ class InteractionModel {
     AgentUsageModel.recordUseInBackground({
       agentId: interaction.profileId,
       usedAt: interaction.createdAt,
+      native: params.nativeOpenAiSettlement && !returnRow,
     });
 
     // Run after the committed write, without delaying inference. Read the same
@@ -3887,6 +4306,47 @@ class InteractionModel {
 export default InteractionModel;
 
 /** Usage an auto-routed interaction contributes to its decision; none without usage. */
+async function recordWithRust(params: {
+  row: string;
+  receipt?: ReturnType<typeof InteractionBillingModel.receipt>;
+  routingUsage: InsertRoutingUsage | null;
+}): Promise<StoredInteractionKey & { recordLegacyUsage: boolean }> {
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust API socket is not configured");
+  const result = z
+    .discriminatedUnion("status", [
+      z.object({
+        status: z.literal("written"),
+        id: z.uuid(),
+        profileId: z.uuid().nullable(),
+        createdAt: z.coerce.date(),
+        recordLegacyUsage: z.boolean(),
+      }),
+      z.object({ status: z.literal("foreign_key"), constraint: z.string() }),
+      z.object({ status: z.literal("deadlock") }),
+    ])
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/interactions/settle",
+        json: JSON.stringify({ ...params, row: JSON.parse(params.row) }),
+      }),
+    );
+  switch (result.status) {
+    case "written":
+      return result;
+    case "foreign_key":
+      throw Object.assign(new Error("Interaction reference no longer exists"), {
+        code: "23503",
+        constraint: result.constraint,
+      });
+    case "deadlock":
+      throw Object.assign(new Error("Interaction settlement deadlock"), {
+        code: "40P01",
+      });
+  }
+}
+
 function routingUsageFor(params: {
   interactionId: string;
   decisionId: string | undefined;
@@ -4465,6 +4925,7 @@ async function findMatchingClaudeDesktopMainSession(params: {
 }
 
 async function linkClaudeDesktopTitleInteractions(params: {
+  nativeMainInteractionId?: string;
   profileId: string;
   userId: string | null;
   sessionId: string;
@@ -4501,7 +4962,7 @@ async function linkClaudeDesktopTitleInteractions(params: {
       )
       .orderBy(desc(t.createdAt), desc(t.id))
       .limit(15);
-    const matchedIds: string[] = [];
+    const titles: Array<{ id: string; sessionId: string | null }> = [];
     for (const row of rows) {
       readInteractionRow(row);
       const description = extractClaudeDesktopTitleDescription(row.request);
@@ -4509,10 +4970,25 @@ async function linkClaudeDesktopTitleInteractions(params: {
         description &&
         claudePromptMatchesTitleDescription(openingPrompts, description)
       ) {
-        matchedIds.push(row.id);
+        titles.push({ id: row.id, sessionId: row.sessionId });
       }
     }
-    if (matchedIds.length === 0) return;
+    if (titles.length === 0) return;
+    if (params.nativeMainInteractionId) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath) throw new Error("Rust API socket is not configured");
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/interactions/link-session-titles",
+        json: JSON.stringify({
+          mainInteractionId: params.nativeMainInteractionId,
+          titles,
+        }),
+      });
+      sessionTotalCache.clear();
+      return;
+    }
+    const matchedIds = titles.map(({ id }) => id);
     await db
       .update(t)
       .set({

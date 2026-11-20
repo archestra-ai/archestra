@@ -1,6 +1,9 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { callRustApi } from "@/utils/rust-api";
 
 /**
  * Apps linked into projects. A link never grants access to the app: callers
@@ -22,6 +25,31 @@ class ProjectAppModel {
           schema.projectAppsTable.appId,
         ],
       });
+  }
+
+  static async linkNative(params: {
+    projectId: string;
+    appId: string;
+    organizationId: string;
+    linkedBy: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    return ProjectAppModel.writeNative(
+      "/internal/v1/mcp/tools/link-project-app",
+      params,
+    );
+  }
+
+  static async unlinkNative(params: {
+    projectId: string;
+    appId: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    return ProjectAppModel.writeNative(
+      "/internal/v1/mcp/tools/unlink-project-app",
+      params,
+    );
   }
 
   /** Remove a link; returns whether one existed. */
@@ -80,7 +108,10 @@ class ProjectAppModel {
             : undefined,
         ),
       )
-      .orderBy(asc(schema.projectAppsTable.linkedAt));
+      .orderBy(
+        asc(schema.projectAppsTable.linkedAt),
+        asc(schema.projectAppsTable.appId),
+      );
   }
 
   /** Every linked app id of a project, sorted — the audit snapshot's view. */
@@ -90,6 +121,31 @@ class ProjectAppModel {
       .from(schema.projectAppsTable)
       .where(eq(schema.projectAppsTable.projectId, projectId));
     return rows.map((row) => row.appId).sort();
+  }
+
+  private static async writeNative(
+    path:
+      | "/internal/v1/mcp/tools/link-project-app"
+      | "/internal/v1/mcp/tools/unlink-project-app",
+    {
+      signal,
+      ...link
+    }: {
+      projectId: string;
+      appId: string;
+      organizationId: string;
+      linkedBy?: string;
+      signal: AbortSignal;
+    },
+  ): Promise<boolean> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z
+      .boolean()
+      .parse(
+        await callRustApi({ socketPath, path, json: JSON.stringify(link) }),
+      );
   }
 }
 

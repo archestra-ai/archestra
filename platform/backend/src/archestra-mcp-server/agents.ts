@@ -18,6 +18,7 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
@@ -41,6 +42,7 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
 import {
   AgentDetailOutputSchema,
   AgentLabelOutputSchema,
@@ -650,9 +652,15 @@ const registry = defineArchestraTools([
           agentId: args.id,
           ...principal,
           patch: args.patch,
+          nativeSignal: context.gatewayExecution?.native
+            ? context.gatewayExecution.signal
+            : undefined,
         });
         return structuredSuccessResult(result.policy);
       } catch (error) {
+        const signal = context.gatewayExecution?.signal;
+        if (signal?.aborted && error === signal.reason)
+          return errorResult("Tool call cancelled");
         if (error instanceof ApiError) return errorResult(error.message);
         return catchError(error, "updating agent skill policy");
       }
@@ -669,6 +677,8 @@ const registry = defineArchestraTools([
         if (!context.userId || !context.organizationId) {
           return errorResult("user/organization context not available.");
         }
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
           context.organizationId,
           context.userId,
@@ -676,31 +686,26 @@ const registry = defineArchestraTools([
           args.provider,
         );
         const apiKeyIds = apiKeys.map((key) => key.id);
-        const [modelIdsByKey, models] = await Promise.all([
-          LlmProviderApiKeyModelLinkModel.getModelsForApiKeys(apiKeyIds),
-          LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds),
-        ]);
-        const modelsById = new Map(
-          models.map(({ model }) => [model.id, model]),
-        );
+        const modelsByKey = execution?.native
+          ? await readNativeModelLinks({
+              organizationId: context.organizationId,
+              apiKeyIds,
+              signal: execution.signal,
+            })
+          : await readLegacyModelLinks(apiKeyIds);
         const query = args.query?.toLowerCase();
         const result = {
           apiKeys: apiKeys.map((key) => {
-            const linked = (modelIdsByKey.get(key.id) ?? [])
-              .map((id) => modelsById.get(id))
-              .filter((model) => model !== undefined)
+            const linked = (modelsByKey.get(key.id) ?? [])
               .filter(
-                (model) =>
-                  !query || model.modelId.toLowerCase().includes(query),
+                ({ name }) => !query || name.toLowerCase().includes(query),
               )
-              .sort((a, b) => a.modelId.localeCompare(b.modelId));
+              .sort((a, b) => a.name.localeCompare(b.name));
             return {
               id: key.id,
               name: key.name,
               provider: key.provider,
-              models: linked
-                .slice(0, MAX_MODELS_PER_KEY)
-                .map((model) => ({ id: model.id, name: model.modelId })),
+              models: linked.slice(0, MAX_MODELS_PER_KEY),
               omittedModelCount: Math.max(
                 0,
                 linked.length - MAX_MODELS_PER_KEY,
@@ -710,6 +715,8 @@ const registry = defineArchestraTools([
         };
         return structuredSuccessResult(result, JSON.stringify(result, null, 2));
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "listing LLM models");
       }
     },
@@ -721,6 +728,65 @@ export const toolEntries = registry.toolEntries;
 // === Exports ===
 
 export const tools = registry.tools;
+
+type ModelSummary = { id: string; name: string };
+
+async function readLegacyModelLinks(apiKeyIds: string[]) {
+  const [links, models] = await Promise.all([
+    LlmProviderApiKeyModelLinkModel.getModelsForApiKeys(apiKeyIds),
+    LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds),
+  ]);
+  const modelsById = new Map(
+    models.map(({ model }) => [
+      model.id,
+      { id: model.id, name: model.modelId },
+    ]),
+  );
+  return new Map(
+    [...links].map(([key, ids]) => [
+      key,
+      ids.flatMap((id) => {
+        const model = modelsById.get(id);
+        return model ? [model] : [];
+      }),
+    ]),
+  );
+}
+
+async function readNativeModelLinks(params: {
+  organizationId: string;
+  apiKeyIds: string[];
+  signal: AbortSignal;
+}) {
+  const { signal, ...query } = params;
+  signal.throwIfAborted();
+  const grouped = new Map<string, ModelSummary[]>();
+  if (query.apiKeyIds.length === 0) return grouped;
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+  const links = z
+    .array(
+      z.object({
+        apiKeyId: z.string(),
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/list-llm-models",
+        json: JSON.stringify(query),
+        signal,
+      }),
+    );
+  for (const { apiKeyId, id, name } of links) {
+    const models = grouped.get(apiKeyId);
+    if (models) models.push({ id, name });
+    else grouped.set(apiKeyId, [{ id, name }]);
+  }
+  return grouped;
+}
 
 async function requireSkillPolicyAccess(
   id: string,

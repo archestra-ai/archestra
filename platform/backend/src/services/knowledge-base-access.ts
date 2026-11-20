@@ -6,7 +6,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ApiError, type KnowledgeBase } from "@/types";
 
 export async function canAccessKnowledgeBase(params: {
-  knowledgeBase: KnowledgeBase;
+  knowledgeBase: Pick<KnowledgeBase, "id" | "organizationId">;
   organizationId: string;
   userId?: string;
 }): Promise<boolean> {

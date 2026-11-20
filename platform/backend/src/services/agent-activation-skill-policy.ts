@@ -102,6 +102,7 @@ class AgentActivationSkillPolicyService {
     organizationId: string;
     userId: string;
     patch: PatchAgentActivationSkillPolicy;
+    nativeSignal?: AbortSignal;
   }): Promise<{
     policy: AgentActivationSkillPolicyResponse;
     changed: boolean;
@@ -130,65 +131,36 @@ class AgentActivationSkillPolicyService {
       }
     }
 
-    const changed = await withDbTransaction(async (tx) => {
-      await AgentModel.lockRowForUpdate(params.agentId, tx);
-      const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
-        params.agentId,
-        tx,
-      );
-      if (!snapshot) throw new ApiError(404, "Agent not found");
-      if (snapshot.revision !== params.patch.expectedRevision) {
-        throw new ApiError(409, "Activation skill policy was modified");
-      }
-
-      const stored = snapshot.rules;
-      const operations = normalizeOperations(params.patch.operations);
-      const discard = new Set(params.patch.discardUnavailable);
-      const targetByKey = new Map(
-        stored
-          .filter(
-            (rule) =>
-              !discard.has(rule.disposition) ||
-              visibleKeys.has(referenceKey(rule.reference)),
-          )
-          .map((rule) => [ruleKey(rule), rule]),
-      );
-      for (const operation of operations) {
-        const key = ruleKey(operation);
-        if (operation.op === "add") {
-          targetByKey.set(key, {
-            disposition: operation.disposition,
-            reference: operation.reference,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const changed = params.nativeSignal
+      ? await patchPolicyNative(params, visibleKeys, params.nativeSignal)
+      : await withDbTransaction(async (tx) => {
+          await AgentModel.lockRowForUpdate(params.agentId, tx);
+          const replacement = planPolicyPatch(
+            await AgentActivationSkillRuleModel.findPolicySnapshot(
+              params.agentId,
+              tx,
+            ),
+            params.patch,
+            visibleKeys,
+          );
+          if (!replacement) return false;
+          await AgentActivationSkillRuleModel.replaceRules({
+            agentId: params.agentId,
+            rules: replacement.rules,
+            tx,
           });
-        } else {
-          targetByKey.delete(key);
-        }
-      }
-      const target = [...targetByKey.values()];
-      assertRuleLimits(target);
-      const mode = params.patch.mode ?? snapshot.mode;
-      const storedKeys = new Set(stored.map(ruleKey));
-      const targetKeys = new Set(target.map(ruleKey));
-      if (
-        mode === snapshot.mode &&
-        storedKeys.size === targetKeys.size &&
-        [...storedKeys].every((key) => targetKeys.has(key))
-      ) {
-        return false;
-      }
-      await AgentActivationSkillRuleModel.replaceRules({
-        agentId: params.agentId,
-        rules: target,
-        tx,
-      });
-      await AgentModel.setActivationSkillPolicyState({
-        id: params.agentId,
-        mode,
-        revision: snapshot.revision + 1,
-        tx,
-      });
-      return true;
-    });
+          await AgentModel.setActivationSkillPolicyState({
+            id: params.agentId,
+            mode: replacement.mode,
+            revision: params.patch.expectedRevision + 1,
+            tx,
+          });
+          return true;
+        });
+    // SPDX-SnippetEnd
 
     if (changed) {
       await clearChatMcpClient(params.agentId);
@@ -346,6 +318,82 @@ function displaySkillsForRules(
     const skill = skillsByKey.get(referenceKey(rule.reference));
     return skill ? [skill] : [];
   });
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function patchPolicyNative(
+  params: {
+    agentId: string;
+    organizationId: string;
+    patch: PatchAgentActivationSkillPolicy;
+  },
+  visibleKeys: ReadonlySet<string>,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const { agentId, organizationId, patch } = params;
+  const snapshot =
+    await AgentActivationSkillRuleModel.findPolicySnapshot(agentId);
+  const outcome = await AgentActivationSkillRuleModel.patchMcpNative({
+    agentId,
+    organizationId,
+    expectedRevision: patch.expectedRevision,
+    replacement: planPolicyPatch(snapshot, patch, visibleKeys),
+    signal,
+  });
+  switch (outcome) {
+    case "not_found":
+      throw new ApiError(404, "Agent not found");
+    case "conflict":
+      throw new ApiError(409, "Activation skill policy was modified");
+    case "unchanged":
+      return false;
+    case "updated":
+      return true;
+  }
+}
+// SPDX-SnippetEnd
+
+function planPolicyPatch(
+  snapshot: AgentActivationSkillPolicySnapshot | null,
+  patch: PatchAgentActivationSkillPolicy,
+  visibleKeys: ReadonlySet<string>,
+): Pick<AgentActivationSkillPolicySnapshot, "mode" | "rules"> | null {
+  if (!snapshot) throw new ApiError(404, "Agent not found");
+  if (snapshot.revision !== patch.expectedRevision) {
+    throw new ApiError(409, "Activation skill policy was modified");
+  }
+  const discard = new Set(patch.discardUnavailable);
+  const stored = snapshot.rules;
+  const targetByKey = new Map(
+    stored
+      .filter(
+        (rule) =>
+          !discard.has(rule.disposition) ||
+          visibleKeys.has(referenceKey(rule.reference)),
+      )
+      .map((rule) => [ruleKey(rule), rule]),
+  );
+  for (const { op, disposition, reference } of normalizeOperations(
+    patch.operations,
+  )) {
+    const rule = { disposition, reference };
+    const key = ruleKey(rule);
+    if (op === "add") targetByKey.set(key, rule);
+    else targetByKey.delete(key);
+  }
+  const rules = [...targetByKey.values()];
+  assertRuleLimits(rules);
+  const mode = patch.mode ?? snapshot.mode;
+  if (
+    mode === snapshot.mode &&
+    stored.length === rules.length &&
+    stored.every((rule) => targetByKey.has(ruleKey(rule)))
+  ) {
+    return null;
+  }
+  return { mode, rules };
 }
 
 function normalizeOperations(

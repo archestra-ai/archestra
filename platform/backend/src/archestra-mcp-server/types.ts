@@ -8,6 +8,8 @@ import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-c
  * Context for the Archestra MCP server
  */
 export interface ArchestraContext {
+  /** Set by the public Streamable HTTP POST transport, never from tool arguments. */
+  gatewayExecution?: { native: boolean; signal: AbortSignal };
   openappaSession?: import("@/openappa/service").OpenAppaSession;
   /** Proxy-authenticated source of a runtime handoff, never client-selected. */
   openappaRuntimeCall?: {

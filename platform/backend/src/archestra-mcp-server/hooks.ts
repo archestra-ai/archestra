@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, HookFileModel } from "@/models";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -16,6 +17,7 @@ import {
   HookFileNameSchema,
   HookRequirementsSchema,
 } from "@/types/hook";
+import { callRustApi } from "@/utils/rust-api";
 import {
   catchError,
   defineArchestraTool,
@@ -239,6 +241,8 @@ async function handleListHooks(params: {
   }
 
   try {
+    const execution = context.gatewayExecution;
+    execution?.signal.throwIfAborted();
     const denied = await assertAgentAccess({
       agentId: args.agent_id,
       context,
@@ -248,12 +252,32 @@ async function handleListHooks(params: {
       return denied;
     }
 
+    if (execution?.native) {
+      const socketPath = config.database.rustAuditLogSocket;
+      if (!socketPath)
+        throw new Error("Rust MCP tool socket is not configured");
+      const hooks = z.array(HookOutputItemSchema).parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/list-hooks",
+          json: JSON.stringify({
+            agentId: args.agent_id,
+            organizationId: context.organizationId,
+          }),
+          signal: execution.signal,
+        }),
+      );
+      return structuredSuccessResult({ hooks });
+    }
+
     const hooks = await HookFileModel.listByAgent(
       args.agent_id,
       context.organizationId,
     );
     return structuredSuccessResult({ hooks: hooks.map(serializeHook) });
   } catch (error) {
+    if (context.gatewayExecution?.signal.aborted)
+      return errorResult("Tool call cancelled");
     return catchError(error, "listing hooks");
   }
 }
@@ -282,7 +306,7 @@ async function handleCreateHook(params: {
       return denied;
     }
 
-    const hook = await HookFileModel.create({
+    const data = {
       organizationId: context.organizationId,
       agentId: args.agent_id,
       event: args.event,
@@ -290,9 +314,21 @@ async function handleCreateHook(params: {
       content: args.content,
       requirements: args.requirements ?? [],
       ...(args.enabled !== undefined && { enabled: args.enabled }),
-    });
+    };
+    const execution = context.gatewayExecution;
+    const hook = execution?.native
+      ? await HookFileModel.createMcpNative(data, execution.signal)
+      : await HookFileModel.create(data);
+    if (hook === "unique_violation")
+      return errorResult(
+        "A record with the same value already exists (creating the hook)",
+      );
+    if (!hook) return errorResult(`Agent with ID ${args.agent_id} not found.`);
     return structuredSuccessResult({ hook: serializeHook(hook) });
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "creating the hook");
   }
 }
@@ -323,24 +359,36 @@ async function handleUpdateHook(params: {
       action: "update",
     });
     if (denied) return denied;
-    const hook = await HookFileModel.update({
-      id: args.id,
-      organizationId: context.organizationId,
-      data: {
-        ...(args.event !== undefined && { event: args.event }),
-        ...(args.file_name !== undefined && { fileName: args.file_name }),
-        ...(args.content !== undefined && { content: args.content }),
-        ...(args.requirements !== undefined && {
-          requirements: args.requirements,
-        }),
-        ...(args.enabled !== undefined && { enabled: args.enabled }),
-      },
-    });
+    const data = {
+      ...(args.event !== undefined && { event: args.event }),
+      ...(args.file_name !== undefined && { fileName: args.file_name }),
+      ...(args.content !== undefined && { content: args.content }),
+      ...(args.requirements !== undefined && {
+        requirements: args.requirements,
+      }),
+      ...(args.enabled !== undefined && { enabled: args.enabled }),
+    };
+    const execution = context.gatewayExecution;
+    const scope = { id: args.id, organizationId: context.organizationId };
+    const hook = execution?.native
+      ? await HookFileModel.updateMcpNative({
+          target: { ...scope, agentId: existing.agentId },
+          data,
+          signal: execution.signal,
+        })
+      : await HookFileModel.update({ ...scope, data });
+    if (hook === "unique_violation")
+      return errorResult(
+        "A record with the same value already exists (updating the hook)",
+      );
     if (!hook) {
       return errorResult(`Hook with ID ${args.id} not found.`);
     }
     return structuredSuccessResult({ hook: serializeHook(hook) });
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "updating the hook");
   }
 }
@@ -371,12 +419,23 @@ async function handleDeleteHook(params: {
       action: "update",
     });
     if (denied) return denied;
-    const deleted = await HookFileModel.delete(args.id, context.organizationId);
+    const execution = context.gatewayExecution;
+    const deleted = execution?.native
+      ? await HookFileModel.deleteMcpNative({
+          id: args.id,
+          agentId: existing.agentId,
+          organizationId: context.organizationId,
+          signal: execution.signal,
+        })
+      : await HookFileModel.delete(args.id, context.organizationId);
     if (!deleted) {
       return errorResult(`Hook with ID ${args.id} not found.`);
     }
     return structuredSuccessResult({ success: true, id: args.id });
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "deleting the hook");
   }
 }

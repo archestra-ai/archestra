@@ -37,7 +37,8 @@ archestra:
   database:
     # null preserves existing pool configuration or the backend default of 50
     # query connections per pod. Set a budget to enable automatic pool sizing.
-    # Each peak pod needs at least 13 connections: 1 query, 10 cache, 2 listeners.
+    # Each peak pod needs at least 13 connections: 1 query, 10 cache, 2 listeners,
+    # plus 1 per enabled native pool.
     # Explicitly undersized budgets fail Helm rendering.
     # Keep the budget below PostgreSQL max_connections, reserving capacity for
     # migrations, monitoring, administration, and other database clients.

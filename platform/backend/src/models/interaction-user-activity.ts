@@ -711,7 +711,7 @@ const runtimeDefaultColumns = Object.entries(interactionColumns)
   )
   .map(([key]) => key);
 
-function encodeAppendPayload(
+export function encodeAppendPayload(
   values: typeof schema.interactionsTable.$inferInsert,
 ): string {
   const columns = interactionColumns;

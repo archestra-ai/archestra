@@ -9,6 +9,10 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
+import {
+  isRustOpenAiFramedResponse,
+  openAiStreamFetch,
+} from "@/clients/rust-openai-stream";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
@@ -33,6 +37,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   OpenAi,
+  OpenAiPolicyOutput,
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
@@ -42,6 +47,7 @@ import {
 } from "@/types";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { callRustApi } from "@/utils/rust-api";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
@@ -57,7 +63,10 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { withOpenAiChatToolCallIds } from "../utils/tool-call-ids";
-import { streamChatCompletionChunks } from "./chat-completions-stream";
+import {
+  getNativeStreamProgress,
+  streamChatCompletionChunks,
+} from "./chat-completions-stream";
 import { createOpenAiCodexClient } from "./openai-codex-client";
 import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
@@ -1081,6 +1090,7 @@ export class OpenAIStreamAdapter
   readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
+  nativeOpenAiSettlement = false;
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal. formatEndSSE then finishes the turn as "stop" instead of replaying
   // the upstream "tool_calls" finish reason (a text-only turn ending in
@@ -1185,11 +1195,14 @@ export class OpenAIStreamAdapter
   }
 
   processChunk(chunk: OpenAiStreamChunk): ChunkProcessingResult {
+    const native = getNativeStreamProgress(chunk);
+    if (native) this.nativeOpenAiSettlement = true;
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
 
-    let sseData: string | null = null;
+    let sseData = native?.immediate_sse ?? null;
+    let receiptPrefix: { prefix: string; separateContent: boolean } | undefined;
     let isToolCallChunk = false;
 
     this.state.responseId = chunk.id;
@@ -1226,7 +1239,9 @@ export class OpenAIStreamAdapter
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: !!chunk.usage && this.state.stopReason !== null,
+        isFinal:
+          native?.terminal_usage ??
+          (!!chunk.usage && this.state.stopReason !== null),
       };
     }
 
@@ -1262,19 +1277,25 @@ export class OpenAIStreamAdapter
       this.state.text += delta.content;
     }
     if (delta.content || hasReasoning) {
-      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
-      let prefixSse = "";
       if (delta.content && !this.textPrefixIssued && this.getTextSuffix) {
         const prefix = this.resolveTextPrefix(delta.content);
         this.textPrefixIssued = true;
-        if (prefix) {
-          prefixSse = this.formatTextDeltaSSE(prefix);
-          sseData = `${prefixSse}data: ${JSON.stringify(
+        if (prefix && native) {
+          receiptPrefix = { prefix, separateContent: true };
+        } else if (prefix) {
+          const outbound = delta.tool_calls
+            ? withoutToolCallDeltas(chunk)
+            : chunk;
+          sseData = `${this.formatTextDeltaSSE(prefix)}data: ${JSON.stringify(
             withContentPrefix(outbound, "\n\n"),
           )}\n\n`;
         }
       }
-      sseData ??= `data: ${JSON.stringify(outbound)}\n\n`;
+      if (!native) {
+        sseData ??= `data: ${JSON.stringify(
+          delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk,
+        )}\n\n`;
+      }
     }
 
     let isResponsePreamble = false;
@@ -1285,16 +1306,17 @@ export class OpenAIStreamAdapter
       !delta.tool_calls &&
       !audio
     ) {
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      if (!native) sseData = `data: ${JSON.stringify(chunk)}\n\n`;
       isResponsePreamble = true;
     }
 
     // Audio and transcript deltas are the reply itself: relay each as it
     // arrives, like text. Tool calls riding the same chunk wait for policy
     // evaluation, as they do beside text.
-    if (audio && sseData === null) {
-      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
-      sseData = `data: ${JSON.stringify(outbound)}\n\n`;
+    if (!native && audio && sseData === null) {
+      sseData = `data: ${JSON.stringify(
+        delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk,
+      )}\n\n`;
     }
 
     // Handle tool calls
@@ -1304,53 +1326,87 @@ export class OpenAIStreamAdapter
         if (prefix) {
           this.textPrefixIssued = true;
           this.state.text = prefix;
-          const prefixSse = this.formatTextDeltaSSE(prefix);
-          sseData = sseData ? `${prefixSse}${sseData}` : prefixSse;
+          if (native) {
+            receiptPrefix = { prefix, separateContent: false };
+          } else {
+            const prefixSse = this.formatTextDeltaSSE(prefix);
+            sseData = sseData ? `${prefixSse}${sseData}` : prefixSse;
+          }
         }
       }
-      for (const toolCallDelta of delta.tool_calls) {
-        const index = toolCallDelta.index;
-
-        if (!this.currentToolCallIndices.has(index)) {
-          this.currentToolCallIndices.set(index, this.state.toolCalls.length);
-          this.state.toolCalls.push({
-            id: toolCallDelta.id ?? "",
-            name: toolCallDelta.function?.name ?? "",
-            arguments: "",
-          });
-        }
-
-        const toolCallIndex = this.currentToolCallIndices.get(index);
-        if (toolCallIndex === undefined) continue;
-        const toolCall = this.state.toolCalls[toolCallIndex];
-
-        if (toolCallDelta.id) {
-          toolCall.id = toolCallDelta.id;
-        }
-        if (toolCallDelta.function?.name) {
-          toolCall.name = toolCallDelta.function.name;
-        }
-        if (toolCallDelta.function?.arguments) {
-          toolCall.arguments += toolCallDelta.function.arguments;
-        }
+      if (native) {
+        this.state.toolCalls = native.toolCalls;
+        if (native.held_tool_sse !== null)
+          this.state.rawToolCallEvents.push(native.held_tool_sse);
+      } else {
+        this.accumulateToolCallDeltas(delta.tool_calls);
+        this.state.rawToolCallEvents.push(
+          delta.content || hasReasoning || audio
+            ? onlyToolCallDeltas(chunk)
+            : chunk,
+        );
       }
-
-      this.state.rawToolCallEvents.push(
-        delta.content || hasReasoning || audio
-          ? onlyToolCallDeltas(chunk)
-          : chunk,
-      );
       isToolCallChunk = true;
     }
 
     // A finish chunk can carry cumulative usage that a trailing usage-only
     // chunk corrects. Keep reading even when both are present; providers that
     // omit trailing usage complete when the iterator ends normally.
-    if (choice.finish_reason) {
+    if (native) {
+      this.state.stopReason = native.stop_reason;
+    } else if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
+    if (receiptPrefix) {
+      const payload = { ...receiptPrefix, immediateSse: sseData };
+      return {
+        sseData: null,
+        isToolCallChunk,
+        isFinal: false,
+        isResponsePreamble,
+        resolveNativeSSE: (signal) =>
+          this.nativeSse(
+            "/internal/v1/openai/receipt-prefix-sse",
+            payload,
+            signal,
+          ),
+      };
+    }
     return { sseData, isToolCallChunk, isFinal: false, isResponsePreamble };
+  }
+
+  private accumulateToolCallDeltas(
+    deltas: NonNullable<
+      OpenAiStreamChunk["choices"][number]["delta"]["tool_calls"]
+    >,
+  ): void {
+    for (const toolCallDelta of deltas) {
+      const index = toolCallDelta.index;
+
+      if (!this.currentToolCallIndices.has(index)) {
+        this.currentToolCallIndices.set(index, this.state.toolCalls.length);
+        this.state.toolCalls.push({
+          id: toolCallDelta.id ?? "",
+          name: toolCallDelta.function?.name ?? "",
+          arguments: "",
+        });
+      }
+
+      const toolCallIndex = this.currentToolCallIndices.get(index);
+      if (toolCallIndex === undefined) continue;
+      const toolCall = this.state.toolCalls[toolCallIndex];
+
+      if (toolCallDelta.id) {
+        toolCall.id = toolCallDelta.id;
+      }
+      if (toolCallDelta.function?.name) {
+        toolCall.name = toolCallDelta.function.name;
+      }
+      if (toolCallDelta.function?.arguments) {
+        toolCall.arguments += toolCallDelta.function.arguments;
+      }
+    }
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -1381,8 +1437,8 @@ export class OpenAIStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.rawToolCallEvents.map(
-      (event) => `data: ${JSON.stringify(event)}\n\n`,
+    return this.state.rawToolCallEvents.map((event) =>
+      typeof event === "string" ? event : `data: ${JSON.stringify(event)}\n\n`,
     );
   }
 
@@ -1448,6 +1504,90 @@ export class OpenAIStreamAdapter
       ],
     };
     return [`data: ${JSON.stringify(chunk)}\n\n`];
+  }
+
+  async formatNativePolicySSE(
+    output: OpenAiPolicyOutput,
+    signal: AbortSignal,
+  ): Promise<string[]> {
+    try {
+      const event = await this.nativeSse(
+        "/internal/v1/openai/policy-sse",
+        output.kind === "text"
+          ? { output }
+          : {
+              output: {
+                kind: "tools",
+                calls: output.calls.map(
+                  ({ id, wireId, name, arguments: args }) => ({
+                    id,
+                    wireId,
+                    name,
+                    arguments: args,
+                  }),
+                ),
+              },
+            },
+        signal,
+      );
+      if (output.kind === "text") this.replacedText = output.text;
+      return [event];
+    } catch (error) {
+      // The upstream terminal can precede a failed or cancelled policy release.
+      this.state.toolCalls = [];
+      this.state.rawToolCallEvents = [];
+      throw error;
+    }
+  }
+
+  formatNativeEndSSE(signal: AbortSignal): Promise<string> {
+    return this.nativeSse(
+      "/internal/v1/openai/terminal-sse",
+      {
+        stopReason: this.state.stopReason,
+        replaced: this.responseReplacedWithText,
+        separateUsage: this.clientRequestedUsage,
+        usage: this.rebuiltUsage(),
+      },
+      signal,
+    );
+  }
+
+  private async nativeSse(
+    path:
+      | "/internal/v1/openai/policy-sse"
+      | "/internal/v1/openai/terminal-sse"
+      | "/internal/v1/openai/receipt-prefix-sse",
+    payload:
+      | { output: OpenAiPolicyOutput }
+      | {
+          prefix: string;
+          separateContent: boolean;
+          immediateSse: string | null;
+        }
+      | {
+          stopReason: string | null;
+          replaced: boolean;
+          separateUsage: boolean;
+          usage: ReturnType<OpenAIStreamAdapter["rebuiltUsage"]>;
+        },
+    signal: AbortSignal,
+  ): Promise<string> {
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust API socket is not configured");
+    const events = await callRustApi({
+      socketPath,
+      path,
+      signal,
+      json: JSON.stringify({
+        id: this.state.responseId,
+        model: this.state.model,
+        ...payload,
+      }),
+    });
+    if (typeof events !== "string")
+      throw new Error("Invalid native OpenAI SSE");
+    return events;
   }
 
   formatEndSSE(): string {
@@ -1753,13 +1893,25 @@ export const openaiAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    // Use observable fetch for request duration metrics if agent is provided
+    // A Codex subscription goes to the Responses backend, not this transport.
+    const codexCredential = decodeOpenAiCodexCredential(apiKey);
     const baseFetch = fetchWithAbortSignal(
       options.agent
         ? metrics.llm.getObservableFetch(
             "openai",
             options.agent,
             options.source,
+            config.llmProxy.rustOpenAiStreamEnabled && !codexCredential
+              ? {
+                  upstreamFetch: (input, init, dispatcher) =>
+                    openAiStreamFetch(
+                      input,
+                      init,
+                      dispatcher,
+                      options.onNativeOpenAiDispatch,
+                    ),
+                }
+              : undefined,
           )
         : undefined,
       options.abortSignal,
@@ -1768,7 +1920,6 @@ export const openaiAdapterFactory: LLMProvider<
     // "ChatGPT subscription" (Codex) auth mode: the resolved credential is an
     // encoded ChatGPT OAuth credential, not an `sk-…` key. Route through the
     // Codex Responses backend instead of api.openai.com.
-    const codexCredential = decodeOpenAiCodexCredential(apiKey);
     if (codexCredential) {
       return createOpenAiCodexClient({
         credential: codexCredential,
@@ -1865,6 +2016,7 @@ export const openaiAdapterFactory: LLMProvider<
     return streamChatCompletionChunks<OpenAiStreamChunk>(
       openaiClient.chat.completions.create(openaiRequest),
       onAccepted,
+      isRustOpenAiFramedResponse,
     );
   },
 

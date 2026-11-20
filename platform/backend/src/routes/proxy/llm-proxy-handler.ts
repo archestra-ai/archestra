@@ -69,6 +69,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { internalCallProvenance } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import { canUseRustOpenAiChatRelay } from "@/clients/rust-openai-stream";
 import config from "@/config";
 import {
   ENCRYPTED_CHAT_KEY_HEADER,
@@ -156,6 +157,7 @@ import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
+import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -178,6 +180,7 @@ import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { withMediaUsageAvailability } from "@/utils/media-usage";
+import { callRustApi } from "@/utils/rust-api";
 import { isUuid } from "@/utils/uuid";
 import { withReplyAudioWithinLimit } from "./adapters/openai";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
@@ -280,6 +283,8 @@ export interface LLMProxyContext<TRequest> {
   authorizeA2AOAuthAttempt?: () => Promise<unknown>;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
+  nativeOpenAiPoolQuota?: boolean;
+  isNativeOpenAiQuotaEligible?: () => boolean;
   providerApiKeyId?: string;
   billingEndpoint?: "fireworks" | "other";
   requestedModel?: string;
@@ -1395,6 +1400,7 @@ async function handleObservedLLMProxy<
           name: requestedModel,
           poolId: chatModelPoolId,
           inbound: poolWire,
+          streaming: requestAdapter.isStreaming(),
           caller: {
             userId: authenticatedUserId,
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
@@ -2185,6 +2191,9 @@ async function handleObservedLLMProxy<
           abortSignal && target.attemptSignal
             ? AbortSignal.any([abortSignal, target.attemptSignal])
             : (target.attemptSignal ?? abortSignal),
+        onNativeOpenAiDispatch: () => {
+          upstreamAttempt.nativeOpenAiDispatched = true;
+        },
         source,
         model: target.model,
         defaultHeaders:
@@ -2387,6 +2396,31 @@ async function handleObservedLLMProxy<
       | { value: Awaited<ReturnType<typeof memberCredential>> }
       | { error: unknown }
       | undefined;
+    const isNativeOpenAiQuotaEligible = requestAdapter.isStreaming()
+      ? () => {
+          const member = modelPoolPlan
+            ? preparedMember && "value" in preparedMember
+              ? preparedMember.value
+              : undefined
+            : routedCredential;
+          if (modelPoolPlan || autoRoutedTier) {
+            return (
+              member?.adapter.interactionType === "openai:chatCompletions" &&
+              !decodeOpenAiCodexCredential(member.apiKey) &&
+              canUseRustOpenAiChatRelay(
+                member.row.inferenceBaseUrl ??
+                  member.row.baseUrl ??
+                  member.adapter.getBaseUrl(),
+              )
+            );
+          }
+          return (
+            provider.interactionType === "openai:chatCompletions" &&
+            !decodeOpenAiCodexCredential(apiKey) &&
+            canUseRustOpenAiChatRelay(effectiveBaseUrl)
+          );
+        }
+      : undefined;
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
@@ -2452,6 +2486,7 @@ async function handleObservedLLMProxy<
                   model,
                   billingMode === "subscription",
                   upstreamAttempt.modelAliases,
+                  isNativeOpenAiQuotaEligible?.(),
                 );
               } catch (error) {
                 if (error instanceof ThroughputError && error.status === 402)
@@ -2527,11 +2562,13 @@ async function handleObservedLLMProxy<
                 throughput,
                 autoRouting: undefined,
                 upstreamAttempt: { ...attempt, attemptOutcome: "failed" },
+                nativeOpenAiSettlement: attempt.nativeOpenAiDispatched,
               });
               return async (outcome) => {
                 if (outcome === "failed_over")
                   await InteractionModel.markPoolAttemptFailedOver(
                     interactionId,
+                    { nativeOpenAiSettlement: attempt.nativeOpenAiDispatched },
                   );
               };
             },
@@ -2725,6 +2762,10 @@ async function handleObservedLLMProxy<
       // Read again: an "Auto" platform call records its decision above.
       autoRouting: autoRoutingContext(request),
       throughput,
+      nativeOpenAiPoolQuota: modelPool?.plan.members.every(
+        (member) => member.nativeOpenAiQuotaEligible === true,
+      ),
+      isNativeOpenAiQuotaEligible,
       providerApiKeyId: perKeyChatApiKeyId,
       billingEndpoint,
       requestedModel,
@@ -3186,6 +3227,9 @@ async function handleStreaming<
         throughput: ctx.throughput,
         autoRouting: ctx.autoRouting,
         upstreamAttempt: ctx.upstreamAttempt,
+        nativeOpenAiSettlement:
+          streamAdapter.nativeOpenAiSettlement ||
+          ctx.upstreamAttempt.nativeOpenAiDispatched,
       });
     } catch (interactionError) {
       logger.error(
@@ -3224,7 +3268,10 @@ async function handleStreaming<
       streamAdapter.state.rawToolCallEvents = [];
     }
     try {
-      await ctx.throughput?.reconcile(observedUsage());
+      await ctx.throughput?.reconcile(
+        observedUsage(),
+        ctx.upstreamAttempt.nativeOpenAiDispatched,
+      );
     } catch (error) {
       // A committed stream cannot become an HTTP 503. Preserve interaction
       // accounting and surface the metering failure in server logs.
@@ -3377,6 +3424,7 @@ async function handleStreaming<
           throughput: ctx.throughput,
           autoRouting: ctx.autoRouting,
           upstreamAttempt: ctx.upstreamAttempt,
+          nativeOpenAiSettlement: streamAdapter.nativeOpenAiSettlement,
         });
       } catch (interactionError) {
         logger.error(
@@ -3399,6 +3447,12 @@ async function handleStreaming<
     }
   };
 
+  let disconnectSignal: AbortSignal | undefined;
+  const nativeStreamSignal = () =>
+    (disconnectSignal ??= clientDisconnectSignal({
+      request: reply.request,
+      reply,
+    }));
   try {
     // Execute streaming request with tracing — the span covers the full streaming
     // operation (request → all chunks consumed) so we can set response attributes
@@ -3431,9 +3485,14 @@ async function handleStreaming<
         }
         if (reply.raw.destroyed)
           throw new ApiError(499, "Client disconnected before inference");
-        await ctx.throughput?.admit(request);
+        await ctx.throughput?.admit(
+          request,
+          ctx.nativeOpenAiPoolQuota || ctx.isNativeOpenAiQuotaEligible?.(),
+        );
         if (reply.raw.destroyed) {
-          await ctx.throughput?.cancelBeforeSend();
+          await ctx.throughput?.cancelBeforeSend(
+            ctx.nativeOpenAiPoolQuota || ctx.isNativeOpenAiQuotaEligible?.(),
+          );
           throw new ApiError(499, "Client disconnected before inference");
         }
         const onAccepted = () => {
@@ -3465,9 +3524,10 @@ async function handleStreaming<
           memberTimeoutMs:
             ctx.modelPool?.plan.streamTimeoutMs ??
             MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
-          // Gemini's SDK loses the HTTP status when an error body is cut off;
-          // that is indistinguishable from a transport failure, so don't retry.
+          // A submitted relay request may already have reached the provider.
+          // Gemini can also lose the status when an HTTP error body is cut off.
           isRetryable: (error) =>
+            !ctx.upstreamAttempt.nativeOpenAiDispatched &&
             (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
@@ -3532,8 +3592,17 @@ async function handleStreaming<
           // defeats this (minimax.ts and openai.ts's `delta.content`
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
-          if (result.sseData) {
-            childStream.emitModel(result.sseData, result.isResponsePreamble);
+          const sseData = result.resolveNativeSSE
+            ? await result.resolveNativeSSE(nativeStreamSignal())
+            : result.sseData;
+          if (sseData) {
+            childStream.emitModel(sseData, result.isResponsePreamble);
+            if (
+              result.resolveNativeSSE &&
+              !bufferModelResponse &&
+              !reply.raw.destroyed
+            )
+              appaReceipts?.markReleased("release");
           }
 
           if (result.isFinal && streamAdapter.provider !== "gemini") {
@@ -3753,6 +3822,11 @@ async function handleStreaming<
         "Ruling on tool calls with proxy plugins",
       );
 
+      const nativeRelease =
+        streamAdapter.nativeOpenAiSettlement === true &&
+        streamAdapter.formatToolCallsSSE !== undefined;
+      const originalCalls = nativeRelease ? structuredClone(toolCalls) : null;
+      const policySignal = nativeRelease ? nativeStreamSignal() : undefined;
       const policyOutcome = await evaluateProxyPluginToolCalls(
         ctx.pluginRegistry,
         ctx.pluginContext,
@@ -3760,10 +3834,29 @@ async function handleStreaming<
         streamAdapter.formatToolCallsSSE !== undefined,
         streamAdapter.supportsToolCallReview === true &&
           typeof streamAdapter.formatToolCallsSSE === "function",
+        !nativeRelease,
+        policySignal,
       );
-      if (policyOutcome.wasRewritten)
-        rewrittenToolCalls = policyOutcome.toolCalls;
-      toolInvocationRefusal = policyOutcome.refusal;
+      if (originalCalls) {
+        const release = await planNativeOpenAiToolRelease(
+          policyOutcome.refusal
+            ? { decision: "deny" }
+            : {
+                decision: "allow",
+                original: originalCalls,
+                authorized: policyOutcome.toolCalls,
+              },
+          policySignal,
+        );
+        toolInvocationRefusal =
+          release === "withhold" ? policyOutcome.refusal : null;
+        rewrittenToolCalls =
+          release === "replace" ? policyOutcome.toolCalls : null;
+      } else {
+        if (policyOutcome.wasRewritten)
+          rewrittenToolCalls = policyOutcome.toolCalls;
+        toolInvocationRefusal = policyOutcome.refusal;
+      }
       // Record metrics for tool calls substituted with denial notices.
       for (const blocked of policyOutcome.blocked) {
         recordBlockedToolCallMetrics({
@@ -3816,6 +3909,19 @@ async function handleStreaming<
         toolCalls: rewrittenToolCalls ?? toolCalls,
       });
 
+    const nativePolicySignal =
+      streamAdapter.nativeOpenAiSettlement &&
+      streamAdapter.formatNativePolicySSE
+        ? nativeStreamSignal()
+        : undefined;
+    const formatPolicyText = (text: string) =>
+      nativePolicySignal && streamAdapter.formatNativePolicySSE
+        ? streamAdapter.formatNativePolicySSE(
+            { kind: "text", text },
+            nativePolicySignal,
+          )
+        : streamAdapter.formatCompleteTextSSE(text);
+
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
@@ -3835,7 +3941,7 @@ async function handleStreaming<
           : precedingText.endsWith("\n")
             ? "\n"
             : "\n\n";
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(
+      const refusalEvents = await formatPolicyText(
         `${separator}${fullContentMessage}`,
       );
       for (const event of refusalEvents) {
@@ -3876,7 +3982,12 @@ async function handleStreaming<
         // ids, as the requests are.
         const allEvents =
           rewrittenToolCalls && streamAdapter.formatToolCallsSSE
-            ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
+            ? nativePolicySignal && streamAdapter.formatNativePolicySSE
+              ? await streamAdapter.formatNativePolicySSE(
+                  { kind: "tools", calls: rewrittenToolCalls },
+                  nativePolicySignal,
+                )
+              : streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
             : streamAdapter.getRawToolCallEvents();
         if (rewrittenToolCalls) {
           streamAdapter.state.toolCalls.splice(
@@ -3914,7 +4025,7 @@ async function handleStreaming<
       if (bufferedOutcome.decision === "replace") {
         childStream.discard(streamAdapter);
         childStream.replaceResponse(
-          streamAdapter.formatCompleteTextSSE(
+          await formatPolicyText(
             appaReceipts?.appendToReplacement(bufferedOutcome.responseText) ??
               bufferedOutcome.responseText,
           ),
@@ -3942,9 +4053,25 @@ async function handleStreaming<
       appaReceipts?.markReleased(bufferedOutcome.decision);
     }
 
-    // Stream end events
+    // Settle even if the client disconnects before delivery of the terminal.
     await finalizeInteraction();
-    writeToClient(streamAdapter.formatEndSSE());
+    if (!reply.raw.destroyed) {
+      if (
+        streamAdapter.formatNativeEndSSE &&
+        (streamAdapter.nativeOpenAiSettlement ||
+          ctx.upstreamAttempt.nativeOpenAiDispatched)
+      ) {
+        const signal = nativeStreamSignal();
+        try {
+          writeToClient(await streamAdapter.formatNativeEndSSE(signal));
+        } catch (error) {
+          if (!signal.aborted) throw error;
+          clientGone = true;
+        }
+      } else {
+        writeToClient(streamAdapter.formatEndSSE());
+      }
+    }
     reply.raw.end();
 
     streamCompleted = true;
@@ -5138,6 +5265,56 @@ async function failResponsesGeneration(params: {
   return true;
 }
 
+async function planNativeOpenAiToolRelease(
+  admission:
+    | { decision: "deny" }
+    | {
+        decision: "allow";
+        original: readonly AccumulatedToolCall[];
+        authorized: readonly AccumulatedToolCall[];
+      },
+  signal?: AbortSignal,
+): Promise<"withhold" | "replay" | "replace"> {
+  const socketPath = config.database.rustAuditLogSocket;
+  if (!socketPath) throw new Error("Rust API socket is not configured");
+  const project = ({
+    id,
+    name,
+    arguments: args,
+    namespace,
+    wireId,
+    reviewDetails,
+  }: AccumulatedToolCall) => ({
+    id,
+    name,
+    arguments: args,
+    namespace,
+    wireId,
+    reviewDetails,
+  });
+  const result = await callRustApi({
+    socketPath,
+    path: "/internal/v1/openai/tool-release",
+    signal,
+    json: JSON.stringify(
+      admission.decision === "deny"
+        ? admission
+        : {
+            decision: "allow",
+            original: admission.original.map(project),
+            authorized: admission.authorized.map(project),
+          },
+    ),
+  });
+  if (
+    admission.decision === "deny"
+      ? result === "withhold"
+      : result === "replay" || result === "replace"
+  )
+    return result as "withhold" | "replay" | "replace";
+  throw new Error("Invalid native OpenAI tool release decision");
+}
+
 async function evaluateProxyPluginToolCalls(
   registry: LlmProxyPluginRegistry | undefined,
   context: LlmProxyRequestContext | undefined,
@@ -5146,6 +5323,8 @@ async function evaluateProxyPluginToolCalls(
   canRewriteToolCalls: boolean,
   /** Whether this transport emits a call's review details before the call. */
   canShowToolCallReview: boolean,
+  classifyRewrite = true,
+  signal?: AbortSignal,
 ): Promise<{
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
@@ -5160,22 +5339,27 @@ async function evaluateProxyPluginToolCalls(
       blocked: [],
     };
   // Capture argument values before plugins run, not mutable object references.
-  const originalCalls = toolCalls.map((call) => ({
-    ...call,
-    arguments:
-      typeof call.arguments === "string"
-        ? call.arguments
-        : JSON.stringify(call.arguments),
-  }));
+  const originalCalls = classifyRewrite
+    ? toolCalls.map((call) => ({
+        ...call,
+        arguments:
+          typeof call.arguments === "string"
+            ? call.arguments
+            : JSON.stringify(call.arguments),
+      }))
+    : null;
   const grokDeferred = context.resources.get(GROK_DEFERRED_TOOLS) as
     | GrokDeferredTools
     | undefined;
-  const outcome = await registry.onToolCalls({
-    ...context,
-    toolCalls: grokDeferred?.unwrapCalls(toolCalls) ?? toolCalls,
-    canRewriteToolCalls,
-    canShowToolCallReview,
-  });
+  const outcome = await registry.onToolCalls(
+    {
+      ...context,
+      toolCalls: grokDeferred?.unwrapCalls(toolCalls) ?? toolCalls,
+      canRewriteToolCalls,
+      canShowToolCallReview,
+    },
+    { nativePolicy: !classifyRewrite, signal },
+  );
   if (outcome.decision === "allow") {
     const authorizedCalls = outcome.toolCalls.map((toolCall) => ({
       ...toolCall,
@@ -5190,18 +5374,19 @@ async function evaluateProxyPluginToolCalls(
       refusal: null,
       toolCalls: releasedCalls,
       wasRewritten:
-        releasedCalls.length !== originalCalls.length ||
-        releasedCalls.some((call, index) => {
-          const original = originalCalls[index];
-          return (
-            call.id !== original.id ||
-            call.wireId !== original.wireId ||
-            call.name !== original.name ||
-            call.namespace !== original.namespace ||
-            call.arguments !== original.arguments ||
-            call.reviewDetails !== original.reviewDetails
-          );
-        }),
+        originalCalls !== null &&
+        (releasedCalls.length !== originalCalls.length ||
+          releasedCalls.some((call, index) => {
+            const original = originalCalls[index];
+            return (
+              call.id !== original.id ||
+              call.wireId !== original.wireId ||
+              call.name !== original.name ||
+              call.namespace !== original.namespace ||
+              call.arguments !== original.arguments ||
+              call.reviewDetails !== original.reviewDetails
+            );
+          })),
       blocked: outcome.blocked ?? [],
     };
   }
@@ -5363,8 +5548,18 @@ async function openUpstream<TRequest, T>(params: {
       // A queued request can become unavailable after admission. It never
       // reached the provider, so release its reservation before recording it.
       if (!dispatched && !ctx.modelPool)
-        await ctx.throughput?.cancelBeforeSend();
+        await ctx.throughput?.cancelBeforeSend(
+          ctx.isNativeOpenAiQuotaEligible?.(),
+        );
       throw error;
+    }
+    if (
+      !dispatched &&
+      !retry.shouldContinue() &&
+      (ctx.nativeOpenAiPoolQuota || ctx.isNativeOpenAiQuotaEligible?.())
+    ) {
+      if (!ctx.modelPool) await ctx.throughput?.cancelBeforeSend(true);
+      throw new ApiError(499, "Client disconnected before inference");
     }
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.
@@ -5426,12 +5621,15 @@ async function openUpstream<TRequest, T>(params: {
     });
   } catch (error) {
     if (
-      (error instanceof ModelBudgetExceededError ||
+      ((ctx.nativeOpenAiPoolQuota && !retry.shouldContinue()) ||
+        error instanceof ModelBudgetExceededError ||
         error instanceof ThroughputError ||
         error instanceof ApiError) &&
       !dispatched
     )
-      await ctx.throughput?.cancelBeforeSend();
+      await ctx.throughput?.cancelBeforeSend(
+        ctx.nativeOpenAiPoolQuota || ctx.isNativeOpenAiQuotaEligible?.(),
+      );
     throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
@@ -5598,6 +5796,7 @@ async function persistProxyInteraction({
   throughput,
   autoRouting,
   upstreamAttempt,
+  nativeOpenAiSettlement,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
@@ -5606,6 +5805,7 @@ async function persistProxyInteraction({
   throughput?: LlmThroughput;
   autoRouting: AutoRoutingRequestContext | undefined;
   upstreamAttempt?: UpstreamAttempt;
+  nativeOpenAiSettlement?: boolean;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
@@ -5632,11 +5832,13 @@ async function persistProxyInteraction({
       ? redactEncryptedChatInteraction(record)
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
+    { nativeOpenAiSettlement },
   );
   try {
     await throughput?.settleSpend(
       record.cost,
       record.billingMode === "subscription" ? "subscription" : "metered",
+      nativeOpenAiSettlement,
     );
   } catch (error) {
     // The request's charge is already settled. Failing it now would invite a

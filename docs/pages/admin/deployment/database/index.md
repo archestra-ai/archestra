@@ -2,7 +2,7 @@
 title: PostgreSQL
 description: Choose, size, and connect the PostgreSQL database that holds Archestra's state
 order: 4
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-19
 explore: false
 ---
 
@@ -89,8 +89,10 @@ On every cloud, keep the database on a private network with no public endpoint, 
 
 Set `archestra.database.connectionBudget` to the connections Archestra may use, and the chart divides it among pods. Each pod gets the budget divided by the peak pod count. During a rolling update, each Deployment can run its full new revision, an old revision that is still terminating, and the surge (25% by default, rounded up). With the web HPA maximum at 5 and 2 workers, that is 12 web and 5 worker pods, so 17 peak pods.
 
-Each pod keeps 12 of its share for caching and notifications and uses the rest as its query pool. A share under 13 leaves no query connection, and the chart rejects that budget.
+Helm first reserves one connection per native pool on each pod that runs it. With the native opt-ins enabled, a split deployment reserves for the Rust API on web pods and the Rust rollup pool on worker pods. A combined pod can run both. Helm reserves conservatively for flags it cannot read at render time, such as flags in an imported Secret.
+
+Helm then reserves 12 connections per peak pod for caching and notifications and divides the rest among the query pools. The chart rejects any budget that leaves fewer than one query connection per pod.
 
 - Set PostgreSQL `max_connections` about 25% above the budget. Each pod opens a few connections the budget does not count, and migrations and monitoring need their own. [Pick a Size](/docs/admin/deployment/scaling#pick-a-size) gives a budget for each size.
-- A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Finish one rollout before starting another.
+- A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Leave headroom when changing these settings: terminating pods retain their previous pool sizes. Finish one rollout before starting another.
 - Archestra does not need a connection pooler. Behind PgBouncer in transaction mode, point [`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL) at a direct connection.

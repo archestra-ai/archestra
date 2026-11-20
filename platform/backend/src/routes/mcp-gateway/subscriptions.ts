@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
+import { once } from "node:events";
+import { type IncomingMessage, request as requestHttp } from "node:http";
+import { createInterface } from "node:readline";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { registerShutdownStream } from "@/server/llm-proxy-drain";
@@ -8,6 +12,7 @@ import {
   type CatalogAccessCaller,
   filterToolsByCallerCatalogAccess,
 } from "@/services/caller-catalog-access";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import {
   COMPLETE_RESULT_TYPE,
   MCP_PROTOCOL_VERSION_HEADER,
@@ -141,6 +146,8 @@ export async function runSubscriptionStream(params: {
   requested: SubscriptionFilter;
   /** Who is listening: their tool list is narrowed to catalogs they can see. */
   caller?: CatalogAccessCaller;
+  nativeSocket?: string;
+  onAcknowledged?: (honored: SubscriptionFilter) => void;
   /** Injectable for tests; defaults to the real fingerprint. */
   computeFingerprint?: () => Promise<string>;
   pollIntervalMs?: number;
@@ -164,14 +171,19 @@ export async function runSubscriptionStream(params: {
   } = params;
 
   const honored = acknowledgedFilter(requested);
+  if (params.nativeSocket) {
+    return runNativeSubscription({
+      ...params,
+      socketPath: params.nativeSocket,
+      computeFingerprint,
+      pollIntervalMs,
+      heartbeatMs,
+      maxDurationMs,
+      honored,
+    });
+  }
 
-  reply.hijack();
-  reply.raw.writeHead(200, {
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache, no-transform",
-    connection: "keep-alive",
-    [MCP_PROTOCOL_VERSION_HEADER]: STATELESS_MCP_PROTOCOL_REVISION,
-  });
+  startReply(reply);
 
   const send = (message: Record<string, unknown>): void => {
     reply.raw.write(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
@@ -186,6 +198,7 @@ export async function runSubscriptionStream(params: {
       notifications: honored,
     },
   });
+  params.onAcknowledged?.(honored);
 
   registerShutdownStream(params.request, reply, endGracefully);
 
@@ -295,4 +308,109 @@ export async function runSubscriptionStream(params: {
     });
     reply.raw.end();
   }
+}
+
+const nativeFrame = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sse"), value: z.string() }),
+  z.object({ kind: z.literal("poll") }),
+]);
+
+async function runNativeSubscription(params: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  socketPath: string;
+  subscriptionId: string | number;
+  honored: SubscriptionFilter;
+  computeFingerprint: () => Promise<string>;
+  pollIntervalMs: number;
+  heartbeatMs: number;
+  maxDurationMs: number;
+  onAcknowledged?: (honored: SubscriptionFilter) => void;
+}): Promise<void> {
+  const { request, reply, honored, subscriptionId } = params;
+  const signal = clientDisconnectSignal({ request, reply });
+  const relay = requestHttp({
+    socketPath: params.socketPath,
+    path: "/internal/v1/mcp/subscription",
+    method: "POST",
+    agent: false,
+    signal,
+    headers: { "content-type": "application/x-ndjson" },
+  });
+  const send = (value: object) => {
+    if (!relay.destroyed && !relay.writableEnded)
+      relay.write(`${JSON.stringify(value)}\n`);
+  };
+  let upstream: IncomingMessage | undefined;
+  relay.on("error", (error) => upstream?.destroy(error));
+  const open = once(relay, "response", { signal });
+  const deadline = setTimeout(
+    () => relay.destroy(new Error("Rust subscription header timeout")),
+    10_000,
+  );
+  let acknowledged = false;
+  try {
+    send({
+      subscriptionId,
+      toolsListChanged: honored.toolsListChanged === true,
+      pollIntervalMs: params.pollIntervalMs,
+      heartbeatMs: params.heartbeatMs,
+      maxDurationMs: params.maxDurationMs,
+    });
+    [upstream] = (await open) as [IncomingMessage];
+    clearTimeout(deadline);
+    if (upstream.statusCode !== 200)
+      throw new Error("Rust subscription rejected the request");
+    const lines = createInterface({ input: upstream, crlfDelay: Infinity });
+    try {
+      for await (const line of lines) {
+        if (signal.aborted) break;
+        const frame = nativeFrame.parse(JSON.parse(line));
+        if (frame.kind === "poll") {
+          void params.computeFingerprint().then(
+            (value) => send({ kind: "fingerprint", value }),
+            () => send({ kind: "failed" }),
+          );
+          continue;
+        }
+        if (!acknowledged) {
+          startReply(reply);
+          acknowledged = true;
+          registerShutdownStream(request, reply, () => send({ kind: "end" }));
+          params.onAcknowledged?.(honored);
+        }
+        if (!reply.raw.write(frame.value))
+          await once(reply.raw, "drain", { signal });
+      }
+    } finally {
+      lines.close();
+    }
+    if (!acknowledged && !signal.aborted)
+      throw new Error("Rust subscription did not acknowledge");
+    if (acknowledged && !reply.raw.destroyed) reply.raw.end();
+  } catch (err) {
+    if (signal.aborted) return;
+    logger.warn({ err }, "Rust MCP subscription relay failed");
+    if (acknowledged) reply.raw.destroy();
+    else {
+      reply.status(502).send({
+        jsonrpc: "2.0",
+        id: subscriptionId,
+        error: { code: -32603, message: "MCP subscription unavailable" },
+      });
+    }
+  } finally {
+    clearTimeout(deadline);
+    relay.destroy();
+  }
+}
+
+function startReply(reply: FastifyReply): void {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    [MCP_PROTOCOL_VERSION_HEADER]: STATELESS_MCP_PROTOCOL_REVISION,
+  });
 }

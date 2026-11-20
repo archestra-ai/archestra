@@ -12,6 +12,8 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -21,8 +23,10 @@ import type {
   KnowledgeBase,
   UpdateKnowledgeBase,
 } from "@/types";
+import { SelectKnowledgeBaseSchema } from "@/types";
 import type { ConnectorType } from "@/types/knowledge-connector";
 import type { LabelWithDetails } from "@/types/label";
+import { callRustApi } from "@/utils/rust-api";
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -181,6 +185,24 @@ async function buildOrgFilters(params: {
 }
 
 class KnowledgeBaseModel {
+  static async findAuthorizedListIds(
+    params: Pick<
+      Parameters<typeof KnowledgeBaseModel.findByOrganization>[0],
+      | "organizationId"
+      | "canReadAll"
+      | "viewerTeamIds"
+      | "viewerUserId"
+      | "access"
+    >,
+  ): Promise<string[]> {
+    const filters = await buildOrgFilters(params);
+    const rows = await db
+      .select({ id: schema.knowledgeBasesTable.id })
+      .from(schema.knowledgeBasesTable)
+      .where(and(...filters));
+    return rows.map(({ id }) => id);
+  }
+
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
@@ -377,6 +399,78 @@ class KnowledgeBaseModel {
     });
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async createMcpNative(params: {
+    data: Pick<
+      InsertKnowledgeBase,
+      "organizationId" | "name" | "description" | "createdBy"
+    >;
+    initialPermissionGrants: ResourcePermissionGrant[];
+    signal: AbortSignal;
+  }): Promise<KnowledgeBase> {
+    const { data, initialPermissionGrants, signal } = params;
+    const creator = await CreatedByModel.forInsert({
+      data,
+      userIdField: "createdBy",
+    });
+    const grants = ResourcePermissionPolicyModel.initialGrants({
+      resource: "knowledgeBase",
+      authorId: CreatedByModel.id(creator, creator.createdBy) ?? null,
+      grants: initialPermissionGrants,
+    });
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return nativeKnowledgeBaseSchema.parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/create-knowledge-base",
+        json: JSON.stringify({
+          organizationId: data.organizationId,
+          name: data.name,
+          description: data.description,
+          createdBy: creator.createdBy,
+          createdByServiceAccountId: creator.createdByServiceAccountId,
+          grants,
+        }),
+      }),
+    );
+  }
+
+  static async updateMcpNative(params: {
+    id: string;
+    organizationId: string;
+    data: Pick<UpdateKnowledgeBase, "name" | "description"> & {
+      uploadedFilesEnvironmentId?: string | null;
+    };
+    signal: AbortSignal;
+  }): Promise<KnowledgeBase | null> {
+    const { signal, data, ...scope } = params;
+    const { name, description, uploadedFilesEnvironmentId } = data;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return nativeKnowledgeBaseSchema.nullable().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/update-knowledge-base",
+        json: JSON.stringify({
+          ...scope,
+          name,
+          ...(description !== undefined && {
+            description: { value: description },
+          }),
+          ...(uploadedFilesEnvironmentId !== undefined && {
+            uploadedFilesEnvironment: { value: uploadedFilesEnvironmentId },
+          }),
+        }),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
+
   /** The environment of the internal uploads connector, if files were indexed. */
   static async findUploadedFilesEnvironment(
     knowledgeBaseId: string,
@@ -420,6 +514,28 @@ class KnowledgeBaseModel {
 
     return count > 0;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async deleteMcpNative(params: {
+    id: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/delete-knowledge-base",
+        json: JSON.stringify(input),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Restore: clears `deleted_at`, pure stamp-removal. Junction rows (agent
@@ -781,6 +897,19 @@ class KnowledgeBaseModel {
 }
 
 export default KnowledgeBaseModel;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const nativeKnowledgeBaseTimestamp = z.iso
+  .datetime()
+  .transform((value) => new Date(value));
+const nativeKnowledgeBaseSchema = SelectKnowledgeBaseSchema.extend({
+  createdAt: nativeKnowledgeBaseTimestamp,
+  updatedAt: nativeKnowledgeBaseTimestamp,
+  deletedAt: z.null(),
+});
+// SPDX-SnippetEnd
 
 function ownAudienceContext(organizationId: string) {
   return {

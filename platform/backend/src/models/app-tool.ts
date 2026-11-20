@@ -1,4 +1,10 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { and, eq, ne, notInArray } from "drizzle-orm";
+import { z } from "zod";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
@@ -7,6 +13,7 @@ import type {
   ResourceVisibilityScope,
 } from "@/types";
 import type { InsertAppTool } from "@/types/app";
+import { callRustApi } from "@/utils/rust-api";
 
 /**
  * Tool attachments for apps, mirroring `AgentToolModel` with the app as owner.
@@ -165,6 +172,35 @@ class AppToolModel {
 
     return { status: existing ? "updated" : "created" };
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async replaceAssignmentsMcpNative(params: {
+    id: string;
+    organizationId: string;
+    environmentId: string | null;
+    sessionKey?: string;
+    toolIds: string[];
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { signal, ...input } = params;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    signal.throwIfAborted();
+    return z.boolean().parse(
+      await callRustApi({
+        socketPath,
+        path: "/internal/v1/mcp/tools/set-app-tools",
+        json: JSON.stringify({
+          ...input,
+          archestraCatalogId: ARCHESTRA_MCP_CATALOG_ID,
+          playwrightCatalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+        }),
+      }),
+    );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Make the app's assignments exactly `assignments`, in one transaction:

@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,6 +28,8 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: the bundled PostgreSQL (Docker quickstart and Helm)
   - Values: `postgresql://user:password@host:5432/database`
   - Required when you use an external database.
+  - For experimental Rust services and audit reads using a password, add `?sslmode=verify-full` to verify the server certificate and hostname. Add `&sslrootcert=/path/to/ca.pem` for a private CA. Without a custom CA bundle, the Rust client uses the system trust store. Only literal loopback addresses can connect without TLS.
+  - With RDS IAM or Azure Entra enabled, the Rust client always verifies the database certificate and hostname. It obtains a current token for each new connection. Entra supports Workload Identity, managed identity, and client secret credentials in the Rust client.
 
 - **`ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP`** - Runs database migrations before the backend starts.
   - Default: `true`
@@ -37,6 +39,25 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: `50`
   - Values: `1`–`500`
   - In Helm, `archestra.database.connectionBudget` sizes the pool across all pods. This variable and `archestra.database.poolMax` override it. See [Connection Capacity](/docs/admin/deployment/database#connection-capacity).
+
+- **`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED`** - Uses the experimental Rust repository to list audit events.
+  - Default: `false`
+  - For pilot testing only. Uses one additional database connection per backend process. See the Rust connection requirements under [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL).
+
+- **`ARCHESTRA_SERVER_MANAGE_RUST_SERVICES`** - Starts the enabled experimental Rust services after database migrations in the unified image. In standalone Helm worker pods, starts and drains the Rust rollup worker alongside the Node worker.
+  - Default: `false`
+  - Pilot only.
+  - Standalone Helm worker pods manage only the Rust rollup worker. If you enable native API features in those pods, provide a separate Rust API socket.
+  - To enable the API, set a native API feature flag or [`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET). To enable the rollup worker, set [`ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED).
+
+- **`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET`** - Sends audit log listings to the experimental `archestra-api` process. Takes precedence over [`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED).
+  - Default: unset
+  - When launching `archestra-api` separately, pass this path as its first argument and run it with the same database URL and OS user as the backend. The socket directory must have mode `0700`. The unified image can create a private socket automatically when a native API feature is enabled.
+  - If the socket is unavailable, audit log listing fails rather than falling back to another implementation. To switch back, unset this variable and restart the backend.
+
+- **`ARCHESTRA_DATABASE_RUST_SITE_NOTIFICATION_ENABLED`** - Uses the experimental Rust API to replace site notifications and write their success audit records in the same transaction.
+  - Default: `false`
+  - Requires [`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET). Failed requests never retry through the TypeScript implementation.
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - PostgreSQL `statement_timeout` for every pooled connection, in milliseconds.
   - Default: `30000`
@@ -633,6 +654,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Raise it when a model can take more than 5 minutes to start or continue a response.
   - Keep it below your load balancer's request or idle timeout. For a 600-second load balancer timeout, use `540000`.
 
+- **`ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED`** - Uses the experimental Rust API for direct OpenAI Chat Completions streams.
+  - Default: `false`
+  - Set on both processes, with the same OpenAI base URL. Requires [`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET) on the backend.
+  - Supports the official OpenAI endpoint or a loopback test fixture. Subscription credentials, HTTP-proxy environments, and custom upstream timeout settings still use TypeScript.
+
 - **`ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS`** - Longest a streaming response stays silent before Archestra sends an SSE keep-alive comment, in milliseconds.
   - Default: `10000` (10 seconds)
   - Values: `0` turns it off
@@ -775,6 +801,11 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Archestra detects an endpoint that cannot deliver notifications and polls faster on its own. Set this only to avoid opening a listener connection that cannot work.
 
 ## MCP Gateway
+
+- **`ARCHESTRA_MCP_GATEWAY_RUST_DISCOVER_ENABLED`** - Uses the experimental Rust API for MCP POST routing, `server/discover` results, and `subscriptions/listen` streams. Fastify still authorizes requests and records accepted subscriptions.
+  - Default: `false`
+  - Requires [`ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET).
+  - Uses Rust for [`whoami`](/docs/reference/archestra-mcp-server#whoami), team reads ([`list_teams`](/docs/reference/archestra-mcp-server/organization#list_teams), [`get_team`](/docs/reference/archestra-mcp-server/organization#get_team), [`list_team_members`](/docs/reference/archestra-mcp-server/organization#list_team_members), [`list_team_external_groups`](/docs/reference/archestra-mcp-server/organization#list_team_external_groups)), and token usage reads ([`get_agent_token_usage`](/docs/reference/archestra-mcp-server/organization#get_agent_token_usage), [`get_llm_proxy_token_usage`](/docs/reference/archestra-mcp-server/organization#get_llm_proxy_token_usage)) on Streamable HTTP POSTs. Rust also sends eligible remote tool calls, including background tasks and calls authenticated with OAuth or AWS IAM. TypeScript still refreshes OAuth credentials and signs AWS IAM requests.
 
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Timeout for one upstream MCP tool call made through the gateway, in milliseconds.
   - Default: `60000` (60 seconds)
@@ -1229,6 +1260,12 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS`** - How long a stopping worker waits for running tasks to finish.
   - Default: `30`
+
+- **`ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED`** - Reserves LLM usage rollup jobs for the experimental Rust worker.
+  - Default: `false`
+  - Set `true` on every backend worker and on `archestra-worker`. To launch it automatically in the unified image or the standalone Helm worker, also set [`ARCHESTRA_SERVER_MANAGE_RUST_SERVICES=true`](/docs/admin/deployment/configuration#ARCHESTRA_SERVER_MANAGE_RUST_SERVICES). Keep it off for standard deployments.
+  - See the Rust connection requirements under [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL).
+  - To switch back, stop the Rust worker before restarting the backend workers with this setting off.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum time one connector sync run works before it saves a checkpoint and continues in a new run.
   - Default: `3300` (55 minutes)

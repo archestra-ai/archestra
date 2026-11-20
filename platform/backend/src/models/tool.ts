@@ -8,6 +8,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolGroupId,
+  getCreationDefaultArchestraToolShortNames,
   isAppRuntimeOnlyArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -96,6 +97,7 @@ import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
+import { type McpToolReloadScope, writeMcpToolReload } from "./mcp-tool-reload";
 import OrganizationModel from "./organization";
 import { port } from "./ports";
 
@@ -929,6 +931,7 @@ class ToolModel {
       /** The original tool name from the MCP server (e.g., "generate_text"). */
       rawToolName?: string;
     }>,
+    nativeWrite?: McpToolReloadScope,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
       return [];
@@ -964,17 +967,23 @@ class ToolModel {
 
     // Upgrade proxy-discovered tools (catalogId=NULL) to this catalog.
     // Preserves existing tool IDs and agent_tools links.
-    await db
-      .update(schema.toolsTable)
-      .set({ catalogId })
-      .where(
-        and(
-          isNull(schema.toolsTable.catalogId),
-          isNull(schema.toolsTable.agentId),
-          isNull(schema.toolsTable.delegateToAgentId),
-          inArray(schema.toolsTable.name, toolNames),
-        ),
-      );
+    if (nativeWrite) {
+      await writeMcpToolReload(nativeWrite, {
+        kind: "adopt",
+        names: toolNames,
+      });
+    } else
+      await db
+        .update(schema.toolsTable)
+        .set({ catalogId })
+        .where(
+          and(
+            isNull(schema.toolsTable.catalogId),
+            isNull(schema.toolsTable.agentId),
+            isNull(schema.toolsTable.delegateToAgentId),
+            inArray(schema.toolsTable.name, toolNames),
+          ),
+        );
 
     // Fetch all existing tools for this catalog in a single query
     const existingTools = await db
@@ -991,11 +1000,14 @@ class ToolModel {
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
     // Prepare tools to insert (only those that don't exist)
-    const toolsToInsert: InsertTool[] = [];
+    const toolsToInsert: (InsertTool & { rawName: string })[] = [];
     const resultTools: Tool[] = [];
 
     // Collect update promises so they run in parallel instead of N+1 sequential UPDATEs.
     const updatePromises: Promise<Tool>[] = [];
+    // The Rust pilot pool has one connection. Queue independent updates before
+    // dispatch rather than letting a large tool list exhaust pool checkout time.
+    let nativeQueue = Promise.resolve();
 
     for (const tool of tools) {
       const rawName = tool.rawToolName ?? ToolModel.unslugifyName(tool.name);
@@ -1015,20 +1027,38 @@ class ToolModel {
             JSON.stringify(tool.parameters) ||
           JSON.stringify(existingTool.meta) !== JSON.stringify(tool.meta);
         if (changed) {
-          updatePromises.push(
-            db
-              .update(schema.toolsTable)
-              .set({
-                rawName,
-                description: tool.description,
-                parameters: tool.parameters,
-                meta: tool.meta ?? null,
-                updatedAt: new Date(),
-              })
-              .where(eq(schema.toolsTable.id, existingTool.id))
-              .returning()
-              .then(([updated]) => updated ?? existingTool),
-          );
+          const fields = {
+            rawName,
+            description: tool.description,
+            parameters: tool.parameters,
+            meta: tool.meta ?? null,
+          };
+          if (nativeWrite) {
+            const update = nativeQueue
+              .then(() =>
+                writeMcpToolReload(nativeWrite, {
+                  kind: "update",
+                  id: existingTool.id,
+                  tool: { ...fields, name: existingTool.name },
+                  restore: false,
+                }),
+              )
+              .then(([updated]) => updated ?? existingTool);
+            nativeQueue = update.then(
+              () => {},
+              () => {},
+            );
+            updatePromises.push(update);
+          } else {
+            updatePromises.push(
+              db
+                .update(schema.toolsTable)
+                .set({ ...fields, updatedAt: new Date() })
+                .where(eq(schema.toolsTable.id, existingTool.id))
+                .returning()
+                .then(([updated]) => updated ?? existingTool),
+            );
+          }
         } else {
           resultTools.push(existingTool);
         }
@@ -1051,11 +1081,16 @@ class ToolModel {
 
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
-      const insertedTools = await db
-        .insert(schema.toolsTable)
-        .values(toolsToInsert)
-        .onConflictDoNothing()
-        .returning();
+      const insertedTools = nativeWrite
+        ? await ToolModel.insertDiscoveredToolsNative(
+            nativeWrite,
+            toolsToInsert,
+          )
+        : await db
+            .insert(schema.toolsTable)
+            .values(toolsToInsert)
+            .onConflictDoNothing()
+            .returning();
 
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
@@ -1819,19 +1854,51 @@ class ToolModel {
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
+    const toolIds = await ToolModel.getDefaultArchestraToolIds(
+      ToolModel.getDefaultArchestraToolShortNames(),
+    );
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  static async getCreationDefaultToolIds(
+    organizationId: string,
+  ): Promise<string[]> {
+    const organization = await OrganizationModel.getById(organizationId);
+    const openappaEnabled = enterpriseTier.isOpenappaActive();
+    const defaults =
+      ToolModel.getDefaultArchestraToolShortNames(openappaEnabled);
+    const catalogOnly = getCreationDefaultArchestraToolShortNames({
+      skillsEnabled: organization?.skillToolsEnabled === true,
+      sandboxEnabled: config.skillsSandbox.enabled,
+      openappaEnabled,
+    }).filter((name) => !defaults.includes(name));
+
+    // Preserve the legacy lookup scopes: core defaults match by name,
+    // and the additional groups must come from the built-in catalog.
+    const coreIds = await ToolModel.getDefaultArchestraToolIds(defaults);
+    const extraIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      catalogOnly,
+      { organization },
+    );
+    return [...new Set([...coreIds, ...extraIds])];
+  }
+
+  private static getDefaultArchestraToolShortNames(
+    openappaEnabled = enterpriseTier.isOpenappaActive(),
+  ): ArchestraToolShortName[] {
+    return [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...(openappaEnabled ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES : []),
+    ];
+  }
+
+  private static async getDefaultArchestraToolIds(
+    shortNames: ArchestraToolShortName[],
+  ): Promise<string[]> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // Sandbox and persistent-files tools are assigned separately by
-    // `assignSandboxToolsToAgent` (only when the sandbox runtime is on); this
-    // method assigns just the tools every agent gets.
-    const defaultToolShortNames: ArchestraToolShortName[] = [
-      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...(enterpriseTier.isOpenappaActive()
-        ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES
-        : []),
-    ];
-
-    const defaultToolNames = defaultToolShortNames.map((shortName) =>
+    const defaultToolNames = shortNames.map((shortName) =>
       archestraMcpBranding.getToolName(shortName),
     );
 
@@ -1840,15 +1907,7 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.name, defaultToolNames));
 
-    if (defaultTools.length === 0) {
-      // Tools not yet seeded, skip assignment
-      return;
-    }
-
-    const toolIds = defaultTools.map((t) => t.id);
-
-    // Assign tools to agent in bulk
-    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+    return defaultTools.map((tool) => tool.id);
   }
 
   /**
@@ -2991,6 +3050,7 @@ class ToolModel {
       rawToolName?: string;
       meta?: Record<string, unknown>;
     }>,
+    nativeReload?: McpToolReloadScope,
   ): Promise<{
     created: Tool[];
     updated: Tool[];
@@ -3015,7 +3075,12 @@ class ToolModel {
 
     // Upgrade proxy-discovered tools (catalogId=NULL) to this catalog.
     // Defensive: proxy tools could be created between install and reinstall.
-    if (toolNames.length > 0) {
+    if (nativeReload) {
+      await writeMcpToolReload(nativeReload, {
+        kind: "adopt",
+        names: toolNames,
+      });
+    } else if (toolNames.length > 0) {
       await db
         .update(schema.toolsTable)
         .set({ catalogId })
@@ -3087,7 +3152,7 @@ class ToolModel {
     const created: Tool[] = [];
     const updated: Tool[] = [];
     const unchanged: Tool[] = [];
-    const toolsToInsert: InsertTool[] = [];
+    const toolsToInsert: (InsertTool & { rawName: string })[] = [];
 
     // Collect update promises so they run in parallel instead of N+1 sequential UPDATEs.
     const syncUpdatePromises: Promise<Tool | null>[] = [];
@@ -3151,21 +3216,27 @@ class ToolModel {
           metaChanged ||
           rawNameChanged
         ) {
+          const fields = {
+            name: targetName,
+            rawName,
+            description: tool.description,
+            parameters: tool.parameters,
+            meta: tool.meta,
+          };
           syncUpdatePromises.push(
-            db
-              .update(schema.toolsTable)
-              .set({
-                name: targetName,
-                rawName,
-                description: tool.description,
-                parameters: tool.parameters,
-                meta: tool.meta,
-                deletedAt: null,
-                updatedAt: new Date(),
-              })
-              .where(eq(schema.toolsTable.id, existingTool.id))
-              .returning()
-              .then(([updatedTool]) => updatedTool ?? null),
+            (nativeReload
+              ? writeMcpToolReload(nativeReload, {
+                  kind: "update",
+                  id: existingTool.id,
+                  tool: { ...fields, meta: fields.meta ?? existingTool.meta },
+                  restore: true,
+                })
+              : db
+                  .update(schema.toolsTable)
+                  .set({ ...fields, deletedAt: null, updatedAt: new Date() })
+                  .where(eq(schema.toolsTable.id, existingTool.id))
+                  .returning()
+            ).then(([updatedTool]) => updatedTool ?? null),
           );
         } else {
           unchanged.push(existingTool);
@@ -3193,11 +3264,16 @@ class ToolModel {
 
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
-      const insertedTools = await db
-        .insert(schema.toolsTable)
-        .values(toolsToInsert)
-        .onConflictDoNothing()
-        .returning();
+      const insertedTools = nativeReload
+        ? await ToolModel.insertDiscoveredToolsNative(
+            nativeReload,
+            toolsToInsert,
+          )
+        : await db
+            .insert(schema.toolsTable)
+            .values(toolsToInsert)
+            .onConflictDoNothing()
+            .returning();
 
       created.push(...insertedTools);
     }
@@ -3262,27 +3338,50 @@ class ToolModel {
 
             if (existingAssignment.length === 0) {
               // No existing assignment, create one for the target tool
-              await db.insert(schema.agentToolsTable).values({
+              const assignment = {
                 agentId: agentTool.agentId,
                 toolId: targetTool.id,
                 mcpServerId: agentTool.mcpServerId,
                 credentialResolutionMode: agentTool.credentialResolutionMode,
-              });
+              };
+              if (nativeReload)
+                await writeMcpToolReload(nativeReload, {
+                  kind: "transfer",
+                  assignment,
+                });
+              else await db.insert(schema.agentToolsTable).values(assignment);
             }
           }
         }
       }
 
       // Now safe to delete orphaned tools - agent_tools have been transferred
-      await db.delete(schema.toolsTable).where(
-        inArray(
-          schema.toolsTable.id,
-          orphanedTools.map((t) => t.id),
-        ),
-      );
+      const ids = orphanedTools.map((t) => t.id);
+      if (nativeReload)
+        await writeMcpToolReload(nativeReload, { kind: "delete", ids });
+      else
+        await db
+          .delete(schema.toolsTable)
+          .where(inArray(schema.toolsTable.id, ids));
     }
 
     return { created, updated, unchanged, deleted: orphanedTools };
+  }
+
+  private static async insertDiscoveredToolsNative(
+    scope: McpToolReloadScope,
+    tools: (InsertTool & { rawName: string })[],
+  ): Promise<Tool[]> {
+    return writeMcpToolReload(scope, {
+      kind: "insert",
+      tools: tools.map(({ name, rawName, description, parameters, meta }) => ({
+        name,
+        rawName,
+        description: description ?? null,
+        parameters: parameters ?? {},
+        meta,
+      })),
+    });
   }
 
   /**

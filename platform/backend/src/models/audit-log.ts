@@ -1,3 +1,4 @@
+import { createCursorPaginatedResponseSchema } from "@archestra/shared";
 import {
   and,
   asc,
@@ -16,10 +17,12 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import {
   isServiceAccountUserId,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
 } from "@/auth/service-account-user-id";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   type CursorPaginatedResult,
@@ -29,15 +32,23 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import { auditLogExporter } from "@/observability/audit-log-export";
-import type {
-  AuditActorType,
-  AuditEventName,
-  AuditLog,
-  AuditLogWithImpersonator,
-  AuditOutcome,
-  InsertAuditLog,
-  SortDirection,
+import {
+  type AuditActorType,
+  type AuditEventName,
+  type AuditLog,
+  type AuditLogWithImpersonator,
+  AuditLogWithImpersonatorSchema,
+  type AuditOutcome,
+  type InsertAuditLog,
+  type SortDirection,
 } from "@/types";
+import { callRustApi } from "@/utils/rust-api";
+
+const nativeAuditRow = AuditLogWithImpersonatorSchema.extend({
+  createdAt: z.coerce.date(),
+  occurredAt: z.coerce.date(),
+});
+const nativeAuditPage = createCursorPaginatedResponseSchema(nativeAuditRow);
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[%_\\]/g, "\\$&");
@@ -166,8 +177,9 @@ class AuditLogModel {
     organizationId: string;
     limit: number;
     cursor?: string;
-    startDate?: Date;
-    endDate?: Date;
+    ownActorId?: string;
+    startDate?: string;
+    endDate?: string;
     actorId?: string;
     action?: AuditEventName;
     outcome?: AuditOutcome;
@@ -177,7 +189,50 @@ class AuditLogModel {
   }): Promise<CursorPaginatedResult<AuditLogWithImpersonator>> {
     const { limit, cursor } = opts;
 
-    const conditions = AuditLogModel.buildFilterConditions(opts);
+    const nativeSocket = config.database.rustAuditLogSocket;
+    if (nativeSocket || config.database.rustAuditLogEnabled) {
+      const query = JSON.stringify({
+        organizationId: opts.organizationId,
+        visibility:
+          opts.ownActorId === undefined
+            ? { kind: "organization" }
+            : { kind: "ownEvents", actorId: opts.ownActorId },
+        limit,
+        cursor,
+        startDate: opts.startDate,
+        endDate: opts.endDate,
+        actorId: opts.actorId,
+        action: opts.action,
+        outcome: opts.outcome,
+        actorType: opts.actorType,
+        resourceType: opts.resourceType,
+        resourceId: opts.resourceId,
+      });
+      if (nativeSocket) {
+        return nativeAuditPage.parse(
+          await callRustApi({
+            socketPath: nativeSocket,
+            path: "/internal/v1/audit-logs/list",
+            json: query,
+          }),
+        );
+      }
+      const { listAuditRows } = await import("@archestra/archestra-db-rs");
+      const rows = nativeAuditRow
+        .array()
+        .parse(JSON.parse(await listAuditRows(config.database.url, query)));
+      return createCursorPaginatedResult(rows, { limit, cursor }, (row) => ({
+        value: row.createdAt.toISOString(),
+        id: String(row.eventSequence),
+      }));
+    }
+
+    const conditions = AuditLogModel.buildFilterConditions({
+      ...opts,
+      startDate: opts.startDate ? new Date(opts.startDate) : undefined,
+      endDate: opts.endDate ? new Date(opts.endDate) : undefined,
+      actorId: opts.ownActorId ?? opts.actorId,
+    });
 
     // An unreadable cursor is treated as no cursor, so a stale or truncated
     // link lands on the newest page instead of erroring.

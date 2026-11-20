@@ -159,22 +159,68 @@ Percentage maxSurge values round up, matching Kubernetes Deployment behavior.
 {{- add $replicas $surge -}}
 {{- end }}
 
+{{/* Reserve for flags whose values are not visible at render time. */}}
+{{- define "archestra-platform.nativeEnvMayEnable" -}}
+{{- $archestra := .root.Values.archestra -}}
+{{- $enabled := false -}}
+{{- if hasKey $archestra.env .name -}}
+  {{- $value := toString (get $archestra.env .name | default "") -}}
+  {{- $enabled = or (contains "$(" $value) (eq $value "true") (and .nonempty (ne $value "")) -}}
+{{- else -}}
+  {{- range $archestra.envFrom -}}
+    {{- if hasPrefix (.prefix | default "") $.name -}}{{- $enabled = true -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- range concat ($archestra.envFromSecrets | default list) ($archestra.envWithValueFrom | default list) -}}
+  {{- if eq .name $.name -}}{{- $enabled = true -}}{{- end -}}
+{{- end -}}
+{{- if $archestra.initContainers.vaultSecrets.enabled -}}
+  {{- range $archestra.initContainers.vaultSecrets.secrets -}}
+    {{- if eq .envVar $.name -}}{{- $enabled = true -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $enabled -}}
+{{- end }}
+
+{{- define "archestra-platform.nativeConnectionReserve" -}}
+{{- $root := .root -}}
+{{- $managed := eq (include "archestra-platform.nativeEnvMayEnable" (dict "root" $root "name" "ARCHESTRA_SERVER_MANAGE_RUST_SERVICES")) "true" -}}
+{{- $rollup := eq (include "archestra-platform.nativeEnvMayEnable" (dict "root" $root "name" "ARCHESTRA_TASK_QUEUE_RUST_ROLLUP_ENABLED")) "true" -}}
+{{- $socket := eq (include "archestra-platform.nativeEnvMayEnable" (dict "root" $root "name" "ARCHESTRA_DATABASE_RUST_AUDIT_LOG_SOCKET" "nonempty" true)) "true" -}}
+{{- $audit := eq (include "archestra-platform.nativeEnvMayEnable" (dict "root" $root "name" "ARCHESTRA_DATABASE_RUST_AUDIT_LOG_ENABLED")) "true" -}}
+{{- $api := false -}}
+{{- range list "ARCHESTRA_DATABASE_RUST_SITE_NOTIFICATION_ENABLED" "ARCHESTRA_LLM_PROXY_RUST_OPENAI_STREAM_ENABLED" "ARCHESTRA_MCP_GATEWAY_RUST_DISCOVER_ENABLED" -}}
+  {{- if eq (include "archestra-platform.nativeEnvMayEnable" (dict "root" $root "name" .)) "true" -}}{{- $api = true -}}{{- end -}}
+{{- end -}}
+{{- /* A socket takes precedence over the in-process audit pool. Only the web image starts its own API. */ -}}
+{{- $reserve := mul .webPods (ternary 1 0 (or $socket $audit (and $managed $api))) -}}
+{{- $reserve = add $reserve (mul .workerPods (ternary 1 0 (or $socket $audit))) -}}
+{{- if and $managed $rollup -}}
+  {{- if $root.Values.archestra.worker.enabled -}}
+    {{- $reserve = add $reserve .workerPods -}}
+  {{- else -}}
+    {{- $reserve = add $reserve .webPods -}}
+  {{- end -}}
+{{- end -}}
+{{- $reserve -}}
+{{- end }}
+
 {{/*
 Divide the connection budget across web and worker rollout pods. Each pod
 reserves ten cache connections and two notification listeners outside its query
-pool. HPA maxReplicas is the web ceiling. Overlapping rollouts need extra headroom.
+pool. Reserve the native pools separately because they can differ by pod type.
 */}}
 {{- define "archestra-platform.databasePoolMax" -}}
 {{- $webReplicas := int .Values.archestra.replicaCount -}}
 {{- if .Values.archestra.horizontalPodAutoscaler.enabled -}}
   {{- $webReplicas = int .Values.archestra.horizontalPodAutoscaler.maxReplicas -}}
 {{- end -}}
-{{- $peakPods := int (include "archestra-platform.rolloutPodCount" (dict "replicas" $webReplicas "strategy" .Values.archestra.deploymentStrategy)) -}}
+{{- $webPods := int (include "archestra-platform.rolloutPodCount" (dict "replicas" $webReplicas "strategy" .Values.archestra.deploymentStrategy)) -}}
+{{- $workerPods := 0 -}}
 {{- if .Values.archestra.worker.enabled -}}
-  {{- $workerPods := int (include "archestra-platform.rolloutPodCount" (dict "replicas" .Values.archestra.worker.replicaCount "strategy" .Values.archestra.worker.deploymentStrategy)) -}}
-  {{- $peakPods = add $peakPods $workerPods -}}
+  {{- $workerPods = int (include "archestra-platform.rolloutPodCount" (dict "replicas" .Values.archestra.worker.replicaCount "strategy" .Values.archestra.worker.deploymentStrategy)) -}}
 {{- end -}}
-{{- $peakPods = max 1 $peakPods -}}
+{{- $peakPods := max 1 (add $webPods $workerPods) -}}
 {{- $configuredPoolMax := .Values.archestra.database.poolMax -}}
 {{- if ne (toString $configuredPoolMax) "<nil>" -}}
   {{- if or (lt (int $configuredPoolMax) 1) (gt (int $configuredPoolMax) 500) -}}
@@ -183,10 +229,14 @@ pool. HPA maxReplicas is the web ceiling. Overlapping rollouts need extra headro
   {{- int $configuredPoolMax -}}
 {{- else -}}
   {{- $budget := int .Values.archestra.database.connectionBudget -}}
-  {{- $connectionsPerPod := div $budget $peakPods -}}
-  {{- if lt $connectionsPerPod 13 -}}
+  {{- $nativeReserve := int (include "archestra-platform.nativeConnectionReserve" (dict "root" . "webPods" $webPods "workerPods" $workerPods)) -}}
+  {{- $minimum := add (mul 13 $peakPods) $nativeReserve -}}
+  {{- if and (lt $budget $minimum) (gt $nativeReserve 0) -}}
+    {{- fail (printf "Configuration error: archestra.database.connectionBudget (%d) must provide at least %d connections for %d peak backend pods, including %d reserved for native pools." $budget $minimum $peakPods $nativeReserve) -}}
+  {{- else if lt $budget $minimum -}}
     {{- fail (printf "Configuration error: archestra.database.connectionBudget (%d) must provide at least 13 connections (1 query, 10 cache, 2 listeners) for each of the %d peak backend pods." $budget $peakPods) -}}
   {{- end -}}
+  {{- $connectionsPerPod := div (sub $budget $nativeReserve) $peakPods -}}
   {{- min 500 (sub $connectionsPerPod 12) -}}
 {{- end -}}
 {{- end }}

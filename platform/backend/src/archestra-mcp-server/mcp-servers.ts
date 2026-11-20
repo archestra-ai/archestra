@@ -20,6 +20,10 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth/agent-type-permissions";
+import {
   getMcpCatalogPermissionChecker,
   isMcpInstallationAdmin,
 } from "@/auth/mcp-catalog-permissions";
@@ -893,10 +897,23 @@ async function handleEditMcpDescription(
 
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
-    const updated = await InternalMcpCatalogModel.update(
-      existing.id,
-      validatedUpdate,
-    );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const execution = context.gatewayExecution;
+    const updated = execution?.native
+      ? await InternalMcpCatalogModel.editDescriptionMcpNative({
+          existing,
+          data: validatedUpdate,
+          signal: execution.signal,
+        })
+      : await InternalMcpCatalogModel.update(existing.id, validatedUpdate);
+    if (updated === "duplicate_label") {
+      return errorResult(
+        "A record with the same value already exists (editing MCP server description)",
+      );
+    }
+    // SPDX-SnippetEnd
 
     if (!updated) {
       return errorResult("failed to update MCP server.");
@@ -917,6 +934,9 @@ async function handleEditMcpDescription(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "editing MCP server description");
   }
 }
@@ -942,12 +962,14 @@ async function handleEditMcpConfig(
       organizationId,
     });
 
+    const execution = context.gatewayExecution;
     const existing = await InternalMcpCatalogModel.findById(args.id, {
       accessAction: "update",
       // Never hydrate on a write path: the merged config is persisted and
       // echoed, so an expanded secret would land back in the jsonb column and
       // in the tool result.
       expandSecrets: false,
+      includeWriteRevision: execution?.native,
       userId: context.userId,
       isAdmin: checker.isAdmin,
       organizationId,
@@ -1099,6 +1121,7 @@ async function handleEditMcpConfig(
       mergedAwsIamSettings({ update: validatedUpdate, current: existing }),
     );
     if (awsIamConflict) return errorResult(awsIamConflict);
+    if (execution?.native) execution.signal.throwIfAborted();
     await moveCatalogSecretsToBag({
       updateData: validatedUpdate as Record<string, unknown>,
       catalogName: existing.name,
@@ -1116,10 +1139,17 @@ async function handleEditMcpConfig(
         // SPDX-SnippetEnd
       ],
     });
-    const updated = await InternalMcpCatalogModel.update(
-      existing.id,
-      validatedUpdate,
-    );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const updated = execution?.native
+      ? await InternalMcpCatalogModel.editConfigMcpNative({
+          existing,
+          data: validatedUpdate,
+          signal: execution.signal,
+        })
+      : await InternalMcpCatalogModel.update(existing.id, validatedUpdate);
+    // SPDX-SnippetEnd
 
     if (!updated) {
       return errorResult("failed to update MCP server config.");
@@ -1147,6 +1177,9 @@ async function handleEditMcpConfig(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "editing MCP server config");
   }
 }
@@ -1307,17 +1340,30 @@ async function handleCreateMcpServer(
       });
       // SPDX-SnippetEnd
     }
+    const execution = context.gatewayExecution;
+    if (execution?.native) execution.signal.throwIfAborted();
     await moveCatalogSecretsToBag({
       updateData: validatedParams as Record<string, unknown>,
       catalogName: name,
       existingLocalConfigSecretId: null,
       existingClientSecretId: null,
     });
-    const created = await InternalMcpCatalogModel.create(validatedParams, {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const createContext = {
       organizationId,
       authorId: context.userId,
       initialPermissionGrants: args.initialGrants ?? [],
-    });
+    };
+    const created = execution?.native
+      ? await InternalMcpCatalogModel.createMcpNative({
+          data: validatedParams,
+          ...createContext,
+          signal: execution.signal,
+        })
+      : await InternalMcpCatalogModel.create(validatedParams, createContext);
+    // SPDX-SnippetEnd
 
     const lines = [
       "Successfully created MCP server.",
@@ -1345,6 +1391,9 @@ async function handleCreateMcpServer(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "creating MCP server");
   }
 }
@@ -1520,15 +1569,28 @@ async function handleDeployMcpServer(
       throw error;
     }
 
-    const mcpServer = await McpServerModel.create({
-      name: catalogItem.name,
-      catalogId: args.catalogId,
-      serverType: catalogItem.serverType,
-      ownerId: context.userId,
+    const execution = context.gatewayExecution;
+    const mcpServer = await McpServerModel.deployMcpTool({
+      catalog: catalogItem,
+      organizationId,
       userId: context.userId,
       scope,
-      ...(teamId && { teamId }),
+      teamId,
+      nativeSignal: execution?.native ? execution.signal : undefined,
     });
+    if (!mcpServer) return errorResult("catalog item not found.");
+    const discovery = {
+      args,
+      mcpServer,
+      catalogItem,
+      ownerAgentId: context.agent.id,
+      organizationId,
+      userId: context.userId,
+      tokenAuth: context.tokenAuth,
+      nativeWrite: execution?.native
+        ? { organizationId, catalogId: catalogItem.id, serverId: mcpServer.id }
+        : undefined,
+    };
 
     if (catalogItem.serverType === "local") {
       if (!McpServerRuntimeManager.isEnabled) {
@@ -1549,23 +1611,11 @@ async function handleDeployMcpServer(
       broadcastMcpInstallationStatus(mcpServer.id, "pending", null);
       await McpServerRuntimeManager.startServer(mcpServer);
 
-      void discoverLocalMcpServerTools({
-        args,
-        mcpServer,
-        catalogItem,
-        ownerAgentId: context.agent.id,
-        tokenAuth: context.tokenAuth,
-      });
+      void discoverLocalMcpServerTools(discovery);
     }
 
     if (catalogItem.serverType === "remote") {
-      await discoverRemoteMcpServerTools({
-        args,
-        mcpServer,
-        catalogItem,
-        ownerAgentId: context.agent.id,
-        tokenAuth: context.tokenAuth,
-      });
+      await discoverRemoteMcpServerTools(discovery);
     }
 
     const lines = [
@@ -1579,6 +1629,9 @@ async function handleDeployMcpServer(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, "deploying MCP server");
   }
@@ -1757,18 +1810,26 @@ async function handleReloadMcpServerTools(
       );
     }
 
-    const result = await reloadToolsForServer(server);
+    const execution = context.gatewayExecution;
+    const result = await reloadToolsForServer(server, {
+      nativeReload: execution?.native
+        ? { organizationId, signal: execution.signal }
+        : undefined,
+    });
 
     return structuredSuccessResult(
       { serverId: server.id, ...result },
       `Reloaded tools for ${server.name}: ${result.created} added, ${result.updated} updated, ${result.deleted} removed, ${result.unchanged} unchanged.`,
     );
   } catch (error) {
+    const signal = context.gatewayExecution?.signal;
+    if (signal?.aborted && error === signal.reason)
+      return errorResult("Tool call cancelled");
     return catchError(error, "reloading MCP server tools");
   }
 }
 
-async function discoverLocalMcpServerTools(params: {
+type DeploymentDiscovery = {
   args: DeployMcpServerArgs;
   mcpServer: Awaited<ReturnType<typeof McpServerModel.create>>;
   catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>> & {
@@ -1776,9 +1837,16 @@ async function discoverLocalMcpServerTools(params: {
     name: string;
   };
   ownerAgentId: string;
+  organizationId: string;
+  userId: string;
   tokenAuth: ArchestraContext["tokenAuth"];
-}): Promise<void> {
-  const { args, mcpServer, catalogItem } = params;
+  nativeWrite?: Parameters<typeof ToolModel.bulkCreateToolsIfNotExists>[1];
+};
+
+async function discoverLocalMcpServerTools(
+  params: DeploymentDiscovery,
+): Promise<void> {
+  const { mcpServer, catalogItem } = params;
 
   try {
     const k8sDeployment = await McpServerRuntimeManager.getOrLoadDeployment(
@@ -1804,38 +1872,7 @@ async function discoverLocalMcpServerTools(params: {
     });
     broadcastMcpInstallationStatus(mcpServer.id, "discovering-tools", null);
 
-    const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
-    const toolNameFor = await mintCatalogToolNames({
-      catalogId: catalogItem.id,
-      rawToolNames: discoveredTools.map((tool) => tool.name),
-    });
-    const toolsToCreate = discoveredTools.map((tool) => ({
-      name: toolNameFor(tool.name),
-      rawToolName: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema,
-      meta: {
-        _meta: tool._meta,
-        annotations: tool.annotations,
-        outputSchema: tool.outputSchema,
-      },
-      catalogId: catalogItem.id,
-    }));
-
-    if (toolsToCreate.length > 0) {
-      const createdTools =
-        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
-      await recordInstallToolDescriptions({
-        mcpServerId: mcpServer.id,
-        syncedTools: createdTools,
-        reported: toolsToCreate,
-      });
-      await assignDiscoveredToolsToAgents({
-        agentIds: args.agentIds ?? [],
-        toolIds: createdTools.map((tool) => tool.id),
-        mcpServerId: mcpServer.id,
-      });
-    }
+    await discoverAndPersistDeploymentTools(params);
 
     await McpServerModel.update(mcpServer.id, {
       localInstallationStatus: "success",
@@ -1865,50 +1902,13 @@ async function discoverLocalMcpServerTools(params: {
   }
 }
 
-async function discoverRemoteMcpServerTools(params: {
-  args: DeployMcpServerArgs;
-  mcpServer: Awaited<ReturnType<typeof McpServerModel.create>>;
-  catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>> & {
-    id: string;
-    name: string;
-  };
-  ownerAgentId: string;
-  tokenAuth: ArchestraContext["tokenAuth"];
-}): Promise<void> {
-  const { args, mcpServer, catalogItem } = params;
+async function discoverRemoteMcpServerTools(
+  params: DeploymentDiscovery,
+): Promise<void> {
+  const { mcpServer, catalogItem } = params;
 
   try {
-    const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
-    if (discoveredTools.length > 0) {
-      const toolNameFor = await mintCatalogToolNames({
-        catalogId: catalogItem.id,
-        rawToolNames: discoveredTools.map((tool) => tool.name),
-      });
-      const toolsToCreate = discoveredTools.map((tool) => ({
-        name: toolNameFor(tool.name),
-        rawToolName: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema,
-        meta: {
-          _meta: tool._meta,
-          annotations: tool.annotations,
-          outputSchema: tool.outputSchema,
-        },
-        catalogId: catalogItem.id,
-      }));
-      const createdTools =
-        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
-      await recordInstallToolDescriptions({
-        mcpServerId: mcpServer.id,
-        syncedTools: createdTools,
-        reported: toolsToCreate,
-      });
-      await assignDiscoveredToolsToAgents({
-        agentIds: args.agentIds ?? [],
-        toolIds: createdTools.map((tool) => tool.id),
-        mcpServerId: mcpServer.id,
-      });
-    }
+    await discoverAndPersistDeploymentTools(params);
     await refreshMcpSkillMetadata({
       catalogId: catalogItem.id,
       mcpServerId: mcpServer.id,
@@ -1926,20 +1926,85 @@ async function discoverRemoteMcpServerTools(params: {
   }
 }
 
-async function assignDiscoveredToolsToAgents(params: {
-  agentIds: string[];
-  toolIds: string[];
-  mcpServerId: string;
-}): Promise<void> {
-  const { agentIds, toolIds, mcpServerId } = params;
-
-  if (agentIds.length === 0 || toolIds.length === 0) {
-    return;
-  }
-
-  await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-    mcpServerId,
+async function discoverAndPersistDeploymentTools(
+  params: DeploymentDiscovery,
+): Promise<void> {
+  const { args, mcpServer, catalogItem, nativeWrite } = params;
+  const discovered = await McpServerModel.getToolsFromServer(mcpServer);
+  if (!discovered.length && mcpServer.serverType === "remote") return;
+  const toolNameFor = await mintCatalogToolNames({
+    catalogId: catalogItem.id,
+    rawToolNames: discovered.map(({ name }) => name),
   });
+  if (!discovered.length) return;
+  const reported = discovered.map((tool) => ({
+    name: toolNameFor(tool.name),
+    rawToolName: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema,
+    meta: {
+      _meta: tool._meta,
+      annotations: tool.annotations,
+      outputSchema: tool.outputSchema,
+    },
+    catalogId: catalogItem.id,
+  }));
+  const tools = await ToolModel.bulkCreateToolsIfNotExists(
+    reported,
+    nativeWrite,
+  );
+  await recordInstallToolDescriptions({
+    mcpServerId: mcpServer.id,
+    syncedTools: tools,
+    reported,
+    nativeReload: nativeWrite,
+  });
+  const agentIds = [...new Set(args.agentIds)];
+  const toolIds = tools.map(({ id }) => id);
+  if (!agentIds.length || !toolIds.length) return;
+  const environmentId = await authorizeDeploymentToolTargets({
+    ...params,
+    agentIds,
+  });
+  if (nativeWrite) {
+    await AgentToolModel.attachDeploymentToolsNative({
+      scope: nativeWrite,
+      agentIds,
+      toolIds,
+      environmentId,
+    });
+  } else {
+    await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
+      mcpServerId: mcpServer.id,
+    });
+  }
+}
+
+async function authorizeDeploymentToolTargets(params: {
+  agentIds: string[];
+  ownerAgentId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<string | null> {
+  const { agentIds, organizationId, userId, ownerAgentId } = params;
+  const [targets, checker, environmentId] = await Promise.all([
+    AgentModel.findByIdsForPermissionCheck(agentIds, organizationId),
+    getAgentTypePermissionChecker({ organizationId, userId }),
+    AgentModel.findEnvironmentId(ownerAgentId),
+  ]);
+  for (const agentId of agentIds) {
+    const target = targets.get(agentId);
+    if (!target || target.environmentId !== environmentId)
+      throw new ApiError(404, "Deployment tool assignment target not found.");
+    checker.require(target.agentType, { action: "update", scope: agentId });
+    requireAgentModifyPermission({
+      agentId,
+      agentType: target.agentType,
+      action: "update",
+      checker,
+    });
+  }
+  return environmentId;
 }
 
 /**
@@ -2003,7 +2068,7 @@ async function authorizeDeployScope(params: {
 
   if (scope === "team" && teamId) {
     const team = await TeamModel.findById(teamId, { includeMembers: false });
-    if (!team) {
+    if (!team || team.organizationId !== organizationId) {
       return "Team not found.";
     }
     const isInstallationAdmin = await isMcpInstallationAdmin({

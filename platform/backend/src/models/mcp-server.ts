@@ -24,6 +24,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -49,6 +50,7 @@ import type {
   UpdateMcpServer,
 } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
+import { callRustApi } from "@/utils/rust-api";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 import AgentToolModel from "./agent-tool";
 import CreatedByModel from "./created-by";
@@ -236,6 +238,91 @@ class McpServerModel {
       users: userId ? [userId] : [],
     };
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async deployMcpTool(params: {
+    catalog: {
+      id: string;
+      name: string;
+      serverType: InternalMcpCatalogServerType;
+      organizationId: string | null;
+      environmentId: string | null;
+    };
+    organizationId: string;
+    userId: string;
+    scope: ResourceVisibilityScope;
+    teamId: string | null;
+    nativeSignal?: AbortSignal;
+  }): Promise<McpServer | null> {
+    const { catalog, organizationId, userId, scope, teamId, nativeSignal } =
+      params;
+    if (!nativeSignal) {
+      return await withDbTransaction((tx) =>
+        McpServerModel.create(
+          {
+            catalogId: catalog.id,
+            name: catalog.name,
+            serverType: catalog.serverType,
+            ownerId: userId,
+            userId,
+            scope,
+            ...(teamId && { teamId }),
+          },
+          tx,
+        ),
+      );
+    }
+    const creator = await CreatedByModel.forInsert({
+      data: {
+        ownerId: userId,
+        organizationId: catalog.organizationId ?? undefined,
+      },
+      userIdField: "ownerId",
+    });
+    const name = McpServerModel.constructServerName({
+      baseName: catalog.name,
+      serverType: catalog.serverType,
+      scope,
+      ownerId: userId,
+      teamId,
+    });
+    const id = crypto.randomUUID();
+    const deploymentName =
+      catalog.serverType === "local"
+        ? constructFrozenMcpDeploymentName(name, id)
+        : null;
+    const socketPath = config.database.rustAuditLogSocket;
+    if (!socketPath) throw new Error("Rust MCP tool socket is not configured");
+    nativeSignal.throwIfAborted();
+    const created = z
+      .uuid()
+      .nullable()
+      .parse(
+        await callRustApi({
+          socketPath,
+          path: "/internal/v1/mcp/tools/deploy-mcp-server",
+          json: JSON.stringify({
+            id,
+            catalogId: catalog.id,
+            organizationId,
+            environmentId: catalog.environmentId,
+            name,
+            deploymentName,
+            serverType: catalog.serverType,
+            scope,
+            teamId,
+            ownerId: creator.ownerId,
+            createdByServiceAccountId: creator.createdByServiceAccountId,
+          }),
+        }),
+      );
+    if (!created) return null;
+    const [row] = await McpServerModel.findByIdsBasic([created]);
+    return row ? { ...row, users: [userId] } : null;
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Writes the frozen `deployment_name`. Deliberately bypasses the

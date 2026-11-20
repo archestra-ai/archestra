@@ -82,12 +82,13 @@ const registry = defineArchestraTools([
     schema: InteractionListArgsSchema,
     async handler({ args, context }) {
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const scope = await logScope(context);
         if (!scope)
           return errorResult("User and organization context required.");
-        const result = await InteractionModel.findSummariesPaginated({
+        const query = {
           pagination: { limit: args.limit, offset: args.offset },
-          sorting: { sortBy: "createdAt", sortDirection: "desc" },
           filters: {
             organizationId: scope.organizationId,
             profileId: args.profile_id,
@@ -97,9 +98,20 @@ const registry = defineArchestraTools([
             startDate: args.start_date ? new Date(args.start_date) : undefined,
             endDate: args.end_date ? new Date(args.end_date) : undefined,
           },
-        });
+        };
+        const result = execution?.native
+          ? await InteractionModel.findMcpSummariesNative({
+              ...query,
+              signal: execution.signal,
+            })
+          : await InteractionModel.findSummariesPaginated({
+              ...query,
+              sorting: { sortBy: "createdAt", sortDirection: "desc" },
+            });
         return structuredSuccessResult({ ...result });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "listing LLM interactions");
       }
     },
@@ -112,13 +124,21 @@ const registry = defineArchestraTools([
     schema: InteractionArgsSchema,
     async handler({ args, context }) {
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const scope = await logScope(context);
         if (!scope)
           return errorResult("User and organization context required.");
-        const interaction = await InteractionModel.findById({
-          id: args.interaction_id,
-          organizationId: scope.organizationId,
-        });
+        const interaction = execution?.native
+          ? await InteractionModel.findMcpDetailNative({
+              id: args.interaction_id,
+              ...scope,
+              signal: execution.signal,
+            })
+          : await InteractionModel.findById({
+              id: args.interaction_id,
+              organizationId: scope.organizationId,
+            });
         if (
           !interaction ||
           (scope.ownUserId && interaction.userId !== scope.ownUserId)
@@ -127,6 +147,8 @@ const registry = defineArchestraTools([
         }
         return structuredSuccessResult({ interaction });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "getting an LLM interaction");
       }
     },
@@ -139,24 +161,36 @@ const registry = defineArchestraTools([
     schema: SessionListArgsSchema,
     async handler({ args, context }) {
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const scope = await logScope(context);
         if (!scope)
           return errorResult("User and organization context required.");
-        const result = await InteractionModel.getSessionsCursor(
-          { limit: args.limit, cursor: args.cursor },
-          undefined,
-          undefined,
-          {
-            organizationId: scope.organizationId,
-            profileId: args.profile_id,
-            userId: scope.ownUserId ?? args.user_id,
-            sessionId: args.session_id,
-            startDate: args.start_date ? new Date(args.start_date) : undefined,
-            endDate: args.end_date ? new Date(args.end_date) : undefined,
-          },
-        );
+        const cursorQuery = { limit: args.limit, cursor: args.cursor };
+        const filters = {
+          organizationId: scope.organizationId,
+          profileId: args.profile_id,
+          userId: scope.ownUserId ?? args.user_id,
+          sessionId: args.session_id,
+          startDate: args.start_date ? new Date(args.start_date) : undefined,
+          endDate: args.end_date ? new Date(args.end_date) : undefined,
+        };
+        const result = execution?.native
+          ? await InteractionModel.getMcpSessionsNative({
+              cursorQuery,
+              filters,
+              signal: execution.signal,
+            })
+          : await InteractionModel.getSessionsCursor(
+              cursorQuery,
+              undefined,
+              undefined,
+              filters,
+            );
         return structuredSuccessResult({ ...result });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "listing LLM sessions");
       }
     },
@@ -169,22 +203,35 @@ const registry = defineArchestraTools([
     schema: SessionLogsArgsSchema,
     async handler({ args, context }) {
       try {
+        const execution = context.gatewayExecution;
+        execution?.signal.throwIfAborted();
         const scope = await logScope(context);
         if (!scope)
           return errorResult("User and organization context required.");
-        const result = await InteractionModel.findAllPaginated(
-          { limit: args.limit, offset: args.offset },
-          { sortBy: "createdAt", sortDirection: "asc" },
-          undefined,
-          undefined,
-          {
-            organizationId: scope.organizationId,
-            userId: scope.ownUserId,
-            sessionId: args.session_id,
-          },
-        );
+        const pagination = { limit: args.limit, offset: args.offset };
+        const result = execution?.native
+          ? await InteractionModel.findMcpSessionLogsNative({
+              ...scope,
+              pagination,
+              sessionId: args.session_id,
+              signal: execution.signal,
+            })
+          : await InteractionModel.findAllPaginated(
+              pagination,
+              { sortBy: "createdAt", sortDirection: "asc" },
+              undefined,
+              undefined,
+              {
+                organizationId: scope.organizationId,
+                userId: scope.ownUserId,
+                sessionId: args.session_id,
+                stableSessionOrder: true,
+              },
+            );
         return structuredSuccessResult({ ...result });
       } catch (error) {
+        if (context.gatewayExecution?.signal.aborted)
+          return errorResult("Tool call cancelled");
         return catchError(error, "getting LLM session logs");
       }
     },

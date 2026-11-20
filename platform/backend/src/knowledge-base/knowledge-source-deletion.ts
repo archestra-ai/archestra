@@ -42,7 +42,14 @@ import { teardownP4Shim } from "./connectors/perforce/p4-shim-service";
  * no active connector matched (already deleted / unknown id), which callers
  * surface as a 404.
  */
-export async function deleteConnector(connectorId: string): Promise<boolean> {
+export async function deleteConnector(
+  connectorId: string,
+  native?: {
+    organizationId: string;
+    environmentId: string | null;
+    signal: AbortSignal;
+  },
+): Promise<boolean> {
   // Both reads happen BEFORE the stamp, while `notDeleted()`-filtered resolvers
   // still see the connector: the assignment set drives cache invalidation, and
   // the row carries the secret to revoke. Capturing up front also means neither
@@ -51,6 +58,20 @@ export async function deleteConnector(connectorId: string): Promise<boolean> {
     KnowledgeBaseConnectorModel.findById(connectorId),
     AgentConnectorAssignmentModel.findByConnector(connectorId),
   ]);
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (native) {
+    native.signal.throwIfAborted();
+    if (
+      !connector ||
+      connector.organizationId !== native.organizationId ||
+      connector.environmentId !== native.environmentId
+    )
+      return false;
+  }
+  // SPDX-SnippetEnd
 
   // Cancel queued/scheduled sync work first so nothing new runs against the
   // connector. Under soft-delete the run rows are not cascade-removed, so the
@@ -67,7 +88,16 @@ export async function deleteConnector(connectorId: string): Promise<boolean> {
     reason: "Sync stopped: the connector was deleted.",
   });
 
-  const deleted = await KnowledgeBaseConnectorModel.delete(connectorId);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const deleted = native
+    ? await KnowledgeBaseConnectorModel.deleteMcpNative({
+        id: connectorId,
+        ...native,
+      })
+    : await KnowledgeBaseConnectorModel.delete(connectorId);
+  // SPDX-SnippetEnd
 
   if (deleted) {
     for (const agentId of new Set(assignments.map((a) => a.agentId))) {
@@ -105,15 +135,24 @@ export async function deleteConnector(connectorId: string): Promise<boolean> {
  * a KB's connectors are separate entities reached through the junction), so the
  * only teardown is cache invalidation.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function deleteKnowledgeBase(
   knowledgeBaseId: string,
+  native?: { organizationId: string; signal: AbortSignal },
 ): Promise<boolean> {
   // Capture affected agents before the stamp (findByKnowledgeBase keys on the
   // KB id, so it returns the assignments regardless of the KB's own state).
   const assignments =
     await AgentKnowledgeBaseModel.findByKnowledgeBase(knowledgeBaseId);
 
-  const deleted = await KnowledgeBaseModel.delete(knowledgeBaseId);
+  const deleted = native
+    ? await KnowledgeBaseModel.deleteMcpNative({
+        id: knowledgeBaseId,
+        ...native,
+      })
+    : await KnowledgeBaseModel.delete(knowledgeBaseId);
 
   if (deleted) {
     for (const agentId of new Set(assignments.map((a) => a.agentId))) {
@@ -123,6 +162,7 @@ export async function deleteKnowledgeBase(
 
   return deleted;
 }
+// SPDX-SnippetEnd
 
 /**
  * Restore a soft-deleted connector and invalidate the knowledge-source cache

@@ -197,10 +197,16 @@ function signature(payload: string, secret: string): string {
 }
 
 function argumentsHash(args: Record<string, unknown>): string {
-  const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args;
   return createHash("sha256")
-    .update(canonicalJson(original, new WeakSet()))
+    .update(canonicalRuntimeToolArguments(args))
     .digest("hex");
+}
+
+export function canonicalRuntimeToolArguments(
+  args: Record<string, unknown>,
+): string {
+  const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args;
+  return canonicalJson(original, new WeakSet());
 }
 
 /** Hash complete JSON, not the bounded/truncated representation used for logs. */

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   classifyRuleTarget,
+  ruleTargetWarning,
   touchedRuleNames,
   touchedToolMetadata,
 } from "./rule-targets";
@@ -69,6 +70,39 @@ describe("classifyRuleTarget", () => {
     "mcp__workspace__bash",
   ])("%s is outside what an MCP inventory can prove", (name) => {
     expect(classifyRuleTarget(name, INVENTORY).kind).toBe("unverifiable");
+  });
+});
+
+describe("ruleTargetWarning", () => {
+  test("an unknown tool can still match a server or client call", () => {
+    expect(
+      ruleTargetWarning(classifyRuleTarget("github__delete_issue", INVENTORY)),
+    ).toBe(
+      'tool rule "github__delete_issue" names no known tool: prefix "github" has no such tool in the MCP registry or observed LLM proxy traffic, so it matches nothing unless a server or client calls "github__delete_issue"; did you mean "github__create_issue", "github__get_issue"?',
+    );
+  });
+
+  test("an unknown prefix can still match an unseen server or client", () => {
+    expect(
+      ruleTargetWarning(classifyRuleTarget("githb__get_issue", INVENTORY)),
+    ).toBe(
+      'tool rule "githb__get_issue" names no known tool: no MCP server or observed LLM proxy tool in this organization uses the prefix "githb", so it matches nothing unless a server or client uses that prefix; did you mean "github"?',
+    );
+    expect(
+      ruleTargetWarning(
+        classifyRuleTarget("calendar__create_event", INVENTORY),
+      ),
+    ).toBe(
+      'tool rule "calendar__create_event" names no known tool: no MCP server or observed LLM proxy tool in this organization uses the prefix "calendar", so it matches nothing unless a server or client uses that prefix',
+    );
+  });
+
+  test.each([
+    "github__get_issue",
+    "mcp/github/get_issue",
+    "Bash",
+  ])("%s needs no missing-tool warning", (name) => {
+    expect(ruleTargetWarning(classifyRuleTarget(name, INVENTORY))).toBeNull();
   });
 });
 

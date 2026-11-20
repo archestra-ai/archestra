@@ -82,9 +82,9 @@ export function ruleTargetWarning(target: RuleTarget): string | null {
       : "";
   switch (target.kind) {
     case "unknown_tool":
-      return `tool rule ${JSON.stringify(target.rule)} names no existing tool: server ${JSON.stringify(target.server)} has no such tool, so the rule governs nothing${suggestion(target.closest)}`;
+      return `tool rule ${JSON.stringify(target.rule)} names no known tool: prefix ${JSON.stringify(target.server)} has no such tool in the MCP registry or observed LLM proxy traffic, so it matches nothing unless a server or client calls ${JSON.stringify(target.rule)}${suggestion(target.closest)}`;
     case "unknown_server":
-      return `tool rule ${JSON.stringify(target.rule)} names no existing tool: no MCP server in this organization uses the prefix ${JSON.stringify(target.server)}, so the rule governs nothing until one does${suggestion(target.closest)}`;
+      return `tool rule ${JSON.stringify(target.rule)} names no known tool: no MCP server or observed LLM proxy tool in this organization uses the prefix ${JSON.stringify(target.server)}, so it matches nothing unless a server or client uses that prefix${suggestion(target.closest)}`;
     case "known":
     case "unverifiable":
       return null;

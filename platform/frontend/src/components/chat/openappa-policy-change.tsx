@@ -128,13 +128,6 @@ export function OpenAppaPolicyChange({
           </pre>
         </div>
       ) : null}
-      {change.warnings?.map((warning) => (
-        <InlineNotice key={warning} variant="warning">
-          <TriangleAlert />
-          <span className="font-medium">Policy warning</span>
-          <InlineNoticeText>{warning}</InlineNoticeText>
-        </InlineNotice>
-      ))}
       {change.errors?.map((error) => (
         <InlineNotice key={error} variant="error">
           <TriangleAlert />

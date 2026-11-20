@@ -2,6 +2,7 @@ import { ApiError } from "@/types/api";
 
 // The short code locates a session, never authorizes it. The digest selects an
 // immutable signed binding: a resumed actor can have several native identities.
+const BANNER = "▄█▄▄▄█▄  started subagent";
 const REFERENCE =
   /▄█▄▄▄█▄ {2}started subagent ([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}@[A-Za-z0-9_-]{22})(?![A-Za-z0-9_@-])/g;
 
@@ -19,6 +20,7 @@ export function stripChildTrajectoryReferences(
   if (options.collectReferences === false) {
     // Callee text and nested notifications cannot establish caller identity.
     // Strip them in one pass without applying the caller's proof-count limit.
+    if (!text.includes(BANNER)) return { text, references };
     const stripped = text.replace(
       new RegExp(
         `((?:\\r?\\n){0,2})${REFERENCE.source}((?:\\r?\\n){0,2})`,
@@ -73,10 +75,7 @@ function defangChildReferenceText(text: string): string {
     .split("\n")
     .map((line) =>
       line.includes("@")
-        ? line.replaceAll(
-            "▄█▄▄▄█▄  started subagent",
-            "[quoted child reference]",
-          )
+        ? line.replaceAll(BANNER, "[quoted child reference]")
         : line,
     )
     .join("\n");

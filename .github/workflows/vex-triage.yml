@@ -118,12 +118,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$RELEASE_TAGS" ]; then
-            releases="$(gh release list --exclude-drafts --limit 100 --json tagName,isPrerelease)"
-            stable="$(jq -r --arg re "$STABLE_TAG" '[.[] | select(.isPrerelease | not) | select(.tagName | test($re))][0].tagName // empty' <<<"$releases")"
+            releases="$(gh release list --exclude-drafts --limit 200 --json tagName,isPrerelease)"
+            # The highest version, not the newest release: a patch to an older
+            # line (1.4.37 after 1.5.1) is published later but is not the latest.
+            highest='map(.tagName) | sort_by(sub("^[^0-9]*"; "") | [scan("[0-9]+") | tonumber]) | last // empty'
+            stable="$(jq -r --arg re "$STABLE_TAG" "[.[] | select(.isPrerelease | not) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
             [ -n "$stable" ] || { echo "::error::No stable release of $GH_REPO."; exit 1; }
             RELEASE_TAGS="$stable"
             if [ -n "$RC_TAG" ]; then
-              rc="$(jq -r --arg re "$RC_TAG" '[.[] | select(.isPrerelease) | select(.tagName | test($re))][0].tagName // empty' <<<"$releases")"
+              rc="$(jq -r --arg re "$RC_TAG" "[.[] | select(.isPrerelease) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
               # Only a candidate for a later version than the stable release:
               # once 1.5.0 ships, 1.5.0-rc.N is behind it.
               rc_version="${rc##*-v}"; rc_version="${rc_version%%-*}"; stable_version="${stable##*-v}"

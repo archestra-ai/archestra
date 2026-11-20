@@ -557,7 +557,13 @@ export async function handleDelegation(
       delegationToolCallId: context.currentToolCallId,
     };
     const task =
-      promptWithContract(message, spawn.binding?.contract) ?? message;
+      promptWithContract(
+        message,
+        spawn.binding?.contract ??
+          (context.openappaRuntimeCall?.defersReturn
+            ? DEFERRED_SUBAGENT_BRIEF
+            : undefined),
+      ) ?? message;
     if (!spawn.binding) {
       return delegationResult(
         message,
@@ -647,8 +653,13 @@ function reviseHeldReturn(reason: string): string {
 const WITHHELD_SUBAGENT_RETURN =
   "The subagent ended without a final answer that may cross to this session, so its output was withheld. Delegate again with a task it can answer within the declared return.";
 
+// Shown to the person in the conversation; the caller's model reads the
+// runtime's notice in its place.
 const DEFERRED_SUBAGENT_RETURN =
-  "The subagent finished. Its answer is waiting for this session's decision.";
+  "The subagent finished. The agent is reviewing its answer before using it.";
+
+const DEFERRED_SUBAGENT_BRIEF =
+  "Guardrails notices you clear while working are not part of your answer: leave them out. Mention a notice only when what it blocked stayed blocked.";
 
 const DEFERRED_RETURN_TARGET_MISMATCH =
   "This subagent now runs in the background, where this delegation's return cannot be decided. No task was delivered. Delegate again.";

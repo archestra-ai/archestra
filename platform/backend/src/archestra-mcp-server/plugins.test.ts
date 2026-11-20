@@ -1,3 +1,4 @@
+import type { ResourcePermissionAction } from "@archestra/shared";
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_TOOL_PREFIX,
@@ -161,7 +162,7 @@ describe("plugin tool execution", () => {
     expect(result.isError).toBe(true);
   });
 
-  test("plugin:admin does not bypass the action-specific REST permission", async ({
+  test("the retired plugin:admin role action does not stand in for plugin:create", async ({
     makeCustomRole,
     makeMember,
     makeUser,
@@ -182,34 +183,89 @@ describe("plugin tool execution", () => {
     expect(textOf(result)).toContain("plugin:create");
   });
 
-  test("plugin:create alone creates a plugin, without managing every plugin", async ({
+  test("plugin:create alone creates a plugin its author then reads, edits and deletes", async ({
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { plugin: ["read", "create"] },
+      permission: { plugin: ["create"] },
     });
     const creator = await makeUser();
     await makeMember(creator.id, organizationId, { role: role.role });
-    const creatorContext = { ...context, userId: creator.id };
+    const as = { ...context, userId: creator.id };
 
     const created = await executeArchestraTool(
       TOOL_CREATE_PLUGIN_FULL_NAME,
       pluginPayload(),
-      creatorContext,
+      as,
     );
-    expect(created.isError, textOf(created)).toBeFalsy();
-    const pluginId = (created.structuredContent as { id: string }).id;
+    expect(created.isError, textOf(created)).not.toBe(true);
+    const id = (created.structuredContent as { id: string }).id;
+    for (const [tool, args] of [
+      [TOOL_LIST_PLUGINS_FULL_NAME, {}],
+      [TOOL_GET_PLUGIN_FULL_NAME, { id }],
+      [TOOL_UPDATE_PLUGIN_FULL_NAME, { id, displayName: "Renamed" }],
+      [TOOL_DELETE_PLUGIN_FULL_NAME, { id }],
+    ] as const) {
+      const result = await executeArchestraTool(tool, args, as);
+      expect(result.isError, `${tool}: ${textOf(result)}`).not.toBe(true);
+    }
+  });
 
-    // Reading the bytes back stays with whoever manages every plugin.
-    const read = await executeArchestraTool(
-      TOOL_GET_PLUGIN_FULL_NAME,
-      { id: pluginId },
-      creatorContext,
-    );
-    expect(read.isError).toBe(true);
-    expect(textOf(read)).toContain("manage every plugin");
+  test("each plugin tool follows the caller's grant on that plugin", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const grant = (actions: ResourcePermissionAction[]) => ({
+      initialPermissionGrants: [
+        { subject: { type: "user" as const, id: member.id }, actions },
+      ],
+    });
+    const readable = await PluginModel.create({
+      organizationId,
+      userId: adminUserId,
+      input: pluginPayload({ displayName: "Readable" }),
+      ...grant(["read"]),
+    });
+    const editable = await PluginModel.create({
+      organizationId,
+      userId: adminUserId,
+      input: pluginPayload({ displayName: "Editable" }),
+      ...grant(["read", "use", "update"]),
+    });
+    const hidden = await seedPlugin({ displayName: "Hidden" });
+    if (!readable || !editable) throw new Error("seed plugin creation failed");
+    const as = { ...context, userId: member.id };
+    const run = (tool: string, args: Record<string, unknown>) =>
+      executeArchestraTool(tool, args, as);
+
+    const list = await run(TOOL_LIST_PLUGINS_FULL_NAME, {});
+    expect(textOf(list)).toContain("Readable");
+    expect(textOf(list)).toContain("Editable");
+    expect(textOf(list)).not.toContain("Hidden");
+    expect(
+      (await run(TOOL_GET_PLUGIN_FULL_NAME, { id: readable.id })).isError,
+    ).not.toBe(true);
+    const refused = await run(TOOL_UPDATE_PLUGIN_FULL_NAME, {
+      id: readable.id,
+      displayName: "Taken",
+    });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toContain("permission to update");
+    const renamed = await run(TOOL_UPDATE_PLUGIN_FULL_NAME, {
+      id: editable.id,
+      displayName: "Edited by a grant",
+    });
+    expect(renamed.isError, textOf(renamed)).not.toBe(true);
+    expect(
+      (await run(TOOL_DELETE_PLUGIN_FULL_NAME, { id: editable.id })).isError,
+    ).toBe(true);
+    const unseen = await run(TOOL_GET_PLUGIN_FULL_NAME, { id: hidden.id });
+    expect(unseen.isError).toBe(true);
+    expect(textOf(unseen)).toContain("No plugin with id");
   });
 
   test("create_plugin, list_plugins, and get_plugin round-trip exact bytes", async () => {
@@ -264,7 +320,7 @@ describe("plugin tool execution", () => {
     makeUser,
     makeMember,
   }) => {
-    // an editor holds plugin:read but not plugin:admin, so the catalog is
+    // an editor holds plugin:read but no grant at `*`, so the catalog is
     // grant-filtered: org plugins show, someone else's own plugin does not.
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });

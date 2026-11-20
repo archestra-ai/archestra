@@ -6,6 +6,7 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import pluginRoutes from "./plugin.routes";
@@ -137,7 +138,35 @@ describe("POST /api/plugins/:id/transfer-ownership", () => {
   }) => {
     const resource = await create();
     organizationId = (await makeOrganization()).id;
-    expect((await transfer(resource.id)).statusCode).toBe(403);
+    // A resource outside the caller's organization reads as absent rather than
+    // refused, so a probe cannot confirm that the id exists elsewhere.
+    expect((await transfer(resource.id)).statusCode).toBe(404);
+  });
+
+  test("an owner who manages only their own plugin hands it to a member, who then manages it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const resource = await create(owner.id);
+    user = owner;
+    expect((await transfer(resource.id, member.id)).statusCode).toBe(200);
+    expect(await snapshot(resource.id)).toMatchObject({ authorId: member.id });
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          organizationId,
+          userId: member.id,
+          resource: "plugin",
+          scope: resource.id,
+        })
+      ).grants
+        .map((grant) => grant.action)
+        .sort(),
+    ).toEqual(["delete", "manage-permissions", "read", "update", "use"]);
   });
 
   test("rejects an unknown resource", async () => {

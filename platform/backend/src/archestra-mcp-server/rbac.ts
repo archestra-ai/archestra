@@ -267,11 +267,9 @@ export const TOOL_PERMISSIONS: Record<
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
-  // Plugins — executable opaque bytes, so only the metadata catalog is
-  // readable without managing every plugin; byte reads and every change to an
-  // existing plugin also require `update` on every plugin (a grant at `*`),
-  // which each handler checks, matching the REST routes (plugin.routes.ts).
-  // Creating a plugin takes `plugin:create` alone.
+  // Plugins — the role action is a floor that a grant on any plugin also
+  // meets (SCOPED_RESOURCE_TOOLS); each handler checks the action on the
+  // plugin itself, matching the REST routes (plugin.routes.ts).
   list_plugins: { resource: "plugin", action: "read" },
   get_plugin: { resource: "plugin", action: "read" },
   create_plugin: { resource: "plugin", action: "create" },
@@ -665,6 +663,11 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   load_skill: { resource: "skill", action: "use" },
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
+  list_plugins: { resource: "plugin", action: "read" },
+  get_plugin: { resource: "plugin", action: "read" },
+  update_plugin: { resource: "plugin", action: "update" },
+  edit_plugin: { resource: "plugin", action: "update" },
+  delete_plugin: { resource: "plugin", action: "delete" },
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
   bulk_remove_tools_from_agents: { resource: "agent", action: "update" },
   bulk_assign_tools_to_mcp_gateways: {

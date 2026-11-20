@@ -7,10 +7,33 @@ vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Northstar",
 }));
+// Role actions and plugin grants, as the auth hooks resolve them: a scoped
+// check reads the grants, any other the role.
+const access = vi.hoisted(() => ({
+  role: { plugin: ["read", "create"] } as Record<string, string[]>,
+  grants: [] as { resource: string; action: string; scope: string }[],
+  plugins: null as unknown[] | null,
+}));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
-  useHasPermissions: () => ({ data: true }),
-  useScopedCapabilities: () => ({ data: [] }),
+  useHasPermissions: (
+    permissions: Record<string, string[]>,
+    scope?: string,
+  ) => ({
+    data: Object.entries(permissions).every(([resource, actions]) =>
+      actions.every((action) =>
+        scope === undefined
+          ? (access.role[resource] ?? []).includes(action)
+          : access.grants.some(
+              (grant) =>
+                grant.resource === resource &&
+                grant.action === action &&
+                (grant.scope === "*" || grant.scope === scope),
+            ),
+      ),
+    ),
+  }),
+  useScopedCapabilities: () => ({ data: access.grants }),
   // The Agents-section tab bar at the top of the page asks which of its pages
   // this reader may open.
   usePermissionMap: () => ({
@@ -39,7 +62,7 @@ vi.mock("./_parts/plugin-install-dialog", () => ({
 }));
 vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({
-    data: [PLUGIN],
+    data: access.plugins ?? [PLUGIN],
     isPending: false,
     isFetching: false,
     isLoadingError: false,
@@ -102,6 +125,62 @@ describe("PluginsPage", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
     );
+    access.role = { plugin: ["read", "create"] };
+    access.grants = [
+      { resource: "plugin", action: "read", scope: PLUGIN.id },
+      { resource: "plugin", action: "use", scope: PLUGIN.id },
+    ];
+    access.plugins = null;
+  });
+
+  it("offers adding a plugin to a role that may only create plugins", () => {
+    access.role = { plugin: ["create"] };
+    render(<PluginsPage />);
+    expect(
+      screen.getByRole("link", { name: /Add new plugin/ }),
+    ).toHaveAttribute("href", "/plugins/new");
+  });
+
+  it("offers the first plugin to a creator and refuses it without plugin:create", () => {
+    access.plugins = [];
+    access.role = { plugin: ["create"] };
+    const view = render(<PluginsPage />);
+    expect(
+      screen.getByRole("link", { name: /Add your first plugin/ }),
+    ).toBeVisible();
+
+    view.unmount();
+    access.role = { plugin: ["read"] };
+    render(<PluginsPage />);
+    expect(
+      screen.queryByRole("link", { name: /Add your first plugin/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Add your first plugin/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("opens a listed plugin without edit access, and offers bulk actions only as far as its grants go", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    const user = userEvent.setup();
+    render(<PluginsPage />);
+
+    await user.click(screen.getByText("acme/policy-plugins", { exact: false }));
+    expect(push).toHaveBeenCalledWith(`/plugins/${PLUGIN.id}`);
+
+    await user.click(screen.getByRole("checkbox", { name: /Policy Runtime/ }));
+    expect(screen.getByRole("button", { name: "Install" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+    for (const name of ["Add access", "Delete"]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    }
   });
 
   it("groups related facts into a compact table", async () => {

@@ -116,7 +116,7 @@ it("adds initial access without submitting the resource, excludes duplicates, an
   ).toHaveAccessibleDescription(
     expect.stringMatching(/run the agent.*delegate tasks/i),
   );
-  await user.click(screen.getByRole("option", { name: "Can update" }));
+  await user.click(screen.getByRole("option", { name: "Can edit" }));
   await user.click(screen.getByRole("button", { name: "Create agent" }));
   expect(submit).toHaveBeenLastCalledWith([
     {
@@ -261,7 +261,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Support" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can update" }));
+  await user.click(screen.getByRole("option", { name: "Can edit" }));
   await pick(user, "Design");
   expect(screen.getByRole("dialog", { name: "Create virtual key" })).toBe(
     dialog,
@@ -272,7 +272,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   expect(submit).not.toHaveBeenCalled();
   expect(
     screen.getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can update");
+  ).toHaveTextContent("Can edit");
   expect(
     screen.getByRole("combobox", { name: "Permission for Design" }),
   ).toHaveTextContent("Can use");

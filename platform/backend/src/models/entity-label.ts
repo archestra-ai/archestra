@@ -246,12 +246,13 @@ export interface EntityLabelModel {
     labels: LabelWithDetails[],
     tx?: Transaction,
   ): Promise<void>;
-  getAllKeys(organizationId: string): Promise<string[]>;
+  getAllKeys(organizationId: string, ownerIds?: string[]): Promise<string[]>;
   getValuesByKey(params: {
     organizationId: string;
     key: string;
+    ownerIds?: string[];
   }): Promise<string[]>;
-  getAllValues(organizationId: string): Promise<string[]>;
+  getAllValues(organizationId: string, ownerIds?: string[]): Promise<string[]>;
 }
 
 /**
@@ -454,18 +455,26 @@ export function createEntityLabelModel(
       pruneLabelKeysAndValues().catch(() => {});
     },
 
-    async getAllKeys(organizationId) {
+    async getAllKeys(organizationId, ownerIds) {
+      if (ownerIds?.length === 0) return [];
       const rows = await distinctKeysQuery()
-        .where(owner.organizationScope(organizationId))
+        .where(
+          and(
+            owner.organizationScope(organizationId),
+            ownerIds ? inArray(ownerIdColumn, ownerIds) : undefined,
+          ),
+        )
         .orderBy(asc(schema.labelKeysTable.key));
       return rows.map((row) => row.key);
     },
 
-    async getValuesByKey({ organizationId, key }) {
+    async getValuesByKey({ organizationId, key, ownerIds }) {
+      if (ownerIds?.length === 0) return [];
       const rows = await distinctValuesQuery()
         .where(
           and(
             owner.organizationScope(organizationId),
+            ownerIds ? inArray(ownerIdColumn, ownerIds) : undefined,
             eq(schema.labelKeysTable.key, key),
           ),
         )
@@ -473,9 +482,15 @@ export function createEntityLabelModel(
       return rows.map((row) => row.value);
     },
 
-    async getAllValues(organizationId) {
+    async getAllValues(organizationId, ownerIds) {
+      if (ownerIds?.length === 0) return [];
       const rows = await distinctValuesQuery()
-        .where(owner.organizationScope(organizationId))
+        .where(
+          and(
+            owner.organizationScope(organizationId),
+            ownerIds ? inArray(ownerIdColumn, ownerIds) : undefined,
+          ),
+        )
         .orderBy(asc(schema.labelValuesTable.value));
       return rows.map((row) => row.value);
     },

@@ -45,7 +45,7 @@ A resource grant names a recipient and the actions they can perform. Recipients 
 
 Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants. Adding or expanding them requires entitlement.
 
-To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can read**, **Can use**, **Can update**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
+To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can read**, **Can use**, **Can edit**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
 Sharing with everyone or a role makes a resource Org-wide. That takes **Full access** on every resource of that kind, or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold it for every kind, and Editor for models and credentials. Without it:
 
@@ -63,7 +63,7 @@ Owners and anyone with **Manage access** on an item can share it with any team i
 
 ### Actions And Scopes
 
-**Can read** permits reading. **Can use** adds execution. **Can update** adds configuration changes. **Full access** also includes deletion and **Manage access**, which lets the recipient change other people's grants. OAuth clients omit execution from these levels.
+**Can read** permits reading. **Can use** adds execution. **Can edit** adds configuration changes. **Full access** also includes deletion and **Manage access**, which lets the recipient change other people's grants. OAuth clients omit execution from these levels.
 
 MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. Changing what an entry runs or connects to, such as its image, command, URL, or authentication, takes **Full access + deploy** or [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create). OAuth client registrations have no **Can use** preset.
 
@@ -143,7 +143,7 @@ To hand a resource to another person, use **Make owner** on their row:
 - The previous owner keeps Full access. Remove them as a separate change.
 - Other grants do not change.
 
-Only someone with edit and Full access on the resource can make another person the owner. Plugins require edit access to every plugin.
+Only someone with edit and Full access on the resource can make another person the owner.
 
 ### Team Roles
 
@@ -161,9 +161,9 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 ### OAuth Clients
 
-One **OAuth Clients** resource governs clients with any combination of MCP Gateway, A2A, and LLM Proxy capabilities. Role permissions [`oauthClient:read`](/docs/reference/permissions#oauthClient:read) and [`oauthClient:create`](/docs/reference/permissions#oauthClient:create) control listing and creation. **Can update** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only the enabled capabilities and configured resources; management grants do not themselves authorize API calls.
+One **OAuth Clients** resource governs clients with any combination of MCP Gateway, A2A, and LLM Proxy capabilities. Role permissions [`oauthClient:read`](/docs/reference/permissions#oauthClient:read) and [`oauthClient:create`](/docs/reference/permissions#oauthClient:create) control listing and creation. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only the enabled capabilities and configured resources; management grants do not themselves authorize API calls.
 
-During an upgrade, each action from the former MCP and LLM client permissions carries over to OAuth Clients. A role with MCP client **read** and LLM client **create** gets OAuth Client **read** and **create**, not edit or delete. A wildcard **Can update** grant reaches all OAuth clients; a grant on one client stays on that client.
+During an upgrade, each action from the former MCP and LLM client permissions carries over to OAuth Clients. A role with MCP client **read** and LLM client **create** gets OAuth Client **read** and **create**, not edit or delete. A wildcard **Can edit** grant reaches all OAuth clients; a grant on one client stays on that client.
 
 ### Visibility-Scoped Credentials
 
@@ -171,7 +171,7 @@ Provider keys and virtual keys can have personal, team, or organization scope. P
 
 ### Saved Credentials
 
-[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Updating a credential requires **Can update**; deleting it requires **Full access**. These are grants on the credential, not role permissions. Anyone can add a credential that only they can use. Sharing one, or adding an organization credential, needs [`credential:create`](/docs/reference/permissions#credential:create).
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Updating a credential requires **Can edit**; deleting it requires **Full access**. These are grants on the credential, not role permissions. Anyone can add a credential that only they can use. Sharing one, or adding an organization credential, needs [`credential:create`](/docs/reference/permissions#credential:create).
 
 ### Models
 

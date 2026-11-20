@@ -89,6 +89,7 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
@@ -215,11 +216,18 @@ function SkillsList() {
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
-  const { data: canOpenPluginDetails } = useHasPermissions(
-    { plugin: ["read", "update"] },
-    "*",
-  );
-  const pluginSkillsEnabled = canReadPlugins === true;
+  const hasPluginReadGrant =
+    scopedCapabilities.data?.some(
+      (grant) => grant.resource === "plugin" && grant.action === "read",
+    ) ?? false;
+  const canOpenPluginDetails = (pluginId: string) =>
+    holdsItemGrant({
+      grants: scopedCapabilities.data,
+      resource: "plugin",
+      action: "read",
+      id: pluginId,
+    });
+  const pluginSkillsEnabled = canReadPlugins === true || hasPluginReadGrant;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind = hasImportFilter
     ? "standalone"
@@ -742,9 +750,8 @@ function SkillsList() {
               icon: <Puzzle className="h-4 w-4" />,
               label: "Manage plugin",
               href: `/plugins/${item.skill.pluginId}`,
-              // Managing a plugin needs `update` on every plugin.
               permissions: { plugin: ["update"] },
-              permissionScope: "*",
+              permissionScope: item.skill.pluginId,
             },
           ];
 
@@ -783,7 +790,10 @@ function SkillsList() {
       header: "Source",
       cell: ({ row }) => {
         const source = listedSkillSource(row.original);
-        if (row.original.source === "plugin" && canOpenPluginDetails) {
+        if (
+          row.original.source === "plugin" &&
+          canOpenPluginDetails(row.original.skill.pluginId)
+        ) {
           return (
             <RowClickShield className="min-w-0">
               <Link
@@ -1129,7 +1139,8 @@ function SkillsList() {
                             <ListedSkillSourceBadge
                               item={item}
                               canOpenPluginDetails={
-                                canOpenPluginDetails === true
+                                item.source === "plugin" &&
+                                canOpenPluginDetails(item.skill.pluginId)
                               }
                             />
                             {standalone ? (

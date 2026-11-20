@@ -353,8 +353,10 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:delete": "Permanently delete skills from the trash",
   "plugin:read": "View plugins and their file metadata",
   "plugin:create": "Create plugins",
-  "plugin:update": "Modify plugin metadata and files",
-  "plugin:delete": "Delete plugins",
+  "plugin:update":
+    "No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin",
+  "plugin:delete":
+    "No standalone effect; deleting a plugin requires a Full access grant on that plugin",
   "app:read": "Open Apps",
   "app:create": "Create new MCP Apps",
   "guardrailsPolicy:read": "View Guardrails policy, batteries, and coverage",

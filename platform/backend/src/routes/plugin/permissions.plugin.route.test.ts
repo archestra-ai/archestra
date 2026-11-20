@@ -221,6 +221,86 @@ describe("plugin permissions", () => {
     expect((await as(stranger, { method: "GET", url })).statusCode).toBe(404);
     expect((await rename(stranger)).statusCode).toBe(404);
   });
+
+  test("plugin label keys and values only include labels from readable plugins", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const [author, viewer, readerWithNoGrants] = await Promise.all([
+      makeUser(),
+      makeUser(),
+      makeUser(),
+    ]);
+    await makeMember(author.id, organizationId, { role: "admin" });
+    await makeMember(viewer.id, organizationId);
+    await makeMember(readerWithNoGrants.id, organizationId, {
+      role: "member,fixed:plugins:reader",
+    });
+
+    await PluginModel.create({
+      organizationId,
+      userId: author.id,
+      input: {
+        ...createPayload(),
+        displayName: "Private labeled plugin",
+        labels: [{ key: "secret", value: "classified" }],
+      },
+    });
+    await PluginModel.create({
+      organizationId,
+      userId: author.id,
+      input: {
+        ...createPayload(),
+        displayName: "Shared labeled plugin",
+        labels: [{ key: "env", value: "shared" }],
+      },
+      initialPermissionGrants: [
+        { subject: { type: "user", id: viewer.id }, actions: ["read"] },
+      ],
+    });
+
+    const viewerKeys = await as(viewer, {
+      method: "GET",
+      url: "/api/plugins/labels/keys",
+    });
+    expect(viewerKeys.statusCode).toBe(200);
+    expect(viewerKeys.json()).toEqual(["env"]);
+
+    const viewerValues = await as(viewer, {
+      method: "GET",
+      url: "/api/plugins/labels/values",
+    });
+    expect(viewerValues.statusCode).toBe(200);
+    expect(viewerValues.json()).toEqual(["shared"]);
+
+    const viewerSecretValues = await as(viewer, {
+      method: "GET",
+      url: "/api/plugins/labels/values?key=secret",
+    });
+    expect(viewerSecretValues.statusCode).toBe(200);
+    expect(viewerSecretValues.json()).toEqual([]);
+
+    const viewerEnvValues = await as(viewer, {
+      method: "GET",
+      url: "/api/plugins/labels/values?key=env",
+    });
+    expect(viewerEnvValues.statusCode).toBe(200);
+    expect(viewerEnvValues.json()).toEqual(["shared"]);
+
+    const emptyReaderKeys = await as(readerWithNoGrants, {
+      method: "GET",
+      url: "/api/plugins/labels/keys",
+    });
+    expect(emptyReaderKeys.statusCode).toBe(200);
+    expect(emptyReaderKeys.json()).toEqual([]);
+
+    const adminKeys = await as(author, {
+      method: "GET",
+      url: "/api/plugins/labels/keys",
+    });
+    expect(adminKeys.statusCode).toBe(200);
+    expect(adminKeys.json()).toEqual(["env", "secret"]);
+  });
 });
 
 function createPayload(): CreatePlugin {

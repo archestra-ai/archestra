@@ -246,6 +246,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!checker.canRead) {
         throw new ApiError(403, "You do not have permission to view plugins");
       }
+      if (checker.canReadAll) return undefined;
+      const ownerIds = await PluginTeamModel.getUserAccessiblePluginIds({
+        organizationId,
+        userId,
+      });
+      return { ownerIds };
     },
   });
 

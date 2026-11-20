@@ -30,11 +30,15 @@ export function registerEntityLabelRoutes(
     model: EntityLabelModel;
     keysOperationId: RouteId;
     valuesOperationId: RouteId;
-    /** Optional per-request check when route-level permissions defer to grants. */
+    /**
+     * Optional per-request check when route-level permissions defer to grants.
+     * Returning `{ ownerIds }` scopes the returned label vocabulary to those
+     * readable entities so labels on unreadable entities are not disclosed.
+     */
     authorize?: (params: {
       organizationId: string;
       userId: string;
-    }) => Promise<void>;
+    }) => Promise<{ ownerIds?: string[] } | undefined | void>;
   },
 ): void {
   const {
@@ -58,8 +62,12 @@ export function registerEntityLabelRoutes(
       },
     },
     async ({ organizationId, user }, reply) => {
-      if (authorize) await authorize({ organizationId, userId: user.id });
-      return reply.send(await model.getAllKeys(organizationId));
+      const scope = authorize
+        ? await authorize({ organizationId, userId: user.id })
+        : undefined;
+      return reply.send(
+        await model.getAllKeys(organizationId, scope?.ownerIds),
+      );
     },
   );
 
@@ -77,11 +85,17 @@ export function registerEntityLabelRoutes(
       },
     },
     async ({ query: { key }, organizationId, user }, reply) => {
-      if (authorize) await authorize({ organizationId, userId: user.id });
+      const scope = authorize
+        ? await authorize({ organizationId, userId: user.id })
+        : undefined;
       return reply.send(
         key
-          ? await model.getValuesByKey({ organizationId, key })
-          : await model.getAllValues(organizationId),
+          ? await model.getValuesByKey({
+              organizationId,
+              key,
+              ownerIds: scope?.ownerIds,
+            })
+          : await model.getAllValues(organizationId, scope?.ownerIds),
       );
     },
   );

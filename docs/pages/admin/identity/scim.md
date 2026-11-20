@@ -22,7 +22,7 @@ flowchart LR
 
 - **Pushed:** the person becomes a user with the organization's **Default Roles for New Users** from **Settings → Auth**, and no team. They show in **Settings → Users**.
 - **First sign-in:** their SSO sign-in opens that same user, so the teams you added are already there. From then on, the provider's [Role Mapping](/docs/admin/identity/sso#role-mapping) applies as for every SSO sign-in.
-- **Deactivated or deleted** in the identity provider: the user can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their data and teams stay, and **Settings → Users** marks them **Deactivated**. Adding them back to the group restores them.
+- **Deactivated or deleted** in the identity provider: the user can no longer sign in, and their API keys, gateway tokens, and chat integrations stop working. Their data and teams stay, and **Settings → Users** marks them **Deactivated**. Adding them back to the group restores them. Deactivated users don't count toward the [30-user free tier](/docs/get-started/pricing-model).
 
 Archestra never deletes a user through SCIM. To remove someone for good, use **Remove user** in **Settings → Users**.
 
@@ -48,7 +48,7 @@ Entra pushes everyone assigned on its first cycle, then sends changes on its own
 Pushed users are members you can add to teams right away, by email, before they sign in:
 
 - **Terraform:** look the person up with the `archestra_user` data source and list them in the `members` of an `archestra_team`.
-- **API:** look up the user ID with `GET /api/organization/members/{email}`, then call `POST /api/teams/{teamId}/members`.
+- **API:** look up the user ID with [`GET /api/organization/members/{email}`](/docs/reference/api/organization#tag/organization/GET/api/organization/members/{idOrEmail}), then call [`POST /api/teams/{teamId}/members`](/docs/reference/api/organization#tag/teams/POST/api/teams/{id}/members).
 
 Give the service account from the setup the **Team Writer** role too, for [`team:update`](/docs/reference/permissions#team:update), and use its key. The lookup by email needs [`member:read`](/docs/reference/permissions#member:read), which **User Writer** already holds.
 

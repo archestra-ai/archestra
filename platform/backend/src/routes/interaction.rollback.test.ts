@@ -82,8 +82,8 @@ describe("interaction routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([
-      { id: busy.id, name: busy.name },
-      { id: quiet.id, name: quiet.name },
+      { id: busy.id, name: busy.name, email: busy.email },
+      { id: quiet.id, name: quiet.name, email: quiet.email },
     ]);
     await makeMember(quiet.id, organizationId, { role: "member" });
     currentUser = quiet;
@@ -92,7 +92,9 @@ describe("interaction routes", () => {
       url: "/api/interactions/user-ids?limit=100",
     });
     expect(own.statusCode).toBe(200);
-    expect(own.json()).toEqual([{ id: quiet.id, name: quiet.name }]);
+    expect(own.json()).toEqual([
+      { id: quiet.id, name: quiet.name, email: quiet.email },
+    ]);
   });
 
   test("returns scoped lineage and fails closed for ambiguous organization-wide lineage", async ({
@@ -1441,7 +1443,11 @@ describe("interaction routes", () => {
         url: "/api/interactions/user-ids",
       });
       expect(userIds.json()).toEqual([
-        { id: limitedUser.id, name: limitedUser.name },
+        {
+          id: limitedUser.id,
+          name: limitedUser.name,
+          email: limitedUser.email,
+        },
       ]);
 
       const extIds = await app.inject({
@@ -1467,7 +1473,11 @@ describe("interaction routes", () => {
         });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual([
-          { id: limitedUser.id, name: limitedUser.name },
+          {
+            id: limitedUser.id,
+            name: limitedUser.name,
+            email: limitedUser.email,
+          },
         ]);
       }
     });
@@ -1478,7 +1488,7 @@ describe("interaction routes", () => {
         url: `/api/interactions/user-ids?search=${encodeURIComponent(otherUser.name)}`,
       });
       expect(search.json()).toEqual([
-        { id: otherUser.id, name: otherUser.name },
+        { id: otherUser.id, name: otherUser.name, email: otherUser.email },
       ]);
 
       const ids = await app.inject({
@@ -1487,7 +1497,11 @@ describe("interaction routes", () => {
       });
       // The caller has no logs here, so only the user with logs resolves.
       expect(ids.json()).toEqual([
-        { id: limitedUser.id, name: limitedUser.name },
+        {
+          id: limitedUser.id,
+          name: limitedUser.name,
+          email: limitedUser.email,
+        },
       ]);
 
       const one = await app.inject({

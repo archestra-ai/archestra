@@ -1978,13 +1978,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
-      // The runtime holds no record of this call, so the result the client
-      // sends back for it is answered from here.
-      await cacheManager.set(
-        notLoadedRulingKey({ session, callId: id }),
-        feedback,
-        TimeInMs.Day,
-      );
     }
     for (const id of blockedTranscriptCalls) {
       decisionById.set(id, {
@@ -2004,6 +1997,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (relay.kind === "deny") {
         decisionById.set(id, { kind: "deny", feedback: relay.feedback });
       }
+    }
+    for (const id of notLoaded.keys()) {
+      const decision = decisionById.get(id);
+      if (decision?.kind !== "deny") continue;
+      // The runtime holds no record of this call, so the result the client
+      // sends back for it is answered from here, with the ruling shown now.
+      await cacheManager.set(
+        notLoadedRulingKey({ session, callId: id }),
+        decision.feedback,
+        TimeInMs.Day,
+      );
     }
 
     const refusals = [...decisionById.values()].flatMap((decision) =>

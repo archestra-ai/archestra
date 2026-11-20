@@ -490,6 +490,91 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ).toHaveLength(0);
     });
 
+    test("a reused-name spawn the session has not loaded reads the same ruling on later requests", async () => {
+      await db.insert(database.schema.openappaSessionsTable).values({
+        actor: openappaActor(scoped(`${lead}:${auditor}`)),
+        root: openappaActor(scoped(lead)),
+        organizationId: h.agent.organizationId,
+        callerId: `user:${h.userId}`,
+        sessionId: scoped(`${lead}:${auditor}`),
+        parentId: scoped(lead),
+        startDecision: { decision: "ack" },
+      });
+      // A client that defers its tools, here without Agent loaded.
+      const sendDeferring = (messages: unknown[]) => {
+        const body = h.payload(true, messages);
+        body.tools.push(
+          {
+            name: "ToolSearch",
+            description: "Search for deferred tools",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "DeferredToolPlaceholder",
+            description: "Deferred",
+            input_schema: { type: "object", properties: {} },
+            defer_loading: true,
+          } as (typeof body.tools)[number],
+        );
+        return h.app.inject({
+          method: "POST",
+          url: h.url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...claudeCodeHeaders(undefined) },
+          payload: body,
+        });
+      };
+      const ask = [
+        { role: "user", content: "Audit the triggers again with a teammate" },
+      ];
+      reply("Agent", spawnInput);
+      const refused = await sendDeferring(ask);
+      expect(refused.statusCode, refused.body).toBe(200);
+      const notice = noticeFrom(refused.body, true);
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+
+      answerText();
+      const next = await sendDeferring([
+        ...ask,
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: notice.name,
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the model",
+            },
+          ],
+        },
+      ]);
+      expect(next.statusCode, next.body).toBe(200);
+      const results = (
+        h.providerRequests.at(-1) as {
+          messages: { content: unknown }[];
+        }
+      ).messages.flatMap((message) =>
+        Array.isArray(message.content)
+          ? message.content.filter(
+              (block: { type?: string }) => block.type === "tool_result",
+            )
+          : [],
+      );
+      expect(
+        results.map((block: { content?: unknown }) => block.content),
+      ).toEqual([notice.input.ruling]);
+    });
+
     test("a teammate's message the peer check denies is not sent", async () => {
       const { prompt } = await spawnTeammate();
       vi.mocked(appaService.sendPeerMessage).mockResolvedValue({

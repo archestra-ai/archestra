@@ -72,6 +72,8 @@ export type InteractionSessionPreview = z.infer<
 export const UserInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
+  // Two users can share a name; the email tells them apart in the filter.
+  email: z.string(),
 });
 
 export const InteractionAuthMethodSchema = z.enum([

@@ -91,7 +91,11 @@ export default class InteractionUserActivityModel {
     const activity = schema.interactionUserActivityTable;
     const state = schema.interactionUserActivityStateTable;
     return db
-      .select({ id: activity.userId, name: schema.usersTable.name })
+      .select({
+        id: activity.userId,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
       .from(activity)
       .innerJoin(schema.usersTable, eq(schema.usersTable.id, activity.userId))
       .innerJoin(

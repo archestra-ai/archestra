@@ -27,7 +27,7 @@ describe("InteractionModel.getUserFilterOptions", () => {
         organizationId: org.id,
         limit: 100,
       });
-    const expected = [{ id: user.id, name: user.name }];
+    const expected = [{ id: user.id, name: user.name, email: user.email }];
     for (let version = 0; version < 3; version++) {
       await InteractionUserActivityModel.invalidate();
       get.mockClear();
@@ -67,8 +67,8 @@ describe("InteractionModel.getUserFilterOptions", () => {
         limit: 2,
       }),
     ).toEqual([
-      { id: busy.id, name: "Zulu Busy" },
-      { id: middle.id, name: "Mike Middle" },
+      { id: busy.id, name: "Zulu Busy", email: busy.email },
+      { id: middle.id, name: "Mike Middle", email: middle.email },
     ]);
   });
 
@@ -125,7 +125,9 @@ describe("InteractionModel.getUserFilterOptions", () => {
       limit: 20,
     });
 
-    expect(found).toEqual([{ id: ada.id, name: "Lovelace, Ada" }]);
+    expect(found).toEqual([
+      { id: ada.id, name: "Lovelace, Ada", email: ada.email },
+    ]);
     expect(found.map((user) => user.id)).not.toContain(adaNoLogs.id);
   });
 
@@ -158,12 +160,14 @@ describe("InteractionModel.getUserFilterOptions", () => {
       });
 
     expect(await search("100%")).toEqual([
-      { id: percent.id, name: "Load 100% done" },
+      { id: percent.id, name: "Load 100% done", email: percent.email },
     ]);
     expect(await search("snake_case")).toEqual([
-      { id: underscore.id, name: "snake_case" },
+      { id: underscore.id, name: "snake_case", email: underscore.email },
     ]);
-    expect(await search(unnamed.id)).toEqual([{ id: unnamed.id, name: "" }]);
+    expect(await search(unnamed.id)).toEqual([
+      { id: unnamed.id, name: "", email: unnamed.email },
+    ]);
     // A named user is matched by name only, never by id.
     expect(await search(named.id)).toEqual([]);
   });
@@ -202,14 +206,14 @@ describe("InteractionModel.getUserFilterOptions", () => {
       });
 
     expect(await search("a")).toEqual([
-      { id: early.id, name: "Ada Bbb Active" },
-      { id: late.id, name: "Ada Yyy Active" },
+      { id: early.id, name: "Ada Bbb Active", email: early.email },
+      { id: late.id, name: "Ada Yyy Active", email: late.email },
     ]);
     expect(await search("a", 1)).toEqual([
-      { id: early.id, name: "Ada Bbb Active" },
+      { id: early.id, name: "Ada Bbb Active", email: early.email },
     ]);
     expect(await search("ada yyy")).toEqual([
-      { id: late.id, name: "Ada Yyy Active" },
+      { id: late.id, name: "Ada Yyy Active", email: late.email },
     ]);
     expect(await search("quixote")).toEqual([]);
   });
@@ -234,7 +238,7 @@ describe("InteractionModel.getUserFilterOptions", () => {
         ids: [local.id, foreign.id],
         limit: 20,
       }),
-    ).toEqual([{ id: local.id, name: "Local" }]);
+    ).toEqual([{ id: local.id, name: "Local", email: local.email }]);
   });
 
   test("keeps each organization's default list separate", async ({
@@ -254,8 +258,12 @@ describe("InteractionModel.getUserFilterOptions", () => {
     const list = (organizationId: string) =>
       InteractionModel.getUserFilterOptions({ organizationId, limit: 20 });
 
-    expect(await list(org.id)).toEqual([{ id: local.id, name: "Local" }]);
-    expect(await list(other.id)).toEqual([{ id: foreign.id, name: "Foreign" }]);
+    expect(await list(org.id)).toEqual([
+      { id: local.id, name: "Local", email: local.email },
+    ]);
+    expect(await list(other.id)).toEqual([
+      { id: foreign.id, name: "Foreign", email: foreign.email },
+    ]);
   });
 
   test("serves the default list from the cache until it expires", async ({
@@ -276,11 +284,15 @@ describe("InteractionModel.getUserFilterOptions", () => {
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     try {
-      expect(await list()).toEqual([{ id: first.id, name: "First" }]);
+      expect(await list()).toEqual([
+        { id: first.id, name: "First", email: first.email },
+      ]);
       await seed(agent.id, [later.id, later.id]);
 
       clock.mockReturnValue(now + 20 * TimeInMs.Second);
-      expect(await list()).toEqual([{ id: first.id, name: "First" }]);
+      expect(await list()).toEqual([
+        { id: first.id, name: "First", email: first.email },
+      ]);
       // Search reads the log directly, so it already sees the new user.
       expect(
         await InteractionModel.getUserFilterOptions({
@@ -288,12 +300,12 @@ describe("InteractionModel.getUserFilterOptions", () => {
           search: "later",
           limit: 20,
         }),
-      ).toEqual([{ id: later.id, name: "Later" }]);
+      ).toEqual([{ id: later.id, name: "Later", email: later.email }]);
 
       clock.mockReturnValue(now + 40 * TimeInMs.Second);
       expect(await list()).toEqual([
-        { id: later.id, name: "Later" },
-        { id: first.id, name: "First" },
+        { id: later.id, name: "Later", email: later.email },
+        { id: first.id, name: "First", email: first.email },
       ]);
     } finally {
       clock.mockRestore();
@@ -328,7 +340,9 @@ describe("InteractionModel.getUserFilterOptions", () => {
     ]);
 
     expect(results).toEqual(
-      Array.from({ length: 6 }, () => [{ id: user.id, name: "Only" }]),
+      Array.from({ length: 6 }, () => [
+        { id: user.id, name: "Only", email: user.email },
+      ]),
     );
     // One store per organization: the five concurrent misses shared a load.
     expect(set).toHaveBeenCalledTimes(2);
@@ -363,7 +377,9 @@ describe("InteractionModel.getUserFilterOptions", () => {
         limit: 100,
       }),
     );
-    expect(loaded.result).toEqual([{ id: user.id, name: user.name }]);
+    expect(loaded.result).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
     expect(loads).toBe(1);
     expect(
       loaded.statements.filter((statement) =>
@@ -393,7 +409,7 @@ describe("InteractionModel.getUserFilterOptions", () => {
         organizationId: org.id,
         limit: 20,
       }),
-    ).toEqual([{ id: user.id, name: "Only" }]);
+    ).toEqual([{ id: user.id, name: "Only", email: user.email }]);
   });
 });
 

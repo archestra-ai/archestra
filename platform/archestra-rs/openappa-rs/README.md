@@ -23,10 +23,10 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches the OpenAPPA runtime pinned to commit `05c04872` from its main
-branch. This includes the checked status read from OpenAPPA PR #509 and the
-wildcard fallback fix from PR #515. A sibling checkout is not required. Update
-the manifest revision and lockfile when adopting a newer runtime commit.
+Cargo fetches the OpenAPPA runtime pinned to commit `b8d63cdd` from its main
+branch. A sibling checkout is not required. Update the manifest revision, the
+lockfile and `ENGINE_VERSION` in `src/replay.rs` when adopting a newer runtime
+commit.
 The lockfile also selects `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
 
@@ -89,7 +89,7 @@ Caller identity provides audit attribution. For external clients, it scopes the 
 
 The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
 
-Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. The endpoint returns no status for an encrypted chat, even when the browser has its key; it does not read OpenAPPA for that chat.
+Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. For an encrypted chat the endpoint returns no status while the request leaves the chat locked. An unlocked chat with key escrow is read with the chat's key.
 
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
@@ -139,20 +139,20 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 | `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
-| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and its lease generation (migration `0530`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
 store keeps a pool of PostgreSQL connections, each on its own thread, sized by
-`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`. A dispatch leases one connection
-and runs the advisory lock, the receipt SQL and the runtime's event writes on
-it: the lock and the event writes take the same key, which only one connection
-can hold twice. The pool replaces a connection the server has ended.
+`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`. No dispatch holds a connection
+or a lock while it works: each claim, renewal, event write and completion
+checks a connection out for one short transaction. The pool replaces a
+connection the server has ended.
 
-Dispatches for different trajectory families run concurrently. An in-process
-lock serializes each family within a backend process, and a PostgreSQL advisory
-lock serializes it across backend processes. Before an operation that might
-consult an external authority, the binding commits a `pending` receipt. Hook
+Dispatches run concurrently, including dispatches of one trajectory family.
+The event log takes each family's read-decide-append steps in turn on the
+family's row, and each operation's receipt lets one dispatch work on it at a
+time. Before an operation that might consult an external authority, the
+binding commits a `pending` receipt. Hook
 event writes and the completed receipt/approved output then commit as separate
 short transactions. The runtime keeps no trajectory state in memory between
 events, so a failed dispatch leaves nothing to discard. A durable pending
@@ -163,25 +163,26 @@ not block the family's other work.
 
 A backend process can stop between a receipt's claim and its completion: a
 rollout, an out-of-memory kill, a lost database connection. The receipt then
-stays pending. Before its first claim, a hook dispatch takes the family's lease
-in `openappa_dispatch_leases`. The lease names the dispatch and records where
-the family's event log ended.
+stays pending. The dispatch that claimed a receipt holds a lease on it: an
+owner id and an expiry the database clock judges. A lease stands for 30
+seconds without renewal, and a working dispatch renews its leases every five
+seconds, so a lease outlives any consult it waits on. A process that stops
+renews nothing and its leases expire. Recovery is per operation, at the
+operation's own resubmission:
 
-The lease lasts as long as its owner's connection. The owner holds the family's
-advisory lock for the whole dispatch, and PostgreSQL drops that lock when the
-connection ends. A later dispatch that holds the lock and still finds pending
-receipts therefore knows that their owner no longer works on them. No clock is
-compared. Recovery is per operation, at the operation's own resubmission:
-
-- A resubmitted operation that finds its receipt pending is driven again
-  through the runtime. Work the event log never kept runs as a first run, with
-  its external consults. Work the log kept is answered from the committed
-  facts — the same decision, the same offers, the same dispatch binding —
-  without re-execution. Either way the pending receipt completes with exactly
-  the answer the host was owed, and the family goes on.
-- A dispatch that fails while its own log is unchanged kept nothing, so the
-  receipts it claimed are released before it returns, and the host's retry
-  runs them again.
+- A resubmitted operation that finds its receipt pending under an expired
+  lease is driven again through the runtime. Work the event log never kept
+  runs as a first run, with its external consults. Work the log kept is
+  answered from the committed facts — the same decision, the same offers, the
+  same dispatch binding — without re-execution. Either way the pending receipt
+  completes with exactly the answer the host was owed, and the family goes on.
+- A resubmitted operation whose receipt is pending under a live lease belongs
+  to a dispatch still at work. It waits for that dispatch's answer for a
+  bounded time, holding no connection, and is then refused as retryable.
+- A dispatch that fails while the family's log is unchanged kept nothing, so it
+  removes the receipts it created and the host's retry runs them as first
+  runs. Any other receipt it holds keeps its recorded input and only its lease
+  ends, so the retry takes it over at once.
 - A remedy completes two receipts one after the other. One stopped between
   them is repaired from its own saved decision: the completed operation
   receipt already holds the answer the pending result receipt takes.
@@ -196,10 +197,11 @@ A mismatched resubmission still fails closed: a reused call id with different
 bytes, a result that contradicts the committed one, and an input that conflicts
 with a pending receipt are refused, and no receipt is rewritten for them.
 
-A working dispatch reads its lease every five seconds. If the read fails or the
-lease has another owner, the dispatch stops and returns the lost-lease error.
-The host reports that error as retryable. The dispatch that took the family
-answers the retry from its completed receipt.
+Only the owner of a pending receipt completes it. A dispatch whose lease
+expired before a renewal reached the database, and was taken over, stops and
+returns the lost-lease error. The host reports that error as retryable. The
+dispatch that took the receipt over answers the retry from its completed
+receipt.
 
 A tool result is recorded in the event log before its output sanitizer is
 consulted. A process that stops during that consult leaves a checkpoint the
@@ -217,7 +219,7 @@ session that already owns a root cannot move to another history. The fork
 opens an independent root with the parent root's policy revision, current state,
 effects, and denials. Parent and child activities stay separate.
 
-`forked_at` is the database-clock watermark recorded while the process holds the parent root lock.
+`forked_at` is the database-clock watermark taken before the fork reads the parent's log.
 A fork inherits only parent decisions completed strictly before that watermark,
 including across a chain of forks. If the parent admits a result after the fork opens,
 the fork withholds that result. If a process stops unexpectedly before writing
@@ -247,7 +249,7 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-Encrypted chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred tools are governed: `tool_search` declarations, Anthropic's provider-run `tool_search_tool_regex_*` and `tool_search_tool_bm25_*` types, and `defer_loading` tools are accepted. Only a tool the request declares is ruled on, so a call to a tool the client has not loaded is refused with the instruction to search for it, and never released. While the remedy tools are not both declared, the remedy and `ask_user` tools are withheld from the model and a denial is refused with the instruction to load them. Unknown `tool_search_tool_*` types are refused as unclassifiable. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
+Encrypted chats are governed too: the payloads of their events and receipts are stored encrypted under the chat's key. Operation ids, label-change rows and the session's routing and fork metadata stay in plain columns. Chat refuses a message in an encrypted chat without key escrow while Guardrails v2 is active. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred tools are governed: `tool_search` declarations, Anthropic's provider-run `tool_search_tool_regex_*` and `tool_search_tool_bm25_*` types, and `defer_loading` tools are accepted. Only a tool the request declares is ruled on, so a call to a tool the client has not loaded is refused with the instruction to search for it, and never released. While the remedy tools are not both declared, the remedy and `ask_user` tools are withheld from the model and a denial is refused with the instruction to load them. Unknown `tool_search_tool_*` types are refused as unclassifiable. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
 
 The provider runs a hosted `web_search` inside the inference call, so the proxy cannot stop the call; it rules on what the call brought in. It withholds the response from the first `web_search_call` item on — the search record, the text the model wrote with the results in view, and any calls after it — and submits that as the result of a `web_search` tool call. An admitted result passes through unchanged. A held one reaches the client as a notice in place of the withheld part, so the model never sees it in a later request unless a remedy releases it. List `web_search` under `confined_results` to have the runtime stage the result: accepting the offer returns it. Any other denial drops it, and the model searches again once the remedy allows the call. The query itself has already reached the provider, which holds the session's context anyway. A search-backed turn loses token streaming after the search starts, since the verdict needs the whole turn.
 

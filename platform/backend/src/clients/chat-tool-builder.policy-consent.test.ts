@@ -80,10 +80,30 @@ describe("a pull request on the policy repository needs the person's approval", 
     );
   });
 
-  test("dispatched through run_tool it asks the same, and only for that target", async () => {
+  test("dispatched through run_tool it asks the same, under every name run_tool takes for it, and only for that target", async () => {
     expect(await asks(runTool, { tool_name: propose, tool_args: {} })).toBe(
       true,
     );
+    // run_tool also takes a built-in tool's bare short name.
+    expect(
+      await asks(runTool, {
+        tool_name: "propose_guardrails_server_rules_change",
+        tool_args: {},
+      }),
+    ).toBe(true);
+    // And its name under the default prefix, whatever the deployment's is.
+    expect(
+      await asks(runTool, {
+        tool_name: "archestra__propose_guardrails_server_rules_change",
+        tool_args: {},
+      }),
+    ).toBe(true);
+    expect(
+      await asks(runTool, {
+        tool_name: "preview_guardrails_server_rules_change",
+        tool_args: {},
+      }),
+    ).toBe(false);
     expect(await asks(runTool, { tool_name: preview, tool_args: {} })).toBe(
       false,
     );

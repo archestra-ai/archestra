@@ -231,9 +231,7 @@ export function buildMcpGatewayTool(params: {
           ? // Dispatched through run_tool: the same call, the same consent.
             {
               needsApproval: (input: unknown) =>
-                opensPolicyPullRequest(
-                  resolveRunToolTargetName(mcpTool.name, input),
-                ),
+                runToolOpensPolicyPullRequest(mcpTool.name, input),
             }
           : {}),
     execute: async (args: unknown, options) => {
@@ -1039,6 +1037,18 @@ function opensPolicyPullRequest(toolName: string): boolean {
   return (
     archestraMcpBranding.getToolShortName(toolName) ===
     OPENAPPA_SERVER_RULES_PROPOSE_TOOL_SHORT_NAME
+  );
+}
+
+/**
+ * The same for a `run_tool` call, by the tool it dispatches to. The target
+ * is read as `run_tool` itself resolves it, so the bare short name it also
+ * accepts is the same call as the full one.
+ */
+function runToolOpensPolicyPullRequest(toolName: string, args: unknown) {
+  const dispatch = resolveRunToolDispatch({ toolName, args });
+  return (
+    dispatch.kind === "target" && opensPolicyPullRequest(dispatch.toolName)
   );
 }
 

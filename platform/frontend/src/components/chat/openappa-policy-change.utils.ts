@@ -72,14 +72,22 @@ export function parsePolicyDelivery(
 /**
  * The text a unified diff started from, given the text it led to: its
  * context and added lines are found in `after`, its removed lines put back.
- * Null when the diff does not fit the text.
+ * Whether that text ended in a newline is read from the diff's
+ * "\ No newline at end of file" markers where the diff reaches its last
+ * line, and is as `after` ends where it does not. Null when the diff does
+ * not fit the text.
  */
 export function textBeforeDiff(after: string, diff: string): string | null {
   const lines = after === "" ? [] : after.replace(/\n$/, "").split("\n");
   const before: string[] = [];
+  // Whether the last line put into `before` came with a no-newline marker;
+  // null when that line was copied from `after` outside any hunk.
+  let lastUnterminated: boolean | null = null;
   // The next line of `after`, from 0, the diff has not accounted for.
   let next = 0;
   let inHunk = false;
+  // The kind of the hunk line just read: "+", "-" or " ".
+  let previous = "";
   for (const raw of diff.replace(/\n$/, "").split("\n")) {
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(raw);
     if (hunk) {
@@ -87,25 +95,41 @@ export function textBeforeDiff(after: string, diff: string): string | null {
       const start =
         hunk[2] === "0" ? Number(hunk[1]) : Math.max(Number(hunk[1]) - 1, 0);
       if (start < next || start > lines.length) return null;
+      if (start > next) lastUnterminated = null;
       before.push(...lines.slice(next, start));
       next = start;
       inHunk = true;
+      previous = "";
       continue;
     }
-    if (!inHunk || raw.startsWith("\\")) continue;
+    if (!inHunk) continue;
+    if (raw.startsWith("\\")) {
+      // The marker speaks for the line above it: a removed or a kept line
+      // is the old text's last one.
+      if (previous === "-" || previous === " ") lastUnterminated = true;
+      continue;
+    }
     if (raw.startsWith("+")) {
       if (lines[next] !== raw.slice(1)) return null;
       next++;
+      previous = "+";
     } else if (raw.startsWith("-")) {
       before.push(raw.slice(1));
+      lastUnterminated = false;
+      previous = "-";
     } else {
       if (lines[next] !== raw.slice(1)) return null;
       before.push(lines[next]);
+      lastUnterminated = false;
       next++;
+      previous = " ";
     }
   }
+  if (next < lines.length) lastUnterminated = null;
   before.push(...lines.slice(next));
-  return before.length === 0 ? "" : `${before.join("\n")}\n`;
+  if (before.length === 0) return "";
+  const unterminated = lastUnterminated ?? !after.endsWith("\n");
+  return `${before.join("\n")}${unterminated ? "" : "\n"}`;
 }
 
 /** A server's rules always travel as a pull request, named or not. */

@@ -42,6 +42,44 @@ describe("textBeforeDiff", () => {
   it("refuses a diff that does not fit the text", () => {
     expect(textBeforeDiff("other\n", DIFF)).toBeNull();
   });
+  it("keeps a missing final newline of the text before, as the diff's markers say", () => {
+    const marker = "\\ No newline at end of file\n";
+    // Neither text ends in a newline.
+    expect(
+      textBeforeDiff(
+        "a\nB",
+        `--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n${marker}+B\n${marker}`,
+      ),
+    ).toBe("a\nb");
+    // Only the new text lacks it.
+    expect(
+      textBeforeDiff(
+        "a\nB",
+        `--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n+B\n${marker}`,
+      ),
+    ).toBe("a\nb\n");
+    // Only the old text lacked it.
+    expect(
+      textBeforeDiff(
+        "a\nb\n",
+        `--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n${marker}+b\n`,
+      ),
+    ).toBe("a\nb");
+    // A kept last line carries the marker for both texts.
+    expect(
+      textBeforeDiff(
+        "X\ny",
+        `--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n-x\n+X\n y\n${marker}`,
+      ),
+    ).toBe("x\ny");
+    // The diff ends before the last line: the ending is the new text's.
+    expect(
+      textBeforeDiff(
+        "X\nm1\nm2\nm3\nm4\nlast",
+        "--- a/f\n+++ b/f\n@@ -1,4 +1,4 @@\n-x\n+X\n m1\n m2\n m3\n",
+      ),
+    ).toBe("x\nm1\nm2\nm3\nm4\nlast");
+  });
 });
 
 describe("parsePolicyChange", () => {

@@ -4,7 +4,10 @@ import type { UIMessage } from "@ai-sdk/react";
 import type { ArchestraToolShortName } from "@archestra/shared";
 import { createContext, type ReactNode, useContext } from "react";
 import { OpenAppaPolicyArguments } from "./openappa-policy-change";
-import { parsePolicyOutput } from "./openappa-policy-change.utils";
+import {
+  parsePolicyChange,
+  parsePolicyOutput,
+} from "./openappa-policy-change.utils";
 
 /** A completed preview: its result, and the arguments it was called with. */
 export type PreviewedChange = { output: unknown; input: unknown };
@@ -67,7 +70,8 @@ export function collectPreviewedChanges(
         name = wrapped.tool_name;
         args = wrapped.tool_args;
       }
-      const shortName = getToolShortName(name);
+      // run_tool also takes a built-in tool's bare short name.
+      const shortName = getToolShortName(name) ?? name;
       if (
         shortName !== "preview_guardrails_server_rules_change" &&
         shortName !== "propose_guardrails_server_rules_change"
@@ -80,13 +84,28 @@ export function collectPreviewedChanges(
         if (previewed) result.set(part.toolCallId, previewed);
       } else if (
         part.state === "output-available" &&
-        parsePolicyOutput(part.output)?.valid !== false
+        showsAsDiff(part.output, args)
       ) {
         previews.set(key, { output: part.output, input: args });
       }
     }
   }
   return result.size ? result : NONE;
+}
+
+/**
+ * Whether a preview's card shows the change as a diff: a result that reads
+ * as a valid preview, with a diff that fits the file. Anything else (an
+ * error text, a diff that cannot be undone) leaves no diff on screen, so a
+ * proposal of the same file is not said to be "previewed above".
+ */
+function showsAsDiff(output: unknown, args: unknown): boolean {
+  const parsed = parsePolicyOutput(output);
+  return (
+    !!parsed &&
+    parsed.valid !== false &&
+    parsePolicyChange(output, false, args) !== null
+  );
 }
 
 /**

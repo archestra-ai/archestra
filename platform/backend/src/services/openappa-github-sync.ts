@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  BUILT_IN_AGENT_IDS,
   getGithubWebOrigin,
   gitHostFromUrl,
   isBuiltInCatalogId,
@@ -19,6 +20,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { gitClient } from "@/git-hosts/git-access";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import AgentModel from "@/models/agent";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import MemberModel from "@/models/member";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
@@ -26,6 +28,7 @@ import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoleCompositionModel from "@/models/role-composition";
 import UserModel from "@/models/user";
 import {
@@ -313,7 +316,7 @@ export async function connectAppaGithubRepository(params: {
       409,
       "Stop the current Git sync before connecting another repository",
     );
-  await saveSource(params);
+  const before = await saveSource({ ...params, deferKeeperShare: true });
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (row?.lastSyncError) {
@@ -323,6 +326,7 @@ export async function connectAppaGithubRepository(params: {
       `Could not connect ${params.source.repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -593,7 +597,7 @@ export async function createAppaGithubRepository(params: {
     setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
-  await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  await saveAndShareKeeper(params.organizationId, source);
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
       organizationId: params.organizationId,
@@ -706,7 +710,9 @@ async function proposeSetupPullRequest(params: {
     setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
-  await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  const before = await saveAndShareKeeper(params.organizationId, source, {
+    deferShare: true,
+  });
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
       organizationId: params.organizationId,
@@ -725,6 +731,7 @@ async function proposeSetupPullRequest(params: {
       `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
     );
   }
+  await shareKeeperOnceInForce(params.organizationId, before);
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -873,7 +880,7 @@ async function createAppaGitlabProject(params: {
     setupPullRequestNumber: seeded.setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
-  await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  await saveAndShareKeeper(params.organizationId, source);
   if (seeded.setupPullRequestNumber && seeded.setupCommit)
     await rememberSetupCommit({
       organizationId: params.organizationId,
@@ -922,6 +929,65 @@ export async function updateAppaGithubSync(params: {
       await OpenAppaGithubSyncModel.enqueue(params.organizationId);
   }
   return getAppaGithubSync(params.organizationId);
+}
+
+/**
+ * Save the source, and share the Keeper when that puts self-service in
+ * force. A caller that still has to learn whether the source works defers
+ * the share and gives it, with the row returned here, once the first pull
+ * succeeded: a connection that is rolled back shares nothing.
+ */
+async function saveAndShareKeeper(
+  organizationId: string,
+  source: Parameters<typeof OpenAppaGithubSyncModel.save>[1],
+  options: { deferShare?: boolean } = {},
+): Promise<SyncRow | null> {
+  const before = await OpenAppaGithubSyncModel.find(organizationId);
+  await OpenAppaGithubSyncModel.save(organizationId, source);
+  if (!options.deferShare) await shareKeeperOnceInForce(organizationId, before);
+  return before;
+}
+
+/**
+ * A server's editors change its rules through the APPA Keeper, so
+ * self-service coming into force shares it with everyone in the
+ * organization for use: an ordinary grant on the agent, which its sharing
+ * shows and can take away. What a member changes through it still takes
+ * their own access to each server. It is given at that moment only, so a
+ * grant removed later stays removed while self-service stays on. A share
+ * that fails does not undo the setting.
+ */
+async function shareKeeperOnceInForce(
+  organizationId: string,
+  before: SyncRow | null,
+) {
+  if (selfServiceActive(before)) return;
+  try {
+    if (!selfServiceActive(await OpenAppaGithubSyncModel.find(organizationId)))
+      return;
+    const keeper = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organizationId,
+    );
+    if (!keeper) return;
+    const shared = await ResourcePermissionPolicyModel.addSubjectGrant({
+      organizationId,
+      resource: "agent",
+      scope: keeper.id,
+      subject: { type: "organization", id: "*" },
+      actions: ["read", "use"],
+    });
+    if (shared)
+      logger.info(
+        { organizationId, agentId: keeper.id },
+        "OpenAPPA self-service shared the APPA Keeper with the organization",
+      );
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not share the APPA Keeper for self-service",
+    );
+  }
 }
 
 /** Refuse a self-service folder the servers' files cannot live in. */
@@ -2827,7 +2893,9 @@ async function saveSource(params: {
   organizationId: string;
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
-}) {
+  /** The caller shares the Keeper itself, once the source proved to work. */
+  deferKeeperShare?: boolean;
+}): Promise<SyncRow | null> {
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -2880,8 +2948,9 @@ async function saveSource(params: {
       });
     }
     await beforeSourceChange(params.organizationId, params.source);
-    await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
-    return;
+    return saveAndShareKeeper(params.organizationId, params.source, {
+      deferShare: params.deferKeeperShare,
+    });
   }
   // Resolve now to reject a missing or cross-organization credential, or an
   // App that cannot read the repository, before saving it.
@@ -2912,7 +2981,11 @@ async function saveSource(params: {
   // Only now, with the new source checked: a save that fails leaves the
   // branch it would have left protected.
   await beforeSourceChange(params.organizationId, params.source);
-  await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
+  const before = await saveAndShareKeeper(
+    params.organizationId,
+    params.source,
+    { deferShare: params.deferKeeperShare },
+  );
   // Saved with auto-merge in force, the App may just have been granted what
   // it lacked: the next minute's round tries the merge rather than waiting
   // out a hold. A save that failed above lifts nothing.
@@ -2929,6 +3002,7 @@ async function saveSource(params: {
           "OpenAPPA could not forget a held merge",
         ),
       );
+  return before;
 }
 
 /** A rejected or timed-out network call, as `fetch` and `AbortSignal.timeout` raise them. */

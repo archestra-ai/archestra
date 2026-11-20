@@ -1730,10 +1730,93 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // K8s interaction, since deployment identity is frozen. App catalogs
       // never get here (name is app-owned and stripped above).
       const newCatalogName = restBody.name;
-      if (
+      const nameChanges =
         newCatalogName !== undefined &&
-        newCatalogName !== originalCatalogItemForGate.name
-      ) {
+        newCatalogName !== originalCatalogItemForGate.name;
+
+      // When the environment assignment changes, gate it the same way create
+      // does — the target must belong to this org, and a restricted environment
+      // (or restricted default) requires a `use` grant on that environment.
+      const environmentChanged =
+        "environmentId" in restBody &&
+        restBody.environmentId !== originalCatalogItem.environmentId;
+      const governingEnvironmentId = (
+        "environmentId" in restBody
+          ? restBody.environmentId
+          : originalCatalogItem.environmentId
+      ) as string | null;
+      // Every check the governing environment makes on this request. It runs
+      // twice for a rename: once before the rename is committed, so a request
+      // the environment refuses leaves the name as it was, and once at its
+      // usual place, on the values as they are stored.
+      const assertEnvironmentAccepts = async (
+        environment: LocalConfig["environment"],
+      ) => {
+        if (environmentChanged) {
+          await assertCanAssignEnvironment({
+            environmentId: restBody.environmentId ?? null,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+            resource: "mcpRegistry",
+          });
+          // A move into an environment that already holds this name is the
+          // same conflict as creating it there. The edit form always sends
+          // the current name, so "unchanged" includes a name equal to the
+          // stored one. A rename checks its new name itself, below.
+          if (!nameChanges) {
+            await InternalMcpCatalogModel.assertRootNameAvailable({
+              name: originalCatalogItemForGate.name,
+              organizationId: request.organizationId,
+              environmentId: governingEnvironmentId,
+              audience: await catalogNameAudienceOf(originalCatalogItemForGate),
+              excludeId: id,
+            });
+          }
+        }
+
+        // Enforce the governing environment's allowlist regex. Validate when
+        // the local config / userConfig changes (incoming values) or the
+        // environment changes (re-check the EFFECTIVE persisted values against
+        // the new env, so moving an item into a stricter env catches values
+        // stored under the old one).
+        if (
+          environmentChanged ||
+          restBody.localConfig !== undefined ||
+          restBody.userConfig !== undefined
+        ) {
+          await assertValuesMatchEnvironmentRegex({
+            environmentId: governingEnvironmentId,
+            organizationId: request.organizationId,
+            valueSets: [
+              collectStaticEnvValues(environment),
+              collectStaticUserConfigValues(
+                restBody.userConfig ?? originalCatalogItem.userConfig,
+              ),
+            ],
+          });
+        }
+
+        // Re-validate a remote server's URL against its environment's egress
+        // policy when the URL, server type, or environment changes. Unchanged
+        // existing servers are grandfathered (no retroactive block).
+        if (
+          environmentChanged ||
+          restBody.serverUrl !== undefined ||
+          restBody.serverType !== undefined
+        ) {
+          await assertRemoteServerUrlAllowedByNetworkPolicy({
+            serverType: restBody.serverType ?? originalCatalogItem.serverType,
+            serverUrl:
+              (restBody.serverUrl !== undefined
+                ? restBody.serverUrl
+                : originalCatalogItem.serverUrl) ?? null,
+            environmentId: governingEnvironmentId,
+            organizationId: request.organizationId,
+          });
+        }
+      };
+
+      if (nameChanges) {
         // Tool names embed the catalog name and are unique only per catalog;
         // tool-call routing resolves the raw name string, so a same-name (or
         // same-lowercased-slug) sibling in this environment and audience
@@ -1764,6 +1847,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             excludeId: id,
           });
         }
+
+        // The rename is committed on its own, before the rest of this
+        // request. Ask the environment first. A value bound to a credential
+        // is stored without its text, so it is left out here as it is below.
+        await assertEnvironmentAccepts(
+          (
+            restBody.localConfig?.environment ??
+            originalCatalogItem.localConfig?.environment
+          )?.filter((envVar) => !envVar.credentialId),
+        );
 
         // The cascade's freeze-fallback is only safe once the startup adopt
         // pass has frozen every row that HAS a live deployment. Block a
@@ -1916,84 +2009,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // When the environment assignment changes, gate it the same way create
-      // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires a `use` grant on that environment.
-      const environmentChanged =
-        "environmentId" in restBody &&
-        restBody.environmentId !== originalCatalogItem.environmentId;
-      if (environmentChanged) {
-        await assertCanAssignEnvironment({
-          environmentId: restBody.environmentId ?? null,
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          resource: "mcpRegistry",
-        });
-        // A move into an environment that already holds this name is the
-        // same conflict as creating it there. The edit form always sends the
-        // current name, so "unchanged" includes a name equal to the stored
-        // one. A real rename already checked that name in the destination.
-        const nameUnchanged =
-          newCatalogName === undefined ||
-          newCatalogName === originalCatalogItemForGate.name;
-        if (nameUnchanged) {
-          await InternalMcpCatalogModel.assertRootNameAvailable({
-            name: originalCatalogItemForGate.name,
-            organizationId: request.organizationId,
-            environmentId: (restBody.environmentId ?? null) as string | null,
-            audience: await catalogNameAudienceOf(originalCatalogItemForGate),
-            excludeId: id,
-          });
-        }
-      }
-
-      // Enforce the governing environment's allowlist regex. Validate when the
-      // local config / userConfig changes (incoming values) or the environment
-      // changes (re-check the EFFECTIVE persisted values against the new env, so
-      // moving an item into a stricter env catches values stored under the old
-      // one).
-      if (
-        environmentChanged ||
-        restBody.localConfig !== undefined ||
-        restBody.userConfig !== undefined
-      ) {
-        await assertValuesMatchEnvironmentRegex({
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItem.environmentId) as string | null,
-          organizationId: request.organizationId,
-          valueSets: [
-            collectStaticEnvValues(
-              restBody.localConfig?.environment ??
-                originalCatalogItem.localConfig?.environment,
-            ),
-            collectStaticUserConfigValues(
-              restBody.userConfig ?? originalCatalogItem.userConfig,
-            ),
-          ],
-        });
-      }
-
-      // Re-validate a remote server's URL against its environment's egress
-      // policy when the URL, server type, or environment changes. Unchanged
-      // existing servers are grandfathered (no retroactive block).
-      if (
-        environmentChanged ||
-        restBody.serverUrl !== undefined ||
-        restBody.serverType !== undefined
-      ) {
-        await assertRemoteServerUrlAllowedByNetworkPolicy({
-          serverType: restBody.serverType ?? originalCatalogItem.serverType,
-          serverUrl:
-            (restBody.serverUrl !== undefined
-              ? restBody.serverUrl
-              : originalCatalogItem.serverUrl) ?? null,
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItem.environmentId) as string | null,
-          organizationId: request.organizationId,
-        });
-      }
+      await assertEnvironmentAccepts(
+        restBody.localConfig?.environment ??
+          originalCatalogItem.localConfig?.environment,
+      );
 
       // Detect an environment reassignment of a local catalog — it relocates
       // the pod to a different namespace.

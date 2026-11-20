@@ -303,6 +303,45 @@ describe("MCP server names are unique per environment", () => {
     expect(row).toEqual({ name: "Reports", environmentId: null });
   });
 
+  test("keeps the name when the destination environment refuses a rename with a move", async () => {
+    // Staging does not let a server reach example.com.
+    const staging = await createEnvironment({
+      organizationId,
+      data: {
+        name: "Staging",
+        networkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "none",
+          allowedDomains: ["registry.npmjs.org"],
+          allowedCidrs: [],
+        },
+      },
+    });
+    const reports = await create(remote("Reports", shared));
+    expect(reports.statusCode).toBe(200);
+
+    // The new name is free in both environments. The move is refused, so the
+    // rename must not be saved either.
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${reports.json().id}`,
+      payload: { name: "Weather", environmentId: staging.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.internal_code).toBe(
+      "remote_server_url_not_allowed",
+    );
+    const [row] = await db
+      .select({
+        name: schema.internalMcpCatalogTable.name,
+        environmentId: schema.internalMcpCatalogTable.environmentId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, reports.json().id));
+    expect(row).toEqual({ name: "Reports", environmentId: null });
+  });
+
   test("refuses a move into an environment that already has the name", async () => {
     const staging = await createEnvironment({
       organizationId,

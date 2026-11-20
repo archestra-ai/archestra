@@ -6091,7 +6091,6 @@ async function admitChildHandback(params: {
     output: raw,
     spawnCallId,
     ...(childNativeId ? { childNativeId } : {}),
-    ...answeredCallIds(binding),
   });
   if (outcome.decision === "held") {
     logHeldStop(binding, "child handback", outcome.running);

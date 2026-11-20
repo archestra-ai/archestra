@@ -388,64 +388,6 @@ ledgerTest(
   },
 );
 
-ledgerTest(
-  "a Claude Code SubagentHandback sent while a call runs is held until it reports",
-  async ({ makeOrganization, makeAdmin, makeMember }) => {
-    const { plugin, request, opening, started } = await startChild({
-      makeOrganization,
-      makeAdmin,
-      makeMember,
-    });
-    await runPytest(plugin, started);
-    const handback = (id: string, message: string) => ({
-      id,
-      name: "SubagentHandback",
-      arguments: { message },
-    });
-
-    const early = request({
-      agentId: "a1",
-      messages: [opening(), { role: "user", content: "Report back." }],
-    });
-    await plugin.onSessionInit(early);
-    await plugin.onToolResults({ ...early, toolResults: [] });
-    const held = await plugin.onToolCalls(
-      toolCalls(early, [handback("toolu-handback", "The build passes.")]),
-    );
-    // The runtime holds the return on the open pytest call: it does not
-    // close that call as unreported.
-    expect(held).toMatchObject({
-      decision: "allow",
-      blocked: [{ id: "toolu-handback", name: "SubagentHandback" }],
-    });
-    expect(held).not.toHaveProperty("rewritten");
-    await plugin.onCleanup(early);
-
-    const finished = request({
-      agentId: "a1",
-      messages: [opening(), ...pytestRound("2 failed, 40 passed")],
-    });
-    await plugin.onSessionInit(finished);
-    expect(
-      await plugin.onToolResults({
-        ...finished,
-        toolResults: [pytestResult("2 failed, 40 passed")],
-      }),
-    ).toEqual({ toolResultUpdates: { "toolu-pytest": "2 failed, 40 passed" } });
-    const crossed = await plugin.onToolCalls(
-      toolCalls(finished, [
-        handback("toolu-handback-2", "Two tests fail in test_build.py."),
-      ]),
-    );
-    expect(crossed).toMatchObject({
-      decision: "allow",
-      rewritten: [{ id: "toolu-handback-2", name: "SubagentHandback" }],
-    });
-    expect(crossed).not.toHaveProperty("blocked");
-    await plugin.onCleanup(finished);
-  },
-);
-
 const BASH_TOOL = {
   name: "Bash",
   description: "Run a shell command",

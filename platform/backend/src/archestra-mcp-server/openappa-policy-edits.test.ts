@@ -1,6 +1,14 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import config from "@/config";
+import A2aRemoteAgentModel, {
+  A2aConnectionModel,
+} from "@/models/a2a-remote-agent";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import ToolModel from "@/models/tool";
+import ToolObservationModel from "@/models/tool-observation";
+import { coverageVisibility } from "@/openappa/coverage";
+import { persistTools } from "@/routes/proxy/utils/tools";
 import {
   guardrailsPolicyService,
   initialPolicy,
@@ -26,12 +34,14 @@ const INSERT = [{ oldText: ANCHOR, newText: `${NEW_RULES}${ANCHOR}` }];
 let context: ArchestraContext;
 let organizationId: string;
 let userId: string;
+let policyEditorRole: string;
 
 beforeEach(
   async ({
     makeOrganization,
     makeUser,
     makeMember,
+    makeCustomRole,
     makeAgent,
     seedAndAssignArchestraTools,
   }) => {
@@ -43,6 +53,10 @@ beforeEach(
     await seedAndAssignArchestraTools(agent.id);
     organizationId = org.id;
     userId = user.id;
+    const editor = await makeCustomRole(org.id, {
+      permission: { guardrailsPolicy: ["read", "update"] },
+    });
+    policyEditorRole = editor.role;
     context = {
       agent: { id: agent.id, name: agent.name },
       organizationId,
@@ -98,7 +112,11 @@ describe("policy edits", () => {
     const current = withRules(["github__get_issue", "github__list_issues"]);
     await saveRevision(current);
 
-    const previewed = await preview({ edits: INSERT, expectedRevision: 1 });
+    const previewed = await preview({
+      edits: INSERT,
+      expectedRevision: 1,
+      allowUnknownTools: true,
+    });
     const after = (previewed.structuredContent as { after: string }).after;
     expect(after).toBe(current.replace(ANCHOR, `${NEW_RULES}${ANCHOR}`));
     expect((previewed.structuredContent as { before: string }).before).toBe(
@@ -142,7 +160,11 @@ describe("policy edits", () => {
     await saveRevision(current);
     expect(current.length).toBeGreaterThan(50_000);
 
-    const previewed = await preview({ edits: INSERT, expectedRevision: 1 });
+    const previewed = await preview({
+      edits: INSERT,
+      expectedRevision: 1,
+      allowUnknownTools: true,
+    });
     const [block] = previewed.content;
     expect(block?.type === "text" && block.text.length).toBeLessThan(2_000);
   });
@@ -168,7 +190,7 @@ describe("policy edits", () => {
       ],
       [
         { edits: [{ oldText: "delta = {}", newText: "delta = { }" }] },
-        "edits[0]: oldText matches 7 places. Add surrounding lines to make it unique, or set replaceAll to true.",
+        "edits[0]: oldText matches 22 places. Add surrounding lines to make it unique, or set replaceAll to true.",
       ],
       [
         { edits: [{ oldText: "version = 2", newText: "version = 2" }] },
@@ -205,6 +227,7 @@ describe("policy edits", () => {
         },
       ],
       expectedRevision: 1,
+      allowUnknownTools: true,
     });
     expect(modelText(previewed).changed).toEqual({ added: 2, removed: 2 });
     expect((previewed.structuredContent as { after: string }).after).toBe(
@@ -217,10 +240,14 @@ describe("policy edits", () => {
     await saveRevision(current);
     const edited = current.replace(ANCHOR, `${NEW_RULES}${ANCHOR}`);
     const fillers: Array<Record<string, unknown>> = [
-      { content: "", edits: INSERT },
-      { content: null, edits: [{ ...INSERT[0], replaceAll: null }] },
-      { content: edited, edits: [] },
-      { content: edited, edits: null },
+      { content: "", edits: INSERT, allowUnknownTools: true },
+      {
+        content: null,
+        edits: [{ ...INSERT[0], replaceAll: null }],
+        allowUnknownTools: true,
+      },
+      { content: edited, edits: [], allowUnknownTools: true },
+      { content: edited, edits: null, allowUnknownTools: true },
     ];
     for (const args of fillers) {
       const previewed = await preview({ ...args, expectedRevision: 1 });
@@ -236,7 +263,11 @@ describe("policy edits", () => {
     const { revision } = await saveRevision(policy);
 
     const change = modelText(
-      await preview({ edits: INSERT, expectedRevision: revision }),
+      await preview({
+        edits: INSERT,
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
     );
     const noChange = modelText(
       await preview({ content: policy, expectedRevision: revision }),
@@ -248,7 +279,11 @@ describe("policy edits", () => {
 
   test("content still replaces the whole policy and returns a diff", async () => {
     const content = withRules(["github__get_issue"]);
-    const previewed = await preview({ content, expectedRevision: 0 });
+    const previewed = await preview({
+      content,
+      expectedRevision: 0,
+      allowUnknownTools: true,
+    });
     const seen = modelText(previewed);
     expect(seen).not.toHaveProperty("after");
     expect(seen.changed).toEqual({ added: 4, removed: 0 });
@@ -262,7 +297,408 @@ describe("policy edits", () => {
 });
 
 describe("rules naming tools", () => {
-  test("a rule for a missing tool warns at preview and publish; an existing tool's metadata reaches the model", async ({
+  for (const caller of ["observed member", "unobserving admin"]) {
+    test(`a proxy tool is known to an ${caller} at preview and publish`, async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const observer = await makeUser();
+      await makeMember(observer.id, organizationId, {
+        role: `member,${policyEditorRole}`,
+      });
+      expect(
+        await hasAnyAgentTypeAdminPermission({
+          userId: observer.id,
+          organizationId,
+        }),
+      ).toBe(false);
+      const name = "workbench__read_document";
+      await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [
+          {
+            name,
+            description: "Read a document from the workspace.",
+            parameters: {
+              type: "object",
+              properties: { path: {}, revision: {} },
+            },
+          },
+        ],
+        context.agent?.id ?? "",
+      );
+      await ToolObservationModel.recordObservations({
+        toolNames: [name],
+        userId: observer.id,
+      });
+      const { revision } = await saveRevision(initialPolicy());
+      if (caller === "observed member") context.userId = observer.id;
+      const content = withRules([name]);
+      const previewed = modelText(
+        await preview({ content, expectedRevision: revision }),
+      );
+      expect(previewed).toMatchObject({ valid: true, warnings: [] });
+      expect(previewed.touchedTools).toMatchObject({
+        tools: [
+          {
+            name,
+            description: "Read a document from the workspace.",
+            arguments: ["path", "revision"],
+          },
+        ],
+        omitted: 0,
+      });
+      expect(
+        modelText(await publish({ content, expectedRevision: revision })),
+      ).toMatchObject({ warnings: [] });
+    });
+  }
+
+  test("a member cannot discover another user's proxy tools through targets, metadata or suggestions", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, {
+      role: `member,${policyEditorRole}`,
+    });
+    expect(
+      await hasAnyAgentTypeAdminPermission({
+        userId: member.id,
+        organizationId,
+      }),
+    ).toBe(false);
+    const name = "workbench__read_document";
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [
+        {
+          name,
+          description: "Private tool metadata.",
+          parameters: { type: "object", properties: { privatePath: {} } },
+        },
+      ],
+      context.agent?.id ?? "",
+    );
+    await ToolObservationModel.recordObservations({
+      toolNames: [name],
+      userId,
+    });
+    const { revision } = await saveRevision(initialPolicy());
+    context.userId = member.id;
+    for (const ruleName of [
+      name,
+      "workbench__read_documen",
+      "workbenc__read_document",
+    ]) {
+      const targets = await guardrailsPolicyService.touchedRuleTargets({
+        organizationId,
+        userId: member.id,
+        content: withRules([ruleName]),
+        previous: initialPolicy(),
+      });
+      expect(targets).toEqual([
+        {
+          kind: "unknown_server",
+          rule: ruleName,
+          server: ruleName.split("__")[0],
+          closest: [],
+        },
+      ]);
+      const gated = await preview({
+        content: withRules([ruleName]),
+        expectedRevision: revision,
+      });
+      const seen = modelText(gated);
+      expect(seen).toMatchObject({
+        stage: "confirmation_required",
+        valid: true,
+        unknownTools: [
+          {
+            rule: ruleName,
+            reason: "unknown_server",
+            prefix: ruleName.split("__")[0],
+            closest: [],
+          },
+        ],
+      });
+      expect(gated.structuredContent).not.toHaveProperty("before");
+      expect(gated.structuredContent).not.toHaveProperty("delivery");
+
+      const confirmed = modelText(
+        await preview({
+          content: withRules([ruleName]),
+          expectedRevision: revision,
+          allowUnknownTools: true,
+        }),
+      );
+      expect(confirmed).toMatchObject({
+        stage: "preview",
+        valid: true,
+        warnings: [],
+        touchedTools: null,
+      });
+    }
+    const published = modelText(
+      await publish({ content: withRules([name]), expectedRevision: revision }),
+    );
+    expect(published.warnings).toHaveLength(1);
+    expect(JSON.stringify(published.warnings)).not.toContain("did you mean");
+  });
+
+  test("outbound A2A tools are excluded even for an admin who observed them", async () => {
+    const remote = await A2aRemoteAgentModel.create({
+      data: {
+        organizationId,
+        authorId: userId,
+        name: "Document assistant",
+        scope: "org",
+        discoveryMode: "inline_card",
+        agentCard: { name: "Document assistant" },
+        cardHash: "test-card-hash",
+      },
+    });
+    const connection = await A2aConnectionModel.create({
+      remoteAgentId: remote.id,
+      authType: "none",
+      selectedInterface: {
+        url: "https://agent.example.test/a2a",
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+    });
+    const name = "remote__read_document";
+    await ToolModel.create({
+      name,
+      parameters: {},
+      delegateToA2aConnectionId: connection.id,
+    });
+    await ToolObservationModel.recordObservations({
+      toolNames: [name],
+      userId,
+    });
+    const { revision } = await saveRevision(initialPolicy());
+    const content = withRules([name]);
+    const gated = modelText(
+      await preview({ content, expectedRevision: revision }),
+    );
+    expect(gated).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      unknownTools: [
+        {
+          rule: name,
+          reason: "unknown_server",
+          prefix: "remote",
+          closest: [],
+        },
+      ],
+    });
+    const confirmed = modelText(
+      await preview({
+        content,
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
+    );
+    expect(confirmed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+    });
+    expect(
+      modelText(await publish({ content, expectedRevision: revision }))
+        .warnings,
+    ).toHaveLength(1);
+  });
+
+  test("catalog metadata takes precedence over proxy metadata for the same name", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const name = "workbench__read_document";
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [
+        {
+          name,
+          description: "Client description.",
+          parameters: { type: "object", properties: { clientPath: {} } },
+        },
+      ],
+      context.agent?.id ?? "",
+    );
+    await ToolObservationModel.recordObservations({
+      toolNames: [name],
+      userId,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Workbench",
+    });
+    await ToolModel.create({
+      catalogId: catalog.id,
+      name,
+      description: "Server description.",
+      parameters: { type: "object", properties: { path: {} } },
+    });
+    const { revision } = await saveRevision(initialPolicy());
+    const previewed = modelText(
+      await preview({ content: withRules([name]), expectedRevision: revision }),
+    );
+    expect(previewed).toMatchObject({
+      stage: "preview",
+      warnings: [],
+      touchedTools: {
+        tools: [
+          { name, description: "Server description.", arguments: ["path"] },
+        ],
+      },
+    });
+  });
+
+  test("catalog-first proxy observation is recognized for a non-admin without disclosing unreadable catalog metadata", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const name = "workbench__read_document";
+    const restrictedTeam = await makeTeam(organizationId, userId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Restricted Workbench",
+      access: { teams: [restrictedTeam.id] },
+    });
+    await ToolModel.create({
+      catalogId: catalog.id,
+      name,
+      description: "Restricted catalog description.",
+      parameters: { type: "object", properties: { secretPath: {} } },
+    });
+
+    const observer = await makeUser();
+    const otherMember = await makeUser();
+    await makeMember(observer.id, organizationId, {
+      role: `member,${policyEditorRole}`,
+    });
+    await makeMember(otherMember.id, organizationId, {
+      role: `member,${policyEditorRole}`,
+    });
+
+    // Confirm neither non-admin can read the colliding catalog.
+    expect(
+      (await coverageVisibility(observer.id, organizationId)).visibleCatalogIds,
+    ).not.toContain(catalog.id);
+    expect(
+      (await coverageVisibility(otherMember.id, organizationId))
+        .visibleCatalogIds,
+    ).not.toContain(catalog.id);
+
+    // Production proxy ingestion deduplicates globally against the existing
+    // catalog row and attributes the caller's observation to that row.
+    await persistTools({
+      agentId: context.agent?.id ?? "",
+      tools: [
+        {
+          toolName: name,
+          toolDescription: "Client description.",
+          toolParameters: { type: "object", properties: { clientPath: {} } },
+        },
+      ],
+      observer: { userId: observer.id },
+    });
+
+    const { revision } = await saveRevision(initialPolicy());
+    const content = withRules([name]);
+
+    // The observing non-admin gets a direct preview and warning-free publish,
+    // without exposing the restricted catalog's description or parameters.
+    context.userId = observer.id;
+    const previewed = modelText(
+      await preview({ content, expectedRevision: revision }),
+    );
+    expect(previewed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+    });
+    expect(JSON.stringify(previewed)).not.toContain(
+      "Restricted catalog description.",
+    );
+    expect(JSON.stringify(previewed)).not.toContain("secretPath");
+
+    // A non-admin who neither observed the tool nor can read the catalog still
+    // cannot discover it through targets, suggestions, or metadata.
+    context.userId = otherMember.id;
+    for (const ruleName of [name, "workbench__read_documen"]) {
+      const gated = modelText(
+        await preview({
+          content: withRules([ruleName]),
+          expectedRevision: revision,
+        }),
+      );
+      expect(gated).toMatchObject({
+        stage: "confirmation_required",
+        valid: true,
+        unknownTools: [
+          {
+            rule: ruleName,
+            reason: "unknown_server",
+            prefix: "workbench",
+            closest: [],
+          },
+        ],
+      });
+    }
+
+    context.userId = observer.id;
+    const published = modelText(
+      await publish({ content, expectedRevision: revision }),
+    );
+    expect(published).toMatchObject({ warnings: [] });
+  });
+
+  test("provisional and agent-owned tools do not enter the proxy inventory", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const names = [
+      "workbench__provisional",
+      "workbench__owned",
+      "workbench__delegated",
+    ];
+    await ToolModel.create({
+      name: names[0],
+      parameters: {},
+      clonedPendingDiscovery: true,
+    });
+    await ToolModel.create({
+      name: names[1],
+      parameters: {},
+      agentId: agent.id,
+    });
+    await ToolModel.create({
+      name: names[2],
+      parameters: {},
+      delegateToAgentId: agent.id,
+    });
+    await ToolObservationModel.recordObservations({ toolNames: names, userId });
+    const { revision } = await saveRevision(initialPolicy());
+    const gated = modelText(
+      await preview({ content: withRules(names), expectedRevision: revision }),
+    );
+    expect(gated).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      unknownTools: names.map((rule) => ({
+        rule,
+        reason: "unknown_server",
+        prefix: "workbench",
+        closest: [],
+      })),
+    });
+  });
+
+  test("an unknown tool requires user confirmation before previewing; after confirmation, preview proceeds cleanly without missing-tool warnings", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -287,14 +723,18 @@ describe("rules naming tools", () => {
         expectedRevision: revision,
       }),
     );
-    const missing = modelText(
-      await preview({
-        edits: edits(["github__delete_issue"]),
-        expectedRevision: revision,
-      }),
-    );
+    const missingRaw = await preview({
+      edits: edits(["github__delete_issue"]),
+      expectedRevision: revision,
+      allowUnknownTools: null,
+    });
+    const missing = modelText(missingRaw);
 
-    expect(known).toMatchObject({ valid: true, warnings: [] });
+    expect(known).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+    });
     expect(known.touchedTools).toMatchObject({
       tools: [
         {
@@ -305,10 +745,42 @@ describe("rules naming tools", () => {
       ],
       omitted: 0,
     });
-    expect(missing).toMatchObject({ valid: true });
-    expect(missing.warnings).toHaveLength(1);
-    expect(missing.touchedTools).toBeNull();
-    expect(missing.instruction).not.toBe(known.instruction);
+
+    expect(missing).toMatchObject({
+      stage: "confirmation_required",
+      valid: true,
+      warnings: [],
+      unknownTools: [
+        {
+          rule: "github__delete_issue",
+          reason: "unknown_tool",
+          prefix: "github",
+          closest: ["github__create_issue"],
+        },
+      ],
+    });
+    expect(missingRaw.structuredContent).not.toHaveProperty("before");
+    expect(missingRaw.structuredContent).not.toHaveProperty("after");
+    expect(missingRaw.structuredContent).not.toHaveProperty("delivery");
+    expect(missing.instruction).toContain("ask_user");
+    expect(missing.instruction).toContain("allowUnknownTools");
+
+    const confirmed = modelText(
+      await preview({
+        edits: edits(["github__delete_issue"]),
+        expectedRevision: revision,
+        allowUnknownTools: true,
+      }),
+    );
+    expect(confirmed).toMatchObject({
+      stage: "preview",
+      valid: true,
+      warnings: [],
+      touchedTools: null,
+      changed: { added: 4, removed: 0 },
+    });
+    expect(confirmed.diff).toContain('+name = "github__delete_issue"\n');
+    expect(confirmed.instruction).toBe(known.instruction);
 
     const published = modelText(
       await publish({
@@ -316,6 +788,6 @@ describe("rules naming tools", () => {
         expectedRevision: revision,
       }),
     );
-    expect(published.warnings).toEqual(missing.warnings);
+    expect(published.warnings).toHaveLength(1);
   });
 });

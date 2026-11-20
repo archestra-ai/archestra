@@ -23,6 +23,7 @@ import { isPoolableModel, poolModelName } from "./model-name";
  */
 export type PoolFormValues = {
   name: string;
+  routingStrategy?: "weighted" | "least-tokens";
   retrySettings?: ModelPoolRetrySettings | null;
   members: PoolFormMember[];
 } & Record<PoolTiming, string>;
@@ -84,6 +85,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
   const priorities = denseOrders(members);
   return {
     name: pool?.name ?? "",
+    routingStrategy: pool?.routingStrategy ?? "weighted",
     retrySettings: pool?.retrySettings ?? null,
     streamTimeoutSeconds: String(pool?.streamTimeoutSeconds ?? ""),
     timeoutSeconds: String(pool?.timeoutSeconds ?? ""),
@@ -102,6 +104,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
   return {
     name: values.name.trim(),
+    routingStrategy: values.routingStrategy ?? "weighted",
     retrySettings: values.retrySettings ?? null,
     streamTimeoutSeconds: toSeconds(values.streamTimeoutSeconds),
     timeoutSeconds: toSeconds(values.timeoutSeconds),

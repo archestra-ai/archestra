@@ -1,6 +1,11 @@
 "use client";
 
 import { code } from "@streamdown/code";
+import { createMathPlugin } from "@streamdown/math";
+// Ships with this lazy chunk, so only pages that render markdown load it.
+// The workspace pins one katex, the version rehype-katex renders with, so the
+// stylesheet always matches the markup.
+import "katex/dist/katex.min.css";
 import { type ComponentProps, memo, useMemo } from "react";
 import remarkBreaks from "remark-breaks";
 import {
@@ -9,6 +14,7 @@ import {
   Streamdown,
 } from "streamdown";
 import { cn } from "@/lib/utils/tailwind";
+import { normalizeMathDelimiters } from "./math-delimiters";
 import { isSameOriginUrl } from "./response";
 
 export type ResponseProps = ComponentProps<typeof Streamdown> & {
@@ -102,14 +108,32 @@ const REHYPE_PLUGINS: ResponseProps["rehypePlugins"] = [
   rehypeFocusablePre,
 ];
 
+// Single-dollar math stays off: remark-math would pair any two `$` on a line,
+// so "$HOME and $PATH" or "$5 and $10" would render as a formula.
+// normalizeMathDelimiters promotes the `$…$`, `\(…\)` and `\[…\]` spans that
+// read as math to the `$$` form instead.
+const PLUGINS: ResponseProps["plugins"] = {
+  code,
+  math: createMathPlugin({ singleDollarTextMath: false }),
+};
+
 const ResponseMarkdown = memo(
   ({
     className,
     linkSafety,
     isStreaming = false,
     preserveLineBreaks = false,
+    children,
     ...props
   }: ResponseProps) => {
+    const markdown = useMemo(
+      () =>
+        typeof children === "string"
+          ? normalizeMathDelimiters(children)
+          : children,
+      [children],
+    );
+
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -133,7 +157,7 @@ const ResponseMarkdown = memo(
           code: { copy: true, download: true },
           table: { copy: true, download: true },
         }}
-        plugins={{ code }}
+        plugins={PLUGINS}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling
@@ -186,6 +210,9 @@ const ResponseMarkdown = memo(
           // Fix button link styling - use group variant to match parent's is-user/is-assistant class
           "group-[.is-user]:[&_[data-streamdown='link']]:text-primary-foreground",
           "group-[.is-assistant]:[&_[data-streamdown='link']]:text-foreground",
+          // A display formula wider than the message scrolls on its own
+          // instead of pushing the transcript sideways.
+          "[&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_.katex-display]:py-1",
           className,
         )}
         remarkPlugins={
@@ -194,7 +221,9 @@ const ResponseMarkdown = memo(
         rehypePlugins={REHYPE_PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}
-      />
+      >
+        {markdown}
+      </Streamdown>
     );
   },
   (prevProps, nextProps) =>

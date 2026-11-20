@@ -1,5 +1,5 @@
 {
-  "id": "7458dd1f-20ba-4b6f-a49f-42efe15d7e1f",
+  "id": "0649a9f0-73ef-416c-8688-b45cfe43a414",
   "prevId": "6ea97e46-6ae2-47b7-bb46-ee6ec331c856",
   "version": "7",
   "dialect": "postgresql",
@@ -21622,6 +21622,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "synced_long_context_pricing": {
+          "name": "synced_long_context_pricing",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "long_context_threshold": {
           "name": "long_context_threshold",
           "type": "integer",
@@ -33332,18 +33338,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "soft_deleted": {
-          "name": "soft_deleted",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scim_provisioned": {
-          "name": "scim_provisioned",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

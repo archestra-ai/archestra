@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
+import { isKubeconfigFilePending } from "@/k8s/shared";
 import { openappaReadiness } from "@/openappa/service";
 import type { SandboxRuntimeStatus } from "@/sandbox-runtime/sandbox-runtime-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -68,7 +69,10 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string(),
             status: z.literal("degraded"),
             version: z.string(),
-            database: z.enum(["connected", "disconnected"]),
+            database: z.enum(["connected", "disconnected", "not_checked"]),
+            // The Docker quickstart's embedded cluster is still starting: the
+            // API already serves, but MCP servers cannot run yet.
+            kubernetes: z.literal("starting").optional(),
             openappa: z.enum(["starting", "unavailable"]).optional(),
             // The runtime failure code, e.g. `storage`; the log has the cause.
             openappaReason: z.string().optional(),
@@ -96,6 +100,19 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status: "maintenance",
           database: "not_checked",
           openappa: "not_checked",
+        });
+      }
+
+      // Ready includes the Kubernetes runtime, as it did before the quickstart
+      // started its backend ahead of its cluster: callers act on the cluster
+      // (installing MCP servers, kubectl) as soon as this answers 200.
+      if (isKubeconfigFilePending()) {
+        return reply.status(503).send({
+          name,
+          status: "degraded",
+          version,
+          database: "not_checked",
+          kubernetes: "starting",
         });
       }
 

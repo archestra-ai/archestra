@@ -11,6 +11,8 @@ import {
   type HitlReviewCard,
   hitlInspectionDigest,
   hitlReviewCard,
+  hitlReviewForm,
+  hitlReviewInspectionResult,
   renderHitlReviewText,
   toolDescriptionLine,
 } from "./hitl-review-overview";
@@ -642,6 +644,19 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
  * very card comes back. Returns undefined when the review is already ruled
  * on, so the caller falls back to the ordinary card.
  */
+/**
+ * What ask_user returns after an Inspect answer on a form: the complete
+ * review of the live offer, for the agent to print in the chat. Undefined
+ * when the review is gone.
+ */
+export async function getHitlInspectionResult(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<string | undefined> {
+  const review = await getHitlReview(params);
+  return review ? hitlReviewInspectionResult(review) : undefined;
+}
+
 export async function getHitlInspectableAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];
@@ -649,6 +664,12 @@ export async function getHitlInspectableAskUserArguments(params: {
   emit?: boolean;
   /** The card being read was issued with the complete review text above it. */
   carriedReviewText?: boolean;
+  /**
+   * A form whose message is one paragraph, on a client that cannot be handed
+   * assistant text: the complete review reaches the chat as the asking
+   * tool's result, so `reviewText` here only says an inspection is pending.
+   */
+  presentation?: "form";
 }): Promise<
   | {
       card: HitlAskUserArguments;
@@ -705,7 +726,9 @@ export async function getHitlInspectableAskUserArguments(params: {
       : undefined;
   // A card that carries the complete text, or follows its delivery, may offer
   // Allow even when it cannot show the whole call itself.
-  const { card } = hitlReviewCard({
+  const { card } = (
+    params.presentation === "form" ? hitlReviewForm : hitlReviewCard
+  )({
     base,
     review,
     inspected:
@@ -747,6 +770,8 @@ export async function resolveHitlInspectableAnswer(params: {
   carriedReviewText: boolean;
   /** The payload digest the answered card was issued with. */
   claimDigest: string;
+  /** The answer came from the one-paragraph form, read against its limits. */
+  presentation?: "form";
 }): Promise<
   | { status: "recorded"; ruling: "approve" | "deny" }
   | { status: "inspect-pending" | "inspect-shown" }
@@ -801,6 +826,18 @@ export async function resolveHitlInspectableAnswer(params: {
           { offerId, digest, status: "pending" as const },
           HITL_REVIEW_TTL_MS,
         );
+        if (params.presentation === "form") {
+          // Reading the complete review takes time the review window did not
+          // plan for: a native card renews its review when it is issued, and
+          // a form does when its reviewer asks to inspect.
+          const lifetime = HITL_QUESTION_TTL_MS + HITL_REVIEW_TTL_MS;
+          const pending = await cache.get<PendingHitlReview>(
+            reviewKey(session, offerId),
+          );
+          await cache.set(stagePresenceKey(session, offerId), staged, lifetime);
+          if (pending?.offerId === offerId)
+            await cache.set(reviewKey(session, offerId), pending, lifetime);
+        }
         return { status: "inspect-pending" as const };
       }
       // No approval while a requested inspection has not been delivered:
@@ -812,7 +849,7 @@ export async function resolveHitlInspectableAnswer(params: {
       // reviewer received this payload's complete review text, offers Allow.
       if (
         params.answer === "approve" &&
-        !hitlReviewCard({
+        !(params.presentation === "form" ? hitlReviewForm : hitlReviewCard)({
           base: buildHitlAskUserCard(staged),
           review: staged,
           inspected: inspection?.status === "delivered",
@@ -839,6 +876,14 @@ export async function resolveHitlInspectableAnswer(params: {
         await cache.delete(rulingKey(session, offerId, "none"));
       } else {
         await cache.delete(rulingKey(session, offerId, "none"));
+        // A form's review was not renewed when it was shown: it lives as
+        // long as the approval, which the remedy call is spent with.
+        if (params.presentation === "form")
+          await cache.set(
+            stagePresenceKey(session, offerId),
+            staged,
+            HITL_REVIEW_TTL_MS,
+          );
       }
       return { status: "recorded" as const, ruling: params.answer };
     },

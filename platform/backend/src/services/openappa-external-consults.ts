@@ -7,7 +7,7 @@ import {
 } from "@/models";
 import type { ExternalConsultFilters } from "@/models/openappa-external-consult";
 import { clientSessionId } from "@/openappa/actor";
-import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
+import { recordsCall } from "@/openappa/call-id";
 import type { ExternalConsult } from "@/types/openappa-external-consults";
 
 /** What one viewer may read of the organization's consults. */
@@ -100,9 +100,7 @@ export async function findExternalConsult(params: {
       sessionId: llmSessionId,
     });
     mcpToolCallId =
-      calls.find(
-        (call) => withoutTrajectoryStamp(call.llmToolCallId) === callId,
-      )?.id ?? null;
+      calls.find((call) => recordsCall(callId, call.llmToolCallId))?.id ?? null;
   }
 
   return {

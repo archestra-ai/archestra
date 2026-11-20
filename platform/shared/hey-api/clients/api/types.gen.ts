@@ -33866,7 +33866,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -33973,7 +33973,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -34206,7 +34206,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -44982,6 +44982,15 @@ export type GetBootstrapResponses = {
                 domainPreset: 'none' | 'common_dependencies' | 'package_managers';
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
+            } | null;
+            mcpRuntimeTiers: {
+                tiers: Array<{
+                    name: string;
+                    cpuRequest: number;
+                    cpuLimit: number | null;
+                    memoryRequestMiB?: number | null;
+                    memoryLimitMiB?: number | null;
+                }>;
             } | null;
             agentRuntimeTiers: {
                 [key: string]: unknown;
@@ -67822,7 +67831,8 @@ export type GetReadyErrors = {
         name: string;
         status: 'degraded';
         version: string;
-        database: 'connected' | 'disconnected';
+        database: 'connected' | 'disconnected' | 'not_checked';
+        kubernetes?: 'starting';
         openappa?: 'starting' | 'unavailable';
         openappaReason?: string;
     };
@@ -93075,6 +93085,7 @@ export type GetInternalMcpCatalogResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -93250,6 +93261,7 @@ export type CreateInternalMcpCatalogItemData = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig?: {
             command?: string | null;
@@ -93486,6 +93498,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -94582,6 +94595,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -94745,6 +94759,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig?: {
             command?: string | null;
@@ -94962,6 +94977,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -95671,6 +95687,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -95912,6 +95929,7 @@ export type ApproveCatalogItemImageResponses = {
                 email?: string;
             }>;
             imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
+            runtimeTier?: string;
         } | null;
         desktopConfig: {
             command?: string | null;
@@ -108209,6 +108227,13 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -108795,6 +108820,13 @@ export type UpdateModelResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        syncedLongContextPricing: {
+            threshold: number;
+            pricePerMillionInput: string;
+            pricePerMillionOutput: string;
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+        } | null;
         longContextThreshold: number | null;
         longContextPricePerMillionInput: string | null;
         longContextPricePerMillionOutput: string | null;
@@ -115901,6 +115933,7 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -115950,6 +115983,7 @@ export type GetModelPoolsResponse = GetModelPoolsResponses[keyof GetModelPoolsRe
 
 export type CreateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -116065,6 +116099,7 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -116288,6 +116323,7 @@ export type DeleteModelPoolResponse = DeleteModelPoolResponses[keyof DeleteModel
 
 export type UpdateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -116405,6 +116441,7 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -119570,6 +119607,7 @@ export type GetOauthClientsResponses = {
                 currentUsage: number;
                 estimatedUsage: boolean;
             } | null;
+            icon: string | null;
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
@@ -119590,6 +119628,10 @@ export type GetOauthClientsResponse = GetOauthClientsResponses[keyof GetOauthCli
 export type CreateOauthClientData = {
     body: {
         name: string;
+        /**
+         * An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.
+         */
+        icon?: string | null;
         serviceAccountId?: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds?: Array<string>;
@@ -119777,6 +119819,7 @@ export type CreateOauthClientResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -119874,9 +119917,146 @@ export type DeleteOauthClientResponses = {
 
 export type DeleteOauthClientResponse = DeleteOauthClientResponses[keyof DeleteOauthClientResponses];
 
+export type GetOauthClientData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/oauth-clients/{id}';
+};
+
+export type GetOauthClientErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOauthClientError = GetOauthClientErrors[keyof GetOauthClientErrors];
+
+export type GetOauthClientResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        clientId: string;
+        serviceAccountId: string | null;
+        name: string;
+        organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
+        providerApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            providerApiKeyId: string;
+            providerApiKeyName: string;
+        }>;
+        redirectUris: Array<string>;
+        disabled: boolean;
+        authorId: string | null;
+        authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
+        createdAt: string;
+        updatedAt: string;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+            estimatedUsage: boolean;
+        } | null;
+        icon: string | null;
+        scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
+        allowedGatewayIds: Array<string>;
+        includeFutureProviders: boolean;
+    };
+};
+
+export type GetOauthClientResponse = GetOauthClientResponses[keyof GetOauthClientResponses];
+
 export type UpdateOauthClientData = {
     body: {
         name: string;
+        /**
+         * An emoji, a logo id or an image data URL shown beside the name. Omit on update to keep it; null clears it.
+         */
+        icon?: string | null;
         serviceAccountId?: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds?: Array<string>;
@@ -120041,6 +120221,7 @@ export type UpdateOauthClientResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -120173,6 +120354,7 @@ export type RotateOauthClientSecretResponses = {
             currentUsage: number;
             estimatedUsage: boolean;
         } | null;
+        icon: string | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
@@ -130626,6 +130808,15 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131095,6 +131286,15 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131332,6 +131532,15 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131565,6 +131774,15 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131797,6 +132015,15 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131810,6 +132037,203 @@ export type UpdateSkillsSettingsResponses = {
 };
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
+
+export type GetMcpRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type GetMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpRuntimeTiersError = GetMcpRuntimeTiersErrors[keyof GetMcpRuntimeTiersErrors];
+
+export type GetMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type GetMcpRuntimeTiersResponse = GetMcpRuntimeTiersResponses[keyof GetMcpRuntimeTiersResponses];
+
+export type UpdateMcpRuntimeTiersData = {
+    body: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB?: number | null;
+            memoryLimitMiB?: number | null;
+            previousName?: string;
+        }>;
+    } | null;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type UpdateMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpRuntimeTiersError = UpdateMcpRuntimeTiersErrors[keyof UpdateMcpRuntimeTiersErrors];
+
+export type UpdateMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type UpdateMcpRuntimeTiersResponse = UpdateMcpRuntimeTiersResponses[keyof UpdateMcpRuntimeTiersResponses];
 
 export type GetAgentRuntimeTiersData = {
     body?: never;
@@ -132256,6 +132680,15 @@ export type UpdateAgentSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -132511,6 +132944,15 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -132804,6 +133246,15 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133046,6 +133497,15 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133282,6 +133742,15 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -133522,6 +133991,15 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133750,6 +134228,15 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -134341,6 +134828,15 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -158547,6 +159043,409 @@ export type UpdateIdentityProviderResponses = {
 };
 
 export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[keyof UpdateIdentityProviderResponses];
+
+export type GetOauthClientFederatedCredentialsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/oauth-clients/{id}/federated-credentials';
+};
+
+export type GetOauthClientFederatedCredentialsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOauthClientFederatedCredentialsError = GetOauthClientFederatedCredentialsErrors[keyof GetOauthClientFederatedCredentialsErrors];
+
+export type GetOauthClientFederatedCredentialsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        oauthClientId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetOauthClientFederatedCredentialsResponse = GetOauthClientFederatedCredentialsResponses[keyof GetOauthClientFederatedCredentialsResponses];
+
+export type CreateOauthClientFederatedCredentialData = {
+    body: {
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions?: {
+            [key: string]: string;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/oauth-clients/{id}/federated-credentials';
+};
+
+export type CreateOauthClientFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateOauthClientFederatedCredentialError = CreateOauthClientFederatedCredentialErrors[keyof CreateOauthClientFederatedCredentialErrors];
+
+export type CreateOauthClientFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        oauthClientId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateOauthClientFederatedCredentialResponse = CreateOauthClientFederatedCredentialResponses[keyof CreateOauthClientFederatedCredentialResponses];
+
+export type DeleteOauthClientFederatedCredentialData = {
+    body?: never;
+    path: {
+        id: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/api/oauth-clients/{id}/federated-credentials/{credentialId}';
+};
+
+export type DeleteOauthClientFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteOauthClientFederatedCredentialError = DeleteOauthClientFederatedCredentialErrors[keyof DeleteOauthClientFederatedCredentialErrors];
+
+export type DeleteOauthClientFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOauthClientFederatedCredentialResponse = DeleteOauthClientFederatedCredentialResponses[keyof DeleteOauthClientFederatedCredentialResponses];
+
+export type UpdateOauthClientFederatedCredentialData = {
+    body: {
+        name?: string;
+        issuer?: string;
+        audience?: string;
+        subject?: string;
+        claimConditions?: {
+            [key: string]: string;
+        };
+    };
+    path: {
+        id: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/api/oauth-clients/{id}/federated-credentials/{credentialId}';
+};
+
+export type UpdateOauthClientFederatedCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateOauthClientFederatedCredentialError = UpdateOauthClientFederatedCredentialErrors[keyof UpdateOauthClientFederatedCredentialErrors];
+
+export type UpdateOauthClientFederatedCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        oauthClientId: string;
+        name: string;
+        issuer: string;
+        audience: string;
+        subject: string;
+        claimConditions: {
+            [key: string]: string;
+        };
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateOauthClientFederatedCredentialResponse = UpdateOauthClientFederatedCredentialResponses[keyof UpdateOauthClientFederatedCredentialResponses];
 
 export type SearchInitialPermissionSubjectsData = {
     body?: never;

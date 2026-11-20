@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
+import { policyCallId } from "./call-id";
 import { stripChildTrajectoryReferences } from "./child-trajectory-reference-format";
 import { grokChildOutputs } from "./grok-child-return";
 import { parseGrokDurableHistory } from "./grok-durable-history";
@@ -23,6 +24,33 @@ export type CollectedChildReturns = {
   /** Every structured completed leaf. */
   completions: AppaChildReturnCompletion[];
 };
+
+/** Returns named by the ids policy knows their spawn calls by. */
+export function underPolicyCallIds(
+  childReturns: CollectedChildReturns,
+): CollectedChildReturns {
+  // One envelope can hold many returns: its policy id is worked out once.
+  const policyIds = new Map<string, string>();
+  const policyId = (wireId: string): string => {
+    const known = policyIds.get(wireId);
+    if (known !== undefined) return known;
+    const id = policyCallId(wireId);
+    policyIds.set(wireId, id);
+    return id;
+  };
+  return {
+    ...childReturns,
+    completions: childReturns.completions.map((completion) => ({
+      ...completion,
+      ...(completion.spawnCallId
+        ? { spawnCallId: policyId(completion.spawnCallId) }
+        : {}),
+      ...(completion.envelopeId
+        ? { envelopeId: policyId(completion.envelopeId) }
+        : {}),
+    })),
+  };
+}
 
 /**
  * Mints the visual marker that announces a crossed child return. The marker is
@@ -522,7 +550,7 @@ function replaceTaskNotifications(
       const toolUseId = tagValue(block, "tool-use-id");
       if (
         !isBoundedNativeMetadata(taskId) ||
-        (toolUseId !== undefined && !isBoundedNativeMetadata(toolUseId))
+        (toolUseId !== undefined && !isWireCallId(toolUseId))
       ) {
         throw new ApiError(
           400,
@@ -625,16 +653,13 @@ function replaceSubagentNotifications(
     if (object && status && completed !== undefined) {
       const agentPath = optionalBoundedMetadata(object.agent_path);
       const agentId = optionalBoundedMetadata(object.agent_id);
-      const toolUseId = optionalBoundedMetadata(
-        object.tool_use_id ?? object["tool-use-id"] ?? object.call_id,
-      );
+      const echoedCallId =
+        object.tool_use_id ?? object["tool-use-id"] ?? object.call_id;
+      const toolUseId = isWireCallId(echoedCallId) ? echoedCallId : undefined;
       if (
         hasInvalidMetadata(object.agent_path, agentPath) ||
         hasInvalidMetadata(object.agent_id, agentId) ||
-        hasInvalidMetadata(
-          object.tool_use_id ?? object["tool-use-id"] ?? object.call_id,
-          toolUseId,
-        )
+        hasInvalidMetadata(echoedCallId, toolUseId)
       ) {
         throw new ApiError(
           400,
@@ -1154,6 +1179,12 @@ const NATIVE_COMPLETION_TOOLS = new Set([
   "wait_agent",
 ]);
 const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
+/**
+ * A tool-call id a client echoes in a notification: the characters of other
+ * native metadata, with room for a trajectory stamp around an id that carries
+ * a thought signature. Policy knows the call by its policy id.
+ */
+const WIRE_CALL_ID = /^[A-Za-z0-9_.:@/-]{1,16384}$/;
 /** Copilot CLI's tool that reads what a background agent returned. */
 const COPILOT_REPORT_TOOLS: ReadonlySet<string> = new Set(["read_agent"]);
 /**
@@ -1323,6 +1354,10 @@ function isOpenCodeBackgroundCompletion(value: unknown): value is string {
     typeof value === "string" &&
     /^\s*<task\b[^>]*\bstate\s*=\s*(["'])completed\1[^>]*>/.test(value)
   );
+}
+
+function isWireCallId(value: unknown): value is string {
+  return typeof value === "string" && WIRE_CALL_ID.test(value);
 }
 
 function isBoundedNativeMetadata(value: unknown): value is string {

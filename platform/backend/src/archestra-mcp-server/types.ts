@@ -16,6 +16,8 @@ export interface ArchestraContext {
     spawn: boolean;
     /** Signed while enforcement was off; no policy ruled the call. */
     observed?: true;
+    /** The spawn was released under a deferred return: its parent decides on the answer. */
+    defersReturn?: true;
   };
   /**
    * The child trajectory an OpenAPPA spawn bound this delegated run to, minted
@@ -94,6 +96,13 @@ export interface ArchestraContext {
    * outcome rather than block.
    */
   elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
+  /**
+   * The client shows a form's message as one paragraph and cannot be handed
+   * assistant text (Cursor). A guardrail review then asks with a short form
+   * that offers Inspect, and returns the complete review as the asking
+   * tool's result.
+   */
+  inspectableReviewForm?: boolean;
   /**
    * Answers `elicitation/create` from an upstream MCP server that run_tool
    * dispatches to, as a direct chat call would. Absent where no viewer can

@@ -26,6 +26,18 @@ describe("connect choices", () => {
     expect(readConnectChoices("codex")).toEqual(ALL_INCLUDED);
   });
 
+  it("keeps Cursor on its own models until the person routes them", () => {
+    expect(readConnectChoices("cursor")).toEqual({
+      ...ALL_INCLUDED,
+      proxy: false,
+    });
+    saveConnectChoices("cursor", { ...ALL_INCLUDED, skills: false });
+    expect(readConnectChoices("cursor")).toEqual({
+      ...ALL_INCLUDED,
+      skills: false,
+    });
+  });
+
   it("reads back the gateway and plugins picked, per client", () => {
     saveConnectChoices("claude-code", ALL_INCLUDED, {
       gatewayId: "gw-1",

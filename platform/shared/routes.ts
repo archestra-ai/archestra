@@ -698,6 +698,11 @@ export const RouteId = {
 
   // Unified OAuth Client Routes
   GetOauthClients: "getOauthClients",
+  GetOauthClient: "getOauthClient",
+  GetOauthClientFederatedCredentials: "getOauthClientFederatedCredentials",
+  CreateOauthClientFederatedCredential: "createOauthClientFederatedCredential",
+  UpdateOauthClientFederatedCredential: "updateOauthClientFederatedCredential",
+  DeleteOauthClientFederatedCredential: "deleteOauthClientFederatedCredential",
   GetOauthClientLabelKeys: "oauthClientLabelKeys",
   GetOauthClientLabelValues: "oauthClientLabelValues",
   CreateOauthClient: "createOauthClient",
@@ -774,6 +779,8 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetMcpRuntimeTiers: "getMcpRuntimeTiers",
+  UpdateMcpRuntimeTiers: "updateMcpRuntimeTiers",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
   GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 
@@ -1037,6 +1044,7 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaGithubAppPermissions: "getAppaGithubAppPermissions",
   GetAppaSelfService: "getAppaSelfService",
   GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
   GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",
@@ -1207,11 +1215,13 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  ReportCursorHookEvent: "reportCursorHookEvent",
   GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
+  GetDisconnectReference: "getDisconnectReference",
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
   GetAgentAdoptionUsage: "getAgentAdoptionUsage",

@@ -5,6 +5,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  type RuntimeTierSize,
+  runtimeTierSettingsAfter,
+} from "@/components/runtime-tiers/runtime-tier-form";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -16,10 +20,6 @@ import {
 } from "@/lib/organization.query";
 import { PooledHint } from "./pooled-hint";
 import { RuntimeTierDialog } from "./runtime-tier-dialog";
-import {
-  type RuntimeTierSize,
-  runtimeTierSettingsAfter,
-} from "./runtime-tier-form";
 
 /**
  * The organization's runtime tiers: a table of the tiers in effect and dialogs
@@ -259,9 +259,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         title={`Delete tier ${deleting?.name ?? ""}?`}
         description={
           <>
-            Agents and templates that name it as their default or scaleup tier
-            must move to another tier first; the deletion is refused while any
-            does.
+            Agents and templates that use this tier must move to another tier
+            first. The tier cannot be deleted while it is in use.
             {deleteFailure && (
               <span role="alert" className="mt-2 block text-destructive">
                 {deleteFailure}

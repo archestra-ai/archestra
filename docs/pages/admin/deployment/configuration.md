@@ -115,6 +115,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - Requires the Docker socket mounted into the container. For evaluation only. See [Run Archestra](/docs/get-started#run-archestra).
 
+- **`ARCHESTRA_NODE_SOURCE_MAPS`** - Shows TypeScript files and lines in the stack traces the backend logs.
+  - Default: `true`, or `false` with [`ARCHESTRA_QUICKSTART`](/docs/admin/deployment/configuration#ARCHESTRA_QUICKSTART)
+  - Values: `true`, `false`
+  - Costs about 250 MB of backend memory. Error reports show source lines either way.
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
   - Values: `true`, `false`
@@ -187,6 +192,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix of the auth cookie names, for example `archestra.session_token`.
   - Default: `archestra`
   - Give each instance a unique prefix when two instances run on one host on different ports, or on sibling subdomains that share a [cookie domain](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_COOKIE_DOMAIN). Otherwise their session cookies overwrite each other.
+
+- **`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`** - Service accounts and federated credentials to create on startup, as a JSON array. Requires an Enterprise license.
+  - Default: unset (nothing is created)
+  - With the Helm chart, set `archestra.bootstrap.serviceAccounts` instead. See [Declare Accounts in the Helm Chart](/docs/admin/identity/workload-identity#declare-accounts-in-the-helm-chart).
+  - Only missing accounts and credentials are created, matched by name. A malformed value stops startup.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Turns off email and password sign-in. Users sign in only through SSO.
   - Default: `false`
@@ -976,7 +986,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.

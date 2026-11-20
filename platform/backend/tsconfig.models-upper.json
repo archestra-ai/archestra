@@ -13,6 +13,7 @@
     "src/auth/linked-idp.ts",
     "src/auth/mcp-catalog-permissions.ts",
     "src/auth/oauth-client-permissions.ts",
+    "src/auth/plugin-permissions.ts",
     "src/auth/request-lookups.ts",
     "src/auth/skill-permissions.ts",
     "src/models/app.ts",

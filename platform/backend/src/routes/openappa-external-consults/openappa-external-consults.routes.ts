@@ -106,7 +106,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaGuardrailEvents,
         description:
-          "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. `log:read` returns the records of the caller's own sessions. `log:admin` returns every record in the organization. A consult is served as the consults export serves it.",
+          "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. Consults need `log:read`, which returns the consults of the caller's own sessions; `log:admin` returns every consult in the organization. Yells need `guardrailsYell:read`, which returns the yells of the caller's own sessions; `guardrailsYell:admin` returns every yell in the organization. A kind the caller may not read is left out, and a caller who may read neither is refused. A consult is served as the consults export serves it.",
         tags: ["OpenAPPA"],
         querystring: EventsQuerySchema,
         response: constructResponseSchema(

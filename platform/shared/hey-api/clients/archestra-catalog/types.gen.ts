@@ -151,7 +151,7 @@ export type SearchMcpServerCatalogData = {
          */
         language?: string;
         /**
-         * Filter by whether the server is confirmed to work in the Archestra Desktop app
+         * Filter by whether the server is confirmed to work in Archestra
          */
         worksInArchestra?: boolean;
         /**

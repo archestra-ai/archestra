@@ -68,6 +68,8 @@ export function useAppearanceSettings(enabled = true) {
  * Query key factory for organization-related queries
  */
 export const organizationKeys = {
+  mcpRuntimeTiers: () =>
+    [...organizationKeys.all, "mcp-runtime-tiers"] as const,
   agentRuntimeTiers: () =>
     [...organizationKeys.all, "agent-runtime-tiers"] as const,
   defaultModelRuntimeDependents: (modelId?: string | null) =>
@@ -1081,6 +1083,43 @@ export function useDeletePendingSignupMember() {
         queryKey: organizationKeys.memberSignupStatus(),
       });
       toast.success("Pending member removed");
+    },
+  });
+}
+
+/** MCP tiers are independent from Agent Runtime tiers. */
+export function useMcpRuntimeTiers(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.mcpRuntimeTiers(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMcpRuntimeTiers();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+export function useSaveMcpRuntimeTiers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.UpdateMcpRuntimeTiersData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.updateMcpRuntimeTiers({
+        body,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.mcpRuntimeTiers(),
+      });
+      // Renames update catalog selections; size changes mark installations for reinstall.
+      for (const key of ["mcp-catalog", "mcp-servers", "mcp-registry"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      toast.success("MCP runtime tiers saved");
     },
   });
 }

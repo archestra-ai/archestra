@@ -18,7 +18,7 @@ catalog:
   # Keep core/OAuth contexts aligned; SSO retains its OAuth-only patch below.
   better-auth: 1.7.7
   "@better-auth/core": 1.7.7
-  "@better-auth/oauth-provider": 1.6.22
+  "@better-auth/oauth-provider": 1.7.7
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1.
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
@@ -32,14 +32,13 @@ overrides:
   # endpoint context. The older plugin's exact peer otherwise installs a
   # second, incompatible better-call/core context.
   '@better-auth/sso@1.6.22>better-call': 1.4.0
-  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
   # Run their validators on patched Zod 4; the package patches below adapt
   # their record/function/error APIs while preserving current SDK interfaces.
   # Remove these selectors and patches when the SDKs adopt patched Zod 4.
-  '@microsoft/agents-activity@1.9.1>zod': '>=4.6.6 <5'
-  '@microsoft/agents-hosting@1.9.1>zod': '>=4.6.6 <5'
-  'confluence.js@2.1.0>zod': '>=4.6.6 <5'
+  '@microsoft/agents-activity@1.10.1>zod': '>=4.6.6 <5'
+  '@microsoft/agents-hosting@1.10.1>zod': '>=4.6.6 <5'
+  'confluence.js@2.1.1>zod': '>=4.6.6 <5'
   # iconv-lite 0.6.x publishes a .idea/ folder, which sandboxed agents can't
   # write, so installs fail there. 0.7 keeps the same API and ships without it.
   iconv-lite@<0.7: ^0.7.2
@@ -224,8 +223,9 @@ overrides:
   # 0.4 line posthog-js uses; the 0.8 line is unaffected.
   fflate@<0.5: '>=0.4.9 <0.5'
   # GHSA-866g-f22w-33x8 (uncontrolled resource consumption) fixed in 4.0.33.
-  # The @ai-sdk/* providers pin exact 4.0.x patch releases.
-  '@ai-sdk/provider-utils@^4': '>=4.0.33 <5'
+  # The @ai-sdk/* providers pin exact 4.0.x patch releases; @ai-sdk/google
+  # 3.0.146 and @ai-sdk/xai 3.0.152 import exports first shipped in 4.0.66.
+  '@ai-sdk/provider-utils@^4': '>=4.0.66 <5'
   # GHSA-396q-4vc8-28x9 (bearer token and cookie leak on cross-origin
   # redirect) fixed in 1.0.0-preview.102. Transitive via kiota-bundle. The
   # abstractions floor keeps the Kiota packages on one shared abstractions copy.
@@ -263,10 +263,6 @@ packageExtensions:
       zod: ^4.6.6
 
 patchedDependencies:
-  # Preserve function-call IDs across SDK responses and request history.
-  # OpenAPPA uses these IDs to match released calls to returned results.
-  # Remove when the provider preserves both functionCall.id and functionResponse.id.
-  '@ai-sdk/google@3.0.43': patches/@ai-sdk__google@3.0.43.patch
   # Grok can think, start its answer, and think again in one response. The chat
   # model named every reasoning run `reasoning-<completion id>` and sent the
   # second run's deltas to the part it had already closed, so chat stopped with
@@ -274,7 +270,7 @@ patchedDependencies:
   # part for each run of reasoning or text. Pinned by
   # backend/src/clients/xai-interleaved-reasoning.unit.test.ts; drop it after an
   # upgrade passes that test unpatched.
-  '@ai-sdk/xai@3.0.67': patches/@ai-sdk__xai@3.0.67.patch
+  '@ai-sdk/xai@3.0.152': patches/@ai-sdk__xai@3.0.152.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.
@@ -289,7 +285,7 @@ patchedDependencies:
   # re-run backend/src/auth/github-sso.ee.test.ts and real GitHub sign-in.
   '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
   # Keep the SDK's string-keyed semantic-action records under Zod 4.
-  '@microsoft/agents-activity@1.9.1': patches/@microsoft__agents-activity@1.9.1.patch
+  '@microsoft/agents-activity@1.10.1': patches/@microsoft__agents-activity@1.10.1.patch
   # Compile fixed redaction paths once and skip nested traversal for primitives.
   # Keep all credential rules; remove after an upstream upgrade passes logging
   # redaction coverage without parsing paths on every record.
@@ -297,9 +293,17 @@ patchedDependencies:
   # Settle reconnect failures and cancellation; do not reopen after disconnect.
   # Remove after an upstream upgrade passes the real Socket Mode lifecycle tests.
   '@slack/socket-mode@2.0.5': patches/@slack__socket-mode@2.0.5.patch
-  better-auth@1.7.7: patches/better-auth@1.7.7.patch
+  # Better Auth 1.7 accepts a native client's custom-scheme redirect URI only
+  # in RFC 8252 reverse-domain form without an authority (`com.example.app:/cb`).
+  # Shipping MCP clients register authority-form URIs such as Cursor's
+  # `cursor://anysphere.cursor-mcp/oauth/callback`, which 1.6 accepted, so DCR
+  # keeps rejecting only the reserved schemes (javascript:, data:, file:, ...).
+  # Remove when those clients register reverse-domain redirect URIs, or the
+  # provider accepts authority-form custom schemes; re-run
+  # backend/src/routes/auth-oauth-provider.test.ts.
+  '@better-auth/oauth-provider@1.7.7': patches/@better-auth__oauth-provider@1.7.7.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
-  confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
+  confluence.js@2.1.1: patches/confluence.js@2.1.1.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
   # and the package opened the text part on `content != null` and processed text
   # before thinking — so the UI text part was created before the reasoning part

@@ -241,6 +241,29 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
+  it("leaves the Permissions tab unlocked by the General tab's update check", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    renderPage(BASE_PLUGIN);
+
+    expect(
+      screen.getByTestId("plugin-permissions").closest("fieldset"),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "You can view this plugin's configuration but not change it.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("locks a repository-owned plugin and edits its source in a dialog", async () => {
     const user = userEvent.setup();
     renderPage({

@@ -151,6 +151,12 @@ describe("impersonation cache boundaries", () => {
     });
 
     expect(assign).toHaveBeenCalledWith("/");
+    // With a JSON body: a body-less POST from a page whose address has a
+    // query string is refused (see useStopImpersonating).
+    expect(authClient.$fetch).toHaveBeenCalledWith(
+      "/admin/stop-impersonating",
+      { method: "POST", body: {} },
+    );
   });
 
   it("keeps persisted auth when returning to the admin session fails", async () => {

@@ -555,6 +555,60 @@ describe("resource permission policy persistence", () => {
       await ResourcePermissions.allows({ ...context, action: "update" }),
     ).toBe(false);
   });
+  test("a grant added to one subject keeps every other grant, also one written at the same moment", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const first = await makeUser();
+    const second = await makeUser();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const before =
+      (await ResourcePermissionPolicyModel.find(key))?.grants ?? [];
+    const add = (subject: PermissionSubject) =>
+      ResourcePermissionPolicyModel.addSubjectGrant({
+        ...key,
+        subject,
+        actions: ["read", "use"],
+      });
+
+    // Both read the policy before either writes: the second write finds the
+    // revision moved, reads again and adds to what the first one saved.
+    expect(
+      await Promise.all([
+        add({ type: "user", id: first.id }),
+        add({ type: "user", id: second.id }),
+        add({ type: "organization", id: "*" }),
+      ]),
+    ).toEqual([true, true, true]);
+
+    const grants = (await ResourcePermissionPolicyModel.find(key))?.grants;
+    expect(grants).toEqual(
+      expect.arrayContaining([
+        ...before,
+        { subject: { type: "user", id: first.id }, actions: ["read", "use"] },
+        { subject: { type: "user", id: second.id }, actions: ["read", "use"] },
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ]),
+    );
+    expect(grants).toHaveLength(before.length + 3);
+    // Held already: nothing to write.
+    expect(await add({ type: "organization", id: "*" })).toBe(false);
+  });
+
   test("permanent deletion removes object grants without removing wildcard access", async ({
     makeOrganization,
     makeUser,

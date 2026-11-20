@@ -17,9 +17,9 @@ import {
 export function PluginSkillPage({ pluginId }: { pluginId: string }) {
   const search = useSearchParams();
   const skillPath = search.get("skillPath") ?? "";
-  const { data: canManagePlugin } = useHasPermissions(
-    { plugin: ["update"] },
-    "*",
+  const { data: canOpenPlugin } = useHasPermissions(
+    { plugin: ["read"] },
+    pluginId,
   );
   const { data: skill, isPending } = usePluginSkill({ pluginId, skillPath });
 
@@ -36,7 +36,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
         <Puzzle />
         <InlineNoticeText>
           <span>This skill comes from </span>
-          {canManagePlugin ? (
+          {canOpenPlugin ? (
             <Link
               href={`/plugins/${skill.pluginId}`}
               className="font-medium underline decoration-border underline-offset-4 hover:decoration-current"
@@ -58,6 +58,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
         onManifestChange={() => undefined}
         onFilesChange={() => undefined}
         readOnly
+        downloadName={skill.name}
         className="h-[calc(100vh-20rem)] min-h-[32rem]"
       />
     </PageLayout>

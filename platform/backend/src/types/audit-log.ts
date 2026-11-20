@@ -149,6 +149,12 @@ export const AuditEventNameSchema = z.enum([
   "oauthClient.deleted",
   "oauthClient.rotated",
   "oauthClient.bulk_deleted",
+  // A workload OIDC token presented as a client assertion, accepted or
+  // refused (outcome says which). Written by the token endpoint.
+  "oauthClient.token_exchanged",
+  "oauthClientFederatedCredential.created",
+  "oauthClientFederatedCredential.updated",
+  "oauthClientFederatedCredential.deleted",
   "llmProviderApiKey.created",
   "llmProviderApiKey.updated",
   "llmProviderApiKey.deleted",

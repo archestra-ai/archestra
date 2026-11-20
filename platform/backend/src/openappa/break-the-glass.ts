@@ -11,6 +11,7 @@ import { type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   HumanApprovalMode,
@@ -18,6 +19,7 @@ import type {
 } from "@/types/guardrails-policy";
 import type { OpenAppaYellKind } from "@/types/openappa-yell";
 import { type OpenAppaSession, openappaYellEnabled } from "./service";
+import { isHardBlock } from "./soft-block";
 import {
   rememberRecordedCalls,
   superyellSession,
@@ -62,7 +64,7 @@ export function waiverFor(params: {
   const { decision, settings } = params;
   if (!settings.active || decision.recorded !== true || decision.unanswered)
     return null;
-  if (HARD_BLOCK.test(decision.feedback)) return null;
+  if (isHardBlock(decision.feedback)) return null;
   // Another tool to run first is a remedy with no offer id; the agent runs it.
   if (REDISPATCH.test(decision.feedback)) return null;
   if (decision.review?.length) {
@@ -233,19 +235,17 @@ export async function recordWaivedCalls(params: {
   const fresh = unrecordedCallIds({ ...scope, toolCallIds: [...byId.keys()] });
   // Reports off: nothing to record a yell in, so nothing turns the session off.
   const superyell = params.superyell && openappaYellEnabled();
-  let recorded: boolean;
+  // The yells the batch recorded, or null when it recorded no call.
+  let recorded: WaiverGroup[] | null;
   try {
     recorded = await withDbTransaction(async (tx) => {
       const inserted = await OpenAppaUnenforcedModel.recordCalls(
         { ...scope, toolCallIds: fresh, reason: "waived" },
         tx,
       );
-      if (inserted.length === 0) return false;
+      if (inserted.length === 0) return null;
       // One yell per tool and kind, counting the calls recorded now.
-      const groups = new Map<
-        string,
-        { tool: string; kind: WaiverKind; calls: number }
-      >();
+      const groups = new Map<string, WaiverGroup>();
       for (const id of inserted) {
         const call = byId.get(id);
         if (!call) continue;
@@ -258,9 +258,11 @@ export async function recordWaivedCalls(params: {
         group.calls += 1;
         groups.set(key, group);
       }
+      const yells: WaiverGroup[] = [];
       for (const group of groups.values())
-        await recordWaiver({ session, ...group, superyell }, tx);
-      return true;
+        if (await recordWaiver({ session, ...group, superyell }, tx))
+          yells.push(group);
+      return yells;
     });
   } catch (err) {
     logger.warn(
@@ -273,6 +275,7 @@ export async function recordWaivedCalls(params: {
   // ids for the resent batch to record.
   rememberRecordedCalls({ ...scope, toolCallIds: fresh });
   if (!recorded) return true;
+  for (const group of recorded) observeOpenappaYell({ ...group, superyell });
   for (const call of params.calls) logWaiver({ session, ...call, superyell });
   return true;
 }
@@ -314,6 +317,10 @@ export async function recordWaivedReview(params: {
       // A refused plan rolls its record back.
       if (!through) throw REFUSED_PLAN;
     });
+    observeOpenappaYell({
+      kind: "approval_waived",
+      superyell: waiver.superyell,
+    });
   } catch (err) {
     if (err === REFUSED_PLAN) return "refused";
     // The runtime's own failure is the caller's to answer, as before.
@@ -330,6 +337,9 @@ export async function recordWaivedReview(params: {
 
 const REFUSED_PLAN = Symbol("the runtime refused the plan");
 
+/** The calls of one tool and kind that a batch merges into one yell. */
+type WaiverGroup = { tool: string; kind: WaiverKind; calls: number };
+
 // ===
 
 async function recordWaiver(
@@ -341,8 +351,8 @@ async function recordWaiver(
     calls: number;
   },
   tx: Transaction,
-): Promise<void> {
-  if (!openappaYellEnabled()) return;
+): Promise<boolean> {
+  if (!openappaYellEnabled()) return false;
   const { session } = params;
   await OpenAppaYellModel.recordWaiver(
     {
@@ -358,6 +368,7 @@ async function recordWaiver(
     tx,
   );
   if (params.superyell) await superyellSession(session, tx);
+  return true;
 }
 
 function logWaiver(params: {
@@ -392,12 +403,8 @@ function unattendedSessionKey(session: OpenAppaSession): AllowedCacheKey {
 }
 
 // The deny decision carries no structured gap list, so the runtime's rendering
-// is what there is to read. It renders the missing marks as `requires
-// attention: <mark>, …`; the reserved mark is `blocked`, which an upstream
-// OpenAPPA prototype renames `hard-block` (653c7e3b0), and a miss here would
-// let a hard block through. A tool to run first (a redispatch, which mints no offer) renders as
-// `- Run <tool> first; it clears: <gaps>.` under `Continue:`.
-const HARD_BLOCK = /requires attention: [^\n]*\b(?:blocked|hard-block)\b/;
+// is what there is to read. A tool to run first (a redispatch, which mints no
+// offer) renders as `- Run <tool> first; it clears: <gaps>.` under `Continue:`.
 const REDISPATCH = /^\s*- Run .+ first; it clears: /m;
 
 const noted = registerProcessLocalCache(

@@ -60,10 +60,13 @@ import {
 import {
   getOpenAppaSaveResult,
   isOpenAppaPolicyChange,
+  isOpenAppaPreview,
+  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
   OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
+import { isPolicyChangeTool } from "./openappa-policy-change.utils";
 import {
   RemedyChainCard,
   RemedyGuardrailsSteps,
@@ -72,6 +75,11 @@ import {
   getRemedyChainStatus,
   type RemedyChain,
 } from "./openappa-remedy-chains";
+import {
+  PreviewedChangeReview,
+  proposalApprovalText,
+  usePreviewedChange,
+} from "./previewed-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
@@ -401,34 +409,34 @@ export function CompactToolGroup({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
-  // A saved guardrails change opens its circle once, so its result shows
-  // without a click; a circle the user picked is left alone.
+  // The latest proposed or saved Guardrails change opens its circle once, so
+  // the diff or the save result shows without a click; a circle the user
+  // picked is left alone. It opens for every reader, also one who cannot
+  // open tool calls: a change the person is asked to approve is theirs to
+  // see, not a detail of how the agent worked.
   const userToggledRef = useRef(false);
   const autoOpenedRef = useRef(new Set<string>());
-  const savedChangeKey = canExpandToolCalls
-    ? tools.findLast((entry) => {
-        if (entry.kind === "hook") return false;
-        const call = releasedCall(entry);
-        return (
-          call !== null &&
-          !call.errorText &&
-          !autoOpenedRef.current.has(entry.key) &&
-          getOpenAppaSaveResult({
-            shortName: getToolShortName(
-              resolveRunToolTargetName(call.part, call.toolName, {
-                getToolShortName,
-              }),
-            ),
-            output: call.toolResultPart?.output ?? call.part.output,
-          }) !== null
-        );
-      })?.key
-    : undefined;
+  const policyChangeKey = tools.findLast((entry) => {
+    if (entry.kind === "hook") return false;
+    const call = releasedCall(entry);
+    if (!call) return false;
+    const shortName = getToolShortName(
+      resolveRunToolTargetName(call.part, call.toolName, {
+        getToolShortName,
+      }),
+    );
+    const output = call.toolResultPart?.output ?? call.part.output;
+    return (
+      !call.errorText &&
+      (getOpenAppaSaveResult({ shortName, output }) !== null ||
+        isOpenAppaPreview({ shortName, output, input: call.part.input }))
+    );
+  })?.key;
   useEffect(() => {
-    if (!savedChangeKey) return;
-    autoOpenedRef.current.add(savedChangeKey);
-    if (!userToggledRef.current) setExpandedKey(savedChangeKey);
-  }, [savedChangeKey]);
+    if (!policyChangeKey || autoOpenedRef.current.has(policyChangeKey)) return;
+    autoOpenedRef.current.add(policyChangeKey);
+    if (!userToggledRef.current) setExpandedKey(policyChangeKey);
+  }, [policyChangeKey]);
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
@@ -836,7 +844,6 @@ function ExpandedToolCard({
     cancel: cancelTask,
     isCancelling: isCancellingTask,
   } = useMcpTaskFor(part.toolCallId);
-  const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
   const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
@@ -856,12 +863,14 @@ function ExpandedToolCard({
       });
   const policyChange =
     !saveResult &&
-    (validationChange ||
-      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-        policyToolName,
-      )) &&
+    (validationChange || isPolicyChangeTool(policyToolName)) &&
     !errorText &&
-    isOpenAppaPolicyChange(policyOutput, validationChange);
+    isOpenAppaPolicyChange(policyOutput, validationChange, part.input);
+  // A proposal of a file this conversation previewed: the person approving
+  // it reads that preview's diff, not the raw file a second time.
+  const previewed = usePreviewedChange(part.toolCallId);
+  const previewedChange =
+    previewed && !saveResult && !policyChange && !errorText ? previewed : null;
   const input = withoutProxyTransportArguments({
     toolName,
     shortName: toolShortName,
@@ -870,6 +879,7 @@ function ExpandedToolCard({
         ? withParsedArguments(part.input)
         : part.input,
   });
+  const hasInput = input && Object.keys(input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
   // Whose credential the gateway used against the upstream server.
   const executedAs = extractMcpExecutedAs(
@@ -920,8 +930,11 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput && !policyChange && !saveResult ? (
+        {hasInput && !policyChange && !saveResult && !previewedChange ? (
           <ToolInput input={input} defaultOpen />
+        ) : null}
+        {previewedChange ? (
+          <PreviewedChangeReview previewed={previewedChange} input={input} />
         ) : null}
         {nestedToolCalls}
         {isApprovalRequested &&
@@ -933,7 +946,11 @@ function ExpandedToolCard({
                 <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
               }
               title="Approval required"
-              description="Review this tool call before it can continue."
+              description={
+                previewedChange
+                  ? proposalApprovalText(previewedChange)
+                  : "Review this tool call before it can continue."
+              }
               actions={[
                 {
                   label: "Approve",
@@ -963,6 +980,7 @@ function ExpandedToolCard({
           <OpenAppaPolicyChange
             output={policyOutput}
             validationChange={validationChange}
+            input={part.input}
           />
         )}
         {saveResult === "validation" ? (
@@ -987,6 +1005,9 @@ function ExpandedToolCard({
               errorText={errorText}
             />
           )}
+        {hasInput && (policyChange || saveResult) ? (
+          <OpenAppaPolicyArguments input={input} />
+        ) : null}
       </ToolContent>
     </Tool>
   );

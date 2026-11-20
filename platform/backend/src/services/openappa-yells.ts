@@ -8,28 +8,29 @@ import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ServiceAccountModel from "@/models/service-account";
+import { recordsCall } from "@/openappa/call-id";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
 /**
- * The yells a viewer may read and resolve: with `log:admin`, every yell in the
- * organization; otherwise only the yells of the viewer's own sessions, as for
- * the other logs.
+ * The yells a viewer may read and resolve: with `guardrailsYell:admin`, every
+ * yell in the organization; otherwise only the yells of the viewer's own
+ * sessions, as for the logs.
  */
 export async function openAppaYellScope(params: {
   organizationId: string;
   userId: string;
 }) {
-  const canSeeAllLogs = await userHasPermission(
+  const canSeeAllYells = await userHasPermission(
     params.userId,
     params.organizationId,
-    "log",
+    "guardrailsYell",
     "admin",
   );
   return {
     organizationId: params.organizationId,
-    callerId: canSeeAllLogs ? undefined : `user:${params.userId}`,
+    callerId: canSeeAllYells ? undefined : `user:${params.userId}`,
   };
 }
 
@@ -175,7 +176,7 @@ async function traceLinks(
       inSession.find(
         (candidate) =>
           candidate.llmToolCallId !== null &&
-          withoutTrajectoryStamp(candidate.llmToolCallId) === callId,
+          recordsCall(callId, candidate.llmToolCallId),
       ) ?? nearest(inSession, row.createdAt);
     links.set(row.id, { llmSessionId, mcpToolCallId: call?.id ?? null });
   }

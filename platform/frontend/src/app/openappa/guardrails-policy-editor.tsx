@@ -31,6 +31,7 @@ import {
   type PolicyDeclarations,
   useEffectivePolicy,
 } from "@/lib/openappa-batteries.query";
+import { validationEntry } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
 import { BatteryEditDialog } from "./_parts/batteries-panel";
 import { BATTERY_PROBLEM } from "./_parts/battery-status";
@@ -60,14 +61,12 @@ import {
   POLICY_VALIDATION_CSS,
   PolicyValidationPane,
 } from "./_parts/policy-validation-pane";
+import { usePolicyDownload } from "./_parts/use-policy-download";
 import {
   type PolicyWorkspace,
   usePolicyWorkspace,
 } from "./_parts/use-policy-workspace";
-import {
-  ValidationProvider,
-  validationEntry,
-} from "./_parts/validation-context";
+import { ValidationProvider } from "./_parts/validation-context";
 
 /**
  * The Policy page, laid out as an editor: the policy's files in an explorer,
@@ -84,6 +83,7 @@ export function GuardrailsPolicyEditor() {
 
 function PolicyEditor() {
   const workspace = usePolicyWorkspace();
+  const download = usePolicyDownload(workspace);
   const [outlineOpen, setOutlineOpen] = useStoredFlag(
     "openappa-policy-outline-open",
   );
@@ -178,6 +178,7 @@ function PolicyEditor() {
           quickOpenLabel="Open a policy file"
           quickOpen={policyQuickOpen(workspace)}
           title={<PolicyBarTitle workspace={workspace} />}
+          download={download}
           actions={
             <PolicyBarActions
               workspace={workspace}

@@ -14,7 +14,7 @@ name: Build Archestra CLI
 # that platform/archestra-cli/release.lock.json pins and verifies each file's
 # SHA-256. So a release reaches the images in two steps: this workflow
 # publishes it, then a pull request updates the lock. The `lock` job opens
-# that pull request; a maintainer reviews and merges it.
+# that pull request with auto-merge on.
 #
 # Why an own release track: this repository's releases are immutable. Once
 # published, a release's assets are frozen, so the files cannot be attached to
@@ -27,8 +27,8 @@ name: Build Archestra CLI
 # change that reaches the binary needs a version bump. The `version` job
 # enforces that on pull requests: it fails when such a file changed but the
 # version is already released. That job does not run in the merge queue, so
-# `publish` repeats the comparison against the released commit and fails when
-# main holds changes that the published version does not.
+# `release-state` repeats the comparison against the released commit and
+# fails when main holds changes that the published version does not.
 #
 # Pull requests do not build: the merge queue already compiles and tests the
 # program on macOS, Linux and Windows (archestra-cli-checks in
@@ -37,7 +37,11 @@ name: Build Archestra CLI
 # publish and the lock pull request; both are idempotent. Dispatching on
 # another branch only builds.
 #
-# The binaries are not code-signed yet.
+# The two Windows binaries are code-signed as "Archestra Inc" and the two
+# macOS binaries as "Archestra Limited" (and notarized by Apple) before the
+# release is published, so SHA256SUMS and the lock cover the signed files; see
+# the `sign-windows` and `sign-macos` jobs. Linux has no code signing; the
+# checksums and the attestation cover those files.
 
 # The two path lists are duplicated on purpose: GitHub Actions does not
 # support YAML anchors, so they must be kept in sync by hand.
@@ -87,7 +91,7 @@ jobs:
       # their difference is what this pull request changes, whatever landed on
       # the base branch since the pull request was opened.
       - name: Checkout pull request merge commit and its base
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
@@ -155,7 +159,7 @@ jobs:
       FILE: ${{ matrix.file }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -220,25 +224,26 @@ jobs:
           # A re-run of this job replaces its file from the earlier attempt.
           overwrite: "true"
 
-  publish:
-    name: Publish release
-    needs: [build]
+  # Runs next to `build`, so the signing jobs know before they sign whether this
+  # run will publish: a published version is neither signed nor published
+  # again.
+  release-state:
+    name: Read the release state
     if: >-
       github.repository == 'archestra-ai/archestra'
       && github.ref == 'refs/heads/main'
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
-      contents: write # Create and publish the release.
-      id-token: write # Sign the build provenance attestation.
-      attestations: write # Store the attestation.
+      contents: read # Read the version, the release and the released tag.
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
+      published: ${{ steps.release.outputs.published }}
     steps:
       - name: Checkout release scripts
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -295,8 +300,198 @@ jobs:
               fetch --no-tags --depth=1 origin "refs/tags/${TAG}"
           python3 .github/scripts/archestra-cli-version-check.py check FETCH_HEAD HEAD
 
+  # Signs the two Windows binaries with Azure Artifact Signing (account
+  # `archestra`, certificate profile `archestra-cli`) and replaces their
+  # artifacts, so `publish` downloads the signed files under the same names.
+  # Only a run that will publish signs. This job runs no cargo and no build
+  # output, and it is the only job that can log in to Azure: the app
+  # `archestra-cli-signing` trusts only tokens of the `archestra-cli-release`
+  # environment (main only), and holds the signer role on the `archestra-cli`
+  # profile only. The signing action runs on x86_64 Windows only; it signs the
+  # arm64 file there too.
+  sign-windows:
+    name: Sign the Windows binaries
+    needs: [build, release-state]
+    if: needs.release-state.outputs.published == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    environment: archestra-cli-release
+    permissions:
+      contents: read # Check out this repository's artifact actions.
+      id-token: write # Log in to Azure with the environment's federated credential.
+    steps:
+      - name: Checkout artifact actions
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+
+      - name: Download the two Windows binaries
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: archestra-windows-*
+          path: dist
+          merge-multiple: "true"
+
+      - name: Log in to Azure
+        uses: azure/login@v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # The RFC 3161 timestamp keeps the signature valid after the
+      # certificate expires: Artifact Signing certificates last a few days.
+      - name: Sign with Artifact Signing
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          endpoint: https://neu.codesigning.azure.net/
+          signing-account-name: archestra
+          certificate-profile-name: archestra-cli
+          # The verify step below checks that these are exactly the two binaries.
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          # Only the Azure CLI login of the step above, as in the action's
+          # OIDC guide (docs/OIDC.md); the other credentials are off by default.
+          exclude-environment-credential: true
+
+      # Exactly the two files, each with a valid, timestamped signature of
+      # Archestra Inc. A signature the runner's Windows does not trust fails.
+      - name: Verify the signatures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(Get-ChildItem -Path dist -File)
+          $names = ($files.Name | Sort-Object) -join ','
+          if ($names -ne 'archestra-windows-arm64.exe,archestra-windows-x86_64.exe') {
+            Write-Output "::error::Expected the two Windows binaries in dist, found: $names"
+            exit 1
+          }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+            $subject = "$($signature.SignerCertificate.Subject)"
+            Write-Output "$($file.Name): $($signature.Status), signer: $subject, timestamped by: $($signature.TimeStamperCertificate.Subject)"
+            if ($signature.Status -ne 'Valid' -or ", $subject," -notlike '*, O=Archestra Inc,*' -or -not $signature.TimeStamperCertificate) {
+              Write-Output "::error::$($file.Name) is not validly signed and timestamped by Archestra Inc: $($signature.StatusMessage)"
+              exit 1
+            }
+          }
+
+      - name: Replace the x86_64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-windows-x86_64.exe
+          path: dist/archestra-windows-x86_64.exe
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
+      - name: Replace the arm64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-windows-arm64.exe
+          path: dist/archestra-windows-arm64.exe
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
+  # Signs the two macOS binaries with the Developer ID Application certificate
+  # of Archestra Limited, has Apple notarize them, and replaces their
+  # artifacts, so `publish` downloads the signed files under the same names.
+  # Only a run that will publish signs. Like `sign-windows`, this job builds
+  # nothing and runs no build output, and it is the only job that sees the
+  # Apple secrets: they are secrets of the `archestra-cli-release` environment,
+  # which allows main only and releases its secrets to a run only after a Core
+  # member other than the person who triggered it approves (infra
+  # github/org/environments.tf); one approval covers both signing jobs.
+  # .github/scripts/archestra-cli-sign-macos.sh does the work; it can be run on
+  # a Mac to test the secrets.
+  sign-macos:
+    name: Sign and notarize the macOS binaries
+    needs: [build, release-state]
+    if: needs.release-state.outputs.published == 'false'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    environment: archestra-cli-release
+    permissions:
+      contents: read # Check out the signing script and this repository's artifact actions.
+    steps:
+      - name: Checkout signing script and artifact actions
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            .github/scripts
+
+      - name: Download the two macOS binaries
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: archestra-darwin-*
+          path: dist
+          merge-multiple: "true"
+
+      - name: Sign, notarize and verify
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: bash .github/scripts/archestra-cli-sign-macos.sh dist
+
+      - name: Replace the arm64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-darwin-arm64
+          path: dist/archestra-darwin-arm64
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
+      - name: Replace the x86_64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-darwin-x86_64
+          path: dist/archestra-darwin-x86_64
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
+  # Also runs for a published version, publishing nothing, so that the `lock`
+  # job re-attempts the lock pull request (`release-state` already failed the
+  # run if main holds changes the published version lacks).
+  publish:
+    name: Publish release
+    needs: [build, release-state, sign-windows, sign-macos]
+    if: >-
+      github.repository == 'archestra-ai/archestra'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && !cancelled()
+      && needs.build.result == 'success'
+      && needs.release-state.result == 'success'
+      && ((needs.sign-windows.result == 'success' && needs.sign-macos.result == 'success')
+        || needs.release-state.outputs.published == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # Create and publish the release.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the attestation.
+    env:
+      PUBLISHED: ${{ needs.release-state.outputs.published }}
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
       - name: Download the six binaries
-        if: steps.release.outputs.published == 'false'
+        if: env.PUBLISHED == 'false'
         uses: $/.github/actions/github-download-artifact
         with:
           pattern: archestra-*
@@ -306,17 +501,17 @@ jobs:
       # Lets users check a binary was built here, from this commit:
       # gh attestation verify archestra-<os>-<arch> --repo archestra-ai/archestra
       - name: Attest the binaries
-        if: steps.release.outputs.published == 'false'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: env.PUBLISHED == 'false'
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: dist/archestra-*
 
       - name: Create and publish release
-        if: steps.release.outputs.published == 'false'
+        if: env.PUBLISHED == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.release.outputs.version }}
-          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ needs.release-state.outputs.version }}
+          TAG: ${{ needs.release-state.outputs.tag }}
         run: |
           set -euo pipefail
 
@@ -359,8 +554,8 @@ jobs:
       # hand, for when it cannot.
       - name: Describe the lock update
         env:
-          VERSION: ${{ steps.release.outputs.version }}
-          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ needs.release-state.outputs.version }}
+          TAG: ${{ needs.release-state.outputs.tag }}
         run: |
           {
             echo "## ${TAG}"
@@ -377,18 +572,23 @@ jobs:
   # Opens the pull request that pins the published release in
   # platform/archestra-cli/release.lock.json, the way update-client-versions.yml
   # opens its pull requests: the releaser App's token pushes the automation
-  # branch, so the pull request runs ordinary CI. No auto-merge: the lock
-  # decides what every platform image serves to users' computers, so a
-  # maintainer merges it. The merge queue builds the platform image from that
-  # pull request, which downloads and verifies the pinned files for real.
+  # branch, so the pull request runs ordinary CI. Auto-merge is on: a Core
+  # member already approved the release (archestra-cli-release), the lock is
+  # computed here from the published files, and the merge queue builds the
+  # platform image from that pull request, which downloads and verifies the
+  # pinned files for real before anything merges.
   # This job runs no code of the program: it reads the published release.
   lock:
     name: Propose release lock update
-    needs: [publish]
+    needs: [release-state, publish]
+    # The status check is explicit: for a published version the signing jobs
+    # are skipped, and the implicit one would skip this job too.
     if: >-
       github.repository == 'archestra-ai/archestra'
       && github.ref == 'refs/heads/main'
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && !cancelled()
+      && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -396,11 +596,11 @@ jobs:
     env:
       BRANCH: automation/archestra-cli-release-lock
       LOCK_FILE: platform/archestra-cli/release.lock.json
-      VERSION: ${{ needs.publish.outputs.version }}
-      TAG: ${{ needs.publish.outputs.tag }}
+      VERSION: ${{ needs.release-state.outputs.version }}
+      TAG: ${{ needs.release-state.outputs.tag }}
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -431,7 +631,7 @@ jobs:
       - name: Generate releaser token
         id: token
         if: steps.current.outputs.proceed == 'true'
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -493,7 +693,7 @@ jobs:
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
 
       # Also recovers a branch pushed by an earlier run whose PR creation failed.
-      # No auto-merge: see the note above this job.
+      # Auto-merge: see the note above this job.
       - name: Open or update pull request
         if: steps.current.outputs.proceed == 'true'
         env:
@@ -527,5 +727,9 @@ jobs:
           else
             pr="$existing_pr"
             gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          auto_merge_enabled="$(gh pr view "$pr" --repo "$GH_REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')"
+          if [[ "$auto_merge_enabled" == "false" ]]; then
+            gh pr merge "$pr" --repo "$GH_REPO" --auto
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"Lock pull request: " + .url' >> "$GITHUB_STEP_SUMMARY"

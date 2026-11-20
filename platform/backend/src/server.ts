@@ -137,6 +137,7 @@ import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { seedRequiredStartingData } from "@/services/seed";
+import { bootstrapServiceAccounts } from "@/services/service-account-bootstrap";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -963,6 +964,9 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // Runtimes locked before runtime permissions become those permissions.
     await ensureAgentRuntimeLockUpgrade();
+    // Service accounts the deployment declares (Helm bootstrap), after the
+    // license is known so federated credentials can be created.
+    await bootstrapServiceAccounts();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
@@ -1107,7 +1111,7 @@ const startWebServer = async () => {
     // Agent Runtime is available once the cluster serves the Agent Sandbox
     // API. The loops below start regardless and idle until it does, so
     // installing the controller later needs no restart.
-    void agentSandboxApi.refresh();
+    agentSandboxApi.checkAtStartup();
     // A missing RuntimeClass would leave every unprivileged run waiting for a
     // pod Kubernetes refuses to create; say so at startup, not per run.
     void agentRuntimeClassDetector.checkAtStartup();

@@ -168,6 +168,57 @@ test('a spawn that also narrows releases once, on the call proposed again after 
   assert.equal(result.approved_output, 'nothing unusual');
 });
 
+// What Archestra declares for a delegation that runs to its end in its own process.
+test('a subagent under a deferred return reads what narrows it, and its answer waits for the parent', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const spawned = await run.hook(run.parent, run.spawnCall('s1', { declares: { deferred: true } }));
+  assert.equal(spawned.decision, 'allow_call', JSON.stringify(spawned));
+  assert.ok(spawned.spawn_binding);
+  assert.equal(spawned.defers_return, true, 'the release names the return it recorded');
+  const lookup = {
+    organizationId: run.organization,
+    sessionId: run.parent.session_id,
+    spawnCallId: 's1',
+    controlTool: presentation.control_tool,
+    supportsDelegation: true,
+  };
+  assert.equal(await native.loadDeferredReturn(lookup, policy), null, 'nothing is deferred while the subagent runs');
+
+  await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+  const read = (callId) => run.hook(run.child, run.call(callId, 'read_inbox'));
+  const held = await read('c1');
+  assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+  assert.equal(held.offers.length, 1, 'no floor bounds the subagent: its own consent is the one plan');
+  const consented = await run.remedy(run.child, 'c1:narrow', { offer_id: held.offers[0].offer_id });
+  assert.equal(consented.result.isError, false, JSON.stringify(consented));
+  assert.equal((await read('c2')).decision, 'allow_call');
+  await run.hook(run.child, { event: 'tool_result', tool_call_id: 'c2', output: 'three unread', outcome: 'success' });
+
+  const stop = (request) =>
+    run.hook(run.child, { event: 'child_return', operation_id: `runtime-return:s1:${request}`, output: 'three unread' });
+  const stopped = await stop('r1');
+  assert.equal(stopped.decision, 'defer_return', JSON.stringify(stopped));
+  assert.equal(stopped.value, undefined);
+  assert.equal((await stop('r2')).decision, 'defer_return', 'the errand is over: a later answer is deferred with the first');
+  assert.deepEqual(await crossedReturns(run), [], 'nothing crossed');
+
+  const deferred = await native.loadDeferredReturn(lookup, policy);
+  assert.ok(deferred, 'the parent reads a notice in place of the answer');
+  assert.notEqual(deferred.accept, deferred.discard);
+  const stranger = await run.remedy(run.child, 'c3', { offer_id: deferred.accept });
+  assert.notDeepEqual(stranger.result.content, [{ type: 'text', text: 'three unread' }], 'only the parent decides');
+
+  const accepted = await run.remedy(run.parent, 'p1', { offer_id: deferred.accept });
+  assert.equal(accepted.result.isError, false, JSON.stringify(accepted));
+  assert.equal(accepted.approved_output, 'three unread', "the answer is the control call's result");
+  assert.deepEqual(await run.remedy(run.parent, 'p1', { offer_id: deferred.accept }), accepted, 'a retry answers from the record');
+  assert.deepEqual(await native.loadDeferredReturn(lookup, policy), deferred, "the spawn's own result keeps the notice");
+  assert.deepEqual(await crossedReturns(run), [], 'the accepted answer is no crossing a spawn result carries');
+  const published = await run.hook(run.parent, run.call('c9', 'publish'));
+  assert.equal(published.decision, 'deny_call', 'the accepted answer narrowed the parent');
+});
+
 test('a return declared on a call that starts no subagent is refused before the call is recorded', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();

@@ -554,7 +554,7 @@ describe("NewPluginPage", () => {
     await user.click(
       screen.getByRole("combobox", { name: "Permission for Member" }),
     );
-    await user.click(screen.getByRole("option", { name: "Can update" }));
+    await user.click(screen.getByRole("option", { name: "Can edit" }));
     expect(create).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create plugin" }));
     expect(create).toHaveBeenCalledWith(

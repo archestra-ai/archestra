@@ -268,25 +268,10 @@ export async function githubAppProfile(source: {
   if (!source.githubAppConfigId) return null;
   const cached = appProfiles.get(source.githubAppConfigId);
   if (cached) return cached;
-  const definition = await RuntimeCredentialDefinitionModel.findById({
-    id: source.githubAppConfigId,
+  const { definition, api, asApp } = await githubAppCaller({
     organizationId: source.organizationId,
+    githubAppConfigId: source.githubAppConfigId,
   });
-  if (definition?.kind !== "github_app" || !definition.appId)
-    throw new ApiError(404, "GitHub App credential not found");
-  const appId = definition.appId;
-  const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
-    organizationId: source.organizationId,
-    credentialId: definition.key,
-    scope: "organization",
-  });
-  if (!privateKey)
-    throw new ApiError(400, "GitHub App credential has no private key");
-  const api = (
-    definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
-  ).replace(/\/+$/, "");
-  const asApp = <T>(path: `/app${string}`) =>
-    fetchAsGithubApp<T>({ githubUrl: api, appId, privateKey, path });
   const app = await asApp<{
     slug?: unknown;
     name?: unknown;
@@ -320,6 +305,56 @@ export async function githubAppProfile(source: {
   };
   appProfiles.set(source.githubAppConfigId, profile);
   return profile;
+}
+
+/**
+ * The permissions the App's settings ask for now, as GitHub lists them
+ * (`{ contents: "write", … }`), read each time: an administrator may just
+ * have changed them. An installation holds a new one only once it accepts
+ * the change. Null for a source without an App.
+ */
+export async function githubAppRequestedPermissions(source: {
+  organizationId: string;
+  githubAppConfigId: string | null;
+}): Promise<Record<string, string> | null> {
+  if (!source.githubAppConfigId) return null;
+  const { asApp } = await githubAppCaller({
+    organizationId: source.organizationId,
+    githubAppConfigId: source.githubAppConfigId,
+  });
+  const app = await asApp<{ permissions?: unknown }>("/app");
+  const permissions: Record<string, string> = {};
+  if (typeof app.permissions === "object" && app.permissions !== null)
+    for (const [name, access] of Object.entries(app.permissions))
+      if (typeof access === "string") permissions[name] = access;
+  return permissions;
+}
+
+/** Calls GitHub as the source's App itself, with its saved key. */
+async function githubAppCaller(source: {
+  organizationId: string;
+  githubAppConfigId: string;
+}) {
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: source.githubAppConfigId,
+    organizationId: source.organizationId,
+  });
+  if (definition?.kind !== "github_app" || !definition.appId)
+    throw new ApiError(404, "GitHub App credential not found");
+  const appId = definition.appId;
+  const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
+    organizationId: source.organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!privateKey)
+    throw new ApiError(400, "GitHub App credential has no private key");
+  const api = (
+    definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
+  ).replace(/\/+$/, "");
+  const asApp = <T>(path: `/app${string}`) =>
+    fetchAsGithubApp<T>({ githubUrl: api, appId, privateKey, path });
+  return { definition, api, asApp };
 }
 
 /** The GitLab host and token behind a source's GitLab token. */

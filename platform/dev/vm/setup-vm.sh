@@ -45,8 +45,9 @@ step "apt packages"
 # cmake/clang/libssl-dev/pkg-config: native parts of the Rust crates
 # (aws-lc-sys, openssl-sys). lsof: Tilt's MCP port-forward loop. socat: the
 # kind bridge below. lld/llvm: the macOS build of the archestra program for
-# the Mac (dev/build-archestra-cli-dev.sh).
-packages="build-essential pkg-config cmake clang lld llvm libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat"
+# the Mac (dev/build-archestra-cli-dev.sh). zsh: the agent-connection-setup
+# tests run the zsh startup wrapper.
+packages="build-essential pkg-config cmake clang lld llvm libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat zsh"
 # shellcheck disable=SC2086
 if ! dpkg -s $packages >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
@@ -118,7 +119,10 @@ if ! sudo -iu "$user" sh -c 'command -v rustup' >/dev/null 2>&1; then
 fi
 # Login shells (dev-vm-sync.py run) get cargo, and the Rust
 # build folder Tilt uses (platform/Tiltfile), so a cargo run by hand shares it.
+# umask 022, as on the Mac and in CI: Ubuntu's 002 makes new files group-writable,
+# which the managed-runtime code (and its tests) refuses to trust.
 cat > /etc/profile.d/archestra-dev.sh <<'EOF'
+umask 022
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
 export CARGO_TARGET_DIR="$HOME/.cache/archestra-rs-target"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0

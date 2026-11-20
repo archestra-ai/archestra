@@ -601,10 +601,20 @@ function fromRecord({
 const ROLES = ["authority", "annotator", "sanitizer", "audience_source"];
 
 /**
+ * The id Guardrails records name a call by: the provider's, read out of a
+ * trajectory stamp, and Gemini's own where the Gemini translation packed a
+ * thought signature around it (`gemsig-<signature>.<id>`).
+ */
+function modelCallId(id: string): string {
+  const signed = /^gemsig-[^.]*\.(.+)$/.exec(unstamped(id));
+  return signed ? modelCallId(signed[1]) : unstamped(id);
+}
+
+/**
  * The provider's id inside a trajectory stamp (`appat1` + base64url of
  * `<session>\0<call id>` + a 22-character tag), or the id as given.
  */
-function modelCallId(id: string): string {
+function unstamped(id: string): string {
   if (!id.startsWith("appat1") || id.length <= 6 + 22) return id;
   try {
     const payload = id.slice(6, -22).replace(/-/g, "+").replace(/_/g, "/");

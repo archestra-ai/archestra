@@ -381,6 +381,9 @@ export const auth = betterAuth({
       oauthAccessToken: schema.oauthAccessTokensTable,
       oauthRefreshToken: schema.oauthRefreshTokensTable,
       oauthConsent: schema.oauthConsentsTable,
+      oauthResource: schema.oauthResourcesTable,
+      oauthClientResource: schema.oauthClientResourcesTable,
+      oauthClientAssertion: schema.oauthClientAssertionsTable,
     },
   }),
 

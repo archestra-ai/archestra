@@ -3,8 +3,10 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
+  summarizeAgentRuntimeTier,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -107,7 +109,10 @@ import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-s
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useDefaultEnvironment,
+  useMcpRuntimeTiers,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type CascadeSnapshot,
@@ -614,6 +619,7 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
   const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
+  const isResourcesDirty = deploymentField("runtimeTier");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -1356,6 +1362,27 @@ export function McpCatalogForm({
                   </>
                 )}
               </SettingsSection>
+
+              {currentServerType === "local" && canUpdateAdvancedSettings && (
+                <SettingsSection
+                  className={configurationSectionClass}
+                  title={
+                    <>
+                      Resources
+                      <ReinstallHint show={isResourcesDirty} />
+                    </>
+                  }
+                  description={
+                    initialValues?.deploymentSpecYaml
+                      ? "Resources are configured in the custom Kubernetes deployment YAML."
+                      : "Choose an MCP runtime tier managed in Settings > MCP. Changes apply when the server is installed or reinstalled."
+                  }
+                >
+                  {!initialValues?.deploymentSpecYaml && (
+                    <McpRuntimeTierField form={form} />
+                  )}
+                </SettingsSection>
+              )}
 
               {currentServerType === "local" && (
                 <SettingsSection
@@ -3101,5 +3128,64 @@ function OAuthOverrides({
         {children}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function McpRuntimeTierField({
+  form,
+}: {
+  form: UseFormReturn<McpCatalogFormValues>;
+}) {
+  const { data: resolved } = useMcpRuntimeTiers();
+  const tiers = resolved?.tiers ?? [];
+  return (
+    <FormField
+      control={form.control}
+      name="localConfig.runtimeTier"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Runtime tier</FormLabel>
+          <Select
+            value={
+              !resolved
+                ? ""
+                : field.value
+                  ? `tier:${findMcpRuntimeTier(tiers, field.value)?.name ?? field.value}`
+                  : "default"
+            }
+            disabled={!resolved}
+            onValueChange={(tier) =>
+              field.onChange(tier === "default" ? undefined : tier.slice(5))
+            }
+          >
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Loading tiers…" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              <SelectItem value="default">Deployment defaults</SelectItem>
+              {resolved &&
+                field.value &&
+                !findMcpRuntimeTier(tiers, field.value) && (
+                  <SelectItem value={`tier:${field.value}`}>
+                    {field.value} (unavailable)
+                  </SelectItem>
+                )}
+              {tiers.map((tier) => (
+                <SelectItem key={tier.name} value={`tier:${tier.name}`}>
+                  {tier.name}:{" "}
+                  {summarizeAgentRuntimeTier({ ...tier, workspaceGiB: null })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormDescription>
+            Manage MCP runtime tiers in Settings → MCP.
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }

@@ -43,7 +43,7 @@ describe("list_openappa_yells", () => {
       await seedAndAssignArchestraTools(agent.id);
       const user = await makeUser();
       const role = await makeCustomRole(organizationId, {
-        permission: { log: ["read"] },
+        permission: { guardrailsYell: ["read"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
       context = {
@@ -124,7 +124,7 @@ describe("list_openappa_yells", () => {
 
     const admin = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { guardrailsYell: ["read", "admin"] },
     });
     await makeMember(admin.id, organizationId, { role: role.role });
     context = { ...context, userId: admin.id };
@@ -155,14 +155,14 @@ describe("list_openappa_yells", () => {
     ).toBe(21);
   });
 
-  test("refuses a caller without log:read", async ({
+  test("refuses a caller without guardrailsYell:read, even a log admin", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const user = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { guardrailsPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"], log: ["read", "admin"] },
     });
     await makeMember(user.id, organizationId, { role: role.role });
     await seedYell({ sessionId: "chat", toolCallId: "call" });

@@ -438,6 +438,10 @@ the injection.
 - name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
   value: {{ .Values.archestra.releaseImageDigests | toJson | quote }}
 {{- end }}
+{{- if and ((.Values.archestra.bootstrap).serviceAccounts) (not (hasKey .Values.archestra.env "ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP")) }}
+- name: ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP
+  value: {{ .Values.archestra.bootstrap.serviceAccounts | toJson | quote }}
+{{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}

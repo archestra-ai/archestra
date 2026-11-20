@@ -2564,6 +2564,22 @@ describe("APPA GitHub sync", () => {
     expect((await action({ action: "disconnect" })).statusCode).toBe(403);
   });
 
+  test("the App's permissions read answers null without a GitHub App source, and takes the permission to read organization settings", async () => {
+    const read = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/openappa/github-sync/app-permissions",
+      });
+    await configure();
+    const response = await read();
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toBeNull();
+    await db
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.userId, adminId));
+    expect((await read()).statusCode).toBe(403);
+  });
+
   test("oversized or failed GitHub downloads preserve the active policy", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);

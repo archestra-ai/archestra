@@ -15,6 +15,7 @@ import {
 } from "@/models";
 import SkillModel from "@/models/skill";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   accessGrants,
   afterEach,
@@ -106,11 +107,14 @@ describe("agent activation-skill policy routes", () => {
       mode,
       revision: 7,
     });
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _organizationId, resource) => {
-        if (resource === "plugin")
+    const realResolveAll =
+      ResourcePermissions.resolveAll.bind(ResourcePermissions);
+    vi.spyOn(ResourcePermissions, "resolveAll").mockImplementation(
+      async (params) => {
+        if (params.resources?.includes("plugin")) {
           throw new Error("Plugin permission provider unavailable");
-        return true;
+        }
+        return realResolveAll(params);
       },
     );
     const response = await app.inject({

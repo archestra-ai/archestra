@@ -2,7 +2,7 @@
 title: Guardrails and OpenAPPA Metrics
 description: Monitor OpenAPPA hooks and engine operations through Archestra's standard Prometheus endpoint.
 order: 9
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-19
 ---
 
 Track [Guardrails](/docs/agents/guardrails) hooks and OpenAPPA engine operations through Archestra's standard Prometheus `/metrics` endpoint.
@@ -11,7 +11,7 @@ Track [Guardrails](/docs/agents/guardrails) hooks and OpenAPPA engine operations
 
 Scrape every Archestra web and worker pod using the [standard metrics endpoints and authentication](/docs/admin/observability/metrics#scraping). Hook and engine metrics are included in the same response. No additional exporter, receiver, or data source is required.
 
-If your collector filters metric names, retain `openappa_hook_*`, `appa_*`, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total), including histogram `_bucket`, `_sum`, and `_count` series. Preserve the metric labels and pod identity labels.
+If your collector filters metric names, retain `openappa_hook_*`, `openappa_yells_total`, `appa_*`, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total), including histogram `_bucket`, `_sum`, and `_count` series. Preserve the metric labels and pod identity labels.
 
 Exercise a Guardrails-enabled request, then query `sum by (hook, decision) (openappa_hook_dispatches_total)` and `sum by (outcome) (appa_policy_decisions_total)` in Prometheus. Select that Prometheus source as **Metrics** on the Guardrails & OpenAPPA dashboard. Metrics appear when their corresponding operations run; an absent event-driven series is not a successful zero.
 
@@ -36,8 +36,8 @@ Both families use closed label sets to keep cardinality bounded and never emit o
 
 | Label | Values |
 | --- | --- |
-| `hook` | `session_start`, `prompt`, `tool_call`, `tool_result`, `turn_end`, `cancel_call`, `child_address`, `child_end`, `child_return`, yell, or `other` for an unrecognized hook |
-| `decision` | `ack`, `allow_call`, `pass_control`, `deny_call`, `block`, `replace_output`, `deliver_value`, `child_return`, `context`, `refuse`, `mcp_result`, `other` for an unrecognized decision, or `error` when the dispatch rejects |
+| `hook` | `session_start`, `prompt`, `tool_call`, `tool_result`, `turn_end`, `cancel_call`, `child_address`, `child_end`, `child_return`, [`yell`](/docs/reference/archestra-mcp-server#yell), or `other` for an unrecognized hook |
+| `decision` | `ack`, `allow_call`, `pass_control`, `deny_call`, `block`, `replace_output`, `deliver_value`, `child_return`, `defer_return`, `context`, `refuse`, `mcp_result`, `other` for an unrecognized decision, or `error` when the dispatch rejects |
 
 Related boundary counters on other pages track downstream effects: [`llm_blocked_tools_total`](/docs/admin/observability/metrics/llm#llm_blocked_tools_total) counts tool calls blocked at the LLM Proxy, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total) counts runtime boundary refusals.
 
@@ -61,6 +61,29 @@ histogram_quantile(
   0.95,
   sum by (le, hook) (rate(openappa_hook_dispatch_duration_seconds_bucket[5m]))
 )
+```
+
+## Yell Metrics
+
+Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_total`. It counts what the Yells log records, including the calls Break the glass lets through, which never reach the [`yell`](/docs/reference/archestra-mcp-server#yell) hook and so are missing from `openappa_hook_dispatches_total{hook="yell"}`.
+
+| Metric | Type | Labels | Measures |
+| --- | --- | --- | --- |
+| <span id="openappa_yells_total"></span>`openappa_yells_total` | Counter | `kind`, `superyell` | Committed yells: one per agent or client-failure report, and one per call Break the glass let through. A retried report and a waiver the runtime refuses count nothing. |
+
+| Label | Values |
+| --- | --- |
+| `kind` | `agent` for a report (the agent's [`yell`](/docs/reference/archestra-mcp-server#yell) call, or a client that cannot receive remedies), `approval_waived` for a call that waited for human approval, `block_waived` for a call no remedy could lift |
+| `superyell` | `true` when the yell also turned Guardrails off for its session, otherwise `false` |
+
+Repeats of the same tool and kind merge into one row in the Yells log, but each waived call still counts here. The counter is recorded only while yells are enabled ([`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED)).
+
+```promql
+# Any yell in the last 15 minutes
+sum(increase(openappa_yells_total[15m])) > 0
+
+# A session had Guardrails turned off
+sum by (kind) (increase(openappa_yells_total{superyell="true"}[15m])) > 0
 ```
 
 ## Engine Metrics

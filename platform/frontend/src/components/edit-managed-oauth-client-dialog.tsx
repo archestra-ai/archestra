@@ -17,7 +17,8 @@ import {
   OAuthClientScopePicker,
   oauthCapabilities,
   oauthClientFormReady,
-  resolveOauthClientFormBody,
+  oauthClientFormValuesFrom,
+  oauthClientUpdateBody,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
@@ -67,28 +68,7 @@ export function EditManagedOAuthClientDialog({
     if (oauthClient) {
       setSection("general");
       setPermissionsDirty(false);
-      form.reset({
-        serviceAccountId: oauthClient.serviceAccountId ?? null,
-        name: oauthClient.name,
-        includeFutureProviders: oauthClient.includeFutureProviders ?? false,
-        grantType: oauthClient.grantType,
-        scopes: oauthClient.scopes,
-        allowedGatewayIds: oauthClient.allowedGatewayIds,
-        providerApiKeys: oauthClient.providerApiKeys.map(
-          ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
-        ),
-        modelPoolIds: oauthClient.modelPoolIds,
-        autoRouterIds: oauthClient.autoRouterIds,
-        redirectUrisText: oauthClient.redirectUris.join("\n"),
-        labels: oauthClient.labels,
-        billingTeamId: oauthClient.billingTeam?.id ?? null,
-        spendCap: oauthClient.spendCap
-          ? {
-              limitValue: oauthClient.spendCap.limitValue,
-              cleanupInterval: oauthClient.spendCap.cleanupInterval,
-            }
-          : null,
-      });
+      form.reset(oauthClientFormValuesFrom(oauthClient));
     }
   }, [oauthClient, form]);
   const values = form.watch();
@@ -162,24 +142,14 @@ export function EditManagedOAuthClientDialog({
         </>
       }
       onSubmit={form.handleSubmit(async () => {
-        const { initialGrants: _initial, ...body } =
-          await resolveOauthClientFormBody(
-            {
-              ...values,
-              labels: labelsRef.current?.saveUnsavedLabel() ?? values.labels,
-            },
-            providedGateways,
-          );
-        if (!form.formState.dirtyFields.serviceAccountId)
-          delete body.serviceAccountId;
-        // Saving another field does not require permission to change billing.
-        if (!form.formState.dirtyFields.spendCap) delete body.spendCap;
-        if (!form.formState.dirtyFields.billingTeamId)
-          delete body.billingTeamId;
-        // Only an admin who may change pool access can send it.
-        if (!form.formState.dirtyFields.modelPoolIds) delete body.modelPoolIds;
-        if (!form.formState.dirtyFields.autoRouterIds)
-          delete body.autoRouterIds;
+        const body = await oauthClientUpdateBody({
+          values: {
+            ...values,
+            labels: labelsRef.current?.saveUnsavedLabel() ?? values.labels,
+          },
+          dirtyFields: form.formState.dirtyFields,
+          gateways: providedGateways,
+        });
         await permissionSave.current?.();
         await onSubmit(oauthClient.id, body);
       })}

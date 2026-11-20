@@ -31,6 +31,7 @@ import config from "@/config";
 import AgentModel from "@/models/agent";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import { policyCallId } from "@/openappa/call-id";
 import {
   isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
@@ -378,7 +379,13 @@ export async function executeArchestraTool(
       context = {
         ...context,
         openappaRuntimeCall: admitted.call,
-        currentToolCallId: admitted.call.toolCallId,
+        // The host's own id for this call stays where the proof is for it:
+        // the interface nests a child's stream under the card of that id.
+        currentToolCallId:
+          context.currentToolCallId !== undefined &&
+          policyCallId(context.currentToolCallId) === admitted.call.toolCallId
+            ? context.currentToolCallId
+            : admitted.call.toolCallId,
       };
       proofAccepted = true;
     } else if (await isGuardrailsV2Active()) {
@@ -946,13 +953,17 @@ async function admitRuntimeProof(params: {
     sessionId: verified.session.session_id,
     toolCallIds: [verified.toolCallId],
   });
-  if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+  const release = released.get(verified.toolCallId);
+  if (release?.spawn !== verified.spawn) {
     return {
       kind: "refused",
       reason: "OpenAPPA has no matching released runtime call.",
     };
   }
-  return { kind: "accepted", call: verified };
+  return {
+    kind: "accepted",
+    call: release.defersReturn ? { ...verified, defersReturn: true } : verified,
+  };
 }
 
 /**

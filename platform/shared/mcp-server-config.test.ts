@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OAuthConfigSchema } from "./mcp-server-config";
+import { LocalConfigSchema, OAuthConfigSchema } from "./mcp-server-config";
 
 describe("OAuthConfigSchema", () => {
   const baseOAuthConfig = {
@@ -42,5 +42,26 @@ describe("OAuthConfigSchema", () => {
         token_endpoint: "https://legacy-idp.example.com/oauth/token",
       }),
     ).not.toThrow();
+  });
+});
+
+describe("MCP runtime tiers", () => {
+  it("accepts legacy defaults and trims a named tier", () => {
+    expect(LocalConfigSchema.parse({ command: "node" })).toEqual({
+      command: "node",
+    });
+    expect(
+      LocalConfigSchema.parse({ command: "node", runtimeTier: " S " })
+        .runtimeTier,
+    ).toBe("S");
+  });
+  it.each([
+    "",
+    "  ",
+    "x".repeat(33),
+  ])("rejects invalid names %j", (runtimeTier) => {
+    expect(
+      LocalConfigSchema.safeParse({ command: "node", runtimeTier }).success,
+    ).toBe(false);
   });
 });

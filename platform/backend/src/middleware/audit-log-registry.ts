@@ -37,6 +37,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelCostBackfillModel from "@/models/model-cost-backfill";
 import ModelPoolModel from "@/models/model-pool";
+import OauthClientFederatedCredentialModel from "@/models/oauth-client-federated-credential";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -1211,6 +1212,24 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       ManagedOauthClientModel.findByIdForAudit(id, orgId),
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // `:id` is the client; the POST takes the new credential's id from the
+  // response body, as a service account's credentials do.
+  "/api/oauth-clients/:id/federated-credentials": {
+    resourceType: "oauthClientFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      OauthClientFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id/federated-credentials/:credentialId": {
+    resourceType: "oauthClientFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      OauthClientFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  // SPDX-SnippetEnd
   "/api/oauth-clients/:id/rotate-secret": {
     resourceType: "oauthClient",
     action: "oauthClient.rotated",

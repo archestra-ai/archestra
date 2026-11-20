@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import ipaddr from "ipaddr.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -31,6 +32,8 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { CURSOR_WEB_SETUP_POLICY_TOOL } from "@/services/cursor-web-setup-tool-name";
+import { DOCS_MCP_TOOL_NAMES } from "@/services/docs-mcp-tool-names";
 import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { SKILL_SANDBOX_TOOL_RESULTS_DIR } from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
@@ -268,8 +271,8 @@ export const guardrailsPolicyService = {
 
   /**
    * What the root rules `content` adds or changes against `previous` point at,
-   * checked against the MCP tools of the catalogs the caller can read, so the
-   * answer never reveals a tool the caller could not otherwise see.
+   * checked against catalog and observed proxy tools visible to the caller,
+   * so the answer never reveals a tool the caller could not otherwise see.
    */
   async touchedRuleTargets(params: {
     organizationId: string;
@@ -283,13 +286,22 @@ export const guardrailsPolicyService = {
       params.userId,
       params.organizationId,
     );
-    const { tools } = await ToolModel.findCoverageInventory(
-      params.organizationId,
-      { includeAppCatalogs: true, catalogIds: visibleCatalogIds },
-    );
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission(params);
+    const [{ tools }, proxyTools] = await Promise.all([
+      ToolModel.findCoverageInventory(params.organizationId, {
+        includeAppCatalogs: true,
+        catalogIds: visibleCatalogIds,
+      }),
+      ToolModel.findProxyToolNames({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        isAgentAdmin,
+      }),
+    ]);
     // Built-in tools exist in code even when a feature flag keeps one unseeded.
     const inventory = new Set([
       ...tools.map((tool) => tool.name),
+      ...proxyTools.map((tool) => tool.name),
       ...ARCHESTRA_TOOL_SHORT_NAMES.map((name) =>
         archestraMcpBranding.getToolName(name),
       ),
@@ -463,10 +475,11 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
 # The coding battery's tools under Codex's, OpenCode's, Claude Desktop
-# Cowork's, Kimi Code's, Copilot CLI's and Grok's spellings. Kimi Code shares
-# Claude Code's other tool names; the proxy also evaluates its Read, Write and
-# Edit \`path\` and Copilot CLI's \`view\` and \`create\` \`path\` as \`file_path\`, and
-# Copilot CLI's lowercase \`edit\` \`path\` as \`filePath\`.
+# Cowork's, Kimi Code's, Copilot CLI's, Grok's and Cursor's spellings. Kimi Code
+# and Cursor share Claude Code's other tool names; the proxy also evaluates
+# their Read, Write, Edit and StrReplace \`path\` and Copilot CLI's \`view\` and
+# \`create\` \`path\` as \`file_path\`, and Copilot CLI's lowercase \`edit\` \`path\`
+# as \`filePath\`.
 ${formatHostClientCodingAliases()}
 
 [policy]
@@ -539,6 +552,22 @@ hint = "Routine requester-local file and shell operations, diagnostics, edits, b
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}
 
+# The documentation servers a fresh instance installs serve public
+# documentation pages. Reading one leaves a session's label as it is, the same
+# way on every call.
+${DOCS_MCP_TOOL_NAMES.map(
+  (name) => `[[policy.tool]]
+name = "${name}"
+delta = {}
+`,
+).join("\n")}
+# Cursor's web search and fetch tools run through Cursor's command-line
+# agent. Their setup tool installs that agent and signs it in; it reads and
+# sends nothing of the session.
+[[policy.tool]]
+name = "host/archestra/${CURSOR_WEB_SETUP_POLICY_TOOL}"
+delta = {}
+
 # Starting a subagent opens a child trajectory under this deployment's context
 # control; what the subagent hands back is checked when it returns.
 [[policy.tool]]
@@ -558,6 +587,52 @@ delta = {}
 
 [[policy.tool]]
 name = "host/archestra/mcp__ccd_turn__update_plan"
+delta = {}
+
+# Cursor checks its chats through hooks that setup writes to
+# ~/.cursor/hooks.json and ~/.cursor/archestra. A call that changes them needs
+# a person's approval, so an agent cannot turn its own checks off. A command
+# may spell the path with either slash.
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/write_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/edit_file(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*hooks.json*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "tool/${CODING_BATTERY}/shell(command:*.cursor*archestra*)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+# Cursor's Delete tool has no counterpart in the coding battery, so it is
+# named as Cursor spells it.
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/hooks.json)"
+requires = { attention = ["human-approval"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Delete(file_path:*/.cursor/archestra/*)"
+requires = { attention = ["human-approval"] }
 delta = {}
 
 [[policy.tool]]

@@ -12,6 +12,7 @@ import {
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
+import { AppaCursorAdapter } from "./adapters/cursor";
 import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
@@ -42,6 +43,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     new AppaOpenCodeAdapter(),
     // Matched on the agent id its setup sends: its User-Agent is the OpenAI SDK's.
     new AppaCopilotCliAdapter(),
+    // Last of the external clients: Cursor's only signal is its User-Agent,
+    // so a client's own session header outranks a copied Cursor UA.
+    new AppaCursorAdapter(),
     new AppaChatAdapter(),
   ],
 );
@@ -52,7 +56,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
  * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
- *    headers, Kimi Code's and Copilot CLI's Responses prompt cache keys).
+ *    headers, Kimi Code's and Copilot CLI's Responses prompt cache keys,
+ *    the opening of a Cursor chat). A client that sets
+ *    `genericSessionFallback: false` skips step 3.
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
@@ -102,7 +108,10 @@ export function extractAppaSessionIdentity(params: {
       );
   }
   if (generic.provenance === "appa-header") return generic;
-  if (!native?.sessionId) return generic;
+  if (!native?.sessionId)
+    return adapter?.genericSessionFallback === false
+      ? { parentId: generic.parentId, provenance: "none" }
+      : generic;
   return {
     ...native,
     parentId: generic.parentId ?? native.parentId,

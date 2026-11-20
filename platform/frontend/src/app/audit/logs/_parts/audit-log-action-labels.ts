@@ -152,6 +152,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "oauthClient.updated": "OAuth client updated",
   "oauthClient.deleted": "OAuth client deleted",
   "oauthClient.rotated": "OAuth client secret rotated",
+  "oauthClient.token_exchanged": "OAuth client signed in with an OIDC token",
+  "oauthClientFederatedCredential.created": "Federated credential created",
+  "oauthClientFederatedCredential.updated": "Federated credential updated",
+  "oauthClientFederatedCredential.deleted": "Federated credential deleted",
   "oauthClient.bulk_deleted": "OAuth clients bulk deleted",
   // LLM OAuth client
   // Provider API key
@@ -382,6 +386,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   mcpServer: "MCP server",
   member: "User",
   oauthClient: "OAuth client",
+  oauthClientFederatedCredential: "Federated credential",
   // Who can use an object: the list Permissions button and the item's Access section.
   resourcePermissions: "Access",
   openappaBatteryInstall: "Guardrails battery",

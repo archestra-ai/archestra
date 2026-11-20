@@ -1216,6 +1216,14 @@ describe("previewing a recompute", () => {
       externalId: "openai/team-chat",
       provider: "openai",
       modelId: "team-chat",
+      // A catalog tier must not fill cache rates absent from the selected instance.
+      syncedLongContextPricing: {
+        threshold: 100,
+        pricePerMillionInput: "20",
+        pricePerMillionOutput: "80",
+        pricePerMillionCacheRead: "10",
+        pricePerMillionCacheWrite: "20",
+      },
       inputModalities: ["text"],
       outputModalities: ["text"],
     });

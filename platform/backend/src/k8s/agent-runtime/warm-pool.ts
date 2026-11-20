@@ -11,6 +11,7 @@ import {
   createK8sClients,
   isK8sConflictError,
   isK8sNotFoundError,
+  isTransientK8sApiError,
   loadKubeConfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
@@ -530,6 +531,13 @@ class AgentWarmPoolManager {
         logger.debug(
           { error },
           "Agent warm pool reconciliation skipped: extensions or a resource are unavailable",
+        );
+      } else if (isTransientK8sApiError(error)) {
+        // Throttled, or a resource registered moments ago whose storage is
+        // still initializing. The next tick reconciles again.
+        logger.debug(
+          { error },
+          "Agent warm pool reconciliation deferred: the Kubernetes API asked to retry",
         );
       } else
         logger.warn(

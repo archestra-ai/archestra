@@ -82,10 +82,13 @@ can differ; their trees and explicit build inputs must agree.
 
 The `archestra-releaser` App (App ID 5655681, the release PR author) has
 `actions: read`. Its key lives only in the `releaser` environment, which only
-`main` and `release/*` can deploy to. Its token remains in the original release
-job. That job relays one
-verified architecture archive at a time into same-run artifacts, limiting disk
-usage and keeping App credentials out of publisher jobs, outputs and artifacts.
+`main` and `release/*` can deploy to. The release job selects the candidates
+and retains the verified selection as a same-run artifact. One relay leg per
+image (`relay-release-candidates`, also in the `releaser` environment) mints its
+own `actions: read` token and relays that image's verified architecture archives
+one at a time into same-run artifacts. The legs run in parallel; each one limits
+its disk usage, and App credentials stay out of publisher jobs, outputs and
+artifacts.
 Publisher token permissions are unchanged. Relay, digest and image-reference
 artifact names include the publication attempt, so a new attempt cannot mix
 earlier transfer or publication results; it must relay the complete set again.
@@ -104,8 +107,9 @@ manifest/config and every original attestation manifest. BuildKit's provenance
 is retained as emitted; it is not dropped, rewritten or recreated by publication.
 The complete candidate index is an additional authenticated handoff audit record.
 
-The existing publication scans consume those immutable architecture indexes.
-Both scans must pass before a version image tag is assigned. There is no missing-
+Each architecture's promotion leg scans the immutable index it promoted, so the
+two scans run in parallel. Both scans must pass before a version image tag is
+assigned: the tagging job runs only after every leg succeeds. There is no missing-
 artifact or legacy-release rebuild fallback. Older interrupted releases without
 this evidence fail closed; this work does not run or repair those releases.
 

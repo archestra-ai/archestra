@@ -1,4 +1,7 @@
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  geminiMinimalThinkingConfig,
+} from "@archestra/shared";
 import {
   APICallError,
   generateText,
@@ -183,11 +186,21 @@ class OpenAppaArchestraAnnotator {
     // their supported low effort rather than the high/max default, which can
     // consume the runtime's entire consult deadline before returning JSON.
     // The older kimi-for-coding-highspeed model has no adjustable effort.
+    // Gemini's Flash and Pro models reason by default too. A label needs
+    // none of it, and thinking tokens count against the output budget, so
+    // each is asked for the least it accepts; Flash-Lite, which does not
+    // reason unless asked, is sent nothing.
+    const geminiThinking =
+      selection.provider === "gemini"
+        ? geminiMinimalThinkingConfig(selection.modelName)
+        : null;
     const providerOptions =
       selection.provider === "kimi-code" &&
       /^(?:k3(?:[.-]|$)|kimi-for-coding$)/.test(selection.modelName)
         ? { "kimi-code": { reasoningEffort: "low" } }
-        : undefined;
+        : geminiThinking
+          ? { google: { thinkingConfig: geminiThinking } }
+          : undefined;
     const call = {
       model,
       system,

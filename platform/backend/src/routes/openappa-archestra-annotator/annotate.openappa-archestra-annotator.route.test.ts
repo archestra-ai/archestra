@@ -727,7 +727,7 @@ describe("archestra annotator", () => {
     ]);
   });
 
-  test("uses Gemini 3.8 Flash with only a Gemini key and no model choice", async () => {
+  test("uses Gemini 3.8 Flash at its lowest thinking level with only a Gemini key and no model choice", async () => {
     const { keyId } = await useDefaultModel({
       provider: "gemini",
       modelId: "gemini-3.8-pro",
@@ -744,11 +744,16 @@ describe("archestra annotator", () => {
     });
     await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(keyId, [flash.id]);
     const calls: string[] = [];
+    const thinking: unknown[] = [];
     server.use(
       http.post(
         `http://127.0.0.1:${config.api.port}/v1/gemini/${agentId}/v1beta/models/:model`,
-        ({ params }) => {
+        async ({ params, request }) => {
           calls.push(String(params.model));
+          const body = (await request.json()) as {
+            generationConfig?: { thinkingConfig?: unknown };
+          };
+          thinking.push(body.generationConfig?.thinkingConfig);
           return HttpResponse.json({
             candidates: [
               {
@@ -768,6 +773,8 @@ describe("archestra annotator", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ rank: "trusted" });
     expect(calls).toEqual(["gemini-3.8-flash:generateContent"]);
+    // Flash reasons by default; a label is asked for with the least of it.
+    expect(thinking).toEqual([{ thinkingLevel: "low" }]);
   });
 
   test("refuses without a call when no LLM key is configured", async () => {

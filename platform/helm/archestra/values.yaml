@@ -720,9 +720,13 @@ archestra:
     # - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
     #   name: crossplane
     #   description: Crossplane provider
-    #   # Give the account only the access it needs: a predefined role or a
-    #   # custom role name, comma-separated for several.
-    #   role: member
+    #   # Every role the account holds. Compose exactly the access it needs
+    #   # from granular roles (`fixed:<area>:reader` or `fixed:<area>:writer`,
+    #   # see the permissions reference), predefined roles (`member`,
+    #   # `editor`, `admin`) or custom role identifiers.
+    #   roles:
+    #     - fixed:agents:reader
+    #     - fixed:skills:writer
     #   federatedCredentials:
     #     - name: crossplane provider
     #       issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE

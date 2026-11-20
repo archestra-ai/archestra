@@ -18,7 +18,7 @@ const DECLARED = [
     id: ACCOUNT_ID,
     name: "crossplane",
     description: "Crossplane provider",
-    role: "member",
+    roles: ["member"],
     federatedCredentials: [CREDENTIAL],
   },
 ];
@@ -55,6 +55,24 @@ describe("bootstrapServiceAccounts", () => {
     ).toMatchObject([{ ...CREDENTIAL, claimConditions: {} }]);
   });
 
+  test("gives the account every declared role, such as granular fixed roles", async () => {
+    await bootstrapServiceAccounts([
+      {
+        id: ACCOUNT_ID,
+        name: "crossplane",
+        roles: [
+          "fixed:agents:reader",
+          "fixed:skills:writer",
+          "fixed:agents:reader",
+        ],
+      },
+    ]);
+
+    expect(
+      (await ServiceAccountModel.findById(ACCOUNT_ID, organizationId))?.role,
+    ).toBe("fixed:agents:reader,fixed:skills:writer");
+  });
+
   test("is idempotent and keeps edits made after the first run", async () => {
     await bootstrapServiceAccounts(DECLARED);
     await ServiceAccountModel.update(ACCOUNT_ID, organizationId, {
@@ -84,7 +102,7 @@ describe("bootstrapServiceAccounts", () => {
     await bootstrapServiceAccounts([
       {
         name: "crossplane",
-        role: "member",
+        roles: ["member"],
         federatedCredentials: [CREDENTIAL],
       },
     ]);
@@ -105,14 +123,14 @@ describe("bootstrapServiceAccounts", () => {
     });
 
     await bootstrapServiceAccounts([
-      { name: "unknown role", role: "no-such-role" },
-      { id: ACCOUNT_ID, name: "taken", role: "member" },
+      { name: "unknown role", roles: ["member", "no-such-role"] },
+      { id: ACCOUNT_ID, name: "taken", roles: ["member"] },
       {
         name: "private issuer",
-        role: "member",
+        roles: ["member"],
         federatedCredentials: [{ ...CREDENTIAL, issuer: "https://10.0.0.1" }],
       },
-      { name: "valid", role: "member" },
+      { name: "valid", roles: ["member"] },
     ]);
 
     expect(
@@ -143,13 +161,16 @@ describe("bootstrapServiceAccounts", () => {
     await expect(
       bootstrapServiceAccounts([{ name: "no role" }]),
     ).rejects.toThrow(
-      /ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP is invalid: 0\.role/,
+      /ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP is invalid: 0\.roles/,
     );
+    await expect(
+      bootstrapServiceAccounts([{ name: "x", roles: ["member,admin"] }]),
+    ).rejects.toThrow(/cannot contain a comma/);
     await expect(
       bootstrapServiceAccounts([
         {
           name: "x",
-          role: "member",
+          roles: ["member"],
           federatedCredentials: [{ ...CREDENTIAL, issuer: "http://insecure" }],
         },
       ]),

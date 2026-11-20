@@ -58,7 +58,9 @@ With the Helm chart, Archestra creates the service account and its federated cre
        serviceAccounts:
          - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
            name: crossplane
-           role: member
+           roles:
+             - fixed:agents:reader
+             - fixed:skills:writer
            federatedCredentials:
              - name: crossplane provider
                issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE
@@ -66,7 +68,7 @@ With the Helm chart, Archestra creates the service account and its federated cre
                subject: system:serviceaccount:crossplane-system:provider-archestra
    ```
 
-2. Give each account the narrowest `role` that does its job: a predefined role or the name of a custom role.
+2. List under `roles` every role the account needs, and no more. Compose access from [granular roles](/docs/reference/permissions#granular-roles) such as `fixed:agents:reader`, or use a predefined role (`member`, `editor`, `admin`) or a custom role's identifier.
 3. Set `id` to a UUID you choose, and configure the workload with it. The workload can then sign in on the first deploy, without looking the ID up.
 4. Install or upgrade the chart. Archestra creates the accounts after its database migrations.
 

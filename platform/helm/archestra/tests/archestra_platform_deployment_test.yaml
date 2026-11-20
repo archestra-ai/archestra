@@ -1018,7 +1018,9 @@ tests:
       archestra.bootstrap.serviceAccounts:
         - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
           name: crossplane
-          role: member
+          roles:
+            - fixed:agents:reader
+            - fixed:skills:writer
           federatedCredentials:
             - name: crossplane provider
               issuer: https://oidc.example.com
@@ -1029,7 +1031,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP
-            value: '[{"federatedCredentials":[{"audience":"https://archestra.example.com","issuer":"https://oidc.example.com","name":"crossplane provider","subject":"system:serviceaccount:crossplane-system:provider-archestra"}],"id":"6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10","name":"crossplane","role":"member"}]'
+            value: '[{"federatedCredentials":[{"audience":"https://archestra.example.com","issuer":"https://oidc.example.com","name":"crossplane provider","subject":"system:serviceaccount:crossplane-system:provider-archestra"}],"id":"6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10","name":"crossplane","roles":["fixed:agents:reader","fixed:skills:writer"]}]'
 
   - it: should not set ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP by default
     documentIndex: 1

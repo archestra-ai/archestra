@@ -1989,8 +1989,10 @@ describe("parseServiceAccountBootstrap", () => {
   test("returns the declared accounts", async () => {
     const { parseServiceAccountBootstrap } = await import("./config");
     expect(
-      parseServiceAccountBootstrap('[{"name":"crossplane","role":"admin"}]'),
-    ).toEqual([{ name: "crossplane", role: "admin" }]);
+      parseServiceAccountBootstrap(
+        '[{"name":"crossplane","roles":["member"]}]',
+      ),
+    ).toEqual([{ name: "crossplane", roles: ["member"] }]);
   });
 
   test("fails startup on a value that is not a JSON array", async () => {

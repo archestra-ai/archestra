@@ -145,14 +145,15 @@ async function findOrCreateServiceAccount(params: {
     return existingId;
   }
 
-  await assertRolesExist({ organizationId, role: account.role });
+  await assertRolesExist({ organizationId, roles: account.roles });
   try {
     const created = await ServiceAccountModel.create({
       id: account.id,
       organizationId,
       name: account.name,
       description: account.description,
-      role: account.role,
+      // The account column holds several roles comma-separated.
+      role: [...new Set(account.roles)].join(","),
       createdBy: null,
     });
     logger.info(
@@ -174,9 +175,9 @@ async function findOrCreateServiceAccount(params: {
 
 async function assertRolesExist(params: {
   organizationId: string;
-  role: string;
+  roles: string[];
 }): Promise<void> {
-  for (const role of new Set(params.role.split(",").map((r) => r.trim()))) {
+  for (const role of new Set(params.roles)) {
     if (
       !(await OrganizationRoleModel.getByIdentifier(
         role,

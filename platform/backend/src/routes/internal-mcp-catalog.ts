@@ -1741,15 +1741,29 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // (no DB constraint — legacy duplicates must keep working); the
         // check-then-write race is accepted. A metadata-only edit of a
         // legacy duplicate never reaches here: the name is unchanged.
-        await InternalMcpCatalogModel.assertRootNameAvailable({
-          name: newCatalogName,
-          organizationId: request.organizationId,
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItemForGate.environmentId) as string | null,
-          audience: await catalogNameAudienceOf(originalCatalogItemForGate),
-          excludeId: id,
-        });
+        //
+        // A request can rename and move at once. The rename below is
+        // committed before the move's own gates run, and a refused move
+        // leaves the server where it is, so the new name must be free in
+        // the current environment as well as in the destination.
+        const renameAudience = await catalogNameAudienceOf(
+          originalCatalogItemForGate,
+        );
+        const renameEnvironmentIds = new Set<string | null>([
+          originalCatalogItemForGate.environmentId ?? null,
+          "environmentId" in restBody
+            ? ((restBody.environmentId ?? null) as string | null)
+            : (originalCatalogItemForGate.environmentId ?? null),
+        ]);
+        for (const environmentId of renameEnvironmentIds) {
+          await InternalMcpCatalogModel.assertRootNameAvailable({
+            name: newCatalogName,
+            organizationId: request.organizationId,
+            environmentId,
+            audience: renameAudience,
+            excludeId: id,
+          });
+        }
 
         // The cascade's freeze-fallback is only safe once the startup adopt
         // pass has frozen every row that HAS a live deployment. Block a

@@ -274,6 +274,35 @@ describe("MCP server names are unique per environment", () => {
     );
   });
 
+  test("refuses a rename with a move when the current environment has the name", async () => {
+    const staging = await createEnvironment({
+      organizationId,
+      data: { name: "Staging" },
+    });
+    expect((await create(remote("Weather", shared))).statusCode).toBe(200);
+    const reports = await create(remote("Reports", shared));
+    expect(reports.statusCode).toBe(200);
+
+    // Staging has no Weather. The rename is committed before the move, so a
+    // move refused later would leave two Weather servers in Default.
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${reports.json().id}`,
+      payload: { name: "Weather", environmentId: staging.id },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    const [row] = await db
+      .select({
+        name: schema.internalMcpCatalogTable.name,
+        environmentId: schema.internalMcpCatalogTable.environmentId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, reports.json().id));
+    expect(row).toEqual({ name: "Reports", environmentId: null });
+  });
+
   test("refuses a move into an environment that already has the name", async () => {
     const staging = await createEnvironment({
       organizationId,

@@ -1945,6 +1945,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
         !relays.has(call.id) &&
+        !withheldRelayDecisions.has(call.id) &&
         !peerInbox.has(call.id),
     );
     const decisions = rest.length
@@ -1960,6 +1961,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of withheldRelayDecisions) {
+      decisionById.set(id, decision);
+    }
     await holdConflictingRemedyCalls({
       session,
       calls: rest,
@@ -1989,9 +1993,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     for (const [id, feedback] of reusedNames) {
       decisionById.set(id, { kind: "deny", feedback });
-    }
-    for (const [id, decision] of withheldRelayDecisions) {
-      decisionById.set(id, decision);
     }
     for (const [id, relay] of relays) {
       if (relay.kind === "deny") {
@@ -2029,7 +2030,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
     const notice = binding.request.tools?.notice;
     // Only the ordinary calls the runtime ruled on here can be waived.
-    const evaluatedIds = new Set(rest.map((call) => call.id));
+    const evaluatedIds = new Set([
+      ...rest.map((call) => call.id),
+      ...withheldRelayDecisions.keys(),
+    ]);
     // The calls the runtime admitted; a batch that never reaches the client
     // cancels them, so no call stays open that will never run.
     const admittedCalls = () =>

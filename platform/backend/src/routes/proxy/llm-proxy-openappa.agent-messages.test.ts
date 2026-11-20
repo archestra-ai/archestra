@@ -354,6 +354,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain("appapm1-");
       expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
+      // The runtime rules on the withheld send once.
+      expect(
+        h.events.filter(
+          (event) =>
+            event.event === "tool_call" && event.tool === "SendMessage",
+        ),
+      ).toHaveLength(1);
     });
 
     test("a teammate's protocol message is sent unchanged and does not end the sender", async () => {

@@ -48,9 +48,9 @@ All users get access through one Entra group, and team membership is managed in 
 
 ```mermaid
 flowchart LR
-  Entra[Entra group]:::external -->|SCIM| User[Provisioned user]:::accent
-  TF[Terraform] -->|Team members| User
-  User -->|First sign-in| Active[Signed in, teams kept]:::ok
+  Assign[Added to the Entra group]:::external --> Created[User created in Archestra]:::accent
+  Created --> Team[Terraform adds the user to teams]
+  Team --> SignIn[First sign-in, already in teams]:::ok
 ```
 
 1. In Entra, assign one group, for example **Archestra Users**, to the Archestra app.

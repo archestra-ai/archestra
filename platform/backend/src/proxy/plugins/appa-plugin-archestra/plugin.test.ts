@@ -15321,6 +15321,179 @@ describe("soft-block emergency override", () => {
     }
   });
 
+  async function replayHardDenial(
+    plugin: AppaPluginArchestra,
+    context: LlmProxyRequestContext,
+  ) {
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          old: {
+            content: "requires attention: blocked",
+            outputSource: "runtime",
+            denied: true,
+          },
+        },
+      });
+    try {
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          { id: "old", name: "read_file", content: "raw", isError: false },
+        ],
+      });
+    } finally {
+      process.mockRestore();
+    }
+  }
+
+  test("returns a prepared refusal after a replayed hard denial", async ({
+    makeOrganization,
+  }) => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "codex-hard-history",
+    });
+    context.headers = { "user-agent": "codex/0.160.0" };
+    context.requestBody = {
+      tools: [
+        {
+          type: "namespace",
+          name: "collaboration",
+          tools: [
+            {
+              type: "function",
+              name: "spawn_agent",
+              parameters: {
+                type: "object",
+                properties: {
+                  message: { type: "string" },
+                  task_name: { type: "string" },
+                },
+                additionalProperties: false,
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    trusted.request.tools = stubRequestTools();
+    try {
+      await plugin.onSessionInit(context);
+      await replayHardDenial(plugin, context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "spawn-illegal",
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify({
+              message: "task",
+              task_name: "one-child",
+              tool_output_contract: "qa-summary",
+            }),
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({ decision: "refuse" });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("replaces a held runtime return after a replayed hard denial", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+      "parent",
+    );
+    await plugin.onCleanup(context);
+    trusted.runtimeSessionId = trusted.session.session_id;
+    trusted.runtimeTaskId = "task";
+    await plugin.onSessionInit(context);
+    const reason = "your parent takes no return from this session";
+    const crossing = vi
+      .spyOn(appaService, "returnSubagentValue")
+      .mockResolvedValue({ kind: "held", reason });
+    try {
+      await replayHardDenial(plugin, context);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "ready",
+        }),
+      ).toEqual({ decision: "replace", responseText: reason });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      crossing.mockRestore();
+    }
+  });
+
+  test("replaces an uncrossed child end after a replayed hard denial", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:hard-history";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: false,
+    });
+    try {
+      await plugin.onSessionInit(context);
+      await replayHardDenial(plugin, context);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "raw child return",
+        }),
+      ).toEqual({ decision: "replace", responseText: "raw child return" });
+      expect(endChild).toHaveBeenCalledOnce();
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      endChild.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test.for([
     {
       feedback: "OpenAPPA helper unavailable",

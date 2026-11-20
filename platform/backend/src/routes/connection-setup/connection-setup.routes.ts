@@ -435,8 +435,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: 2 * 1024 * 1024,
       schema: {
         operationId: RouteId.ReportCursorHookEvent,
-        // Listed in the API reference once the docs for Cursor's hooks ship.
-        hide: true,
         description:
           "Report one Cursor hook step with an installation-scoped hook credential. Guardrails rule on tool calls in chats that do not pass through the LLM proxy. Live membership and gateway access are rechecked.",
         tags: ["Connection Setups"],

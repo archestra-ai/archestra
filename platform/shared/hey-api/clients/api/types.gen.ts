@@ -55395,6 +55395,93 @@ export type GetAgentAdoptionUsageResponses = {
 
 export type GetAgentAdoptionUsageResponse = GetAgentAdoptionUsageResponses[keyof GetAgentAdoptionUsageResponses];
 
+export type GetDisconnectReferenceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connected-clients/disconnect-reference';
+};
+
+export type GetDisconnectReferenceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDisconnectReferenceError = GetDisconnectReferenceErrors[keyof GetDisconnectReferenceErrors];
+
+export type GetDisconnectReferenceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        reference: string;
+        expiresAt: string;
+    };
+};
+
+export type GetDisconnectReferenceResponse = GetDisconnectReferenceResponses[keyof GetDisconnectReferenceResponses];
+
 export type DisconnectConnectedClientData = {
     body?: never;
     path: {
@@ -55783,6 +55870,104 @@ export type GetConnectionInstructionsResponses = {
 };
 
 export type GetConnectionInstructionsResponse = GetConnectionInstructionsResponses[keyof GetConnectionInstructionsResponses];
+
+export type ReportCursorHookEventData = {
+    body: {
+        step: 'sessionStart' | 'beforeSubmitPrompt' | 'subagentStart' | 'preToolUse' | 'postToolUse' | 'postToolUseFailure' | 'subagentStop' | 'afterAgentResponse' | 'stop';
+        event: {
+            [key: string]: unknown;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/connection-hooks/cursor';
+};
+
+export type ReportCursorHookEventErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReportCursorHookEventError = ReportCursorHookEventErrors[keyof ReportCursorHookEventErrors];
+
+export type ReportCursorHookEventResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        permission?: 'allow' | 'deny' | 'ask';
+        user_message?: string;
+        agent_message?: string;
+        updated_input?: {
+            [key: string]: unknown;
+        };
+        updated_mcp_tool_output?: string;
+        additional_context?: string;
+    };
+};
+
+export type ReportCursorHookEventResponse = ReportCursorHookEventResponses[keyof ReportCursorHookEventResponses];
 
 export type GetConnectionHealthData = {
     body?: never;

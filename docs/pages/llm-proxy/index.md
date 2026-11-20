@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,7 +35,7 @@ An app or agent uses the proxy when you change two things: its base URL and its 
 
 ![The LLM Proxy page, with the endpoint for each provider and the four ways to sign in](/docs/automated_screenshots/llm-proxy_proxy.webp)
 
-- **Coding agents:** set up Claude Code, Codex, Cursor, or another agent through [Connect](/docs/get-started/connect). Connect sets both for you. The agent keeps your own subscription or key.
+- **Coding agents:** set up Claude Code, Codex, Cursor, or another agent through [Connect](/docs/get-started/connect). Connect sets both for you. The agent keeps your own subscription or key. Cursor is the exception: it keeps its own models unless you turn the LLM proxy on for it, and then it uses your organization's provider keys. See [Use Guardrails in Cursor](/docs/agents/guardrails/clients#use-guardrails-in-cursor).
 - **Your own app:**
   1. Go to **LLM Proxy** and copy the URL for your provider.
   2. Create a credential for the app. For most apps, this is a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).

@@ -87,7 +87,12 @@ create_cluster() {
     # sign-off tips. pipefail keeps a failed create visible to the `if`.
     if (
         set -o pipefail
-        kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s 2>&1 \
+        # KUBECONFIG already names the file the backend watches, and kind
+        # writes its unrewritten 127.0.0.1 kubeconfig wherever KUBECONFIG
+        # points. Keep that copy away from the backend; connect_cluster
+        # publishes the rewritten one once the API answers.
+        kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s \
+            --kubeconfig "${KUBECONFIG_PATH}.kind-create" 2>&1 \
             | grep -v \
                 -e "Overriding docker network due to KIND_EXPERIMENTAL_DOCKER_NETWORK" \
                 -e "Here be dragons" \
@@ -217,7 +222,7 @@ connect_cluster() {
 configure_quickstart_backend() {
     # From a previous run, in the data volume: the backend must not attach to
     # the cluster before this run's API answers.
-    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged"
+    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged" "${KUBECONFIG_PATH}.kind-create"
 
     if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
         docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null || exit 1

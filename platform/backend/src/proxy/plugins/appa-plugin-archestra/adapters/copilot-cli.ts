@@ -19,6 +19,7 @@ import {
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
+  resultText,
 } from "./trajectory";
 
 /** The connect setup's agent id header names the client; its User-Agent is the OpenAI SDK's. */
@@ -347,18 +348,4 @@ function readCopilotAnswer(
   if (value === "Approve") return "approve";
   if (value === "Deny") return "deny";
   return "none";
-}
-
-/** The text of a tool result as the Responses or Chat Completions wire carries it. */
-function resultText(content: unknown): string | undefined {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    const texts = content.flatMap((part) => {
-      const text = typeof part === "string" ? part : asRecord(part)?.text;
-      return typeof text === "string" ? [text] : [];
-    });
-    return texts.length > 0 ? texts.join("\n") : undefined;
-  }
-  const wrapped = asRecord(content)?.content;
-  return wrapped === undefined ? undefined : resultText(wrapped);
 }

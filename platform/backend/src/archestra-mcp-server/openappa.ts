@@ -73,6 +73,7 @@ import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
+  isDeferredReturnReference,
   listPeerMessages,
   loadOfferReview,
   loadRetainedOfferRefusal,
@@ -1254,7 +1255,13 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
-      if (remedy.offer_id && (await softBlocksAllowed())) {
+      // A decision on a deferred return answers no refusal, so there is nothing
+      // to waive: the runtime settles it for the session that owns the return.
+      if (
+        remedy.offer_id &&
+        !isDeferredReturnReference(remedy.offer_id) &&
+        (await softBlocksAllowed())
+      ) {
         // A waiver runs before native offer validation, so authorize its target
         // independently. Caller-supplied trajectories are not ownership proof.
         const currentSession =

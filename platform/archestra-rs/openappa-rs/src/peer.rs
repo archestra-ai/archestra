@@ -28,7 +28,7 @@ use crate::{
     lease,
     operations::{canonical_tool, read_completed_operation},
     remedy::recorded_call,
-    session::{SessionKey, session_actor},
+    session::{SessionKey, recorded_root, session_actor},
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -931,15 +931,7 @@ fn current_trajectory(actor: &Actor) -> &TrajectoryId {
 
 fn acting_root(pg: &Sql<'_>, input: &PeerInput) -> napi::Result<String> {
     let key = SessionKey::new(&input.organization_id, &input.session_id);
-    let root = pg.with_client(move |client| {
-        Ok(client
-            .query_opt(
-                "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                &[&key.organization_id, &key.actor],
-            )?
-            .map(|row| row.get::<_, String>(0)))
-    })?;
-    root.ok_or_else(|| invalid_input("OpenAPPA session has not started"))
+    recorded_root(pg, &key)?.ok_or_else(|| invalid_input("OpenAPPA session has not started"))
 }
 
 fn acting_actor(pg: &crate::Sql<'_>, input: &PeerInput, root: &str) -> napi::Result<Actor> {

@@ -14,6 +14,8 @@ const oauthConsent = pgTable(
     }),
     referenceId: text("reference_id"),
     scopes: text("scopes").array(),
+    resources: text("resources").array(),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

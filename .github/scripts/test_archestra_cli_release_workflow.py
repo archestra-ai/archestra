@@ -538,6 +538,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertFalse("cargo" in sign)
         self.assertTrue("          pattern: archestra-darwin-*\n" in sign)
         self.assertTrue("        run: bash .github/scripts/archestra-cli-sign-macos.sh dist\n" in sign)
+        for name in ("APPLE_TEAM_ID", "APPLE_SIGNING_IDENTIFIER"):
+            self.assertIn(f"{name}: ${{{{ secrets.{name} }}}}", sign)
         for name in MACOS_FILES:
             with self.subTest(name=name):
                 self.assertTrue(f"          name: {name}\n          path: dist/{name}\n" in sign)
@@ -548,8 +550,12 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(len(windows), 2)
         self.assertTrue("    runs-on: windows-latest\n" in sign)
         self.assertFalse("cargo" in sign)
-        self.assertTrue("          certificate-profile-name: archestra-cli\n" in sign)
-        self.assertTrue("          endpoint: https://neu.codesigning.azure.net/\n" in sign)
+        # The account, profile, endpoint and publisher are secrets, not code.
+        for line in ("endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}",
+                     "signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}",
+                     "certificate-profile-name: ${{ secrets.AZURE_SIGNING_CERTIFICATE_PROFILE }}",
+                     "SIGNING_PUBLISHER: ${{ secrets.AZURE_SIGNING_PUBLISHER }}"):
+            self.assertIn(line, sign)
         self.assertTrue("          timestamp-rfc3161: http://timestamp.acs.microsoft.com\n" in sign)
         for name in windows:
             with self.subTest(name=name):
@@ -592,6 +598,7 @@ class WorkflowPolicyTests(unittest.TestCase):
 SIGN_MACOS = ROOT / ".github/scripts/archestra-cli-sign-macos.sh"
 # Test values: the script holds no team ID or certificate name of its own.
 TEAM_ID = "TEAMID0001"
+IDENTIFIER = "test.example.cli"
 IDENTITY_HASH = "0123456789ABCDEF0123456789ABCDEF01234567"
 LOGIN_KEYCHAIN = "/Users/runner/Library/Keychains/login.keychain-db"
 
@@ -638,7 +645,7 @@ class SignMacosScriptTests(unittest.TestCase):
                 "CALLS": str(self.calls), "FAKE_VERIFY_EXIT": "0", "FAKE_NOTARY_EXIT": "0",
                 "FAKE_NOTARY": '{"id": "sub-1", "status": "Accepted", "message": "Processing complete"}',
                 "SIGNING_CERTIFICATE_BASE64": "cDEyIGZpbGU=", "SIGNING_CERTIFICATE_PASSWORD": "p12-password",
-                "APPLE_TEAM_ID": TEAM_ID, "APPLE_ID": "dev@example.test", "APPLE_PASSWORD": "abcd-efgh-ijkl-mnop",
+                "APPLE_TEAM_ID": TEAM_ID, "APPLE_SIGNING_IDENTIFIER": IDENTIFIER, "APPLE_ID": "dev@example.test", "APPLE_PASSWORD": "abcd-efgh-ijkl-mnop",
                 "FAKE_IDENTITIES": (
                     f'  1) {IDENTITY_HASH} "Developer ID Application: Example Ltd ({TEAM_ID})"\n'
                     "     1 valid identities found\n"
@@ -669,11 +676,11 @@ class SignMacosScriptTests(unittest.TestCase):
                 path = f"{self.dist}/{name}"
                 signs = [index for index, call in enumerate(calls) if call.startswith("codesign --force ") and call.endswith(path)]
                 self.assertEqual(len(signs), 1)
-                for option in ("--options runtime", "--timestamp", "--identifier ai.archestra.cli",
+                for option in ("--options runtime", "--timestamp", f"--identifier {IDENTIFIER}",
                                f"--keychain {keychain}", f"--sign {IDENTITY_HASH}"):
                     self.assertIn(option, calls[signs[0]])
                 verify = next(call for call in calls if call.startswith("codesign --verify ") and call.endswith(path))
-                self.assertIn(f'certificate leaf[subject.OU] = "{TEAM_ID}" and identifier "ai.archestra.cli"', verify)
+                self.assertIn(f'certificate leaf[subject.OU] = "{TEAM_ID}" and identifier "{IDENTIFIER}"', verify)
                 self.assertLess(signs[0], submit)
         self.assertIn(f"--apple-id dev@example.test --password abcd-efgh-ijkl-mnop --team-id {TEAM_ID} --wait", calls[submit])
         # Both files go in the one submission.

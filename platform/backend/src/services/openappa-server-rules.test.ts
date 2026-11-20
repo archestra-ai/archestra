@@ -1,4 +1,5 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -10,10 +11,12 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { packageContentHash } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
+import { getChatRosterBootstrap } from "@/routes/agent";
 import { secretManager } from "@/secrets-manager";
 import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -2069,6 +2072,100 @@ test("Archestra reads the branch's rules and writes none: a missing rule comes w
   expect(tokens.map((token) => token.permissions)).not.toContainEqual(
     expect.objectContaining({ administration: expect.anything() }),
   );
+});
+
+test("connecting a GitHub App source where the deployment enables self-service shares the APPA Keeper with the organization for use, so a member finds it in chat; a share taken away stays away on a later save", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const member = await makeUser();
+  await makeMember(member.id, org.id, { role: "member" });
+  const keeper = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    // As seeded: shared with nobody beyond its administrators.
+    access: "personal",
+  });
+  await connectApp({ organizationId: org.id });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rules/branches/:branch`, () => HttpResponse.json([])),
+  );
+  // The App is at hand, the source is not connected yet.
+  const githubAppConfigId =
+    (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null;
+  await db
+    .delete(schema.openappaGithubSyncTable)
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  const inMembersChat = async () =>
+    (
+      await getChatRosterBootstrap({
+        userId: member.id,
+        organizationId: org.id,
+      })
+    ).some((agent) => agent.id === keeper.id);
+  const organizationGrant = async () =>
+    (
+      await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "agent",
+        scope: keeper.id,
+      })
+    )?.grants.find((grant) => grant.subject.type === "organization");
+  const connect = () =>
+    configureAppaGithubSync({
+      organizationId: org.id,
+      userId: admin.id,
+      source: {
+        repo: "example/policies",
+        ref: "main",
+        path: "appa.toml",
+        interval: "1h",
+        validationDirectory: "",
+        githubPatId: null,
+        githubAppConfigId,
+        gitlabTokenId: null,
+      },
+    });
+
+  // Not connected, the Keeper is its administrators' alone.
+  expect(await inMembersChat()).toBe(false);
+
+  // Connected: everyone may read and use it, and nothing more.
+  await connect();
+  expect(await organizationGrant()).toEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  });
+  expect(await inMembersChat()).toBe(true);
+
+  // An administrator takes the share away: a save while self-service stays
+  // in force does not bring it back.
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "agent",
+    scope: keeper.id,
+  });
+  await ResourcePermissionPolicyModel.replace({
+    organizationId: org.id,
+    resource: "agent",
+    scope: keeper.id,
+    revision: policy?.revision ?? 0,
+    grants: (policy?.grants ?? []).filter(
+      (grant) => grant.subject.type !== "organization",
+    ),
+  });
+  await connect();
+  expect(await organizationGrant()).toBeUndefined();
+  expect(await inMembersChat()).toBe(false);
 });
 
 test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({

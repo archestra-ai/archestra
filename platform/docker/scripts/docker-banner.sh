@@ -32,12 +32,19 @@ fi
 # Print once both servers answer, so the banner lands after the startup logs
 # instead of in the middle of them. Give up waiting after BANNER_WAIT_SECONDS
 # and print anyway: the banner is informational and must not depend on a
-# healthy boot. The backend check is liveness, not /ready: in quickstart mode
-# /ready also waits for the embedded cluster, while the UI is usable earlier.
+# healthy boot. The backend counts as up once its API answers /ready, even
+# with 503 and `"kubernetes":"starting"`: in quickstart mode /ready also waits
+# for the embedded cluster, while the UI is usable earlier. (/health is no
+# signal: a placeholder server answers it while the backend still seeds.)
 BANNER_WAIT_SECONDS=180
 waited=0
 while [ "$waited" -lt "$BANNER_WAIT_SECONDS" ]; do
-    if wget -q --spider "${BACKEND_URL}/health" 2>/dev/null \
+    ready_body=$(curl -s --max-time 5 -w '%{http_code}' "${BACKEND_URL}/ready" 2>/dev/null)
+    case "$ready_body" in
+        *200 | *'"kubernetes":"starting"'*503) backend_up=1 ;;
+        *) backend_up="" ;;
+    esac
+    if [ -n "$backend_up" ] \
         && wget -q --spider "http://127.0.0.1:3000/default-favicon.ico" 2>/dev/null; then
         break
     fi

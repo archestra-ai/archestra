@@ -34,7 +34,7 @@ Then:
 
 1. In Archestra, go to **Settings → Service Accounts** and create a service account. Give it a role that holds [`member:read`](/docs/reference/permissions#member:read), [`member:create`](/docs/reference/permissions#member:create), [`member:update`](/docs/reference/permissions#member:update), and [`member:delete`](/docs/reference/permissions#member:delete), such as the predefined **User Writer**. Create a key for it and copy it.
 2. In the Microsoft Entra admin center, go to **Enterprise applications** and open your Archestra sign-in app. Open **Provisioning** and set **Provisioning Mode** to **Automatic**.
-3. Under **Admin Credentials**, set **Tenant URL** to your Archestra address plus `/api/scim/v2`, for example `https://archestra.example.com/api/scim/v2`. Paste the service account key into **Secret Token** and click **Test Connection**.
+3. Under **Admin Credentials**, set **Tenant URL** to your Archestra address plus `/api/scim/v2`, for example `https://archestra.example.com/api/scim/v2`. Paste the service account key from step 1 into **Secret Token** and click **Test Connection**.
 4. Under **Mappings**, turn off **Provision Microsoft Entra ID Groups**. Archestra takes only users over SCIM. This turns off groups for SCIM only: the groups in the sign-in token stay, so [Team Sync](/docs/admin/identity/sso#team-sync) keeps working.
 5. In the user mapping, check that `userName` gets the email people sign in with. Entra sends `userPrincipalName` by default. If that is not their email, map `userName` from `mail`.
 6. Under **Settings**, set **Scope** to **Sync only assigned users and groups**.

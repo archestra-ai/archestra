@@ -224,15 +224,17 @@ export async function previewServerRulesChange(
   const autoMerge = selfServiceAutoMergeActive(change.source);
   return {
     stage: "preview" as const,
+    // A server's rules always change through a pull request.
+    delivery: "pull_request" as const,
     ...change.view,
-    // Under auto-merge the request is the approval: the pull request merges
-    // once its check passes, which judges both the file and its requester.
+    // The person approves the proposing call itself, in the chat, with this
+    // preview's diff in front of them. Under auto-merge that approval is the
+    // only one: the pull request then merges once its check passes, which
+    // judges both the file and its requester.
     autoMerge,
     instruction: !change.view.valid
       ? "Fix the errors and preview again."
-      : autoMerge
-        ? "Auto-merge is on. If this is the change the user asked for, call propose_guardrails_server_rules_change now with the same content and expectedCommit and a plain summary. Do not ask the user to approve it first: it merges by itself once its checks pass."
-        : "Explain what the change does to agents, then ask the user whether to open the pull request.",
+      : `If this is the change the user asked for, say in one or two sentences what it does to agents, then call propose_guardrails_server_rules_change now with the same content and expectedCommit and a plain summary. The user is shown this preview's diff and asked to approve that call before it runs, so do not ask them in text as well, and do not repeat the file. ${autoMerge ? "Auto-merge is on: once approved, the pull request merges by itself when its checks pass." : "Once approved, the pull request opens for the user to merge."}`,
   };
 }
 
@@ -291,6 +293,7 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
+    autoMerge: selfServiceAutoMergeActive(change.source),
     instruction: selfServiceAutoMergeActive(change.source)
       ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number, wait=true and the last phase as since, tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
       : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,

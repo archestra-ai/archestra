@@ -1230,9 +1230,12 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     path: "mcp/payments_api.toml",
     before: "",
     after: REFUNDS,
-    // Without auto-merge, the user approves the pull request first.
+    // The person approves the proposing call itself, so the model is not
+    // told to ask in text as well.
     autoMerge: false,
-    instruction: expect.stringContaining("ask the user"),
+    instruction: expect.stringContaining(
+      "asked to approve that call before it runs",
+    ),
   });
   // The first server file brings every server's in, so no later one needs
   // its own line in appa.toml.
@@ -1349,16 +1352,21 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     ),
   );
   // With auto-merge on, the pull request merges by itself once its check
-  // passes: the preview asks for no approval, and the change is proposed.
+  // passes. The preview still sends the model to the proposing call, which
+  // the person approves in the chat: nothing is proposed on the model's word.
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
-  expect(
-    await previewServerRulesChange({ ...change, userId: pat.id }),
-  ).toMatchObject({
+  const previewed = await previewServerRulesChange({
+    ...change,
+    userId: pat.id,
+  });
+  expect(previewed).toMatchObject({
     autoMerge: true,
+    delivery: "pull_request",
     instruction: expect.stringContaining(
-      "Do not ask the user to approve it first",
+      "asked to approve that call before it runs",
     ),
   });
+  expect(previewed.instruction).not.toMatch(/Do not ask the user to approve/);
   expect(
     await proposeServerRulesChange({
       ...change,

@@ -2142,9 +2142,19 @@ describe("APPA GitHub sync", () => {
         .select()
         .from(schema.auditLogsTable)
         .where(eq(schema.auditLogsTable.organizationId, organizationId));
-      expect(rows.map((row) => row.after)).toContainEqual({
-        includeServersRequested: true,
-      });
+      // The record keeps the sync settings and marks the request beside them.
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          before: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: false,
+          }),
+          after: expect.objectContaining({
+            repo: "example/other-policy",
+            includeServersRequested: true,
+          }),
+        }),
+      );
     });
     // The minute's round checks the setup pull request like any other: the
     // policy it carries is judged, with or without a rule that requires

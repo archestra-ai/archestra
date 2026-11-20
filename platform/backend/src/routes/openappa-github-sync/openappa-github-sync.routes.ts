@@ -2,6 +2,7 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   configureAppaGithubSync,
@@ -388,13 +389,23 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         request.auditAfter = { syncRequested: true };
       }
       if (request.body.action === "include_servers") {
-        // The request opens a pull request and leaves the settings as they were.
-        request.auditBefore = { includeServersRequested: false };
-        request.auditAfter = { includeServersRequested: true };
         await ensureSelfServiceInclude({
           organizationId: request.organizationId,
           userId: request.user.id,
         });
+        // The request opens a pull request and usually leaves the settings as
+        // they were, so the record marks it beside whatever a first pull changed.
+        request.auditBefore = {
+          ...request.auditBefore,
+          includeServersRequested: false,
+        };
+        request.auditAfter = {
+          ...(await OpenAppaGithubSyncModel.findByIdForAudit(
+            request.organizationId,
+            request.organizationId,
+          )),
+          includeServersRequested: true,
+        };
         return reply.send(await getAppaGithubSync(request.organizationId));
       }
       // The switch's dialog opens the pull request that includes the

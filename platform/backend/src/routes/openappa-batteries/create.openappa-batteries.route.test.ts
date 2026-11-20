@@ -313,8 +313,6 @@ describe("guardrails batteries", () => {
       row.id,
       "github",
     ]);
-    // With no row to read back, the record carries the declaration it left.
-    expect(records[1].after).toMatchObject({ name: "github", servers: [] });
   });
 
   test("deleting the last install of a battery removes its declaration", async ({

@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.4.37](https://github.com/archestra-ai/archestra/compare/platform-v1.4.36...platform-v1.4.37) (2026-11-20)
+
+
+### Features
+
+* **frontend:** download a file workspace's files as a .zip (backport release/1.4) ([#10976](https://github.com/archestra-ai/archestra/issues/10976)) ([f0bce05](https://github.com/archestra-ai/archestra/commit/f0bce05a93fc2f2993e51b9a9700131c9e9a6c41))
+* **guardrails:** check Cursor chats on Cursor's own models (backport release/1.4) ([#10979](https://github.com/archestra-ai/archestra/issues/10979)) ([91a60be](https://github.com/archestra-ai/archestra/commit/91a60be6e87eeba13be6d2c642546f150e28e7a2))
+* **guardrails:** share the APPA Keeper with the organization on self-service (backport release/1.4) ([#11002](https://github.com/archestra-ai/archestra/issues/11002)) ([09f92f3](https://github.com/archestra-ai/archestra/commit/09f92f36de7be60e009551cabff3e4fc2bd7fdd0))
+* **openappa:** add openappa_yells_total metric for alerting on yells (backport release/1.4) ([#10978](https://github.com/archestra-ai/archestra/issues/10978)) ([4fb815e](https://github.com/archestra-ai/archestra/commit/4fb815e6b70d3cf62c2d0a174224134d8a4f5db2))
+
+
+### Bug Fixes
+
+* **auth:** leave an impersonated session before it runs out (backport release/1.4) ([#11004](https://github.com/archestra-ai/archestra/issues/11004)) ([10dce5e](https://github.com/archestra-ai/archestra/commit/10dce5e0a4d0ab144f8875316e511f491a67ce1d))
+* **auth:** return to the admin session from a page whose address has a query  (backport release/1.4) ([#11001](https://github.com/archestra-ai/archestra/issues/11001)) ([809e63a](https://github.com/archestra-ai/archestra/commit/809e63a8727bf01c9fa4400005628cd4c81627ea))
+* **chat:** make large policy diffs readable and navigable (backport release/1.4) ([#10935](https://github.com/archestra-ai/archestra/issues/10935)) ([2c5023e](https://github.com/archestra-ai/archestra/commit/2c5023e131069aefc034455df0533eb3bfbe8366))
+* **chat:** show settled ask_user answers under their question (backport release/1.4) ([#11023](https://github.com/archestra-ai/archestra/issues/11023)) ([a5c883d](https://github.com/archestra-ai/archestra/commit/a5c883d9883a0c8cd5c18a0b7a37bf3f57b7fb78))
+* **guardrails:** ask for approval before a server's rules pull request (backport release/1.4) ([#11006](https://github.com/archestra-ai/archestra/issues/11006)) ([b86e657](https://github.com/archestra-ai/archestra/commit/b86e657dbc3386913c8dd7e770bd7b663e18dfcc))
+* **guardrails:** Git sync card and setup wizard follow-ups (backport release/1.4) ([#11007](https://github.com/archestra-ai/archestra/issues/11007)) ([7e59847](https://github.com/archestra-ai/archestra/commit/7e59847316ebf28cc6e357b41c6df91133c8836f))
+* **guardrails:** tell the Keeper how to find a tool the operator names (backport release/1.4) ([#10936](https://github.com/archestra-ai/archestra/issues/10936)) ([042b6b5](https://github.com/archestra-ai/archestra/commit/042b6b5263eec2e3c5f21f1bf7c1644f0edb7b89))
+* **guardrails:** update OpenAPPA for one approval of a server's rules change (backport release/1.4) ([#11010](https://github.com/archestra-ai/archestra/issues/11010)) ([bad5042](https://github.com/archestra-ai/archestra/commit/bad50424d84bf16cceba69c0cfc5e1cb56673214))
+* **llm-proxy:** fix Bedrock Converse no-input tool calls and OpenAPPA notice restore (backport release/1.4) ([#10958](https://github.com/archestra-ai/archestra/issues/10958)) ([bddba9d](https://github.com/archestra-ai/archestra/commit/bddba9d0a5f8e7a2c28f7c2721a7b8b79928291c))
+
+
+### Dependencies
+
+* bump golang from 1.27.3-bookworm to 1.27.4-bookworm in /platform/docker_images/agent in the base-images group across 1 directory ([#10882](https://github.com/archestra-ai/archestra/issues/10882)) ([bc8cc94](https://github.com/archestra-ai/archestra/commit/bc8cc94d67f1db7b760830d95310fd584a54a242))
+* bump node from 24.22.2-bookworm-slim to 24.22.3-bookworm-slim in /platform/docker_images/sandbox_base in the sandbox-base-images group across 1 directory ([#10948](https://github.com/archestra-ai/archestra/issues/10948)) ([6c41f60](https://github.com/archestra-ai/archestra/commit/6c41f60ae38c90539f9f46c79fd36c8ee5b850ad))
+* bump the base-images group across 3 directories with 2 updates ([#10949](https://github.com/archestra-ai/archestra/issues/10949)) ([1cb85f9](https://github.com/archestra-ai/archestra/commit/1cb85f9e041d25c8f03f6517f64fde4395c01d1e))
+
+
+### Miscellaneous Chores
+
+* **mcp-catalog:** regenerate the catalog client for the updated API descrip (backport release/1.4) ([#10966](https://github.com/archestra-ai/archestra/issues/10966)) ([dc9e26a](https://github.com/archestra-ai/archestra/commit/dc9e26aa2e66f822e09fbe4b4d70eece00817887))
+
 ## [1.4.36](https://github.com/archestra-ai/archestra/compare/platform-v1.4.35...platform-v1.4.36) (2026-11-19)
 
 

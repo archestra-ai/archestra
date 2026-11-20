@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -96,8 +96,6 @@ import {
 import {
   HITL_INSPECT_LABEL,
   hitlReviewCardAnswer,
-  PREVIOUS_HITL_CARD_LABELS,
-  previousHitlCardAnswer,
 } from "@/openappa/hitl-review-overview";
 import { NO_REMEDY_PLAN_HINT } from "@/openappa/no-remedy-plan-hint";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -7183,9 +7181,6 @@ function externalRemedyWorkflowGuidance(
   ].join(" ");
 }
 
-const LEGACY_NATIVE_QUESTION_ID_PATTERN =
-  /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
-
 function isSpecialToolMember(
   binding: AppaPluginBinding,
   call: { name: string; namespace?: string },
@@ -7314,16 +7309,14 @@ async function claimNativeQuestionResults(params: {
     if (typeof result.id !== "string" || result.id.length === 0) return [];
     const name = nativeQuestionName(params.binding, result.name);
     if (!name || !releasesUserQuestion(params.binding, result)) return [];
-    const scope = { session: params.binding.session, id: result.id };
-    const legacyKey = legacyNativeQuestionCacheKey(scope);
     return [
       {
         result,
         name,
-        keys: [
-          nativeQuestionCacheKey(scope),
-          ...(legacyKey ? [legacyKey] : []),
-        ],
+        key: nativeQuestionCacheKey({
+          session: params.binding.session,
+          id: result.id,
+        }),
       },
     ];
   });
@@ -7338,19 +7331,12 @@ async function claimNativeQuestionResults(params: {
         reviewText?: unknown;
         digest?: unknown;
         askedQuestion?: unknown;
-        /** A pre-upgrade page card's binding; those cards are gone. */
-        page?: unknown;
-      }>(candidates.flatMap((candidate) => candidate.keys))
+      }>(candidates.map((candidate) => candidate.key))
     ).map((entry) => [entry.key, entry.value]),
   );
   for (const candidate of candidates) {
-    const entry = candidate.keys
-      .map((key) => claimed.get(key))
-      .find((value) => value?.name === candidate.name);
-    if (entry) {
-      // A card issued by the removed paged review never grants anything:
-      // its answer is unverified, and the review re-asks or stays open.
-      if (entry.page !== undefined) continue;
+    const entry = claimed.get(candidate.key);
+    if (entry?.name === candidate.name) {
       const offerIds = Array.isArray(entry.offerIds)
         ? entry.offerIds.filter(
             (offerId): offerId is string =>
@@ -7664,35 +7650,13 @@ async function recordInspectableHitlAnswer(params: {
   const cardLabels = asked.card.options.map((option) => option.label);
   // A client whose answer names its question reads the answer itself.
   const nativeQuestion = binding.adapter?.nativeQuestion;
-  let reading = nativeQuestion?.selectionFromResult
+  const reading = nativeQuestion?.selectionFromResult
     ? nativeQuestion.selectionFromResult(result, shownQuestion, cardLabels)
     : labeledQuestionRuling(result, shownQuestion, cardLabels);
-  let answer =
+  const answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
       : undefined;
-  if (reading === "unrecognized" && !params.askedQuestion) {
-    // A card of the previous layout, issued before a deploy, can still be open.
-    for (const question of asked.previousQuestions) {
-      const previous = labeledQuestionRuling(
-        result,
-        question,
-        PREVIOUS_HITL_CARD_LABELS,
-      );
-      if (typeof previous !== "object") continue;
-      const choice = previousHitlCardAnswer(previous.label);
-      if (choice === "ask-again") {
-        logger.warn(
-          { client: binding.adapter?.id, offerId },
-          "OpenAPPA asked again for an approval given on a previous card layout",
-        );
-        return stale;
-      }
-      reading = previous;
-      answer = choice;
-      break;
-    }
-  }
   if (typeof reading === "object") {
     if (answer) {
       const resolved = await resolveHitlInspectableAnswer({
@@ -8014,34 +7978,6 @@ async function renewContinuationLease(
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not refresh a review continuation");
   }
-}
-
-/** Pending pre-upgrade questions expire after ten minutes. New IDs use no MAC. */
-function legacyNativeQuestionCacheKey(params: {
-  session: OpenAppaSession;
-  id: string;
-}): AllowedCacheKey | undefined {
-  if (
-    !config.openappa.offerSigningSecret ||
-    !LEGACY_NATIVE_QUESTION_ID_PATTERN.test(params.id)
-  )
-    return undefined;
-  const scope = createHmac("sha256", config.openappa.offerSigningSecret)
-    .update("archestra-native-question-v1\0")
-    .update(
-      JSON.stringify([
-        params.session.organization_id,
-        params.session.caller_id ?? "",
-        params.session.session_id,
-        params.session.parent_id ?? "",
-        "cache",
-        params.id,
-      ]),
-    )
-    .digest()
-    .subarray(0, 16)
-    .toString("base64url");
-  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
 }
 
 /**

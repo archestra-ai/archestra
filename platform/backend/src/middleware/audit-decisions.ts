@@ -438,7 +438,7 @@ export const AUDIT_DECISIONS = {
   },
   oauthResourcesTable: {
     audited: false,
-    reason: "Better Auth OAuth resources; no Archestra route writes them",
+    reason: "Better Auth OAuth resources; no route of ours writes them",
   },
 
   // =========================================================================
@@ -633,7 +633,7 @@ export const AUDIT_DECISIONS = {
   },
   oauthClientResourcesTable: {
     audited: false,
-    reason: "join: OAuth client × OAuth resource; no Archestra route writes it",
+    reason: "join: OAuth client × OAuth resource; no route of ours writes it",
   },
   mcpServerUsersTable: {
     audited: false,

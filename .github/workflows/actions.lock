@@ -86,6 +86,9 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'pnpm/action-setup@v6.1.1'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+    '.github/workflows/move-release-line.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
     '.github/workflows/napi-dev-cache.yml':
         - 'actions/checkout@v7.0.1'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'

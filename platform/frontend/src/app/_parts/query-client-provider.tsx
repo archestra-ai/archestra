@@ -1,5 +1,6 @@
 "use client";
 
+import { archestraApiClient } from "@archestra/shared";
 import {
   hashKey,
   QueryClient,
@@ -14,6 +15,7 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import type { ShellSeed } from "@/lib/auth/shell-seed.server";
+import { signedOutRefusal } from "@/lib/auth/signed-out-refusal";
 import {
   clearPersistedQueryCache,
   DEFAULT_STALE_TIME,
@@ -67,6 +69,7 @@ export const ArchestraQueryClientProvider = ({
   }, [queryClient]);
 
   useEffect(() => startPersistingQueryCache(queryClient), [queryClient]);
+  useSessionRecheckOnRefusal(queryClient);
   useEffect(() => appLifecycle.markRendered(), []);
 
   return (
@@ -77,6 +80,39 @@ export const ArchestraQueryClientProvider = ({
     </QueryClientProvider>
   );
 };
+
+/**
+ * A request refused as signed out, on a page that believes it is signed in,
+ * means the session ended since it was last checked: it expired, or was
+ * revoked. The session is asked again at once, so the shell follows (to the
+ * sign-in page) instead of staying up with every action failing. A burst of
+ * refusals shares one check.
+ *
+ * The refusal is read where the response arrives, not where a query fails:
+ * a mutation that answers `false` for its error never rejects, and its 401
+ * counts all the same.
+ */
+function useSessionRecheckOnRefusal(client: QueryClient) {
+  useEffect(() => {
+    const interceptor = archestraApiClient.interceptors.response.use(
+      (response) => {
+        if (response.status === 401) signedOutRefusal.report();
+        return response;
+      },
+    );
+    const unsubscribe = signedOutRefusal.subscribe(() => {
+      if (!client.getQueryData(authQueryKeys.session())) return;
+      void client.refetchQueries(
+        { queryKey: authQueryKeys.session(), exact: true },
+        { cancelRefetch: false },
+      );
+    });
+    return () => {
+      unsubscribe();
+      archestraApiClient.interceptors.response.eject(interceptor);
+    };
+  }, [client]);
+}
 
 /**
  * Binds the refresh snapshot to whoever is signed in. A snapshot belonging to

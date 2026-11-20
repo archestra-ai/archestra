@@ -45,10 +45,7 @@ Entra pushes everyone assigned on its first cycle, then sends changes on its own
 
 ## Add Pushed Users to Teams
 
-Pushed users are members you can add to teams right away, by email, before they sign in:
-
-- **Terraform:** look the person up with the `archestra_user` data source and list them in the `members` of an `archestra_team`.
-- **API:** look up the user ID with [`GET /api/organization/members/{email}`](/docs/reference/api/organization#tag/organization/GET/api/organization/members/{idOrEmail}), then call [`POST /api/teams/{teamId}/members`](/docs/reference/api/organization#tag/teams/POST/api/teams/{id}/members).
+Pushed users are members you can add to teams right away, before they sign in. In Terraform, look the person up by email with the `archestra_user` data source and list them in the `members` of an `archestra_team`.
 
 Give the service account from the setup the **Team Writer** role too, for [`team:update`](/docs/reference/permissions#team:update), and use its key. The lookup by email needs [`member:read`](/docs/reference/permissions#member:read), which **User Writer** already holds.
 

@@ -7,7 +7,7 @@ lastUpdated: 2026-11-20
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Let Microsoft Entra ID decide who has an Archestra account. Assign a person to the Archestra app in Entra, and they appear in Archestra right away, before their first sign-in. Unassign them, and they lose access. Archestra uses [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644), the standard Entra uses to push users to apps. This is an [Enterprise feature](/docs/get-started/pricing-model).
+Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644). Entra creates a user in Archestra when you assign them to the Archestra app, and deactivates the user when you unassign them. Without provisioning, a user exists only after their first Single Sign-On sign-in. This is an [Enterprise feature](/docs/get-started/pricing-model).
 
 ## What Happens to a Person
 

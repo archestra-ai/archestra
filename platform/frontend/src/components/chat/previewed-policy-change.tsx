@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import type { ArchestraToolShortName } from "@archestra/shared";
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { OpenAppaPolicyArguments } from "./openappa-policy-change";
 import {
   parsePolicyChange,
@@ -10,8 +10,13 @@ import {
   runToolArguments,
 } from "./openappa-policy-change.utils";
 
-/** A completed preview: its result, and the arguments it was called with. */
-export type PreviewedChange = { output: unknown; input: unknown };
+/** A completed preview: its tool call id, result, arguments, and whether an unresolved approval still points at it. */
+export type PreviewedChange = {
+  previewToolCallId: string;
+  output: unknown;
+  input: unknown;
+  pendingApproval: boolean;
+};
 
 const NONE: ReadonlyMap<string, PreviewedChange> = new Map();
 const PreviewedChangesContext = createContext(NONE);
@@ -42,6 +47,23 @@ export function usePreviewedChange(
 }
 
 /**
+ * Tool call IDs of previews referenced by an unresolved `approval-requested`
+ * proposal so their diffs remain visible even when a newer preview arrives.
+ */
+export function usePinnedPreviewToolCallIds(): ReadonlySet<string> {
+  const previews = useContext(PreviewedChangesContext);
+  return useMemo(() => {
+    const pinned = new Set<string>();
+    for (const change of previews.values()) {
+      if (change.pendingApproval) {
+        pinned.add(change.previewToolCallId);
+      }
+    }
+    return pinned;
+  }, [previews]);
+}
+
+/**
  * For each call that proposes a server's rules, the completed preview of the
  * very same file, keyed by the proposing call, when that preview is the
  * latest one before it: the one whose card is open on its diff.
@@ -55,8 +77,28 @@ export function collectPreviewedChanges(
   messages: UIMessage[],
   getToolShortName: (name: string) => ArchestraToolShortName | null,
 ): ReadonlyMap<string, PreviewedChange> {
+  // Resolve each tool call's final state across split invocation/result parts
+  // so a settled proposal never pins its preview as still awaiting approval.
+  const finalStateByCallId = new Map<string, string | undefined>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const part of message.parts ?? []) {
+      if ("toolCallId" in part && typeof part.toolCallId === "string") {
+        finalStateByCallId.set(
+          part.toolCallId,
+          "state" in part && typeof part.state === "string"
+            ? part.state
+            : undefined,
+        );
+      }
+    }
+  }
+
   // The latest preview so far, if its card shows a diff.
-  let latest: { key: string; change: PreviewedChange } | null = null;
+  let latest: {
+    key: string;
+    change: Omit<PreviewedChange, "pendingApproval">;
+  } | null = null;
   const result = new Map<string, PreviewedChange>();
   for (const message of messages) {
     if (message.role !== "assistant") continue;
@@ -83,10 +125,23 @@ export function collectPreviewedChanges(
       const key = fileKey(args);
       if (!key) continue;
       if (shortName === "propose_guardrails_server_rules_change") {
-        if (latest?.key === key) result.set(part.toolCallId, latest.change);
+        if (latest?.key === key) {
+          result.set(part.toolCallId, {
+            ...latest.change,
+            pendingApproval:
+              finalStateByCallId.get(part.toolCallId) === "approval-requested",
+          });
+        }
       } else if (part.state === "output-available") {
         latest = showsAsDiff(part.output, args)
-          ? { key, change: { output: part.output, input: args } }
+          ? {
+              key,
+              change: {
+                previewToolCallId: part.toolCallId,
+                output: part.output,
+                input: args,
+              },
+            }
           : null;
       }
     }

@@ -3,7 +3,9 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   getArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
+  MCP_TASK_PART_TYPE,
   SUBAGENT_TOOL_CALL_PART_TYPE,
+  TURN_NOTICE_PART_TYPE,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import type { PanelApp } from "./apps-context";
@@ -1108,11 +1110,11 @@ describe("identifyCompactToolGroups", () => {
     ]);
   });
 
-  it("keeps a failed app render out of the row so it renders the full card", () => {
+  it("degrades a failed, denied, or approval-requested app render to a regular tool circle in the row", () => {
     const parts = [
       {
         type: "tool-slack__post_message",
-        toolCallId: "call_app1",
+        toolCallId: "call_app_err",
         state: "output-error",
         input: {},
         errorText: "boom",
@@ -1121,14 +1123,176 @@ describe("identifyCompactToolGroups", () => {
           _meta: { ui: { resourceUri: "ui://slack/compose" } },
         },
       },
+      {
+        type: "tool-slack__post_message",
+        toolCallId: "call_app_approval",
+        state: "approval-requested",
+        input: {},
+      },
+      {
+        type: "tool-slack__post_message",
+        toolCallId: "call_app_denied",
+        state: "output-denied",
+        input: {},
+      },
     ] as unknown as UIMessage["parts"];
 
     const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
       getToolShortName: () => null,
+      mcpAppToolCallIds: new Set(["call_app_approval", "call_app_denied"]),
     });
 
-    expect(groupMap.size).toBe(0);
-    expect(consumedIndices.size).toBe(0);
+    expect(groupMap.size).toBe(1);
+    expect(groupMap.get(0)?.entries.map((entry) => entry.kind)).toEqual([
+      "tool",
+      "tool",
+      "tool",
+    ]);
+    expect(consumedIndices).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("splits circle rows chronologically at visible narration, files, notices, and standalone widgets", () => {
+    const parts = [
+      {
+        type: "tool-archestra__load_skill",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { name: "guardrails" },
+        output: "ok",
+      },
+      { type: "text", text: "Checking the current policy." },
+      {
+        type: "tool-archestra__get_policy",
+        toolCallId: "c2",
+        state: "output-available",
+        input: {},
+        output: "policy",
+      },
+      {
+        type: "file",
+        url: "https://example.com/a.png",
+        mediaType: "image/png",
+      },
+      {
+        type: "tool-archestra__preview_guardrails_policy_change",
+        toolCallId: "c3",
+        state: "output-available",
+        input: {},
+        output: "diff",
+      },
+      { type: TURN_NOTICE_PART_TYPE, data: { message: "output limit" } },
+      {
+        type: "tool-github__delete_branch",
+        toolCallId: "c4",
+        state: "approval-requested",
+        input: { branch: "old" },
+      },
+    ] as unknown as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      role: "assistant",
+      getToolShortName,
+    });
+
+    expect([...groupMap.keys()]).toEqual([0, 2, 4, 6]);
+    expect(
+      [...groupMap.values()].map((g) =>
+        g.entries.map((e) => (e.kind === "hook" ? "hook" : e.toolName)),
+      ),
+    ).toEqual([
+      ["archestra__load_skill"],
+      ["archestra__get_policy"],
+      ["archestra__preview_guardrails_policy_change"],
+      ["github__delete_branch"],
+    ]);
+  });
+
+  it("keeps circle rows grouped across blank assistant text, step-start, reasoning, mcp tasks, and subagent updates", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "c1",
+        state: "output-available",
+        input: {},
+        output: "ok",
+      },
+      { type: "text", text: "   \n\n  " },
+      { type: "step-start" },
+      { type: "reasoning", text: "thinking between silent tool calls" },
+      { type: MCP_TASK_PART_TYPE, data: { taskId: "t1", toolCallId: "c1" } },
+      {
+        type: SUBAGENT_TOOL_CALL_PART_TYPE,
+        data: { parentToolCallId: "c1", toolCallId: "child-1" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "c2",
+        state: "output-available",
+        input: {},
+        output: "ok",
+      },
+    ] as unknown as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      role: "assistant",
+      getToolShortName,
+    });
+
+    expect([...groupMap.keys()]).toEqual([0]);
+    expect(groupMap.get(0)?.entries).toHaveLength(2);
+  });
+
+  it("consumes data-tool-ui-start for grouped calls and synthesizes a streaming app entry when it arrives first", () => {
+    const withToolParts = [
+      {
+        type: "tool-charts__render",
+        toolCallId: "call_app",
+        state: "input-available",
+        input: {},
+      },
+      {
+        type: "data-tool-ui-start",
+        data: {
+          toolCallId: "call_app",
+          toolName: "charts__render",
+          uiResourceUri: "ui://chart",
+        },
+      },
+      {
+        type: "tool-charts__render",
+        toolCallId: "call_app",
+        state: "output-available",
+        output: { _meta: { ui: { resourceUri: "ui://chart" } } },
+      },
+    ] as unknown as UIMessage["parts"];
+
+    const grouped = identifyCompactToolGroups(withToolParts, {
+      getToolShortName,
+    });
+    expect(grouped.groupMap.size).toBe(1);
+    expect(grouped.groupMap.get(0)?.entries).toHaveLength(1);
+    expect(grouped.groupMap.get(0)?.entries[0]?.kind).toBe("app");
+    expect(grouped.consumedIndices).toEqual(new Set([0, 1, 2]));
+
+    const earlyOnly = [
+      {
+        type: "data-tool-ui-start",
+        data: {
+          toolCallId: "call_early",
+          toolName: "charts__render",
+          uiResourceUri: "ui://chart",
+        },
+      },
+    ] as unknown as UIMessage["parts"];
+    const synthesized = identifyCompactToolGroups(earlyOnly, {
+      getToolShortName,
+    });
+    expect(synthesized.groupMap.size).toBe(1);
+    expect(synthesized.groupMap.get(0)?.entries[0]).toMatchObject({
+      kind: "app",
+      toolName: "charts__render",
+    });
+    expect(synthesized.consumedIndices).toEqual(new Set([0]));
   });
 });
 
@@ -1151,18 +1315,6 @@ describe("identifyReasoningRuns", () => {
   const appAnnouncement = (toolCallId: string, toolName: string) => ({
     type: "data-tool-ui-start",
     data: { toolCallId, toolName, uiResourceUri: "ui://chart" },
-  });
-  const appCall = (toolCallId: string) => ({
-    type: "tool-charts__render",
-    toolCallId,
-    state: "input-available",
-    input: {},
-  });
-  const appResult = (toolCallId: string) => ({
-    type: "tool-charts__render",
-    toolCallId,
-    state: "output-available",
-    output: { _meta: { ui: { resourceUri: "ui://chart" } } },
   });
 
   /** Runs as the message stream computes them: grouping pass first, then runs. */
@@ -1199,24 +1351,26 @@ describe("identifyReasoningRuns", () => {
     expect(runs.get(3)?.lastIndex).toBe(6);
   });
 
-  it("splits the run at an MCP App announcement the row left behind", () => {
-    // The circle row opens at index 1 and swallows the app's tool-* parts, but
-    // the announcement at index 5 stays put and renders the app panel itself.
-    // Merging across it would lift the thinking that followed the app above it.
-    const runs = runsFor([
+  it("splits the run at an unconsumed MCP App announcement", () => {
+    // Grouping normally consumes data-tool-ui-start alongside its app entry;
+    // assert the split independently so an ungrouped announcement cannot lift
+    // thinking above its app panel.
+    const parts = [
       thinking("first pass"),
-      toolCall("call_1"),
-      toolResult("call_1"),
-      thinking("second pass"),
-      appCall("call_2"),
       appAnnouncement("call_2", "charts__render"),
-      appResult("call_2"),
-      thinking("third pass"),
-    ]);
+      thinking("second pass"),
+    ] as UIMessage["parts"];
 
-    expect([...runs.keys()]).toEqual([0, 3, 7]);
-    expect(runs.get(3)?.text).toBe("second pass");
-    expect(runs.get(7)?.text).toBe("third pass");
+    const runs = identifyReasoningRuns({
+      parts,
+      role: "assistant",
+      groupMap: new Map(),
+      consumedIndices: new Set(),
+    });
+
+    expect([...runs.keys()]).toEqual([0, 2]);
+    expect(runs.get(0)?.text).toBe("first pass");
+    expect(runs.get(2)?.text).toBe("second pass");
   });
 
   it("splits the run at a hook-run chip even when it is not grouped", () => {

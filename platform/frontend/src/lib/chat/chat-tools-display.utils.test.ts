@@ -7,6 +7,7 @@ import {
   getHumanRulingDisplay,
   getToolErrorText,
   getToolNameFromPart,
+  hasToolAuthPrompt,
   isCompactEligible,
 } from "./chat-tools-display.utils";
 
@@ -246,83 +247,106 @@ describe("tool display helpers", () => {
     ).toBe(true);
   });
 
-  it("keeps auth-required responses as full cards", () => {
+  it("keeps todo_write outside compact circles", () => {
+    expect(
+      isCompactEligible({
+        toolName: "archestra__todo_write",
+        part: {
+          type: "tool-archestra__todo_write",
+          state: "output-available",
+        } as never,
+        toolResultPart: null,
+        getToolShortName: (name) =>
+          name === "archestra__todo_write" ? "todo_write" : null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps auth-required responses compact-eligible and flags their auth prompt", () => {
+    const part = {
+      type: "tool-jira__create_issue",
+      state: "input-available",
+      errorText:
+        'Authentication required for "jira-atlassian-remote".\n\nNo credentials found for this MCP server. To continue, visit this URL: http://localhost:3000/mcp/registry?install=cat_demo',
+    } as never;
     expect(
       isCompactEligible({
         toolName: "jira__create_issue",
-        part: {
-          type: "tool-jira__create_issue",
-          state: "input-available",
-          errorText:
-            'Authentication required for "jira-atlassian-remote".\n\nNo credentials found for this MCP server. To continue, visit this URL: http://localhost:3000/mcp/registry?install=cat_demo',
-        } as never,
+        part,
         toolResultPart: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(hasToolAuthPrompt({ part, toolResultPart: null })).toBe(true);
   });
 
-  it("keeps structured auth-expired responses as full cards", () => {
+  it("keeps structured auth-expired responses compact-eligible and flags their auth prompt", () => {
+    const part = {
+      type: "tool-id-jag_test__get_server_info",
+      state: "output-available",
+      output: {
+        isError: true,
+        _meta: {
+          archestraError: {
+            type: "auth_expired",
+            message: 'Expired or invalid authentication for "id-jag test".',
+            catalogId: "cat_abc",
+            catalogName: "id-jag test",
+            serverId: "srv_xyz",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        },
+      },
+    } as never;
     expect(
       isCompactEligible({
         toolName: "id-jag_test__get_server_info",
-        part: {
-          type: "tool-id-jag_test__get_server_info",
-          state: "output-available",
-          output: {
-            isError: true,
-            _meta: {
-              archestraError: {
-                type: "auth_expired",
-                message: 'Expired or invalid authentication for "id-jag test".',
-                catalogId: "cat_abc",
-                catalogName: "id-jag test",
-                serverId: "srv_xyz",
-                reauthUrl:
-                  "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
-              },
-            },
-          },
-        } as never,
+        part,
         toolResultPart: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(hasToolAuthPrompt({ part, toolResultPart: null })).toBe(true);
   });
 
-  it("keeps assigned-credential-unavailable responses as full cards", () => {
+  it("keeps assigned-credential-unavailable responses compact-eligible and flags their auth prompt", () => {
+    const part = {
+      type: "tool-githubcopilot__remote-mcp__issue_write",
+      state: "output-available",
+      output: {
+        isError: true,
+        _meta: {
+          archestraError: {
+            type: "assigned_credential_unavailable",
+            message: "Assigned credential unavailable",
+            catalogId: "cat_abc",
+            catalogName: "githubcopilot__remote-mcp",
+          },
+        },
+      },
+    } as never;
     expect(
       isCompactEligible({
         toolName: "githubcopilot__remote-mcp__issue_write",
-        part: {
-          type: "tool-githubcopilot__remote-mcp__issue_write",
-          state: "output-available",
-          output: {
-            isError: true,
-            _meta: {
-              archestraError: {
-                type: "assigned_credential_unavailable",
-                message: "Assigned credential unavailable",
-                catalogId: "cat_abc",
-                catalogName: "githubcopilot__remote-mcp",
-              },
-            },
-          },
-        } as never,
+        part,
         toolResultPart: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(hasToolAuthPrompt({ part, toolResultPart: null })).toBe(true);
   });
 
-  it("keeps approval-requested tools as full cards", () => {
+  it("keeps approval-requested tools compact-eligible so their approval card opens under a circle", () => {
+    const part = {
+      type: "tool-github__delete_branch",
+      state: "approval-requested",
+    } as never;
     expect(
       isCompactEligible({
         toolName: "github__delete_branch",
-        part: {
-          type: "tool-github__delete_branch",
-          state: "approval-requested",
-        } as never,
+        part,
         toolResultPart: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(hasToolAuthPrompt({ part, toolResultPart: null })).toBe(false);
   });
 
   it("computes compact tool state from output state", () => {
@@ -335,6 +359,16 @@ describe("tool display helpers", () => {
         toolResultPart: null,
       }),
     ).toBe("running");
+
+    expect(
+      getCompactToolState({
+        part: {
+          type: "tool-github__create_issue",
+          state: "approval-requested",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("approval-requested");
 
     expect(
       getCompactToolState({
@@ -427,7 +461,7 @@ describe("reviewed remedy rulings", () => {
   });
 });
 
-describe("isCompactEligible auth check", () => {
+describe("hasToolAuthPrompt auth check", () => {
   it("parses a part's output once across renders, and again when it changes", () => {
     const part = {
       type: "tool-github__search",
@@ -436,18 +470,17 @@ describe("isCompactEligible auth check", () => {
         'Authentication required for "GitHub". To authenticate, visit: https://example.com/connect/github',
     };
     const check = () =>
-      isCompactEligible({
-        toolName: "github__search",
+      hasToolAuthPrompt({
         part: part as never,
         toolResultPart: null,
       });
     // The auth parsers JSON.parse text that carries their marker; count those.
     const parse = vi.spyOn(JSON, "parse");
     try {
-      expect(check()).toBe(false);
+      expect(check()).toBe(true);
       const parsesForFirstRender = parse.mock.calls.length;
       expect(parsesForFirstRender).toBeGreaterThan(0);
-      expect(check()).toBe(false);
+      expect(check()).toBe(true);
       // Other readers of the output parse it every time; the auth check's
       // parse is the one the second render no longer pays for.
       expect(parse.mock.calls.length - parsesForFirstRender).toBe(
@@ -455,7 +488,7 @@ describe("isCompactEligible auth check", () => {
       );
 
       part.output = "plain result";
-      expect(check()).toBe(true);
+      expect(check()).toBe(false);
     } finally {
       parse.mockRestore();
     }

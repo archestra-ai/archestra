@@ -1,8 +1,8 @@
 diff --git a/dist/index.js b/dist/index.js
-index dce56a3b37acb5e95514c122bb30705f6574e2a4..44defc2ecdb6fe463d696e6c665d49b014ef9516 100644
+index 0ab4035..bc3df01 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -642,6 +642,13 @@ var XaiChatLanguageModel = class {
+@@ -705,6 +705,13 @@ var XaiChatLanguageModel = class {
      const contentBlocks = {};
      const lastReasoningDeltas = {};
      let activeReasoningBlockId = void 0;
@@ -16,7 +16,7 @@ index dce56a3b37acb5e95514c122bb30705f6574e2a4..44defc2ecdb6fe463d696e6c665d49b0
      const self = this;
      return {
        stream: response.pipeThrough(
-@@ -704,17 +711,17 @@ var XaiChatLanguageModel = class {
+@@ -770,17 +777,17 @@ var XaiChatLanguageModel = class {
                if ((lastMessage == null ? void 0 : lastMessage.role) === "assistant" && textContent === lastMessage.content) {
                  return;
                }
@@ -39,7 +39,7 @@ index dce56a3b37acb5e95514c122bb30705f6574e2a4..44defc2ecdb6fe463d696e6c665d49b0
                  delta: textContent
                });
              }
-@@ -724,17 +731,25 @@ var XaiChatLanguageModel = class {
+@@ -790,17 +797,25 @@ var XaiChatLanguageModel = class {
                  return;
                }
                lastReasoningDeltas[blockId] = delta.reasoning_content;
@@ -71,10 +71,10 @@ index dce56a3b37acb5e95514c122bb30705f6574e2a4..44defc2ecdb6fe463d696e6c665d49b0
                });
              }
 diff --git a/dist/index.mjs b/dist/index.mjs
-index b67b0772b39b7d768042636f794dd5822b5acdbd..bd7d9962efe5601b7b5341809128f4d3a662c475 100644
+index e28d095..b7511d6 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -628,6 +628,13 @@ var XaiChatLanguageModel = class {
+@@ -703,6 +703,13 @@ var XaiChatLanguageModel = class {
      const contentBlocks = {};
      const lastReasoningDeltas = {};
      let activeReasoningBlockId = void 0;
@@ -88,7 +88,7 @@ index b67b0772b39b7d768042636f794dd5822b5acdbd..bd7d9962efe5601b7b5341809128f4d3
      const self = this;
      return {
        stream: response.pipeThrough(
-@@ -690,17 +697,17 @@ var XaiChatLanguageModel = class {
+@@ -768,17 +775,17 @@ var XaiChatLanguageModel = class {
                if ((lastMessage == null ? void 0 : lastMessage.role) === "assistant" && textContent === lastMessage.content) {
                  return;
                }
@@ -111,7 +111,7 @@ index b67b0772b39b7d768042636f794dd5822b5acdbd..bd7d9962efe5601b7b5341809128f4d3
                  delta: textContent
                });
              }
-@@ -710,17 +717,25 @@ var XaiChatLanguageModel = class {
+@@ -788,17 +795,25 @@ var XaiChatLanguageModel = class {
                  return;
                }
                lastReasoningDeltas[blockId] = delta.reasoning_content;

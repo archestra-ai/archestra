@@ -16,20 +16,6 @@ export function ImpersonationBanner() {
     ? new Date(session.session.expiresAt).getTime()
     : null;
 
-  // An impersonated session has a fixed length. Left to run out, every
-  // request is refused while the page still looks signed in, and the way
-  // back to the admin's own session is gone with it. So the app returns
-  // shortly before that, while it still can. `ImpersonationEndedNotice`
-  // says why on the page that loads next.
-  useEffect(() => {
-    if (expiresAt === null || Number.isNaN(expiresAt)) return;
-    const timer = setTimeout(
-      () => stopImpersonating("expiring"),
-      Math.max(expiresAt - IMPERSONATION_RETURN_MARGIN_MS - Date.now(), 0),
-    );
-    return () => clearTimeout(timer);
-  }, [expiresAt, stopImpersonating]);
-
   // The end is a time of day on the reader's clock, so it is filled in on
   // their device, not on the server that rendered the page.
   const [until, setUntil] = useState<string | null>(null);

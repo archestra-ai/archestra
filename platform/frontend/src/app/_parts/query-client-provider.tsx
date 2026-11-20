@@ -1,9 +1,8 @@
 "use client";
 
+import { archestraApiClient } from "@archestra/shared";
 import {
   hashKey,
-  MutationCache,
-  QueryCache,
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
@@ -16,6 +15,7 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import type { ShellSeed } from "@/lib/auth/shell-seed.server";
+import { signedOutRefusal } from "@/lib/auth/signed-out-refusal";
 import {
   clearPersistedQueryCache,
   DEFAULT_STALE_TIME,
@@ -24,7 +24,6 @@ import {
   syncPersistedQueryCacheScope,
 } from "@/lib/query-persistence";
 import { markShellSeeded } from "@/lib/shell-deferral";
-import { getApiRefusal } from "@/lib/utils/api";
 
 export const ArchestraQueryClientProvider = ({
   children,
@@ -39,13 +38,7 @@ export const ArchestraQueryClientProvider = ({
   shellSeed?: ShellSeed | null;
 }) => {
   const [queryClient] = useState(() => {
-    const client: QueryClient = new QueryClient({
-      queryCache: new QueryCache({
-        onError: (error) => recheckSessionWhenRefused(client, error),
-      }),
-      mutationCache: new MutationCache({
-        onError: (error) => recheckSessionWhenRefused(client, error),
-      }),
+    const client = new QueryClient({
       defaultOptions: {
         queries: {
           // With SSR, we want to set some default staleTime
@@ -76,6 +69,7 @@ export const ArchestraQueryClientProvider = ({
   }, [queryClient]);
 
   useEffect(() => startPersistingQueryCache(queryClient), [queryClient]);
+  useSessionRecheckOnRefusal(queryClient);
   useEffect(() => appLifecycle.markRendered(), []);
 
   return (
@@ -93,14 +87,31 @@ export const ArchestraQueryClientProvider = ({
  * revoked. The session is asked again at once, so the shell follows (to the
  * sign-in page) instead of staying up with every action failing. A burst of
  * refusals shares one check.
+ *
+ * The refusal is read where the response arrives, not where a query fails:
+ * a mutation that answers `false` for its error never rejects, and its 401
+ * counts all the same.
  */
-function recheckSessionWhenRefused(client: QueryClient, error: unknown) {
-  if (getApiRefusal(error) !== "signed-out") return;
-  if (!client.getQueryData(authQueryKeys.session())) return;
-  void client.refetchQueries(
-    { queryKey: authQueryKeys.session(), exact: true },
-    { cancelRefetch: false },
-  );
+function useSessionRecheckOnRefusal(client: QueryClient) {
+  useEffect(() => {
+    const interceptor = archestraApiClient.interceptors.response.use(
+      (response) => {
+        if (response.status === 401) signedOutRefusal.report();
+        return response;
+      },
+    );
+    const unsubscribe = signedOutRefusal.subscribe(() => {
+      if (!client.getQueryData(authQueryKeys.session())) return;
+      void client.refetchQueries(
+        { queryKey: authQueryKeys.session(), exact: true },
+        { cancelRefetch: false },
+      );
+    });
+    return () => {
+      unsubscribe();
+      archestraApiClient.interceptors.response.eject(interceptor);
+    };
+  }, [client]);
 }
 
 /**

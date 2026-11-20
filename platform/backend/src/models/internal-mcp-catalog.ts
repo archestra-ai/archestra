@@ -1445,14 +1445,19 @@ class InternalMcpCatalogModel {
         ),
       );
 
-    const candidates = rows.filter(
-      (row) =>
-        row.id !== params.excludeId &&
-        // An allocated prefix (a cut long name, or an app's) is the prefix
-        // its tools carry, so it is taken just like a slug.
-        (targetPrefixes.has(ToolModel.sanitizeServerNameForSlug(row.name)) ||
-          (row.toolPrefix !== null && targetPrefixes.has(row.toolPrefix))),
-    );
+    const candidates = rows.filter((row) => {
+      if (row.id === params.excludeId) return false;
+      // An app's tools carry its allocated prefix and keep it when the app is
+      // renamed, so its display name says nothing once it has one.
+      if (row.serverType === "app" && row.toolPrefix !== null)
+        return targetPrefixes.has(row.toolPrefix);
+      // An allocated prefix (a cut long name) is the prefix a server's tools
+      // carry, so it is taken just like a slug.
+      return (
+        targetPrefixes.has(ToolModel.sanitizeServerNameForSlug(row.name)) ||
+        (row.toolPrefix !== null && targetPrefixes.has(row.toolPrefix))
+      );
+    });
     if (candidates.length === 0) return null;
     if (params.organizationWide)
       return { id: candidates[0].id, kind: "server" };

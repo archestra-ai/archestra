@@ -423,6 +423,25 @@ describe("MCP server names are unique per environment", () => {
     expect(await countNamed("Planning App")).toBe(1);
   });
 
+  test("accepts the display name of an app whose tools carry another prefix", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    // The app was renamed to Weather. Its tools still carry `planner`.
+    const renamed = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      serverType: "app",
+      authorId: user.id,
+    });
+    await InternalMcpCatalogModel.applyToolPrefix({
+      catalogIds: [renamed.id],
+      toolPrefix: "planner",
+    });
+
+    expect((await create(remote("Weather", shared))).statusCode).toBe(200);
+    expect((await create(remote("Planner", shared))).statusCode).toBe(409);
+  });
+
   test("refuses a rename onto an app's prefix in the same environment and accepts it in another", async ({
     makeInternalMcpCatalog,
   }) => {

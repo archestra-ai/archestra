@@ -1,0 +1,102 @@
+name: Stale Dependabot PRs
+run-name: ${{ inputs.test_alert && 'Test the stale Dependabot PR alert' || 'Find stale Dependabot PRs' }}
+
+# Dependabot opens no new grouped pull request while one for the same group is
+# open on that branch, so a single unmerged PR holds back every later update
+# in its group: an unmerged golang bump kept main's Node.js base image behind
+# release/1.4's for days. Dependabot Codex (archestra-ai/infra
+# archestra/automation) merges these PRs daily; when it cannot, nothing else
+# notices. Every day this posts to #alerts each open Dependabot PR older than
+# MAX_AGE_DAYS on main or a supported release line, in the public repositories
+# Dependabot Codex maintains (archestra-ai/website is private; its PRs are
+# not visible to this workflow's token).
+
+on:
+  schedule:
+    - cron: "11 15 * * *" # After Dependabot Codex's 09:00 America/Toronto run.
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: Post a test message to #alerts and check nothing.
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: stale-dependabot-prs
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Find Dependabot PRs older than 3 days
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && !inputs.test_alert
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Read backport-targets.json.
+      pull-requests: read # List the open pull requests.
+    outputs:
+      stale: ${{ steps.find.outputs.stale }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/backport-targets.json
+          persist-credentials: false
+
+      - name: Find stale pull requests
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_AGE_DAYS: "3"
+          REPOSITORIES: archestra-ai/archestra archestra-ai/OpenAPPA archestra-ai/.github
+        run: |
+          set -euo pipefail
+          lines="$(jq -c '.branches' .github/backport-targets.json)"
+          cutoff="$(date -u -d "-$MAX_AGE_DAYS days" +%Y-%m-%dT%H:%M:%SZ)"
+          stale=""
+          for repository in $REPOSITORIES; do
+            default="$(gh api "repos/$repository" --jq .default_branch)"
+            found="$(gh pr list --repo "$repository" --author app/dependabot --state open --limit 200 \
+              --json number,title,url,baseRefName,createdAt,isDraft |
+              jq -r --arg cutoff "$cutoff" --arg default "$default" --argjson lines "$lines" --arg repository "$repository" '
+                .[] | select(.isDraft | not) | select(.createdAt < $cutoff)
+                | select(.baseRefName == $default or (.baseRefName as $base | $lines | index($base)))
+                | "• <\(.url)|\($repository | split("/")[1])#\(.number)> on `\(.baseRefName)`, opened \(.createdAt[0:10]): \(.title[0:90])"')"
+            if [[ -n "$found" ]]; then
+              stale+="$found"$'\n'
+            fi
+          done
+          if [[ -z "$stale" ]]; then
+            echo "No Dependabot PR is older than $MAX_AGE_DAYS days."
+            exit 0
+          fi
+          printf '%s' "$stale" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "stale<<STALE_EOF"
+            printf '%s' "$stale"
+            echo "STALE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  notify:
+    name: Report stale Dependabot PRs
+    needs: [check]
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (needs.check.outputs.stale != '' || needs.check.result == 'failure' || inputs.test_alert) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Post to #alerts
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: >-
+            ${{ needs.check.result == 'failure' && 'The stale Dependabot PR check failed.' || 'Dependabot PRs older than 3 days. Each holds back later updates of its group on its branch until it merges or closes, and Dependabot Codex has not merged them.' }}
+          details: ${{ needs.check.result != 'failure' && needs.check.outputs.stale || '' }}
+          test: ${{ inputs.test_alert || 'false' }}
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

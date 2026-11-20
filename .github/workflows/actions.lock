@@ -160,6 +160,10 @@ workflows:
         - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+    '.github/workflows/stale-dependabot-prs.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
+        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.25.2'

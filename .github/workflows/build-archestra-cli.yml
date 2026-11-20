@@ -14,7 +14,7 @@ name: Build Archestra CLI
 # that platform/archestra-cli/release.lock.json pins and verifies each file's
 # SHA-256. So a release reaches the images in two steps: this workflow
 # publishes it, then a pull request updates the lock. The `lock` job opens
-# that pull request; a maintainer reviews and merges it.
+# that pull request with auto-merge on.
 #
 # Why an own release track: this repository's releases are immutable. Once
 # published, a release's assets are frozen, so the files cannot be attached to
@@ -572,10 +572,11 @@ jobs:
   # Opens the pull request that pins the published release in
   # platform/archestra-cli/release.lock.json, the way update-client-versions.yml
   # opens its pull requests: the releaser App's token pushes the automation
-  # branch, so the pull request runs ordinary CI. No auto-merge: the lock
-  # decides what every platform image serves to users' computers, so a
-  # maintainer merges it. The merge queue builds the platform image from that
-  # pull request, which downloads and verifies the pinned files for real.
+  # branch, so the pull request runs ordinary CI. Auto-merge is on: a Core
+  # member already approved the release (archestra-cli-release), the lock is
+  # computed here from the published files, and the merge queue builds the
+  # platform image from that pull request, which downloads and verifies the
+  # pinned files for real before anything merges.
   # This job runs no code of the program: it reads the published release.
   lock:
     name: Propose release lock update
@@ -692,7 +693,7 @@ jobs:
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
 
       # Also recovers a branch pushed by an earlier run whose PR creation failed.
-      # No auto-merge: see the note above this job.
+      # Auto-merge: see the note above this job.
       - name: Open or update pull request
         if: steps.current.outputs.proceed == 'true'
         env:
@@ -726,5 +727,9 @@ jobs:
           else
             pr="$existing_pr"
             gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          auto_merge_enabled="$(gh pr view "$pr" --repo "$GH_REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')"
+          if [[ "$auto_merge_enabled" == "false" ]]; then
+            gh pr merge "$pr" --repo "$GH_REPO" --auto
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"Lock pull request: " + .url' >> "$GITHUB_STEP_SUMMARY"

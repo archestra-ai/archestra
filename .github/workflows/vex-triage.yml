@@ -1,5 +1,5 @@
 name: VEX Triage
-run-name: Triage the vulnerabilities of ${{ inputs.project || 'every project' }} ${{ inputs.release_tag || '(latest stable release)' }}
+run-name: Triage the vulnerabilities of ${{ inputs.project || 'every project' }} ${{ inputs.release_tags || '(latest releases)' }}
 
 # Starts the VEX Triage agent on staging for a release of each project in
 # .github/scripts/vex-triage.py: archestra, OpenAPPA and
@@ -16,7 +16,11 @@ run-name: Triage the vulnerabilities of ${{ inputs.project || 'every project' }}
 # Google account and the repository variables live here once.
 #
 # Weekly, for each project's latest stable release, because new advisories
-# arrive for images that did not change. Run it by hand for one release.
+# arrive for images that did not change. archestra also triages its newest
+# release candidate when it is ahead of the stable line: main ships 1.N+1
+# release candidates while release/1.N ships patches, and customers run both.
+# One agent run covers both, since they share the document, branch and pull
+# request. Run it by hand for chosen releases.
 #
 # The job holds no Archestra API key and no GitHub credential beyond reading
 # public repositories. It trades its GitHub OIDC token for a one-hour token of
@@ -33,16 +37,18 @@ on:
         type: choice
         options: [archestra, openappa, terraform-provider-archestra]
         default: archestra
-      release_tag:
-        description: "Published release, such as platform-v1.4.35 or v0.44.0. Empty: the latest stable release."
+      release_tags:
+        description: "Published releases, separated by spaces, such as platform-v1.4.36 platform-v1.5.0-rc.40. Empty: the latest stable release (and release candidate)."
         type: string
         default: ""
 
 permissions: {}
 
-# One triage at a time; a second waits instead of cancelling the first.
+# One triage per project at a time; a second waits instead of cancelling the
+# first. Only one run waits per group, so a group per project keeps a trigger
+# for one project from replacing a waiting trigger for another.
 concurrency:
-  group: vex-triage
+  group: vex-triage-${{ inputs.project || 'scheduled' }}
   cancel-in-progress: false
 
 jobs:
@@ -101,23 +107,40 @@ jobs:
 
       # A draft is not a release yet: its images are not published. The
       # script checks the tag against the project's release tags.
-      - name: Choose the release
+      - name: Choose the releases
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ matrix.project.repository }}
           STABLE_TAG: ${{ matrix.project.stable_tag }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RC_TAG: ${{ matrix.project.rc_tag }}
+          RELEASE_TAGS: ${{ inputs.release_tags }}
         run: |
           set -euo pipefail
-          if [ -z "$RELEASE_TAG" ]; then
-            RELEASE_TAG="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 --json tagName \
-              | jq -r --arg stable "$STABLE_TAG" '[.[] | select(.tagName | test($stable))][0].tagName // empty')"
+          if [ -z "$RELEASE_TAGS" ]; then
+            releases="$(gh release list --exclude-drafts --limit 200 --json tagName,isPrerelease)"
+            # The highest version, not the newest release: a patch to an older
+            # line (1.4.37 after 1.5.1) is published later but is not the latest.
+            highest='map(.tagName) | sort_by(sub("^[^0-9]*"; "") | [scan("[0-9]+") | tonumber]) | last // empty'
+            stable="$(jq -r --arg re "$STABLE_TAG" "[.[] | select(.isPrerelease | not) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
+            [ -n "$stable" ] || { echo "::error::No stable release of $GH_REPO."; exit 1; }
+            RELEASE_TAGS="$stable"
+            if [ -n "$RC_TAG" ]; then
+              rc="$(jq -r --arg re "$RC_TAG" "[.[] | select(.isPrerelease) | select(.tagName | test(\$re))] | $highest" <<<"$releases")"
+              # Only a candidate for a later version than the stable release:
+              # once 1.5.0 ships, 1.5.0-rc.N is behind it.
+              rc_version="${rc##*-v}"; rc_version="${rc_version%%-*}"; stable_version="${stable##*-v}"
+              if [ -n "$rc" ] && [ "$rc_version" != "$stable_version" ] \
+                && [ "$(printf '%s\n' "$rc_version" "$stable_version" | sort -V | tail -1)" = "$rc_version" ]; then
+                RELEASE_TAGS="$stable $rc"
+              fi
+            fi
           fi
-          [ -n "$RELEASE_TAG" ] || { echo "::error::No stable release of $GH_REPO."; exit 1; }
-          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)"
-          [ "$draft" = false ] || { echo "::error::$RELEASE_TAG of $GH_REPO is not published yet."; exit 1; }
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          for tag in $RELEASE_TAGS; do
+            draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
+            [ "$draft" = false ] || { echo "::error::$tag of $GH_REPO is not published yet."; exit 1; }
+          done
+          echo "tags=$RELEASE_TAGS" >> "$GITHUB_OUTPUT"
 
       # The staging API is private. This account can open the IAP tunnel to
       # its TLS forwarder and nothing else.
@@ -136,7 +159,7 @@ jobs:
       - name: Start the agent run
         env:
           PROJECT: ${{ matrix.project.project }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAGS: ${{ steps.release.outputs.tags }}
           BASE_URL: https://backend.archestra.dev
           PUBLIC_URL: https://frontend.archestra.dev
           SERVICE_ACCOUNT_ID: ${{ vars.VEX_TRIAGE_SERVICE_ACCOUNT_ID }}

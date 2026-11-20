@@ -150,11 +150,9 @@ function PluginDetailView({
     { plugin: ["delete"] },
     plugin.id,
   );
-  const { data: canUpdate } = useHasPermissions(
-    { plugin: ["update"] },
-    plugin.id,
-  );
-  const isReadOnly = canUpdate === false;
+  const { data: canUpdate, isPending: isUpdatePermissionPending } =
+    useHasPermissions({ plugin: ["update"] }, plugin.id);
+  const isReadOnly = !isUpdatePermissionPending && canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
 
   const isGithubPlugin = plugin.sourceKind === "github";
@@ -423,7 +421,8 @@ function PluginDetailView({
             </AlertDescription>
           </Alert>
         ) : (
-          isReadOnly && (
+          isReadOnly &&
+          activeSection === "general" && (
             <Alert>
               <Info className="h-4 w-4" />
               <AlertDescription>

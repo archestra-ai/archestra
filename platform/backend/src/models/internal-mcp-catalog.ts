@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  grantsAudience,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
@@ -33,6 +34,7 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
+  ApiError,
   type CatalogItemApprovalStatus,
   type CatalogTeamInput,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -107,6 +109,18 @@ export type RegistryListFilters = {
   /** Also list app backing entries; the caller checks `app:read`. */
   includeApps?: boolean;
 };
+
+/**
+ * Who a name check compares against. `shared` is a server whose grants reach
+ * a team, a role, or the organization. A personal server names its author,
+ * so only that author's other personal servers conflict with it. An app's
+ * launch tool has an id-suffixed prefix of its own, so an app conflicts with
+ * no server.
+ */
+type CatalogNameAudience =
+  | { kind: "shared" }
+  | { kind: "personal"; authorId: string | null }
+  | { kind: "app" };
 
 export type RegistrySorting = {
   sortBy?: "name" | "createdAt" | "toolCount" | "attention" | "issueAge";
@@ -874,6 +888,54 @@ class InternalMcpCatalogModel {
   }
 
   /**
+   * The columns the name check needs, including the parent id the API type
+   * omits. Null when the catalog does not exist.
+   */
+  static async findNameCheckTarget(id: string): Promise<{
+    id: string;
+    name: string;
+    organizationId: string | null;
+    authorId: string | null;
+    environmentId: string | null;
+    serverType: InternalMcpCatalog["serverType"];
+    parentCatalogItemId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+        organizationId: schema.internalMcpCatalogTable.organizationId,
+        authorId: schema.internalMcpCatalogTable.authorId,
+        environmentId: schema.internalMcpCatalogTable.environmentId,
+        serverType: schema.internalMcpCatalogTable.serverType,
+        parentCatalogItemId: schema.internalMcpCatalogTable.parentCatalogItemId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** Environment of each catalog id (null is Default). Unknown ids are absent. */
+  static async findEnvironmentIdsByIds(
+    ids: string[],
+  ): Promise<Array<{ id: string; environmentId: string | null }>> {
+    if (ids.length === 0) return [];
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        environmentId: schema.internalMcpCatalogTable.environmentId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(inArray(schema.internalMcpCatalogTable.id, ids));
+  }
+
+  /**
    * The environment a catalog item belongs to (null = Default), without the
    * secret expansion and metadata joins {@link InternalMcpCatalogModel.findById}
    * performs. Returns undefined when no such row exists.
@@ -1118,25 +1180,58 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Root-catalog lookup within an organization by sanitized tool-slug prefix —
-   * the rename 409 gate. Tool names embed `sanitizeServerNameForSlug(name)` and
-   * tool-call routing resolves purely by name string, so a sibling catalog whose
-   * display name slugifies to the same prefix (e.g. `"My Server"` vs
-   * `"my_server"`) would silently receive the other server's calls — including
-   * calls from stale clients that would otherwise get a clean "unknown tool"
-   * error. The route excludes self by id before acting on a match.
+   * Root-catalog lookup within an organization by sanitized tool-slug prefix.
+   * The white-label app-name gate uses this organization-wide form: built-in
+   * tools reach every environment, so a prefix any live root already carries
+   * is taken. Name checks for a server use
+   * {@link InternalMcpCatalogModel.findConflictingRootByName}, which is
+   * limited to one environment and one audience.
    */
   static async findRootByNameInOrg(params: {
     name: string;
     organizationId: string;
   }): Promise<{ id: string } | null> {
+    const conflict = await InternalMcpCatalogModel.findConflictingRootByName({
+      name: params.name,
+      organizationId: params.organizationId,
+      environmentId: null,
+      audience: { kind: "shared" },
+      organizationWide: true,
+    });
+    return conflict ? { id: conflict.id } : null;
+  }
+
+  /**
+   * A live root server that would carry the same tool prefix as `name` in
+   * this environment. Two servers conflict when they are in the same
+   * environment (null is Default, a real peer), their tools would carry the
+   * same prefix (the same name slug), and either both are shared with a team
+   * or the organization, or both are personal servers of the same author. A
+   * personal server and a shared server never conflict, and neither do
+   * personal servers of two authors. Apps are not compared here: an app's
+   * launch tool has an id-suffixed prefix of its own. `organizationWide`
+   * drops the environment and audience limits and counts every live root, as
+   * the white-label app name check always did.
+   */
+  static async findConflictingRootByName(params: {
+    name: string;
+    organizationId: string;
+    environmentId: string | null;
+    audience: CatalogNameAudience;
+    excludeId?: string;
+    organizationWide?: boolean;
+  }): Promise<{ id: string; kind: "builtin" | "server" } | null> {
+    if (params.audience.kind === "app") return null;
     if (InternalMcpCatalogModel.takesBuiltInToolPrefix(params.name))
-      return { id: ARCHESTRA_MCP_CATALOG_ID };
+      return { id: ARCHESTRA_MCP_CATALOG_ID, kind: "builtin" };
     const targetSlug = ToolModel.sanitizeServerNameForSlug(params.name);
     const rows = await db
       .select({
         id: schema.internalMcpCatalogTable.id,
         name: schema.internalMcpCatalogTable.name,
+        authorId: schema.internalMcpCatalogTable.authorId,
+        serverType: schema.internalMcpCatalogTable.serverType,
+        environmentId: schema.internalMcpCatalogTable.environmentId,
       })
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -1149,15 +1244,95 @@ class InternalMcpCatalogModel {
           // Active-only: a soft-deleted catalog must not block re-creating (name
           // reuse) nor register as a restore-time slug collision.
           notDeleted(schema.internalMcpCatalogTable),
+          params.organizationWide
+            ? undefined
+            : sql`${schema.internalMcpCatalogTable.environmentId} is not distinct from ${params.environmentId}`,
         ),
       );
 
-    for (const row of rows) {
-      if (ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug) {
-        return { id: row.id };
-      }
+    const candidates = rows.filter(
+      (row) =>
+        row.id !== params.excludeId &&
+        ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug,
+    );
+    if (candidates.length === 0) return null;
+    if (params.organizationWide)
+      return { id: candidates[0].id, kind: "server" };
+
+    // An app's launch tool carries the app's name with an id suffix, so it
+    // never has a server's prefix. Apps count only organization-wide, above.
+    const servers = candidates.filter((row) => row.serverType !== "app");
+    const audiences = await ResourcePermissionPolicyModel.findAudiences({
+      organizationId: params.organizationId,
+      resource: "mcpRegistry",
+      scopes: servers.map((row) => row.id),
+    });
+    for (const row of servers) {
+      if (
+        catalogNameAudiencesConflict({
+          left: params.audience,
+          right: catalogNameAudience({
+            audience: audiences.get(row.id)?.audience ?? "personal",
+            authorId: row.authorId,
+          }),
+        })
+      )
+        return { id: row.id, kind: "server" };
     }
     return null;
+  }
+
+  /**
+   * 409 when this name is already taken under
+   * {@link InternalMcpCatalogModel.findConflictingRootByName}. The message
+   * names the environment and never a server the caller may not see.
+   */
+  static async assertRootNameAvailable(params: {
+    name: string;
+    organizationId: string;
+    environmentId: string | null;
+    audience: CatalogNameAudience;
+    excludeId?: string;
+  }): Promise<void> {
+    const conflict =
+      await InternalMcpCatalogModel.findConflictingRootByName(params);
+    if (!conflict) return;
+    throw new ApiError(
+      409,
+      conflict.kind === "builtin"
+        ? `An MCP server named "${params.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools. Rename it first.`
+        : `An MCP server named "${params.name}" already exists in ${await InternalMcpCatalogModel.environmentDisplayName(params)} environment. Rename it first.`,
+      "catalog_name_conflict",
+    );
+  }
+
+  /**
+   * The name an environment shows in the registry. Default (null) carries the
+   * name the organization gave it.
+   */
+  private static async environmentDisplayName(params: {
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<string> {
+    if (params.environmentId) {
+      const [environment] = await db
+        .select({ name: schema.environmentsTable.name })
+        .from(schema.environmentsTable)
+        .where(
+          and(
+            eq(schema.environmentsTable.id, params.environmentId),
+            eq(schema.environmentsTable.organizationId, params.organizationId),
+          ),
+        )
+        .limit(1);
+      if (environment) return environment.name;
+    }
+    const [organization] = await db
+      .select({ name: schema.organizationsTable.defaultEnvironmentName })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, params.organizationId))
+      .limit(1);
+    return organization?.name ?? "Default";
   }
 
   /**
@@ -1676,15 +1851,29 @@ class InternalMcpCatalogModel {
    * so it compares against live rows only, and excludes the catalog being restored.
    */
   static async getRestoreConflictMessage(
-    catalog: Pick<InternalMcpCatalog, "id" | "name" | "organizationId">,
+    catalog: Pick<
+      InternalMcpCatalog,
+      | "id"
+      | "name"
+      | "organizationId"
+      | "environmentId"
+      | "authorId"
+      | "serverType"
+    >,
   ): Promise<string | null> {
     if (!catalog.organizationId) return null;
-    const conflict = await InternalMcpCatalogModel.findRootByNameInOrg({
+    const conflict = await InternalMcpCatalogModel.findConflictingRootByName({
       name: catalog.name,
       organizationId: catalog.organizationId,
+      environmentId: catalog.environmentId,
+      audience: await catalogNameAudienceOf(catalog),
+      excludeId: catalog.id,
     });
-    if (conflict && conflict.id !== catalog.id) {
-      return "Cannot restore because another active catalog item already uses this name.";
+    if (conflict?.kind === "builtin") {
+      return `Cannot restore because "${catalog.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`;
+    }
+    if (conflict) {
+      return "Cannot restore because another active catalog item already uses this name in this environment. Rename it first.";
     }
     return null;
   }
@@ -2702,6 +2891,69 @@ class InternalMcpCatalogModel {
     await InternalMcpCatalogModel.populateAuthorNames(catalogItems);
     return catalogItems;
   }
+}
+
+/** The audience a stored catalog's grants give it, for the name check. */
+export async function catalogNameAudienceOf(catalog: {
+  id: string;
+  organizationId: string | null;
+  authorId: string | null;
+  serverType?: InternalMcpCatalog["serverType"];
+}): Promise<CatalogNameAudience> {
+  if (catalog.serverType === "app") return { kind: "app" };
+  if (!catalog.organizationId)
+    return { kind: "personal", authorId: catalog.authorId };
+  const audiences = await ResourcePermissionPolicyModel.findAudiences({
+    organizationId: catalog.organizationId,
+    resource: "mcpRegistry",
+    scopes: [catalog.id],
+  });
+  return catalogNameAudience({
+    audience: audiences.get(catalog.id)?.audience ?? "personal",
+    authorId: catalog.authorId,
+  });
+}
+
+/**
+ * The audience a catalog's grants give it, for the name check. A server
+ * with no policy of its own (a system row) is personal to its author, so
+ * it does not block a shared server of the same name.
+ */
+function catalogNameAudience(params: {
+  audience: "personal" | "team" | "org";
+  authorId: string | null;
+}): CatalogNameAudience {
+  return params.audience === "personal"
+    ? { kind: "personal", authorId: params.authorId }
+    : { kind: "shared" };
+}
+
+/** Shared conflicts with shared; personal conflicts only with the same author. */
+function catalogNameAudiencesConflict(params: {
+  left: CatalogNameAudience;
+  right: CatalogNameAudience;
+}): boolean {
+  if (params.left.kind === "app" || params.right.kind === "app") return false;
+  if (params.left.kind === "shared" || params.right.kind === "shared")
+    return params.left.kind === "shared" && params.right.kind === "shared";
+  return (
+    params.left.authorId !== null &&
+    params.left.authorId === params.right.authorId
+  );
+}
+
+/**
+ * The audience `initialGrants` will give a new server. Creation always adds
+ * the author's own manage grant, which stays personal, so only a grant that
+ * reaches a team, a role, or the organization makes the server shared.
+ */
+export function catalogNameAudienceFromGrants(params: {
+  grants: readonly ResourcePermissionGrant[] | undefined;
+  authorId: string | null;
+}): CatalogNameAudience {
+  return grantsAudience(params.grants ?? []) === "personal"
+    ? { kind: "personal", authorId: params.authorId }
+    : { kind: "shared" };
 }
 
 export default InternalMcpCatalogModel;

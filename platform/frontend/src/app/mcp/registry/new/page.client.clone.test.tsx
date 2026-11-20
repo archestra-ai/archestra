@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
@@ -26,6 +27,7 @@ vi.mock("@/components/initial-resource-permissions", () => ({
 }));
 
 vi.mock("next/navigation");
+vi.mock("sonner");
 
 vi.mock("@/lib/config/config.query");
 
@@ -233,6 +235,29 @@ describe("NewMcpCatalogItemPage clone flow", () => {
     ).toBeInTheDocument();
     // ...the user's edits survive the failed submit, and no navigation happens.
     expect(screen.getByDisplayValue("my-edited-name")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows a taken name on the Name field and does not toast it", async () => {
+    mutate.mockImplementation((_data, opts) => {
+      const error = new Error(
+        'An MCP server named "remote-src" already exists in Default environment. Rename it first.',
+      ) as Error & { internalCode?: string };
+      error.internalCode = "catalog_name_conflict";
+      setTimeout(() => opts?.onError?.(error), 0);
+    });
+
+    const user = userEvent.setup();
+    render(<NewMcpCatalogItemPage />);
+    const nameInput = await screen.findByDisplayValue("remote-src-copy");
+    await user.clear(nameInput);
+    await user.type(nameInput, "remote-src");
+    await user.click(screen.getByRole("button", { name: "Add Server" }));
+
+    expect(
+      await screen.findByText(/already exists in Default environment/),
+    ).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 });

@@ -15,17 +15,20 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TURN_NOTICE_PART_TYPE,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
   getToolNameFromPart,
+  hasToolAuthOrNoDevicePrompt,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
 import type { McpToolOutput } from "./mcp-app-container";
+import { runToolArguments } from "./openappa-policy-change.utils";
 import {
   identifyRemedyChains,
   type RemedyChain,
@@ -555,6 +558,57 @@ export function resolveRunToolTargetName(
     : fullToolName;
 }
 
+/**
+ * Unwrap a `run_tool` approval prompt so the card header and input display the
+ * target tool and its arguments instead of the `run_tool` envelope.
+ */
+export function getApprovalToolDisplay({
+  toolName,
+  input,
+  isApprovalRequested,
+  getToolShortName,
+}: {
+  toolName: string;
+  input: unknown;
+  isApprovalRequested: boolean;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}): {
+  toolName: string;
+  input: Record<string, unknown> | undefined;
+} {
+  const displayInput = isPlainRecord(input) ? input : undefined;
+  const shortToolName =
+    getToolShortName(toolName) ?? parseFullToolName(toolName).toolName;
+
+  if (!isApprovalRequested || shortToolName !== TOOL_RUN_TOOL_SHORT_NAME) {
+    return {
+      toolName,
+      input: displayInput,
+    };
+  }
+
+  if (!displayInput) {
+    return {
+      toolName,
+      input: undefined,
+    };
+  }
+
+  const targetToolName = displayInput.tool_name;
+  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
+    return {
+      toolName,
+      input: displayInput,
+    };
+  }
+
+  return {
+    toolName: targetToolName,
+    // As run_tool reads them: an object, or the JSON text of one.
+    input: runToolArguments(displayInput.tool_args) ?? undefined,
+  };
+}
+
 function getMessageCreatedAt(message: UIMessage): number | null {
   const metadata = message.metadata;
   if (
@@ -688,6 +742,7 @@ export function identifyCompactToolGroups(
     nonCompactToolNames?: Set<string>;
     getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
     mcpAppToolCallIds?: Set<string>;
+    role?: UIMessage["role"];
   },
 ): {
   groupMap: Map<number, CompactToolGroup>;
@@ -700,6 +755,8 @@ export function identifyCompactToolGroups(
   const remedyChainCards = new Map<number, RemedyChain>();
 
   if (!parts) return { groupMap, consumedIndices, remedyChainCards };
+
+  const role: UIMessage["role"] = options?.role ?? "assistant";
 
   // A guarded call's notices, remedies, and retries render as one entry at its
   // first notice; every other member renders nothing on its own.
@@ -715,28 +772,23 @@ export function identifyCompactToolGroups(
 
   // Collect toolCallIds from data-tool-ui-start parts (MCP Apps known before output arrives)
   const mcpAppCallIds = new Set(options?.mcpAppToolCallIds);
-  for (const part of parts) {
-    // biome-ignore lint/suspicious/noExplicitAny: data-tool-ui-start shape is dynamic
-    const earlyPart = part as any;
-    if (
-      typeof earlyPart?.type === "string" &&
-      earlyPart.type.startsWith("data-tool-ui-start") &&
-      earlyPart.data?.toolCallId
-    ) {
-      mcpAppCallIds.add(earlyPart.data.toolCallId as string);
-    }
-  }
-
+  const earlyUiStartIndicesByCallId = new Map<string, number[]>();
   const seenToolCallIds = new Set<string>();
-  const invocationIndices: number[] = [];
+  const invocationIndexByCallId = new Map<string, number>();
   const resultByCallId = new Map<string, number>();
+  const duplicateResultIndices = new Set<number>();
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
-    // Hook-run debug parts join the circle row alongside the tool calls they
-    // bracket (SessionStart at turn start, Pre/PostToolUse around their tool).
-    if (isHookRunPart(part)) {
-      invocationIndices.push(i);
+    const earlyUiStart = getEarlyToolUiStartInfo(part);
+    if (earlyUiStart) {
+      mcpAppCallIds.add(earlyUiStart.toolCallId);
+      const list = earlyUiStartIndicesByCallId.get(earlyUiStart.toolCallId);
+      if (list) {
+        list.push(i);
+      } else {
+        earlyUiStartIndicesByCallId.set(earlyUiStart.toolCallId, [i]);
+      }
       continue;
     }
     if (!isToolPart(part)) continue;
@@ -744,48 +796,101 @@ export function identifyCompactToolGroups(
     const callId = part.toolCallId;
     if (callId && seenToolCallIds.has(callId)) {
       resultByCallId.set(callId, i);
+      duplicateResultIndices.add(i);
       continue;
     }
 
     if (callId) {
       seenToolCallIds.add(callId);
+      invocationIndexByCallId.set(callId, i);
     }
-    invocationIndices.push(i);
   }
 
-  let currentGroup: CompactToolGroup | null = null;
+  const consumeEarlyStarts = (toolCallId: string | undefined) => {
+    if (!toolCallId) return;
+    for (const earlyIdx of earlyUiStartIndicesByCallId.get(toolCallId) ?? []) {
+      consumedIndices.add(earlyIdx);
+    }
+  };
 
-  for (const idx of invocationIndices) {
-    const rawPart = parts[idx];
+  let currentGroup: CompactToolGroup | null = null;
+  const flushGroup = () => {
+    finalizeCurrentGroup({ currentGroup, groupMap });
+    currentGroup = null;
+  };
+
+  // Walk parts in transcript order so circle rows stay chronological relative
+  // to visible narration, attachments, notices, and standalone widgets.
+  for (let i = 0; i < parts.length; i++) {
+    if (consumedIndices.has(i) || duplicateResultIndices.has(i)) {
+      continue;
+    }
+
+    const rawPart = parts[i];
+
     // Hook runs are always compact-eligible: join (or start) the current row.
     if (isHookRunPart(rawPart)) {
       if (!currentGroup) {
-        currentGroup = { startIndex: idx, entries: [] };
+        currentGroup = { startIndex: i, entries: [] };
       }
       currentGroup.entries.push({
         kind: "hook",
-        partIndex: idx,
+        partIndex: i,
         data: (rawPart.data ?? {}) as HookRunChipData,
       });
-      consumedIndices.add(idx);
+      consumedIndices.add(i);
       continue;
     }
+
+    // Early MCP App announcement (`data-tool-ui-start`): if a matching tool-*
+    // part exists in this message, wait for it so one entry covers both; if it
+    // arrived ahead of any tool-* part during streaming, surface an app entry
+    // in the circle row immediately.
+    const earlyUiStart = getEarlyToolUiStartInfo(rawPart);
+    if (earlyUiStart) {
+      if (invocationIndexByCallId.has(earlyUiStart.toolCallId)) {
+        continue;
+      }
+      if (!earlyUiStart.toolName) {
+        continue;
+      }
+      if (options?.nonCompactToolNames?.has(earlyUiStart.toolName)) {
+        flushGroup();
+        continue;
+      }
+      const syntheticPart = {
+        type: `tool-${earlyUiStart.toolName}` as `tool-${string}`,
+        toolCallId: earlyUiStart.toolCallId,
+        state: "input-streaming" as const,
+        input: {},
+      } as ToolUIPart;
+      if (!currentGroup) {
+        currentGroup = { startIndex: i, entries: [] };
+      }
+      currentGroup.entries.push({
+        kind: "app",
+        partIndex: i,
+        toolName: earlyUiStart.toolName,
+        part: syntheticPart,
+        toolResultPart: null,
+        errorText: undefined,
+      });
+      consumedIndices.add(i);
+      continue;
+    }
+
     if (!isToolPart(rawPart)) {
-      finalizeCurrentGroup({ currentGroup, groupMap });
-      currentGroup = null;
+      if (isVisibleBreakPart(rawPart, role)) {
+        flushGroup();
+      }
       continue;
     }
 
     const toolName = getToolName(rawPart);
     if (!toolName) {
-      finalizeCurrentGroup({ currentGroup, groupMap });
-      currentGroup = null;
+      flushGroup();
       continue;
     }
-
-    // Chain members render inside their chain's entry, so they neither join
-    // nor break the row.
-    if (consumedIndices.has(idx)) continue;
 
     // A denial notice whose input has not named its target yet renders
     // nothing, so the row never flashes a separate notice circle before the
@@ -794,13 +899,13 @@ export function identifyCompactToolGroups(
       rawPart.state === "input-streaming" &&
       options?.getToolShortName?.(toolName) ===
         TOOL_GET_REMEDY_PLANS_SHORT_NAME &&
-      !remedyChainByAnchor.has(idx)
+      !remedyChainByAnchor.has(i)
     ) {
-      consumedIndices.add(idx);
+      consumedIndices.add(i);
       continue;
     }
 
-    const remedyChain = remedyChainByAnchor.get(idx);
+    const remedyChain = remedyChainByAnchor.get(i);
     if (remedyChain) {
       const entry = remedyChainEntry({
         chain: remedyChain,
@@ -809,14 +914,14 @@ export function identifyCompactToolGroups(
       });
       if (entry) {
         if (!currentGroup) {
-          currentGroup = { startIndex: idx, entries: [] };
+          currentGroup = { startIndex: i, entries: [] };
         }
         currentGroup.entries.push(entry);
-        consumedIndices.add(idx);
+        consumedIndices.add(i);
+        consumeEarlyStarts(remedyChain.finalAttempt?.part.toolCallId);
       } else {
-        remedyChainCards.set(idx, remedyChain);
-        finalizeCurrentGroup({ currentGroup, groupMap });
-        currentGroup = null;
+        remedyChainCards.set(i, remedyChain);
+        flushGroup();
       }
       continue;
     }
@@ -833,45 +938,6 @@ export function identifyCompactToolGroups(
       toolResultPart: toolResultPart as never,
     });
 
-    // MCP-App-rendering calls join the row as app pills (their app content
-    // renders below the row). Errors, approvals, and denials keep the full
-    // tool card, exactly like non-compact tools.
-    if (
-      isAppRenderPart({
-        part: rawPart,
-        toolResultPart,
-        mcpAppCallIds,
-        getToolShortName: options?.getToolShortName,
-      })
-    ) {
-      const state = (toolResultPart ?? rawPart).state;
-      const appEligible =
-        !errorText &&
-        state !== "approval-requested" &&
-        state !== "output-denied";
-      if (appEligible) {
-        if (!currentGroup) {
-          currentGroup = { startIndex: idx, entries: [] };
-        }
-        currentGroup.entries.push({
-          kind: "app",
-          partIndex: idx,
-          toolName,
-          part: rawPart,
-          toolResultPart,
-          errorText,
-        });
-        consumedIndices.add(idx);
-        if (resultIdx !== undefined) {
-          consumedIndices.add(resultIdx);
-        }
-      } else {
-        finalizeCurrentGroup({ currentGroup, groupMap });
-        currentGroup = null;
-      }
-      continue;
-    }
-
     const isEligible =
       !options?.nonCompactToolNames?.has(toolName) &&
       isCompactEligible({
@@ -881,29 +947,50 @@ export function identifyCompactToolGroups(
         getToolShortName: options?.getToolShortName,
       });
 
-    if (isEligible) {
-      if (!currentGroup) {
-        currentGroup = { startIndex: idx, entries: [] };
-      }
-      currentGroup.entries.push({
-        kind: "tool",
-        partIndex: idx,
-        toolName,
-        part: rawPart,
-        toolResultPart,
-        errorText,
-      });
-      consumedIndices.add(idx);
-      if (resultIdx !== undefined) {
-        consumedIndices.add(resultIdx);
-      }
-    } else {
-      finalizeCurrentGroup({ currentGroup, groupMap });
-      currentGroup = null;
+    if (!isEligible) {
+      flushGroup();
+      continue;
     }
+
+    // MCP-App-rendering calls join the row as app pills when healthy, or
+    // degrade to a regular tool circle when they fail, need approval, are
+    // denied, or need authentication / a linked device.
+    const isApp = isAppRenderPart({
+      part: rawPart,
+      toolResultPart,
+      mcpAppCallIds,
+      getToolShortName: options?.getToolShortName,
+    });
+    const state = (toolResultPart ?? rawPart).state;
+    const appEligible =
+      isApp &&
+      !errorText &&
+      state !== "approval-requested" &&
+      state !== "output-denied" &&
+      !hasToolAuthOrNoDevicePrompt({
+        part: rawPart as never,
+        toolResultPart: toolResultPart as never,
+      });
+
+    if (!currentGroup) {
+      currentGroup = { startIndex: i, entries: [] };
+    }
+    currentGroup.entries.push({
+      kind: appEligible ? "app" : "tool",
+      partIndex: i,
+      toolName,
+      part: rawPart,
+      toolResultPart,
+      errorText,
+    });
+    consumedIndices.add(i);
+    if (resultIdx !== undefined) {
+      consumedIndices.add(resultIdx);
+    }
+    consumeEarlyStarts(rawPart.toolCallId);
   }
 
-  finalizeCurrentGroup({ currentGroup, groupMap });
+  flushGroup();
   return { groupMap, consumedIndices, remedyChainCards };
 }
 
@@ -1110,9 +1197,10 @@ function parseToolAppRender(
 }
 
 /**
- * The compact entry for a guarded call, or null when any member needs the full
- * card (an approval, an auth error, a non-compact tool). A released attempt
- * that renders an MCP App keeps its app pill, with the chain in its details.
+ * The compact entry for a guarded call, or null when any member is a
+ * non-compact widget (such as `todo_write` or `ask_user`). A released attempt
+ * that renders an MCP App keeps its app pill when healthy, or degrades to a
+ * regular circle with its expanded card on error, approval, denial, or auth.
  */
 function remedyChainEntry(params: {
   chain: RemedyChain;
@@ -1127,42 +1215,43 @@ function remedyChainEntry(params: {
   const { chain, mcpAppCallIds, options } = params;
   const { finalAttempt } = chain;
   const members = finalAttempt ? [...chain.steps, finalAttempt] : chain.steps;
-  const finalIsApp =
-    finalAttempt !== null &&
-    isAppRenderPart({
-      part: finalAttempt.part,
-      toolResultPart: finalAttempt.toolResultPart,
-      mcpAppCallIds,
-      getToolShortName: options?.getToolShortName,
-    });
-  const eligible = members.every((member) => {
-    if (member === finalAttempt && finalIsApp) {
-      const state = (member.toolResultPart ?? member.part).state;
-      return (
-        !getToolErrorText({
-          part: member.part,
-          toolResultPart: member.toolResultPart,
-        }) &&
-        state !== "approval-requested" &&
-        state !== "output-denied"
-      );
-    }
-    return (
+  const eligible = members.every(
+    (member) =>
       !options?.nonCompactToolNames?.has(member.toolName) &&
       isCompactEligible({
         part: member.part,
         toolResultPart: member.toolResultPart,
         toolName: member.toolName,
         getToolShortName: options?.getToolShortName,
-      })
-    );
-  });
+      }),
+  );
   if (!eligible) return null;
 
+  const finalIsHealthyApp =
+    finalAttempt !== null &&
+    isAppRenderPart({
+      part: finalAttempt.part,
+      toolResultPart: finalAttempt.toolResultPart,
+      mcpAppCallIds,
+      getToolShortName: options?.getToolShortName,
+    }) &&
+    !getToolErrorText({
+      part: finalAttempt.part,
+      toolResultPart: finalAttempt.toolResultPart,
+    }) &&
+    (finalAttempt.toolResultPart ?? finalAttempt.part).state !==
+      "approval-requested" &&
+    (finalAttempt.toolResultPart ?? finalAttempt.part).state !==
+      "output-denied" &&
+    !hasToolAuthOrNoDevicePrompt({
+      part: finalAttempt.part,
+      toolResultPart: finalAttempt.toolResultPart,
+    });
+
   const [anchor] = chain.steps;
-  const shown = finalIsApp && finalAttempt ? finalAttempt : anchor;
+  const shown = finalIsHealthyApp && finalAttempt ? finalAttempt : anchor;
   return {
-    kind: finalIsApp ? "app" : "tool",
+    kind: finalIsHealthyApp ? "app" : "tool",
     partIndex: chain.anchorIndex,
     toolName: shown.toolName,
     part: shown.part,
@@ -1175,6 +1264,52 @@ function remedyChainEntry(params: {
       : undefined,
     remedyChain: chain,
   };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getEarlyToolUiStartInfo(
+  part: unknown,
+): { toolCallId: string; toolName?: string } | null {
+  // biome-ignore lint/suspicious/noExplicitAny: data-tool-ui-start shape is dynamic
+  const earlyPart = part as any;
+  if (
+    typeof earlyPart?.type === "string" &&
+    earlyPart.type.startsWith("data-tool-ui-start") &&
+    typeof earlyPart.data?.toolCallId === "string" &&
+    earlyPart.data.toolCallId.length > 0
+  ) {
+    return {
+      toolCallId: earlyPart.data.toolCallId,
+      toolName:
+        typeof earlyPart.data?.toolName === "string" &&
+        earlyPart.data.toolName.length > 0
+          ? earlyPart.data.toolName
+          : undefined,
+    };
+  }
+  return null;
+}
+
+/**
+ * Visible non-tool parts that split compact circle rows so circles render in
+ * chronological order around assistant narration, files, and turn notices.
+ * Reasoning and blank assistant text do not split silent tool chains.
+ */
+function isVisibleBreakPart(
+  part: UIMessage["parts"][number],
+  role: UIMessage["role"],
+): boolean {
+  switch (part.type) {
+    case "text":
+      return !isBlankAssistantTextPart(part, role);
+    case "file":
+      return true;
+    default:
+      return part.type === TURN_NOTICE_PART_TYPE;
+  }
 }
 
 function finalizeCurrentGroup(params: {

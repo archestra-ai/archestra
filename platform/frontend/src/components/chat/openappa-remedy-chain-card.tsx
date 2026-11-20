@@ -57,6 +57,7 @@ export function RemedyChainCard({
   canExpandToolCalls = true,
   turnActive = false,
   onToolApprovalResponse,
+  className,
 }: {
   chain: RemedyChain;
   collapsible?: boolean;
@@ -64,6 +65,7 @@ export function RemedyChainCard({
   turnActive?: boolean;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: ToolApprovalResponse;
+  className?: string;
 }) {
   const status = getRemedyChainStatus(chain, { turnActive });
   const input = chain.targetArguments;
@@ -80,7 +82,13 @@ export function RemedyChainCard({
     <Tool
       open={!collapsible || needsAction || expanded}
       onOpenChange={setExpanded}
-      className={collapsible ? "cursor-pointer" : undefined}
+      className={
+        collapsible
+          ? className
+            ? `cursor-pointer ${className}`
+            : "cursor-pointer"
+          : className
+      }
     >
       <ToolHeader
         type={`tool-${chain.targetToolName}`}
@@ -139,6 +147,7 @@ const CHAIN_HEADER_STATES: Record<
   ToolHeaderProps["state"]
 > = {
   running: "input-available",
+  "approval-requested": "approval-requested",
   completed: "output-available",
   error: "output-error",
   denied: "output-denied",

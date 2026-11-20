@@ -127009,6 +127009,100 @@ export type GetAppaGithubAppGrantsResponses = {
 
 export type GetAppaGithubAppGrantsResponse = GetAppaGithubAppGrantsResponses[keyof GetAppaGithubAppGrantsResponses];
 
+export type GetAppaGithubAppPermissionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/app-permissions';
+};
+
+export type GetAppaGithubAppPermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppPermissionsError = GetAppaGithubAppPermissionsErrors[keyof GetAppaGithubAppPermissionsErrors];
+
+export type GetAppaGithubAppPermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        url: string | null;
+        settingsUrl: string;
+        installationUrl: string | null;
+        permissions: Array<{
+            name: 'contents' | 'pull_requests' | 'checks' | 'workflows';
+            granted: boolean;
+            requested?: boolean;
+        }>;
+    } | null;
+};
+
+export type GetAppaGithubAppPermissionsResponse = GetAppaGithubAppPermissionsResponses[keyof GetAppaGithubAppPermissionsResponses];
+
 export type GetAppaSelfServiceData = {
     body?: never;
     path?: never;

@@ -102,8 +102,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         operationId: RouteId.GetAppaGithubAppPermissions,
-        // Listed in the API reference once the docs for it ship.
-        hide: true,
         description:
           "The GitHub App's permissions against what self-service needs: which its installation holds, and which its settings ask for now",
         tags: ["OpenAPPA"],

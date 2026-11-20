@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,7 +15,7 @@ With Git sync, every policy change goes through a pull request in your own GitHu
 1. Go to **Settings → Guardrails** and click **Set up Git sync**. After the APPA Keeper saves a policy, the banner in chat links here too.
 2. Pick **GitHub** or **GitLab**, then follow its steps below.
 
-When setup is done, the card on **Settings → Guardrails** shows **Connected**. While something still waits, such as a GitHub App permission or a pull request to merge, the card shows a **Finish setup** notice. The Guardrails pages show the same notice.
+When setup is done, the card on **Settings → Guardrails** shows **Connected**. While something still waits, such as a GitHub App permission or a pull request to merge, the card shows a **Finish setup** notice. The Guardrails pages show the same notice. Archestra reads the GitHub App's permissions from GitHub when the card shows and after every sync. A permission removed on GitHub shows in the notice after the next **Sync now**.
 
 **Finish setup** opens a wizard with one step for each item that waits. On its pull requests step, the wizard checks each pull request again when you return from GitHub. Once they all merge, the wizard goes to **Finish**. Like every Git sync wizard, it ends on the **Finish** step, which lists each part of the setup and what it still needs. While you edit Git sync, **Finish** opens from any step.
 
@@ -92,7 +92,7 @@ Required permissions:
 - [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to set up Git sync.
 - [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or GitLab token.
 - [`credential:create`](/docs/reference/permissions#credential:create) to create a GitHub App or save a GitLab token.
-- To change a server's rules: the server shared for editing and the APPA Keeper agent shared for use ([Granular Access Control](/docs/admin/access-control#granular-access-control)). No Guardrails permission.
+- To change a server's rules: the server shared for editing and the APPA Keeper agent shared for use ([Granular Access Control](/docs/admin/access-control#granular-access-control)). No Guardrails permission. Turning self-service on shares the Keeper with everyone in the organization for use. To choose who gets the Keeper, remove that share on the agent. The share returns only when you turn self-service on again.
 
 ## MCP Guardrails Self-Service
 
@@ -123,9 +123,9 @@ What to know:
 
 ### Auto-merge
 
-MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** in the Self-service step of Git sync setup, or by editing the source later. The Git sync card then says that admitted self-service pull requests merge automatically.
+MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. **Auto-merge pull requests** starts checked wherever you turn self-service on: the Self-service step of Git sync setup, and the **Enable** dialog on the Git sync card. To change it later, edit the source. The Git sync card says whether auto-merge is enabled.
 
-- A pull request merges within about a minute once every check on it passes, and Git sync then applies it. The APPA Keeper opens it without asking you to approve it first. The Keeper then follows it in the chat and reports when the change applies, or what holds it.
+- A pull request merges within about a minute once every check on it passes, and Git sync then applies it. The APPA Keeper shows the change as a diff in the chat. The Keeper opens the pull request only after you approve it there, with auto-merge on or off. The Keeper then follows it in the chat and reports when the change applies, or what holds it.
 - Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
 - A conflict or a draft holds the pull request until someone resolves it on GitHub. If GitHub refuses a merge for another reason, the App tries again a minute later, then every 15 minutes.
 - If the branch ruleset takes the check from another GitHub App, **Finish setup** shows the fix. The App merges the pull request within a minute of that fix.

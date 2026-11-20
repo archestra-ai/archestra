@@ -76,7 +76,7 @@ What to know:
 
 - Archestra creates only what is missing, matched by name, on every start. It never changes or deletes an account or credential that exists, so edits in the UI, API, or Terraform stick.
 - An account it cannot create, for an unknown role or a private issuer, is skipped and logged. Archestra still starts.
-- The chart renders the list into `ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`.
+- The chart renders the list into [`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP).
 
 ## Exchange a Token in GitHub Actions
 

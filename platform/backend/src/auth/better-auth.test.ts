@@ -584,6 +584,44 @@ describe("handleBeforeHook", () => {
     });
   });
 
+  test("refuses the sign-up of an auto-provisioned user the identity provider soft-deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInvitation,
+  }) => {
+    const org = await makeOrganization();
+    await makeUser();
+    const placeholder = await makeUser({
+      email: "deactivated-placeholder@example.com",
+    });
+    await makeMember(placeholder.id, org.id);
+    const invitation = await makeInvitation(org.id, placeholder.id, {
+      email: "deactivated-placeholder@example.com",
+      status: AUTO_PROVISIONED_INVITATION_STATUS,
+    });
+    await UserModel.setSoftDeleted({
+      userId: placeholder.id,
+      softDeleted: new Date(),
+    });
+
+    const ctx = createMockContext({
+      path: "/sign-up/email",
+      method: "POST",
+      body: {
+        email: "deactivated-placeholder@example.com",
+        callbackURL: "/chat",
+        invitationId: invitation.id,
+      },
+    });
+
+    await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+      body: { code: "ACCOUNT_DEACTIVATED" },
+    });
+    // The soft-deleted user is still there, not replaced by a new one.
+    expect(await UserModel.getSoftDeleted(placeholder.id)).toBeInstanceOf(Date);
+  });
+
   describe("impersonation permission gate", () => {
     const impersonateCtx = (
       user: { id: string; email: string },
@@ -5369,6 +5407,57 @@ describe("SSO account linking onto existing password users", () => {
       .from(schema.sessionsTable)
       .where(eq(schema.sessionsTable.userId, user.id));
     expect(sessions).toEqual([]);
+  });
+
+  test("a soft-deleted user's API key is refused on better-auth's own endpoints", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "deactivated-key@example.com" });
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const { key } = await auth.api.createApiKey({
+      body: { userId: user.id, name: "automation" },
+    });
+    const callWithKey = (path: string, init: RequestInit = {}) =>
+      auth.handler(
+        new Request(`http://localhost:3000/api/auth${path}`, {
+          ...init,
+          headers: {
+            authorization: key,
+            origin: "http://localhost:3000",
+            "content-type": "application/json",
+          },
+        }),
+      );
+
+    expect((await callWithKey("/get-session")).status).toBe(200);
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+
+    const session = await callWithKey("/get-session");
+    expect(session.status).toBe(403);
+    expect(await session.json()).toMatchObject({ code: "ACCOUNT_DEACTIVATED" });
+    // The way back in: inviting someone else as an administrator.
+    const invitation = await callWithKey("/organization/invite-member", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "new-admin@example.com",
+        role: ADMIN_ROLE_NAME,
+        organizationId: org.id,
+      }),
+    });
+    expect(invitation.status).toBe(403);
+    expect(
+      await db
+        .select()
+        .from(schema.invitationsTable)
+        .where(eq(schema.invitationsTable.email, "new-admin@example.com")),
+    ).toEqual([]);
   });
 
   test("OIDC callback links an existing account through a matching allowed domain without an email verification claim", async ({

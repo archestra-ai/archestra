@@ -1,4 +1,5 @@
 import { RouteId } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -13,13 +14,14 @@ import { ApiError } from "@/types";
  * user becomes.
  */
 const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Scoped to this plugin's routes.
-  fastify.addHook("preHandler", async () => {
-    if (!enterpriseTier.isCoreActive())
-      throw new ApiError(
-        403,
-        "SCIM provisioning is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-      );
+  // Scoped to this plugin's routes. Deactivation stays open without a licence:
+  // a user the identity provider removed must lose access either way.
+  fastify.addHook("preHandler", async (request) => {
+    if (enterpriseTier.isCoreActive() || isDeactivation(request)) return;
+    throw new ApiError(
+      403,
+      "SCIM provisioning is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+    );
   });
 
   // Every response is SCIM's media type, and every error body is a SCIM error
@@ -89,7 +91,9 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           filter: z.string().optional(),
           startIndex: z.coerce.number().int().min(1).default(1),
-          count: z.coerce.number().int().min(0).max(MAX_COUNT).default(100),
+          // A larger count is answered with `MAX_COUNT` users, not an error
+          // (RFC 7644 section 3.4.2.4).
+          count: z.coerce.number().int().min(0).default(100),
         }),
         response: scimResponses(200, ScimListResponseSchema),
       },
@@ -102,7 +106,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userName,
           startIndex: query.startIndex,
-          count: query.count,
+          count: Math.min(query.count, MAX_COUNT),
         }),
       );
     },
@@ -129,7 +133,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ScimCreateUser,
         description:
-          "SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in.",
+          "SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in. `active: false` creates the user soft-deleted.",
         tags: ["SCIM"],
         body: ScimUserInputSchema,
         response: scimResponses(201, ScimUserSchema),
@@ -141,6 +145,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userName: email,
         name: displayNameOf(body) ?? email,
+        active: body.active !== false,
       });
       if (result.status === "exists")
         throw new ApiError(
@@ -158,23 +163,22 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ScimReplaceUser,
         description:
-          "SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.",
+          "SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` and `displayName` change the email and name of a user who has not signed in yet.",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimUserInputSchema,
         response: scimResponses(200, ScimUserSchema),
       },
     },
-    async (request, reply) => {
-      const { user, changed } = await applyChanges({
-        organizationId: request.organizationId,
-        userId: request.params.id,
-        active: request.body.active,
-        userName: emailIn(request.body),
-      });
-      if (!changed) request.auditSkip = true;
-      return reply.send(user);
-    },
+    async (request, reply) =>
+      reply.send(
+        await applyChanges(request, {
+          userId: request.params.id,
+          active: request.body.active,
+          userName: emailIn(request.body),
+          displayName: displayNameOf(request.body),
+        }),
+      ),
   );
 
   fastify.patch(
@@ -183,23 +187,22 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ScimPatchUser,
         description:
-          "SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.",
+          "SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` and `displayName` change the email and name of a user who has not signed in yet.",
         tags: ["SCIM"],
         params: UserIdParamsSchema,
         body: ScimPatchSchema,
         response: scimResponses(200, ScimUserSchema),
       },
     },
-    async (request, reply) => {
-      const { user, changed } = await applyChanges({
-        organizationId: request.organizationId,
-        userId: request.params.id,
-        active: activeFromPatch(request.body),
-        userName: userNameFromPatch(request.body),
-      });
-      if (!changed) request.auditSkip = true;
-      return reply.send(user);
-    },
+    async (request, reply) =>
+      reply.send(
+        await applyChanges(request, {
+          userId: request.params.id,
+          active: activeFromPatch(request.body),
+          userName: userNameFromPatch(request.body),
+          displayName: displayNameFromPatch(request.body),
+        }),
+      ),
   );
 
   fastify.delete(
@@ -215,14 +218,21 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { changed } = await applyChanges({
-        organizationId: request.organizationId,
-        userId: request.params.id,
-        active: false,
-      });
-      if (!changed) request.auditSkip = true;
+      await applyChanges(request, { userId: request.params.id, active: false });
       return reply.code(204).send();
     },
+  );
+
+  // Any other path under the SCIM base URL, such as `/Groups` or `/Schemas`,
+  // is a SCIM 404 like every other error here. Registered last, so it runs the
+  // hooks above.
+  await fastify.register(
+    async (scope) => {
+      scope.setNotFoundHandler(() => {
+        throw new ApiError(404, "This SCIM endpoint is not supported");
+      });
+    },
+    { prefix: SCIM_BASE },
   );
 };
 
@@ -397,47 +407,61 @@ function displayNameOf(body: ScimUserInput): string | undefined {
 }
 
 /**
- * The `active` value a PATCH sets: from `{ path: "active", value }`, or from a
- * path-less `{ value: { active } }` (both forms are in use).
+ * The values a PATCH sets for one attribute, in order: from
+ * `{ path: "<attribute>", value }`, or from a path-less
+ * `{ value: { <attribute> } }` (both forms are in use).
  */
+function patchValues(
+  body: z.infer<typeof ScimPatchSchema>,
+  attribute: "active" | "userName" | "displayName",
+): unknown[] {
+  return body.Operations.flatMap((operation) => {
+    if (!/^(replace|add)$/i.test(operation.op)) return [];
+    if (operation.path?.toLowerCase() === attribute.toLowerCase())
+      return [operation.value];
+    return operation.path === undefined &&
+      typeof operation.value === "object" &&
+      operation.value !== null
+      ? [(operation.value as Record<string, unknown>)[attribute]]
+      : [];
+  });
+}
+
+/** The `active` value a PATCH sets, if any. */
 function activeFromPatch(body: z.infer<typeof ScimPatchSchema>) {
-  let active: boolean | undefined;
-  for (const operation of body.Operations) {
-    if (!/^(replace|add)$/i.test(operation.op)) continue;
-    const value =
-      operation.path?.toLowerCase() === "active"
-        ? operation.value
-        : operation.path === undefined &&
-            typeof operation.value === "object" &&
-            operation.value !== null
-          ? (operation.value as Record<string, unknown>).active
-          : undefined;
-    const parsed = ScimBooleanSchema.safeParse(value);
-    if (parsed.success) active = parsed.data;
-  }
-  return active;
+  return patchValues(body, "active")
+    .map((value) => ScimBooleanSchema.safeParse(value))
+    .findLast((parsed) => parsed.success)?.data;
+}
+
+/** The email-shaped `userName` a PATCH sets, if any. */
+function userNameFromPatch(body: z.infer<typeof ScimPatchSchema>) {
+  return patchValues(body, "userName")
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim().toLowerCase())
+    .findLast((value) => EMAIL.test(value));
+}
+
+/** The `displayName` a PATCH sets, if any. */
+function displayNameFromPatch(body: z.infer<typeof ScimPatchSchema>) {
+  return patchValues(body, "displayName")
+    .filter((value) => typeof value === "string")
+    .findLast((value) => value.trim() !== "");
 }
 
 /**
- * The email-shaped `userName` a PATCH sets: from `{ path: "userName", value }`,
- * or from a path-less `{ value: { userName } }`.
+ * Whether the request only takes access away: a DELETE, or an update that sets
+ * `active: false`. Runs after validation, so `active` is already a boolean.
  */
-function userNameFromPatch(body: z.infer<typeof ScimPatchSchema>) {
-  let userName: string | undefined;
-  for (const operation of body.Operations) {
-    if (!/^(replace|add)$/i.test(operation.op)) continue;
-    const value =
-      operation.path?.toLowerCase() === "username"
-        ? operation.value
-        : operation.path === undefined &&
-            typeof operation.value === "object" &&
-            operation.value !== null
-          ? (operation.value as Record<string, unknown>).userName
-          : undefined;
-    if (typeof value === "string" && EMAIL.test(value.trim()))
-      userName = value.trim().toLowerCase();
-  }
-  return userName;
+function isDeactivation(request: FastifyRequest): boolean {
+  if (request.routeOptions.url !== `${SCIM_BASE}/Users/:id`) return false;
+  if (request.method === "DELETE") return true;
+  if (request.method === "PUT")
+    return (request.body as ScimUserInput).active === false;
+  return (
+    request.method === "PATCH" &&
+    activeFromPatch(request.body as z.infer<typeof ScimPatchSchema>) === false
+  );
 }
 
 async function getUserOrThrow(params: {
@@ -450,45 +474,65 @@ async function getUserOrThrow(params: {
 }
 
 /**
- * Apply what Archestra takes from a SCIM update: `userName` (for a user who
- * has not signed in yet) and `active` (`false` soft-deletes, `true` restores).
- * `changed` says whether anything changed, so a call that changed nothing is
- * left out of the audit log.
+ * Apply what Archestra takes from a SCIM update: `active` (`false`
+ * soft-deletes, `true` restores), and `userName` and `displayName` for a user
+ * who has not signed in yet. A call that changed nothing is left out of the
+ * audit log, and one that deactivated the user is recorded as
+ * `member.soft_deleted` whatever its method.
  */
-async function applyChanges(params: {
-  organizationId: string;
-  userId: string;
-  active: boolean | undefined;
-  userName?: string;
-}) {
-  const { organizationId, userId, active } = params;
+async function applyChanges(
+  request: FastifyRequest,
+  params: {
+    userId: string;
+    active: boolean | undefined;
+    userName?: string;
+    displayName?: string;
+  },
+) {
+  const { organizationId } = request;
+  const { userId, active } = params;
   const before = await getUserOrThrow({ organizationId, userId });
-  let userNameChanged = false;
-  if (params.userName !== undefined) {
-    const result = await scimProvisioningService.changeUserName({
-      organizationId,
-      userId,
-      userName: params.userName,
-    });
-    if (result === "exists")
-      throw new ApiError(
-        409,
-        "A user with this userName already exists",
-        "uniqueness",
-      );
-    userNameChanged = result === "changed";
+  // First, so that nothing below can keep the user active.
+  if (active === false)
+    await scimProvisioningService.softDeleteUser({ organizationId, userId });
+
+  let profileChanged = false;
+  // Without a licence only deactivation gets here (see the preHandler hook).
+  if (enterpriseTier.isCoreActive()) {
+    if (params.userName !== undefined) {
+      const result = await scimProvisioningService.changeUserName({
+        organizationId,
+        userId,
+        userName: params.userName,
+      });
+      // A deactivation is never refused: the identity provider gets the
+      // conflict when it next sends the userName alone.
+      if (result === "exists" && active !== false)
+        throw new ApiError(
+          409,
+          "A user with this userName already exists",
+          "uniqueness",
+        );
+      profileChanged = result === "changed";
+    }
+    if (params.displayName !== undefined) {
+      const result = await scimProvisioningService.changeDisplayName({
+        organizationId,
+        userId,
+        displayName: params.displayName,
+      });
+      profileChanged ||= result === "changed";
+    }
+    if (active === true)
+      await scimProvisioningService.restoreUser({ organizationId, userId });
   }
-  const user =
-    active === false
-      ? await scimProvisioningService.softDeleteUser({ organizationId, userId })
-      : active === true
-        ? await scimProvisioningService.restoreUser({ organizationId, userId })
-        : await scimProvisioningService.getUser({ organizationId, userId });
-  if (!user) throw new ApiError(404, "User not found");
-  return {
-    user,
-    changed: userNameChanged || user.active !== before.active,
-  };
+
+  const user = await getUserOrThrow({ organizationId, userId });
+  if (!profileChanged && user.active === before.active)
+    request.auditSkip = true;
+  else if (before.active && !user.active)
+    request.auditAction = "member.soft_deleted";
+  return user;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+$/;

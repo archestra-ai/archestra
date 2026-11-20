@@ -10,6 +10,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   sql,
 } from "drizzle-orm";
@@ -186,23 +187,31 @@ class UserModel {
     return row?.softDeleted ?? null;
   }
 
-  /** `soft_deleted` of each given user that has it set, by user id. */
-  static async getSoftDeletedByIds(
-    userIds: string[],
-  ): Promise<Map<string, Date>> {
-    if (userIds.length === 0) return new Map();
+  /** Which of the given users are soft-deleted. */
+  static async findSoftDeletedIds(userIds: string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
     const rows = await db
-      .select({
-        id: schema.usersTable.id,
-        softDeleted: schema.usersTable.softDeleted,
-      })
+      .select({ id: schema.usersTable.id })
       .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, userIds));
-    return new Map(
-      rows.flatMap((row) =>
-        row.softDeleted ? [[row.id, row.softDeleted] as const] : [],
-      ),
-    );
+      .where(
+        and(
+          inArray(schema.usersTable.id, userIds),
+          isNotNull(schema.usersTable.softDeleted),
+        ),
+      );
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /** The given users, by user id. */
+  static async findByIds(userIds: string[]) {
+    const rows =
+      userIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.usersTable)
+            .where(inArray(schema.usersTable.id, userIds));
+    return new Map(rows.map((row) => [row.id, row] as const));
   }
 
   /** Set when the user was soft-deleted, or `null` to make them active again. */
@@ -212,7 +221,7 @@ class UserModel {
   }) {
     await db
       .update(schema.usersTable)
-      .set({ softDeleted: params.softDeleted })
+      .set({ softDeleted: params.softDeleted, updatedAt: new Date() })
       .where(eq(schema.usersTable.id, params.userId));
   }
 

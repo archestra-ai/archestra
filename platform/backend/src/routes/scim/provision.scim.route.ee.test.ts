@@ -5,7 +5,14 @@ import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { AccountModel, MemberModel, TeamModel, UserModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AccountModel,
+  MemberModel,
+  TeamModel,
+  UserModel,
+} from "@/models";
 import SessionModel from "@/models/session";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
@@ -219,9 +226,11 @@ describe("SCIM /api/scim/v2/Users", () => {
       .from(schema.auditLogsTable)
       .where(eq(schema.auditLogsTable.resourceId, user.id))
       .orderBy(asc(schema.auditLogsTable.createdAt));
+    // A deactivation is `member.soft_deleted` whether it came as a PATCH (how
+    // Entra ID sends it) or as a DELETE.
     expect(audits.map((audit) => audit.action)).toEqual([
       "member.created",
-      "member.provisioning_updated",
+      "member.soft_deleted",
       "member.provisioning_updated",
       "member.soft_deleted",
     ]);
@@ -280,6 +289,170 @@ describe("SCIM /api/scim/v2/Users", () => {
     const clash = await replaceUserName(pending.id, "taken@example.com");
     expect(clash.statusCode).toBe(409);
     expectScimError(clash, 409, "uniqueness");
+  });
+
+  test("deactivation cancels the user's tasks in progress", async ({
+    makeAgent,
+  }) => {
+    const user = (await createUser("running@example.com")).json();
+    const agent = await makeAgent({ organizationId });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const running = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const finished = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+
+    await patchActive(user.id, "False");
+
+    expect((await A2ATaskModel.findById(running.id))?.state).toBe(
+      "TASK_STATE_CANCELED",
+    );
+    expect((await A2ATaskModel.findById(finished.id))?.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+  });
+
+  test("a user pushed as inactive is created soft-deleted", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/scim/v2/Users",
+      headers: { "content-type": "application/scim+json" },
+      payload: JSON.stringify({
+        userName: "disabled@example.com",
+        active: "False",
+      }),
+    });
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json().active).toBe(false);
+    expect(await UserModel.getSoftDeleted(response.json().id)).toBeInstanceOf(
+      Date,
+    );
+  });
+
+  test("a deactivation is applied even when the same request carries a taken userName", async () => {
+    const user = (await createUser("leaving@example.com")).json();
+    await createUser("taken@example.com");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/scim/v2/Users/${user.id}`,
+      headers: { "content-type": "application/scim+json" },
+      payload: JSON.stringify({
+        Operations: [
+          {
+            op: "Replace",
+            value: { userName: "taken@example.com", active: false },
+          },
+        ],
+      }),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      userName: "leaving@example.com",
+      active: false,
+    });
+    expect(await UserModel.getSoftDeleted(user.id)).toBeInstanceOf(Date);
+  });
+
+  test("a changed displayName renames a user who has not signed in, and nobody else", async ({
+    makeAccount,
+  }) => {
+    const pending = (await createUser("pending-name@example.com")).json();
+    const signedIn = (await createUser("signed-in-name@example.com")).json();
+    await makeAccount(signedIn.id, { providerId: "entra" });
+    const replaceDisplayName = (userId: string) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/scim/v2/Users/${userId}`,
+        headers: { "content-type": "application/scim+json" },
+        payload: JSON.stringify({
+          Operations: [
+            { op: "Replace", path: "displayName", value: "Grace Hopper" },
+          ],
+        }),
+      });
+
+    expect((await replaceDisplayName(pending.id)).json().displayName).toBe(
+      "Grace Hopper",
+    );
+    expect((await replaceDisplayName(signedIn.id)).json().displayName).toBe(
+      "Ada Lovelace",
+    );
+  });
+
+  test("without an enterprise license a user can still be deactivated, and nothing else", async () => {
+    const byPatch = (await createUser("unassigned@example.com")).json();
+    const byDelete = (await createUser("removed@example.com")).json();
+    await createUser("free-email@example.com");
+    const spy = vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(false);
+    try {
+      // The userName in the same request is not applied.
+      const deactivated = await app.inject({
+        method: "PATCH",
+        url: `/api/scim/v2/Users/${byPatch.id}`,
+        headers: { "content-type": "application/scim+json" },
+        payload: JSON.stringify({
+          Operations: [
+            {
+              op: "Replace",
+              value: { userName: "renamed@example.com", active: false },
+            },
+          ],
+        }),
+      });
+      expect(deactivated.statusCode, deactivated.body).toBe(200);
+      expect(deactivated.json()).toMatchObject({
+        userName: "unassigned@example.com",
+        active: false,
+      });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/scim/v2/Users/${byDelete.id}`,
+      });
+      expect(deleted.statusCode).toBe(204);
+      expect(await UserModel.getSoftDeleted(byDelete.id)).toBeInstanceOf(Date);
+
+      const restored = await patchActive(byPatch.id, "True");
+      expect(restored.statusCode).toBe(403);
+      expectScimError(restored, 403);
+      expect(await UserModel.getSoftDeleted(byPatch.id)).toBeInstanceOf(Date);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a path SCIM does not serve here is a SCIM 404", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/scim/v2/Groups",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expectScimError(response, 404);
+  });
+
+  test("a count above the maximum returns users instead of an error", async () => {
+    await createUser("listed@example.com");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/scim/v2/Users?count=5000",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().Resources.length).toBeGreaterThan(0);
   });
 
   test("filters other than userName eq are rejected", async () => {

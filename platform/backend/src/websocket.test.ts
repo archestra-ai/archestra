@@ -92,6 +92,7 @@ const service = websocketService as unknown as {
     request: IncomingMessage,
   ) => Promise<WebSocketClientContext | null>;
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
+  closeSoftDeletedClients: () => Promise<void>;
   clientContexts: Map<WS, WebSocketClientContext>;
   browserSubscriptions: {
     clear: () => void;
@@ -187,6 +188,47 @@ describe("websocket authentication", () => {
     await expect(
       service.authenticateConnection(request),
     ).resolves.toMatchObject({ userId: user.id });
+  });
+
+  test("an open connection of a user deactivated since is closed, by the sweep and on their next message", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const deactivated = await makeUser();
+    const active = await makeUser();
+    await makeMember(deactivated.id, org.id);
+    await makeMember(active.id, org.id);
+    const openSocket = () =>
+      ({ readyState: WS.OPEN, send: vi.fn(), close: vi.fn() }) as unknown as WS;
+    const connect = (userId: string) => {
+      const ws = openSocket();
+      service.clientContexts.set(ws, {
+        userId,
+        organizationId: org.id,
+        userIsMcpServerAdmin: false,
+      });
+      return ws;
+    };
+    const receiving = connect(deactivated.id);
+    const sending = connect(deactivated.id);
+    const other = connect(active.id);
+    await UserModel.setSoftDeleted({
+      userId: deactivated.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(deactivated.id);
+
+    await service.handleMessage(
+      { type: "unsubscribe_mcp_logs", payload: {} } as ClientWebSocketMessage,
+      sending,
+    );
+    expect(sending.close).toHaveBeenCalledWith(4401, "Unauthorized");
+
+    await service.closeSoftDeletedClients();
+    expect(receiving.close).toHaveBeenCalledWith(4401, "Unauthorized");
+    expect(other.close).not.toHaveBeenCalled();
   });
 });
 

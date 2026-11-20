@@ -30,7 +30,20 @@ export async function createPendingSignupMember(params: {
     email: params.email,
     scimProvisioned: params.scimProvisioned,
   });
-  await MemberModel.create(user.id, organizationId, role);
+  try {
+    await MemberModel.create(user.id, organizationId, role);
+  } catch (error) {
+    // A user with no member row is on no page and keeps the email taken, so
+    // the next attempt would fail as a duplicate. Remove it and report the
+    // original failure.
+    await UserModel.delete(user.id).catch((cleanupError) =>
+      logger.error(
+        { err: cleanupError, userId: user.id },
+        "[pending-signup-member] Failed to remove the user after its member could not be created",
+      ),
+    );
+    throw error;
+  }
 
   try {
     await AgentModel.ensurePersonalChatAgent({

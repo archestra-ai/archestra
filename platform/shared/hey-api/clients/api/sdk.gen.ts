@@ -15060,7 +15060,7 @@ export const scimGetServiceProviderConfig = <ThrowOnError extends boolean = fals
 export const scimListUsers = <ThrowOnError extends boolean = false>(options?: Options<ScimListUsersData, ThrowOnError>) => (options?.client ?? client).get<ScimListUsersResponses, ScimListUsersErrors, ThrowOnError>({ url: '/api/scim/v2/Users', ...options });
 
 /**
- * SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in.
+ * SCIM 2.0: create a user. The user becomes a member who has not signed up yet and can be added to teams before their first SSO sign-in. `active: false` creates the user soft-deleted.
  *
  * Authentication:
  *
@@ -15106,7 +15106,7 @@ export const scimDeleteUser = <ThrowOnError extends boolean = false>(options: Op
 export const scimGetUser = <ThrowOnError extends boolean = false>(options: Options<ScimGetUserData, ThrowOnError>) => (options.client ?? client).get<ScimGetUserResponses, ScimGetUserErrors, ThrowOnError>({ url: '/api/scim/v2/Users/{id}', ...options });
 
 /**
- * SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.
+ * SCIM 2.0: patch a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` and `displayName` change the email and name of a user who has not signed in yet.
  *
  * Authentication:
  *
@@ -15127,7 +15127,7 @@ export const scimPatchUser = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` changes the email of a user who has not signed in yet.
+ * SCIM 2.0: replace a user. `active: false` soft-deletes the user (no sign-in, data kept), `active: true` restores them, and `userName` and `displayName` change the email and name of a user who has not signed in yet.
  *
  * Authentication:
  *

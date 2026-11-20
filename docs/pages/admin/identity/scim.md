@@ -7,7 +7,7 @@ lastUpdated: 2026-11-20
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644). Entra creates a user in Archestra when you assign them to the Archestra app, and deactivates the user when you unassign them. Without provisioning, a user exists only after their first Single Sign-On sign-in. With provisioning, you can add users to teams before they sign in, for example [with Terraform](#example-one-entra-group-teams-in-terraform). This is an [Enterprise feature](/docs/get-started/pricing-model).
+Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644). Entra creates a user in Archestra when you assign them to the Archestra app, and deactivates the user when you unassign them. Without provisioning, a user exists only after their first Single Sign-On sign-in. With provisioning, you can add users to teams before they sign in, for example [with Terraform](#example-one-entra-group-teams-in-terraform). This is an [Enterprise feature](/pricing).
 
 ## User Lifecycle
 
@@ -17,7 +17,7 @@ How Archestra handles each change from Entra:
 - **First sign-in:** Single Sign-On signs the person in as the provisioned user, with any roles and teams assigned to it.
 - **Unassigned in Entra:** Archestra deactivates the user, and **Settings → Users** shows them as **Deactivated**. They can't sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and team memberships are kept. Assigning them in Entra again reactivates the user.
 
-Archestra never deletes a user through SCIM. To delete a user, use **Remove user** in **Settings → Users**. Deactivated users are excluded from the 30-user free tier count.
+Archestra never deletes a user through SCIM. To delete a user, use **Remove user** in **Settings → Users**, or **Remove pending user** if they have not signed in yet. Deactivated users are excluded from the 30-user free tier count.
 
 ## Set Up Microsoft Entra ID
 
@@ -44,7 +44,7 @@ Entra runs an initial cycle for all assigned users, then incremental cycles abou
 All users get access through one Entra group, and team membership is managed in Terraform.
 
 1. In Entra, assign one group, for example **Archestra Users**, to the Archestra app.
-2. Add a role that holds [`team:update`](/docs/reference/permissions#team:update), for example the predefined **Team Writer**, to the service account you created for Entra in [Set Up Microsoft Entra ID](#set-up-microsoft-entra-id). Configure the Terraform provider with `ARCHESTRA_BASE_URL` and the service account key in `ARCHESTRA_API_KEY`.
+2. Add a role that holds [`team:create`](/docs/reference/permissions#team:create) and [`team:update`](/docs/reference/permissions#team:update), for example the predefined **Team Writer**, to the service account you created for Entra in [Set Up Microsoft Entra ID](#set-up-microsoft-entra-id). Configure the Terraform provider with `ARCHESTRA_BASE_URL` and the service account key in `ARCHESTRA_API_KEY`.
 3. Resolve user IDs by email with the `archestra_user` data source, and set the team's `members`:
 
    ```hcl

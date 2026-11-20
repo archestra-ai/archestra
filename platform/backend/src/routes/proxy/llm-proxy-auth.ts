@@ -161,6 +161,18 @@ export async function validateVirtualApiKeyToken(
 }
 
 /**
+ * Refuse a credential whose user the identity provider deactivated (SCIM).
+ * 403, not 401: a 401 falls back to anonymous forwarding.
+ */
+export async function assertUserNotSoftDeleted(userId: string): Promise<void> {
+  if (await softDeletedUsers.isSoftDeleted(userId))
+    throw new ApiError(
+      403,
+      "Your account was deactivated in your identity provider",
+    );
+}
+
+/**
  * Validate a platform-managed virtual API key.
  * Checks: token validity, expiration, and provider mapping.
  * Returns the resolved real API key and optional base URL.
@@ -379,9 +391,13 @@ async function virtualKeyIdentity(
     ReturnType<typeof validateVirtualApiKeyToken>
   >["virtualKey"],
 ) {
+  const virtualKeyIsPersonal = await VirtualApiKeyModel.isPersonal(virtualKey);
+  // A personal key acts as its author, so it stops working with them.
+  if (virtualKeyIsPersonal && virtualKey.authorId)
+    await assertUserNotSoftDeleted(virtualKey.authorId);
   return {
     virtualKeyId: virtualKey.id,
-    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(virtualKey),
+    virtualKeyIsPersonal,
     virtualKeyAuthorId: virtualKey.authorId,
     serviceAccountId: virtualKey.createdByServiceAccountId ?? undefined,
     billingTeamId: virtualKey.billingTeamId ?? undefined,
@@ -483,6 +499,7 @@ export async function validatePassthroughVirtualKey(params: {
     throw noAccessError();
   }
   MemberModel.remember(membership);
+  await assertUserNotSoftDeleted(virtualKey.authorId);
 
   // The default organization proxy serves every current member and has no
   // scoped grant namespace. The fresh membership and organization checks above
@@ -1624,14 +1641,7 @@ async function authenticatePassthroughProxyRequest(params: {
     const identity = await authenticate();
     // A user the identity provider deactivated (SCIM) cannot use their
     // credentials. 403, not 401: a 401 falls back to anonymous forwarding.
-    if (
-      identity?.userId &&
-      (await softDeletedUsers.isSoftDeleted(identity.userId))
-    )
-      throw new ApiError(
-        403,
-        "Your account was deactivated in your identity provider",
-      );
+    if (identity?.userId) await assertUserNotSoftDeleted(identity.userId);
     if (authenticatedBearer && bearerToken) {
       stripAuthenticatedBearer(request, bearerToken);
       if (providerApiKey) {

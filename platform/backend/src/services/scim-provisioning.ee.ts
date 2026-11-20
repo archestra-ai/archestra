@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { AccountModel, MemberModel, UserModel } from "@/models";
 import SessionModel from "@/models/session";
+import { cancelUnfinishedTasksOfUser } from "@/services/agent-runtime/start-task";
 import { createPendingSignupMember } from "@/services/pending-signup-member";
 import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -19,8 +20,8 @@ import { isUniqueConstraintError } from "@/utils/db";
  *   drop their teams.
  * - SCIM never deletes a user. Deactivating or deleting soft-deletes them
  *   (`user.soft_deleted`): they cannot sign in or call the API, their sessions
- *   end, and their data, memberships and teams stay. Activating them again
- *   clears it.
+ *   end, their tasks in progress are canceled, and their data, memberships
+ *   and teams stay. Activating them again clears it.
  */
 class ScimProvisioningService {
   async listUsers(params: {
@@ -47,22 +48,16 @@ class ScimProvisioningService {
       organizationId,
       pagination: { limit: count, offset: startIndex - 1 },
     });
-    const softDeleted = await UserModel.getSoftDeletedByIds(
+    const users = await UserModel.findByIds(
       page.data.map((member) => member.userId),
     );
     return listResponse({
       totalResults: page.pagination.total,
       startIndex,
-      resources: page.data.map((member) =>
-        toScimUser({
-          id: member.userId,
-          email: member.email,
-          name: member.name,
-          createdAt: member.createdAt,
-          updatedAt: member.createdAt,
-          softDeleted: softDeleted.get(member.userId) ?? null,
-        }),
-      ),
+      resources: page.data.flatMap((member) => {
+        const user = users.get(member.userId);
+        return user ? [toScimUser(user)] : [];
+      }),
     });
   }
 
@@ -83,6 +78,8 @@ class ScimProvisioningService {
     organizationId: string;
     userName: string;
     name: string;
+    /** `false` creates the user soft-deleted, as the identity provider has them. */
+    active: boolean;
   }): Promise<{ status: "created"; user: ScimUser } | { status: "exists" }> {
     try {
       const { userId } = await createPendingSignupMember({
@@ -91,6 +88,8 @@ class ScimProvisioningService {
         name: params.name,
         scimProvisioned: true,
       });
+      if (!params.active)
+        await UserModel.setSoftDeleted({ userId, softDeleted: new Date() });
       const user = await this.getUser({
         organizationId: params.organizationId,
         userId,
@@ -104,8 +103,8 @@ class ScimProvisioningService {
   }
 
   /**
-   * Deactivate or delete: soft-delete the user and end their sessions. A user
-   * soft-deleted earlier keeps the first date.
+   * Deactivate or delete: soft-delete the user, end their sessions and cancel
+   * their tasks in progress. A user soft-deleted earlier keeps the first date.
    */
   async softDeleteUser(params: {
     organizationId: string;
@@ -121,6 +120,11 @@ class ScimProvisioningService {
       softDeletedUsers.invalidate(params.userId);
     }
     await SessionModel.deleteAllByUserId(params.userId);
+    await cancelUnfinishedTasksOfUser({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      statusReason: "The task's user was deactivated in the identity provider.",
+    });
     return this.getUser(params);
   }
 
@@ -141,12 +145,33 @@ class ScimProvisioningService {
     if (user.userName === email) return "unchanged";
     if (await AccountModel.getByUserId(params.userId)) return "unchanged";
     try {
-      await UserModel.patch(params.userId, { email });
+      await UserModel.patch(params.userId, { email, updatedAt: new Date() });
       return "changed";
     } catch (error) {
       if (isUniqueConstraintError(error)) return "exists";
       throw error;
     }
+  }
+
+  /**
+   * Apply a new `displayName` (the user's name) while the user has not signed
+   * in yet, for the same reason as `changeUserName`: after the first SSO
+   * sign-in the name comes from the identity provider's claims.
+   */
+  async changeDisplayName(params: {
+    organizationId: string;
+    userId: string;
+    displayName: string;
+  }): Promise<"changed" | "unchanged" | "not_found"> {
+    const user = await this.getUser(params);
+    if (!user) return "not_found";
+    if (user.displayName === params.displayName) return "unchanged";
+    if (await AccountModel.getByUserId(params.userId)) return "unchanged";
+    await UserModel.patch(params.userId, {
+      name: params.displayName,
+      updatedAt: new Date(),
+    });
+    return "changed";
   }
 
   /** Activate again: the user can sign in. */

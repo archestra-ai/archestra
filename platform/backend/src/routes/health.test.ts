@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -56,5 +59,28 @@ describe("GET /ready", () => {
     expect(body.openappa).toBe("not_checked");
 
     await app.close();
+  });
+
+  test("answers 503 until the quickstart cluster's kubeconfig is written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kubeconfig-"));
+    const kubernetes = config.orchestrator.kubernetes;
+    const previous = kubernetes.kubeconfig;
+    kubernetes.kubeconfig = join(dir, "kubeconfig");
+    const app = createFastifyInstance();
+    await app.register(healthRoutes);
+    try {
+      const starting = await app.inject({ method: "GET", url: "/ready" });
+      expect(starting.statusCode).toBe(503);
+      expect(starting.json()).toMatchObject({ kubernetes: "starting" });
+
+      // Once it exists, readiness moves on to the database and the rest.
+      writeFileSync(kubernetes.kubeconfig, "");
+      const next = await app.inject({ method: "GET", url: "/ready" });
+      expect(next.json().kubernetes).toBeUndefined();
+    } finally {
+      kubernetes.kubeconfig = previous;
+      rmSync(dir, { recursive: true, force: true });
+      await app.close();
+    }
   });
 });

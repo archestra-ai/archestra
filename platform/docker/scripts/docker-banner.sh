@@ -32,11 +32,12 @@ fi
 # Print once both servers answer, so the banner lands after the startup logs
 # instead of in the middle of them. Give up waiting after BANNER_WAIT_SECONDS
 # and print anyway: the banner is informational and must not depend on a
-# healthy boot.
+# healthy boot. The backend check is liveness, not /ready: in quickstart mode
+# /ready also waits for the embedded cluster, while the UI is usable earlier.
 BANNER_WAIT_SECONDS=180
 waited=0
 while [ "$waited" -lt "$BANNER_WAIT_SECONDS" ]; do
-    if wget -q --spider "${BACKEND_URL}/ready" 2>/dev/null \
+    if wget -q --spider "${BACKEND_URL}/health" 2>/dev/null \
         && wget -q --spider "http://127.0.0.1:3000/default-favicon.ico" 2>/dev/null; then
         break
     fi

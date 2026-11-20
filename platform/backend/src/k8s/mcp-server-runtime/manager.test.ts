@@ -3089,6 +3089,45 @@ describe("McpServerRuntimeManager.start — kubeconfig written after boot", () =
     });
   });
 
+  test("a namespace check waits for the cluster instead of failing", async () => {
+    let kubeconfigWritten = false;
+    vi.mocked(fs.existsSync).mockImplementation(
+      (path) => path === KUBECONFIG_PATH && kubeconfigWritten,
+    );
+    const createSelfSubjectAccessReview = vi
+      .fn()
+      .mockResolvedValue({ status: { allowed: true } });
+    vi.spyOn(k8s.KubeConfig.prototype, "makeApiClient").mockReturnValue({
+      createSelfSubjectAccessReview,
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("boot blip")),
+    } as unknown as k8s.CoreV1Api);
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    manager.start().catch(() => {});
+    const validated = manager.validateNamespace("team-a");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(createSelfSubjectAccessReview).not.toHaveBeenCalled();
+
+    kubeconfigWritten = true;
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(validated).resolves.toBeUndefined();
+    expect(createSelfSubjectAccessReview).toHaveBeenCalled();
+  });
+
+  test("a request gives up with a clear error when the cluster never starts", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    manager.start().catch(() => {});
+    const validated = manager.validateNamespace("team-a");
+    validated.catch(() => {});
+    await vi.advanceTimersByTimeAsync(2 * 60_000 + 1_000);
+
+    await expect(validated).rejects.toThrow("Kubernetes is still starting");
+  });
+
   test("stops waiting when the runtime shuts down", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const makeApiClient = vi.spyOn(k8s.KubeConfig.prototype, "makeApiClient");

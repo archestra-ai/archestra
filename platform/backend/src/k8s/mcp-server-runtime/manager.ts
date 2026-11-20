@@ -348,6 +348,12 @@ export class McpServerRuntimeManager {
   private resolveDeploymentNamesAdopted!: () => void;
   private rejectDeploymentNamesAdopted!: (error: Error) => void;
 
+  // Set when the kubeconfig did not exist yet at construction; settled once
+  // start() has loaded the clients, failed to, or given up.
+  private clientsDeferred = false;
+  private clientsSettled: Promise<void> = Promise.resolve();
+  private settleClients: () => void = () => {};
+
   // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
@@ -365,6 +371,10 @@ export class McpServerRuntimeManager {
     // Docker quickstart's embedded KinD cluster) may not exist yet. The runtime
     // stays enabled, and start() waits for the file.
     if (isKubeconfigFilePending()) {
+      this.clientsDeferred = true;
+      this.clientsSettled = new Promise((resolve) => {
+        this.settleClients = resolve;
+      });
       return;
     }
     this.loadClients();
@@ -384,6 +394,7 @@ export class McpServerRuntimeManager {
   }
 
   async validateNamespace(namespaceName: string): Promise<void> {
+    await this.waitForClients();
     if (!this.k8sAuthApi) {
       throw new Error("Kubernetes API client not initialized");
     }
@@ -401,10 +412,17 @@ export class McpServerRuntimeManager {
    */
   async start(): Promise<void> {
     if (!this.k8sApi && this.status === "not_initialized") {
-      if (isKubeconfigFilePending() && !(await this.waitForKubeconfigFile())) {
-        return;
+      try {
+        if (
+          isKubeconfigFilePending() &&
+          !(await this.waitForKubeconfigFile())
+        ) {
+          return;
+        }
+        if (!this.loadClients()) return;
+      } finally {
+        this.settleClients();
       }
-      if (!this.loadClients()) return;
     }
     if (
       !this.k8sApi ||
@@ -836,6 +854,7 @@ export class McpServerRuntimeManager {
       resolvedCredentials?: Awaited<ReturnType<typeof resolveMcpCredentials>>;
     },
   ): Promise<void> {
+    await this.waitForClients();
     if (
       mcpServer.catalogId === PLAYWRIGHT_MCP_CATALOG_ID &&
       !(await PlaywrightRuntimeModel.isEnabled())
@@ -4783,6 +4802,25 @@ export class McpServerRuntimeManager {
     }
     return this.status !== "stopped";
   }
+
+  /**
+   * While the kubeconfig is still being written (the Docker quickstart starts
+   * its cluster after the backend), waits for start() to load the clients
+   * instead of failing a request that needs them. Gives up after
+   * CLIENTS_WAIT_TIMEOUT_MS with an error that says why.
+   */
+  private async waitForClients(): Promise<void> {
+    if (!this.clientsDeferred || this.k8sApi) return;
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), CLIENTS_WAIT_TIMEOUT_MS);
+    });
+    const outcome = await Promise.race([this.clientsSettled, timedOut]);
+    clearTimeout(timer);
+    if (outcome === "timeout" && !this.k8sApi) {
+      throw new Error("Kubernetes is still starting. Try again in a minute.");
+    }
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -4896,5 +4934,7 @@ const WATCH_STREAM_RECONNECT_JITTER_MS = 5_000;
 // Long enough for the quickstart to create its KinD cluster on a slow machine.
 const KUBECONFIG_WAIT_TIMEOUT_MS = 10 * 60_000;
 const KUBECONFIG_WAIT_POLL_MS = 500;
+// How long a request that needs Kubernetes waits for a cluster still starting.
+const CLIENTS_WAIT_TIMEOUT_MS = 2 * 60_000;
 
 export default new McpServerRuntimeManager();

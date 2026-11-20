@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import type { ArchestraToolShortName } from "@archestra/shared";
 import {
   getPolicyOutputPayload,
+  isPolicyPreviewTool,
   parsePolicyChange,
 } from "./openappa-policy-change.utils";
 import { getPolicyDiffRows } from "./policy-diff-rows";
@@ -59,7 +60,7 @@ export class PolicyDiffReferenceCollector {
         }
         targets.set(part.toolCallId, name);
         if (
-          getToolShortName(name) !== "preview_guardrails_policy_change" ||
+          !isPolicyPreviewTool(getToolShortName(name)) ||
           part.state !== "output-available"
         )
           continue;
@@ -69,7 +70,7 @@ export class PolicyDiffReferenceCollector {
         const reference =
           cached && samePolicyContent(cached.payload, payload)
             ? cached.reference
-            : createReference(part.output);
+            : createReference(part.output, part.input);
         const next =
           cached?.reference === reference && cached.preceding === references
             ? cached.references
@@ -108,8 +109,11 @@ function samePolicyContent(previous: unknown, next: unknown): boolean {
   );
 }
 
-function createReference(output: unknown): PolicyDiffReference | null {
-  const change = parsePolicyChange(output);
+function createReference(
+  output: unknown,
+  input: unknown,
+): PolicyDiffReference | null {
+  const change = parsePolicyChange(output, false, input);
   if (!change || typeof change.diff !== "string") return null;
   const before = change.before.replace(/\r\n/g, "\n");
   const after = change.after.replace(/\r\n/g, "\n");

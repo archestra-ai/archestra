@@ -17,7 +17,7 @@ import {
   USER_HEADER,
 } from "@/test/authenticated-route-app";
 import { useRouteTestApp } from "@/test/route-test-app";
-import { grantEverywhere } from "@/test/wildcard-grants";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
@@ -84,7 +84,7 @@ function stePlugin(overrides: Partial<CreatePlugin> = {}): CreatePlugin {
 
 describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
-  let pluginAdmin: boolean;
+  let readerRoleId: string;
 
   beforeEach(async ({ makeCustomRole, makeMember }) => {
     // Plugin visibility reads grants, and a grant reaches only a member of
@@ -93,9 +93,8 @@ describe("plugin Skill routes", () => {
     const reader = await makeCustomRole(ctx.organizationId, {
       permission: { ...memberPermissions, plugin: ["read"] },
     });
+    readerRoleId = reader.id;
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
-    pluginAdmin = false;
-    grantEverywhere(["plugin"], () => pluginAdmin);
   });
 
   afterEach(() => {
@@ -271,7 +270,12 @@ describe("plugin Skill routes", () => {
 
     // a plugin admin sees the whole org catalog
     ctx.user = reader;
-    pluginAdmin = true;
+    await grantRoleEverywhere({
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      roleId: readerRoleId,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    });
     const adminResponse = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",
@@ -344,7 +348,12 @@ describe("plugin Skill routes", () => {
   });
 
   test("projects only portable resources from root and nested skill trees", async () => {
-    pluginAdmin = true;
+    await grantRoleEverywhere({
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      roleId: readerRoleId,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    });
     const plugin = await seedPlugin(
       stePlugin({
         files: [

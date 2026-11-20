@@ -174,7 +174,7 @@ type PluginSkillListParams = {
   lookups?: RequestLookups;
 };
 
-/** undefined = plugin admin (all plugins); otherwise the visible id set. */
+/** undefined = reads every plugin (`*`); otherwise the visible plugin id set. */
 async function resolvePluginAccess(params: {
   organizationId: string;
   userId?: string;
@@ -186,23 +186,36 @@ async function resolvePluginAccess(params: {
     });
   }
   // Grants decide plugin visibility: a read grant at `*` sees every plugin,
-  // and anyone else sees the plugins granted to them, which is none for a
-  // caller with no plugin grant at all.
-  const canReadAll = await ResourcePermissions.allows({
+  // and anyone else sees the specific plugins granted to them, sharing one
+  // memoized grant load when the caller passes RequestLookups.
+  const grants = await ResourcePermissions.resolveAll({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "plugin",
-    scope: "*",
-    action: "read",
+    resources: ["plugin"],
     lookups: params.lookups,
   });
-  return canReadAll
-    ? undefined
-    : PluginTeamModel.getUserAccessiblePluginIds({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        lookups: params.lookups,
-      });
+  if (
+    grants.some(
+      (grant) =>
+        grant.resource === "plugin" &&
+        grant.scope === "*" &&
+        grant.action === "read",
+    )
+  ) {
+    return undefined;
+  }
+  return Array.from(
+    new Set(
+      grants
+        .filter(
+          (grant) =>
+            grant.resource === "plugin" &&
+            grant.scope !== "*" &&
+            grant.action === "read",
+        )
+        .map((grant) => grant.scope),
+    ),
+  );
 }
 
 function tryParse(content: string) {

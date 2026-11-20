@@ -80,6 +80,8 @@ export type PrincipalSource = {
     userId: string;
     organizationId: string;
   }): Promise<GrantPrincipal>;
+  /** Per-request memoization shared by lookups within the same request. */
+  memo?<T>(key: string, load: () => Promise<T>): Promise<T>;
 };
 
 export default class ResourcePermissionSubjectModel {

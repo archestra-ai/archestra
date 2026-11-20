@@ -137,9 +137,18 @@ import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import {
   isOpenAppaPolicyChange,
+  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
+import { isPolicyChangeTool } from "./openappa-policy-change.utils";
 import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
+import {
+  collectPreviewedChanges,
+  PreviewedChangeReview,
+  PreviewedChangesProvider,
+  proposalApprovalText,
+  usePreviewedChange,
+} from "./previewed-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -404,6 +413,10 @@ export function ChatMessages({
     () => policyDiffCollector.collect(messages, getToolShortName),
     [messages, getToolShortName, policyDiffCollector],
   );
+  const previewedChanges = useMemo(
+    () => collectPreviewedChanges(messages, getToolShortName),
+    [messages, getToolShortName],
+  );
   const groupedAskUserToolCallIds = useMemo(
     () =>
       new Set(
@@ -634,7 +647,7 @@ export function ChatMessages({
     -1,
   );
 
-  return (
+  const conversation = (
     <McpTaskProvider
       value={{
         byToolCallId: mcpTasksByToolCallId,
@@ -1657,6 +1670,12 @@ export function ChatMessages({
       </Conversation>
     </McpTaskProvider>
   );
+
+  return (
+    <PreviewedChangesProvider value={previewedChanges}>
+      {conversation}
+    </PreviewedChangesProvider>
+  );
 }
 
 function getCompactGroupKey(messageId: string, startIndex: number): string {
@@ -1894,13 +1913,9 @@ const MessageTool = memo(
       "update_guardrails_validation",
     ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
-      (validationChange ||
-        [
-          "preview_guardrails_policy_change",
-          "update_guardrails_policy",
-        ].includes(policyToolName)) &&
+      (validationChange || isPolicyChangeTool(policyToolName)) &&
       !errorText &&
-      isOpenAppaPolicyChange(rawOutput, validationChange);
+      isOpenAppaPolicyChange(rawOutput, validationChange, part.input);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -1916,9 +1931,7 @@ const MessageTool = memo(
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
-    // The policy change card already shows the proposed policy.
-    const hasInput =
-      !policyChange && displayInput && Object.keys(displayInput).length > 0;
+    const hasInput = displayInput && Object.keys(displayInput).length > 0;
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
@@ -1945,6 +1958,17 @@ const MessageTool = memo(
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
+    // A proposal of a file this conversation previewed: the person approving
+    // it reads that preview's diff, not the raw file a second time.
+    const previewed = usePreviewedChange(part.toolCallId);
+    const previewedChange =
+      previewed &&
+      !policyChange &&
+      !errorText &&
+      !toolResultPart &&
+      !part.output
+        ? previewed
+        : null;
     const viewerUserId = session?.user?.id;
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
     const [userDenied, setUserDenied] = useState(false);
@@ -2082,7 +2106,16 @@ const MessageTool = memo(
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
-          {hasInput ? <ToolInput input={displayInput} /> : null}
+          {/* Under a policy change card the arguments go last, closed. */}
+          {hasInput && !policyChange && !previewedChange ? (
+            <ToolInput input={displayInput} />
+          ) : null}
+          {previewedChange ? (
+            <PreviewedChangeReview
+              previewed={previewedChange}
+              input={displayInput}
+            />
+          ) : null}
           {nestedToolCalls}
           {isApprovalRequested &&
             onToolApprovalResponse &&
@@ -2093,7 +2126,11 @@ const MessageTool = memo(
                   <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
                 }
                 title="Approval required"
-                description="Review this tool call before it can continue."
+                description={
+                  previewedChange
+                    ? proposalApprovalText(previewedChange)
+                    : "Review this tool call before it can continue."
+                }
                 actions={[
                   {
                     label: "Approve",
@@ -2175,6 +2212,7 @@ const MessageTool = memo(
             <OpenAppaPolicyChange
               output={rawOutput}
               validationChange={validationChange}
+              input={part.input}
             />
           )}
           {/* Show text output when NOT rendering a UI resource */}
@@ -2199,6 +2237,9 @@ const MessageTool = memo(
                 errorText={errorText}
               />
             )}
+          {hasInput && policyChange ? (
+            <OpenAppaPolicyArguments input={displayInput} />
+          ) : null}
         </ToolContent>
       </Tool>
     );

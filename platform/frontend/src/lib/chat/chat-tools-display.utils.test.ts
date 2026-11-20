@@ -195,22 +195,23 @@ describe("tool display helpers", () => {
     ).toContain('Expired or invalid authentication for "id-jag test"');
   });
 
-  it("keeps a proposed policy change as a full card", () => {
+  it.each([
+    "preview_guardrails_policy_change",
+    "preview_guardrails_validation_change",
+  ] as const)("shows %s in a circle like other calls", (shortName) => {
     expect(
       isCompactEligible({
-        toolName: "archestra__preview_guardrails_policy_change",
+        toolName: `archestra__${shortName}`,
         getToolShortName: (name) =>
-          name === "archestra__preview_guardrails_policy_change"
-            ? "preview_guardrails_policy_change"
-            : null,
+          name === `archestra__${shortName}` ? shortName : null,
         part: {
-          type: "tool-archestra__preview_guardrails_policy_change",
+          type: `tool-archestra__${shortName}`,
           state: "output-available",
           output: { structuredContent: { stage: "preview" } },
         } as never,
         toolResultPart: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("folds a saved policy change into a circle like other calls", () => {

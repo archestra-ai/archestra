@@ -110,7 +110,7 @@ export function carriedServed(params: {
       v: 1,
       kind: "composition",
       contentHash: expected.contentHash,
-      rootRevision: expected.rootRevision,
+      rootRevision: expected.rootRevision < 0 ? null : expected.rootRevision,
       composedAt: expected.compiledAt.toISOString(),
       // Rows another write changed since that composition no longer say what
       // it composed with.

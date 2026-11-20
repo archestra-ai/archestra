@@ -77,6 +77,15 @@ describe("carriedServed", () => {
     });
   });
 
+  test("a clean row marked stale carries no revision, not the stale mark", () => {
+    expect(
+      carriedServed({
+        expected: row({ served: null, rootRevision: -1 }),
+        installs: [install()],
+      }),
+    ).toMatchObject({ kind: "composition", rootRevision: null });
+  });
+
   test("rows written after that composition do not stand in for what it composed", () => {
     expect(
       carriedServed({

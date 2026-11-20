@@ -1,7 +1,11 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { authQueryKeys, useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableImpersonation } from "@/lib/config/config.query";
 import { clearPersistedQueryCache } from "@/lib/query-persistence";
@@ -82,9 +86,24 @@ export function useImpersonateUser() {
   });
 }
 
+/**
+ * How long before an impersonated session expires the app returns to the
+ * impersonator's own session. The session has a fixed length and cannot be
+ * extended; once it has expired there is no way back but signing in again,
+ * so the app leaves while "Return to admin" still works. Two minutes cover
+ * the once-a-minute timers of a background tab.
+ */
+export const IMPERSONATION_RETURN_MARGIN_MS = 2 * 60 * 1000;
+
+/**
+ * Return to the impersonator's own session. `"expiring"` is the app doing
+ * so by itself, shortly before the impersonated session runs out.
+ */
 export function useStopImpersonating() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
+    // biome-ignore lint/suspicious/noConfusingVoidType: void lets callers pass nothing
+    mutationFn: async (_reason: "expiring" | void) => {
       const result = await authClient.$fetch("/admin/stop-impersonating", {
         method: "POST",
         // An explicit JSON body. The OAuth client plugin rewrites the body
@@ -98,14 +117,23 @@ export function useStopImpersonating() {
       }
       return result.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, reason) => {
       // Same reasoning as impersonate — full reload restores every query
       // under the admin session and avoids the inverse permission mismatch.
       clearPersistedQueryCache();
-      toast.success("Returned to admin session");
+      // The reload takes a toast with it, and nobody asked for this return:
+      // the reason is kept for the page that loads next.
+      if (reason === "expiring") impersonationEndedNotice.remember();
+      else toast.success("Returned to admin session");
       window.location.assign("/");
     },
-    onError: (error) => {
+    onError: (error, reason) => {
+      // Too late: the session ran out first. The session check finds that
+      // and leads to the sign-in page.
+      if (reason === "expiring") {
+        void queryClient.refetchQueries({ queryKey: authQueryKeys.session() });
+        return;
+      }
       toast.error(
         error instanceof Error
           ? error.message
@@ -114,3 +142,26 @@ export function useStopImpersonating() {
     },
   });
 }
+
+/** Why the admin is suddenly back in their own session, across the reload. */
+export const impersonationEndedNotice = {
+  remember() {
+    try {
+      window.sessionStorage.setItem(ENDED_NOTICE_KEY, "1");
+    } catch {
+      // Storage is unavailable: the return still happens, without the note.
+    }
+  },
+  /** Whether a return by expiry happened just before this page; asked once. */
+  take(): boolean {
+    try {
+      const noted = window.sessionStorage.getItem(ENDED_NOTICE_KEY) !== null;
+      if (noted) window.sessionStorage.removeItem(ENDED_NOTICE_KEY);
+      return noted;
+    } catch {
+      return false;
+    }
+  },
+};
+
+const ENDED_NOTICE_KEY = "archestra:impersonation-ended";

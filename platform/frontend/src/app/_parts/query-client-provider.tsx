@@ -2,6 +2,8 @@
 
 import {
   hashKey,
+  MutationCache,
+  QueryCache,
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
@@ -22,6 +24,7 @@ import {
   syncPersistedQueryCacheScope,
 } from "@/lib/query-persistence";
 import { markShellSeeded } from "@/lib/shell-deferral";
+import { getApiRefusal } from "@/lib/utils/api";
 
 export const ArchestraQueryClientProvider = ({
   children,
@@ -36,7 +39,13 @@ export const ArchestraQueryClientProvider = ({
   shellSeed?: ShellSeed | null;
 }) => {
   const [queryClient] = useState(() => {
-    const client = new QueryClient({
+    const client: QueryClient = new QueryClient({
+      queryCache: new QueryCache({
+        onError: (error) => recheckSessionWhenRefused(client, error),
+      }),
+      mutationCache: new MutationCache({
+        onError: (error) => recheckSessionWhenRefused(client, error),
+      }),
       defaultOptions: {
         queries: {
           // With SSR, we want to set some default staleTime
@@ -77,6 +86,22 @@ export const ArchestraQueryClientProvider = ({
     </QueryClientProvider>
   );
 };
+
+/**
+ * A request refused as signed out, on a page that believes it is signed in,
+ * means the session ended since it was last checked: it expired, or was
+ * revoked. The session is asked again at once, so the shell follows (to the
+ * sign-in page) instead of staying up with every action failing. A burst of
+ * refusals shares one check.
+ */
+function recheckSessionWhenRefused(client: QueryClient, error: unknown) {
+  if (getApiRefusal(error) !== "signed-out") return;
+  if (!client.getQueryData(authQueryKeys.session())) return;
+  void client.refetchQueries(
+    { queryKey: authQueryKeys.session(), exact: true },
+    { cancelRefetch: false },
+  );
+}
 
 /**
  * Binds the refresh snapshot to whoever is signed in. A snapshot belonging to

@@ -170,7 +170,7 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="skill:read"></span>`skill:read` | Open Skills |
 | <span id="skill:create"></span>`skill:create` | Create new agent skills |
 | <span id="skill:delete"></span>`skill:delete` | Permanently delete skills from the trash |
-| <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |
+| <span id="plugin:read"></span>`plugin:read` | Open Plugins; viewing an individual plugin requires a grant on that plugin |
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
 | <span id="plugin:update"></span>`plugin:update` | No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin |
 | <span id="plugin:delete"></span>`plugin:delete` | No standalone effect; deleting a plugin requires a Full access grant on that plugin |

@@ -43,7 +43,6 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -164,12 +163,10 @@ function PluginDetailView({
   const updatesAction = pluginAction(actionModel, "updates");
   const deleteAction = pluginAction(actionModel, "delete");
   const updateReason = isReadOnly
-    ? formatPermissionConstraint(updatesAction.permissions)
+    ? "Requires Can edit or Full access on this plugin"
     : undefined;
   const deleteReason =
-    canDelete === false
-      ? formatPermissionConstraint(deleteAction.permissions)
-      : undefined;
+    canDelete === false ? "Requires Full access on this plugin" : undefined;
   const updateReasonId = useId();
   const deleteReasonId = useId();
 

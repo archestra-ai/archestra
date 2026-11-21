@@ -2444,6 +2444,48 @@ describe("ChatOpsManager security validation", () => {
     expect(getUserEmailSpy).not.toHaveBeenCalled();
   });
 
+  test("refuses a sender the identity provider deactivated", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+
+    const user = await makeUser({ email: "deactivated@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+
+    const mockProvider = createMockProvider();
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({ senderEmail: "deactivated@example.com" }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("deactivated in your identity provider");
+  });
+
   test("rejects when both senderEmail and getUserEmail return null", async ({
     makeUser,
     makeOrganization,

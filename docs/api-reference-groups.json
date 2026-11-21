@@ -6,7 +6,7 @@
   "llm-proxy": ["LLM Proxy", "LLM Models", "LLM Provider API Keys", "Virtual API Keys", "Model Pools", "Limits", "Guardrails", "GitHub Copilot Auth", "Microsoft 365 Copilot Auth", "OpenAI Codex Auth", "xAI Subscription Auth"],
   "llm-proxy/logs": ["LLM Proxy Logs"],
   "llm-proxy/auto-routing": ["Auto Routing"],
-  "organization": ["Organization", "Teams", "Members", "Member", "User", "Roles", "Permissions", "Service Accounts", "API Keys", "Auth", "OAuth", "OAuth Clients", "Identity Providers", "Agent Identity", "User Tokens", "Config", "Site Notification", "Invitation", "Secrets", "Blob Providers", "Ownership"],
+  "organization": ["Organization", "Teams", "Members", "Member", "User", "Roles", "Permissions", "Service Accounts", "API Keys", "Auth", "OAuth", "OAuth Clients", "Identity Providers", "SCIM", "Agent Identity", "User Tokens", "Config", "Site Notification", "Invitation", "Secrets", "Blob Providers", "Ownership"],
   "apps": ["Apps", "Connectors", "Connection Setups", "Credentials", "Git Credentials", "GitHub App Configs", "GitHub PATs"],
   "projects-chat": ["Projects", "Chat", "ChatOps", "ChatOps Webhooks", "Incoming Email", "Sessions", "Webhooks"],
   "knowledge": ["Knowledge Bases", "Knowledge Files"],

@@ -11,6 +11,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import UserModel from "@/models/user";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
@@ -136,6 +137,41 @@ test("unconsumed, revoked, unsupported-client and removed-member installations c
   await ConnectionSetupModel.claimByToken({ rawToken: active.rawToken });
   await MemberModel.deleteAllByUserId(ctx.user.id);
   expect((await fetchRuntime(tokenFor(active.setup.id))).statusCode).toBe(403);
+});
+
+test("an installation of a user the identity provider deactivated cannot get executable artifacts", async ({
+  makeMember,
+  makeAgent,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId);
+  const gateway = await makeAgent({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    agentType: "mcp_gateway",
+  });
+  const { setup, rawToken } = await ConnectionSetupModel.create({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    clientId: "kilo",
+    platform: "linux",
+    baseUrl: "https://deployment.example.com/v1",
+    mcpGatewayId: gateway.id,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  await ConnectionSetupModel.claimByToken({ rawToken });
+  const token = tokenFor(setup.id);
+  expect((await fetchRuntime(token)).statusCode).toBe(200);
+
+  await UserModel.setSoftDeleted({
+    userId: ctx.user.id,
+    softDeleted: new Date(),
+  });
+
+  const refused = await fetchRuntime(token);
+  expect(refused.statusCode).toBe(403);
+  expect(refused.json().error.message).toBe(
+    "Installed connection is no longer available",
+  );
 });
 
 test("live resource-use grants, not cached membership or read-only grants, control update delivery", async ({

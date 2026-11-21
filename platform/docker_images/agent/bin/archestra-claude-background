@@ -62,6 +62,16 @@ def main():
                 response = payload.get("tool_response", {})
                 tool = payload.get("tool_name")
                 if isinstance(response, dict):
+                    # A child may consume a finished shell's output before its
+                    # task notification reaches the transcript. The Read hook
+                    # is direct evidence that this result reached the child.
+                    if tool == "Read" and isinstance(response.get("file"), dict):
+                        file = response["file"]
+                        path, content = file.get("filePath"), file.get("content")
+                        if isinstance(path, str) and isinstance(content, str) and "[exited with code " in content:
+                            for key, job in jobs.items():
+                                if job["owner"] == payload.get("agent_id") and path.endswith(f"/tasks/{key}.output"):
+                                    job["pending"] = False
                     task_id = response.get("backgroundTaskId") if tool == "Bash" else None
                     if tool == "Agent" and response.get("isAsync"):
                         task_id = response.get("agentId")

@@ -1,5 +1,5 @@
 {
-  "id": "ea4c58a4-ae4f-4aff-ae3c-7901b2929f9f",
+  "id": "47568425-0702-4235-ba5c-2e1d93b64787",
   "prevId": "eaa75d1e-3222-4156-af7b-ca850fd625a8",
   "version": "7",
   "dialect": "postgresql",
@@ -18486,12 +18486,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
-        },
-        "run": {
-          "name": "run",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -18768,12 +18762,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
-        },
-        "run": {
-          "name": "run",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -18788,22 +18776,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "llm_usage_hourly_run_unknown_idx": {
-          "name": "llm_usage_hourly_run_unknown_idx",
-          "columns": [
-            {
-              "expression": "hour",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"llm_usage_hourly\".\"run\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -34015,6 +33987,18 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
+        },
+        "soft_deleted": {
+          "name": "soft_deleted",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scim_provisioned": {
+          "name": "scim_provisioned",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

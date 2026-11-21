@@ -529,6 +529,15 @@ export async function processIncomingEmail(
   const securityMode = agent.incomingEmailSecurityMode;
   const senderEmail = email.fromAddress.toLowerCase();
   const senderUser = await UserModel.findByEmail(senderEmail);
+  if (senderUser?.softDeleted) {
+    logger.warn(
+      { messageId: email.messageId, agentId },
+      "[IncomingEmail] Sender was deactivated in the identity provider",
+    );
+    throw new Error(
+      "The sender's account was deactivated in the identity provider",
+    );
+  }
 
   logger.debug(
     {

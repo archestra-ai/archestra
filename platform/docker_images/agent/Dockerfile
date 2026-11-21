@@ -38,32 +38,44 @@ RUN curl -fsSL --retry 3 \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:9354eb131b6856f43fc9c7eba8cb54f5d0200fe7fbf5495bf6065be8a4a43e3b AS agent-base
 ARG TARGETARCH
+# DHI's apt mirror can serve a stale archive after its signed index changes.
+# Request fresh packages while retaining apt's index and archive verification.
+RUN printf '%s\n' 'Acquire::http::No-Cache "true";' > /etc/apt/apt.conf.d/99dhi-no-cache \
+ && mkdir -p /usr/local/bin && ln -s /usr/bin/node /usr/local/bin/node
 
 # Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
 # CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
+# Keep already-installed hardened packages; libssl-dev still pulls in its
+# matching fixed OpenSSL libraries, and the version checks below enforce them.
 RUN apt-get update -qq \
- && apt-get install -y --no-install-recommends \
-      apt libapt-pkg6.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
-      libsasl2-2 libsasl2-modules-db libssl-dev libssl3 \
-      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
- && for package in apt libapt-pkg6.0; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.6.2' || exit 1; \
+ && apt-get install -y --no-upgrade --no-install-recommends \
+      apt libapt-pkg7.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
+      libsasl2-2 libsasl2-modules-db libssl-dev libssl3t64 \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux ncurses-term gzip hostname bsdutils \
+ && for package in apt libapt-pkg7.0; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.4' || exit 1; \
     done \
- && for package in openssl libssl3 libssl-dev; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+ && for package in openssl libssl3t64 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.5.9-1~deb13u1' || exit 1; \
     done \
  && for package in libsasl2-2 libsasl2-modules-db; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg-10+deb12u1' || exit 1; \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg1-9' || exit 1; \
     done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
-# own postgresql-common enables the PGDG repository: bookworm's pgvector
+# own postgresql-common enables the PGDG repository: Debian's pgvector
 # predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
 # and the shared socket directory lets local clients connect without flags.
-RUN apt-get update -qq \
+# The DHI mirror has served postgresql-common archives that do not match its
+# signed index. Resolve these helpers from signed Debian and PGDG repositories.
+RUN printf '%s\n' \
+      'Package: postgresql-common postgresql-client-common postgresql-common-dev' \
+      'Pin: origin "dhi.io"' \
+      'Pin-Priority: -1' > /etc/apt/preferences.d/postgresql-common \
+ && apt-get update -qq \
  && apt-get install -y --no-install-recommends postgresql-common \
  && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
  && sed -i 's/^#*\s*create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \
@@ -86,24 +98,25 @@ COPY --from=gh-build /out/gh /usr/bin/gh
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpicker
 
-# Bookworm seeds new venvs from an old setuptools wheel. Keep the bootstrap
-# wheel and system pip on fixed, checksum-verified versions.
-RUN curl -fsSL \
+# Keep the venv bootstrap wheel and system pip on fixed, checksum-verified
+# versions. Debian 13 no longer seeds setuptools into newly created venvs.
+RUN find /usr/share/python-wheels -maxdepth 1 -name 'setuptools-*.whl' -delete \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl" \
       -o /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl \
  && echo "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670  /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl" | sha256sum -c - \
- && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
- && curl -fsSL \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
       -o /tmp/pip-25.3-py3-none-any.whl \
  && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \
- && mkdir -p /usr/local/lib/python3.11/dist-packages \
- && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.11/dist-packages \
+ && mkdir -p /usr/local/lib/python3.13/dist-packages \
+ && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.13/dist-packages \
  && rm /tmp/pip-25.3-py3-none-any.whl \
  && printf '%s\n' '#!/bin/sh' 'exec python3 -m pip "$@"' > /usr/local/bin/pip \
  && chmod 0755 /usr/local/bin/pip \
  && ln -s pip /usr/local/bin/pip3 \
  && python3 -m venv /tmp/agent-python-check \
+ && /tmp/agent-python-check/bin/python -m pip install --no-index --find-links=/usr/share/python-wheels setuptools==84.0.0 \
  && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '84.0.0'" \
  && rm -rf /tmp/agent-python-check
 
@@ -152,6 +165,8 @@ RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
  && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
+ && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && curl -fsSL https://registry.npmjs.org/corepack/-/corepack-0.36.0.tgz -o /tmp/corepack.tgz \
  && echo '9128cfe26aee0c99f4fc68c15c6b8b12309a68be0de2c012cdfea2a463cb722f  /tmp/corepack.tgz' | sha256sum -c - \
  && mkdir -p /usr/local/lib/node_modules/corepack \
@@ -186,8 +201,10 @@ RUN { printf '%s\n' \
     } > /tmp/bash.bashrc \
  && mv /tmp/bash.bashrc /etc/bash.bashrc
 
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV HOME=/home/node
-RUN mkdir -p /home/node/workspace /var/run/archestra \
+RUN usermod -s /bin/bash node \
+ && mkdir -p /home/node/workspace /var/run/archestra \
  && chown -R 1000:1000 /home/node /var/run/archestra
 USER 1000:1000
 WORKDIR /home/node/workspace

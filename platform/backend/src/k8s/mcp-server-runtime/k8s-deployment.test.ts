@@ -2847,6 +2847,66 @@ spec:
     expect(spec.metadata?.labels).not.toHaveProperty(
       "app.kubernetes.io/component",
     );
+    // The generated pod runs under the runtime's default syscall filter.
+    expect(podSpec?.securityContext).toEqual({
+      seccompProfile: { type: "RuntimeDefault" },
+    });
+  });
+
+  test("gives a custom YAML pod the runtime's default seccomp profile and keeps its other pod settings", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      securityContext:
+        fsGroup: 2000
+      containers:
+        - name: mcp-server
+          image: test:latest
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    expect(spec.spec?.template.spec?.securityContext).toEqual({
+      fsGroup: 2000,
+      seccompProfile: { type: "RuntimeDefault" },
+    });
+  });
+
+  test("keeps the seccomp profile a custom YAML pod chooses", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      securityContext:
+        seccompProfile:
+          type: Localhost
+          localhostProfile: profiles/mcp.json
+      containers:
+        - name: mcp-server
+          image: test:latest
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    expect(spec.spec?.template.spec?.securityContext?.seccompProfile).toEqual({
+      type: "Localhost",
+      localhostProfile: "profiles/mcp.json",
+    });
   });
 
   // SPDX-SnippetBegin

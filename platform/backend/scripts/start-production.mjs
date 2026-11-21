@@ -83,7 +83,8 @@ export function serverArguments(env) {
     sourceMaps = setting === "true";
   } else if (setting !== undefined) {
     messages.push(
-      `WARNING: invalid ARCHESTRA_NODE_SOURCE_MAPS value '${setting}', using ${sourceMapsDefault}`,
+      // The value itself is not echoed: environment values stay out of logs.
+      `WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using ${sourceMapsDefault}`,
     );
   }
   if (sourceMaps) args.unshift("--enable-source-maps");

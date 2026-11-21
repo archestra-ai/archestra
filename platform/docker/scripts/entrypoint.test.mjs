@@ -48,7 +48,7 @@ test("puts both servers on one valid keep-alive window", () => {
   for (const bad of ["0", "-5", "1.5", "620s", "abc"]) {
     const result = run(bad);
     assert.equal(result.env.ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS, "620000", bad);
-    assert.match(result.messages.join("\n"), /WARNING: invalid/, bad);
+    assert.match(result.messages.join("\n"), /WARNING: ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS must be/, bad);
   }
 });
 

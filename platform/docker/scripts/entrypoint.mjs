@@ -78,7 +78,8 @@ export function prepare(input, { dataDir = "/app/data" } = {}) {
     env.ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS = String(KEEP_ALIVE_DEFAULT_MS);
   } else if (!/^\d+$/.test(keepAlive) || !(Number(keepAlive) > 0) || !Number.isSafeInteger(Number(keepAlive))) {
     messages.push(
-      `WARNING: invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value '${keepAlive}', using default ${KEEP_ALIVE_DEFAULT_MS}ms`,
+      // The value itself is not echoed: environment values stay out of logs.
+      `WARNING: ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS must be a positive integer of milliseconds, using default ${KEEP_ALIVE_DEFAULT_MS}ms`,
     );
     env.ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS = String(KEEP_ALIVE_DEFAULT_MS);
   }

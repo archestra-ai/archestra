@@ -152,7 +152,7 @@ describe("serverArguments", () => {
     });
     expect(args).toContain("--enable-source-maps");
     expect(messages).toEqual([
-      "WARNING: invalid ARCHESTRA_NODE_SOURCE_MAPS value 'yes', using true",
+      "WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using true",
     ]);
   });
 

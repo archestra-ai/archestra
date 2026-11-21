@@ -173,6 +173,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ./platform/docker_images/agent/Dockerfile
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+          token: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
+
       - name: Build agent catalog image
         uses: $/.github/actions/build-docker-image
         with:

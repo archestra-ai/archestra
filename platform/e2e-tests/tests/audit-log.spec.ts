@@ -7,215 +7,220 @@ const test = mergeTests(uiTest, apiTest);
 
 const AUDIT_LOGS_PATH = "/audit/logs";
 
-test.describe("Audit log UI", {
-  tag: ["@firefox", "@webkit"],
-}, () => {
-  test("admin sees the Audit tab on the Logs page", async ({
-    adminPage,
-    goToAdminPage,
-  }) => {
-    await goToAdminPage("/llm/logs");
-    await adminPage.waitForLoadState("domcontentloaded");
+// TODO: rewrite against the unified Logs page (`/logs?type=audit`) and the
+// audit event page (`/audit/logs/[id]`) once the backend serves the unified
+// feed (`GET /api/logs/events`). These drove the removed Audit list and its
+// drawer.
+test.describe
+  .fixme("Audit log UI", {
+    tag: ["@firefox", "@webkit"],
+  }, () => {
+    test("admin sees the Audit tab on the Logs page", async ({
+      adminPage,
+      goToAdminPage,
+    }) => {
+      await goToAdminPage("/llm/logs");
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    // Audit is rendered with auditLog:read permission, which admin has.
-    await expect(
-      adminPage.getByRole("link", { name: "Audit", exact: true }),
-    ).toBeVisible({ timeout: 15_000 });
-
-    await adminPage.getByRole("link", { name: "Audit", exact: true }).click();
-
-    await adminPage.waitForURL(`**${AUDIT_LOGS_PATH}**`, { timeout: 15_000 });
-    expect(adminPage.url()).toContain(AUDIT_LOGS_PATH);
-  });
-
-  test("admin lands on /audit/logs and the table renders", async ({
-    adminPage,
-    goToAdminPage,
-  }) => {
-    await goToAdminPage(AUDIT_LOGS_PATH);
-    await adminPage.waitForLoadState("domcontentloaded");
-
-    // The filter pickers are part of the audit log table contract.
-    for (const filter of ["Event", "Actor", "Resource"]) {
+      // Audit is rendered with auditLog:read permission, which admin has.
       await expect(
-        adminPage.getByRole("button", { name: `${filter} filter:` }),
+        adminPage.getByRole("link", { name: "Audit", exact: true }),
       ).toBeVisible({ timeout: 15_000 });
-    }
 
-    // Column headers are stable and part of the visual contract.
-    for (const column of ["Event", "Actor", "Status", "Time"]) {
-      await expect(
-        adminPage.getByRole("columnheader", { name: column }),
-      ).toBeVisible();
-    }
-  });
+      await adminPage.getByRole("link", { name: "Audit", exact: true }).click();
 
-  test("audit table shows resource type and name — never the resource id — in the Resource column", async ({
-    adminPage,
-    goToAdminPage,
-    makeRandomString,
-    createTeam,
-    deleteTeam,
-  }) => {
-    const teamName = makeRandomString(10, "audit-resource-name");
-    const createResponse = await createTeam(adminPage.request, teamName);
-    const team = (await createResponse.json()) as { id: string };
+      await adminPage.waitForURL(`**${AUDIT_LOGS_PATH}**`, { timeout: 15_000 });
+      expect(adminPage.url()).toContain(AUDIT_LOGS_PATH);
+    });
 
-    try {
-      // The audit hook records after the response is sent. Wait for this
-      // exact resource so parallel specs cannot affect the UI assertion.
-      await expect
-        .poll(
-          async () => {
-            const response = await adminPage.request.get(
-              `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
-            );
-            if (!response.ok()) return undefined;
-            const body = (await response.json()) as {
-              data: Array<{
-                resourceId: string | null;
-                resourceName: string | null;
-              }>;
-            };
-            return body.data.find((event) => event.resourceId === team.id)
-              ?.resourceName;
-          },
-          { timeout: 15_000 },
-        )
-        .toBe(teamName);
+    test("admin lands on /audit/logs and the table renders", async ({
+      adminPage,
+      goToAdminPage,
+    }) => {
+      await goToAdminPage(AUDIT_LOGS_PATH);
+      await adminPage.waitForLoadState("domcontentloaded");
 
-      await goToAdminPage(
-        `${AUDIT_LOGS_PATH}?resourceId=${encodeURIComponent(team.id)}`,
-      );
+      // The filter pickers are part of the audit log table contract.
+      for (const filter of ["Event", "Actor", "Resource"]) {
+        await expect(
+          adminPage.getByRole("button", { name: `${filter} filter:` }),
+        ).toBeVisible({ timeout: 15_000 });
+      }
 
-      const resourceCell = adminPage.locator(
-        'tbody tr td[data-column-id="resource"]',
-      );
-      await expect(resourceCell).toHaveCount(1, { timeout: 15_000 });
-      await expect(resourceCell).toContainText(teamName);
-      await expect(resourceCell).toContainText("Team");
-      await expect(resourceCell).not.toContainText(team.id);
-    } finally {
-      await deleteTeam(adminPage.request, team.id);
-    }
-  });
+      // Column headers are stable and part of the visual contract.
+      for (const column of ["Event", "Actor", "Status", "Time"]) {
+        await expect(
+          adminPage.getByRole("columnheader", { name: column }),
+        ).toBeVisible();
+      }
+    });
 
-  test("clicking a row opens the event drawer", async ({
-    adminPage,
-    goToAdminPage,
-  }) => {
-    await goToAdminPage(AUDIT_LOGS_PATH);
-    await adminPage.waitForLoadState("domcontentloaded");
+    test("audit table shows resource type and name — never the resource id — in the Resource column", async ({
+      adminPage,
+      goToAdminPage,
+      makeRandomString,
+      createTeam,
+      deleteTeam,
+    }) => {
+      const teamName = makeRandomString(10, "audit-resource-name");
+      const createResponse = await createTeam(adminPage.request, teamName);
+      const team = (await createResponse.json()) as { id: string };
 
-    // Only real data rows have cells with data-column-id; the empty-state row
-    // is a single colSpan <tr> without that attribute, so this selector skips it.
-    const firstRow = adminPage
-      .locator("tbody tr:has(td[data-column-id])")
-      .first();
-    const hasRow = await firstRow
-      .waitFor({ state: "visible", timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false);
+      try {
+        // The audit hook records after the response is sent. Wait for this
+        // exact resource so parallel specs cannot affect the UI assertion.
+        await expect
+          .poll(
+            async () => {
+              const response = await adminPage.request.get(
+                `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
+              );
+              if (!response.ok()) return undefined;
+              const body = (await response.json()) as {
+                data: Array<{
+                  resourceId: string | null;
+                  resourceName: string | null;
+                }>;
+              };
+              return body.data.find((event) => event.resourceId === team.id)
+                ?.resourceName;
+            },
+            { timeout: 15_000 },
+          )
+          .toBe(teamName);
 
-    // Test is meaningful only when the org already has at least one event.
-    // The shared admin fixture has produced many sign-ins, so this should
-    // virtually always be true; skip cleanly if it isn't.
-    test.skip(!hasRow, "no audit rows in the test environment");
+        await goToAdminPage(
+          `${AUDIT_LOGS_PATH}?resourceId=${encodeURIComponent(team.id)}`,
+        );
 
-    await firstRow.click();
-    const drawer = adminPage.getByRole("dialog");
-    await expect(drawer).toBeVisible({ timeout: 10_000 });
-    // Drawer contract: the Overview names the actor and the time.
-    await drawer.getByRole("tab", { name: "Overview" }).click();
-    await expect(drawer).toContainText(/When/i);
-    await expect(drawer).toContainText(/Actor/i);
-  });
+        const resourceCell = adminPage.locator(
+          'tbody tr td[data-column-id="resource"]',
+        );
+        await expect(resourceCell).toHaveCount(1, { timeout: 15_000 });
+        await expect(resourceCell).toContainText(teamName);
+        await expect(resourceCell).toContainText("Team");
+        await expect(resourceCell).not.toContainText(team.id);
+      } finally {
+        await deleteTeam(adminPage.request, team.id);
+      }
+    });
 
-  test("deep link with ?event=<id> opens the event drawer", async ({
-    adminPage,
-    goToAdminPage,
-    makeRandomString,
-    createTeam,
-    deleteTeam,
-  }) => {
-    // Team creation is audited (team.created), so it gives the test a
-    // deterministic event tied to a unique resource id.
-    const createResponse = await createTeam(
-      adminPage.request,
-      makeRandomString(10, "audit-deep-link"),
-    );
-    const team = (await createResponse.json()) as { id: string };
+    test("clicking a row opens the event drawer", async ({
+      adminPage,
+      goToAdminPage,
+    }) => {
+      await goToAdminPage(AUDIT_LOGS_PATH);
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    try {
-      // The audit hook records the event after the response is sent, so poll
-      // until the team.created event is queryable.
-      let eventId: string | undefined;
-      await expect
-        .poll(
-          async () => {
-            const response = await adminPage.request.get(
-              `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
-            );
-            if (!response.ok()) return undefined;
-            const body = (await response.json()) as {
-              data: Array<{ id: string; resourceId: string | null }>;
-            };
-            eventId = body.data.find(
-              (event) => event.resourceId === team.id,
-            )?.id;
-            return eventId;
-          },
-          { timeout: 15_000 },
-        )
-        .toBeDefined();
+      // Only real data rows have cells with data-column-id; the empty-state row
+      // is a single colSpan <tr> without that attribute, so this selector skips it.
+      const firstRow = adminPage
+        .locator("tbody tr:has(td[data-column-id])")
+        .first();
+      const hasRow = await firstRow
+        .waitFor({ state: "visible", timeout: 15_000 })
+        .then(() => true)
+        .catch(() => false);
 
-      await goToAdminPage(`${AUDIT_LOGS_PATH}?event=${eventId}`);
+      // Test is meaningful only when the org already has at least one event.
+      // The shared admin fixture has produced many sign-ins, so this should
+      // virtually always be true; skip cleanly if it isn't.
+      test.skip(!hasRow, "no audit rows in the test environment");
 
+      await firstRow.click();
       const drawer = adminPage.getByRole("dialog");
-      await expect(drawer).toBeVisible({ timeout: 15_000 });
-      await expect(
-        drawer.getByRole("heading", { name: "Team created" }),
-      ).toBeVisible();
-      // The drawer shows the deep-linked event: the created team's id
-      // appears as the resource id on the Overview.
+      await expect(drawer).toBeVisible({ timeout: 10_000 });
+      // Drawer contract: the Overview names the actor and the time.
       await drawer.getByRole("tab", { name: "Overview" }).click();
-      await expect(drawer).toContainText(team.id);
-    } finally {
-      await deleteTeam(adminPage.request, team.id);
-    }
+      await expect(drawer).toContainText(/When/i);
+      await expect(drawer).toContainText(/Actor/i);
+    });
+
+    test("deep link with ?event=<id> opens the event drawer", async ({
+      adminPage,
+      goToAdminPage,
+      makeRandomString,
+      createTeam,
+      deleteTeam,
+    }) => {
+      // Team creation is audited (team.created), so it gives the test a
+      // deterministic event tied to a unique resource id.
+      const createResponse = await createTeam(
+        adminPage.request,
+        makeRandomString(10, "audit-deep-link"),
+      );
+      const team = (await createResponse.json()) as { id: string };
+
+      try {
+        // The audit hook records the event after the response is sent, so poll
+        // until the team.created event is queryable.
+        let eventId: string | undefined;
+        await expect
+          .poll(
+            async () => {
+              const response = await adminPage.request.get(
+                `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
+              );
+              if (!response.ok()) return undefined;
+              const body = (await response.json()) as {
+                data: Array<{ id: string; resourceId: string | null }>;
+              };
+              eventId = body.data.find(
+                (event) => event.resourceId === team.id,
+              )?.id;
+              return eventId;
+            },
+            { timeout: 15_000 },
+          )
+          .toBeDefined();
+
+        await goToAdminPage(`${AUDIT_LOGS_PATH}?event=${eventId}`);
+
+        const drawer = adminPage.getByRole("dialog");
+        await expect(drawer).toBeVisible({ timeout: 15_000 });
+        await expect(
+          drawer.getByRole("heading", { name: "Team created" }),
+        ).toBeVisible();
+        // The drawer shows the deep-linked event: the created team's id
+        // appears as the resource id on the Overview.
+        await drawer.getByRole("tab", { name: "Overview" }).click();
+        await expect(drawer).toContainText(team.id);
+      } finally {
+        await deleteTeam(adminPage.request, team.id);
+      }
+    });
+
+    test("member does not see the Audit tab and is blocked from direct nav", async ({
+      memberPage,
+      goToMemberPage,
+    }) => {
+      await goToMemberPage("/llm/logs");
+      await memberPage.waitForLoadState("domcontentloaded");
+
+      // Member lacks auditLog:read so the tab is hidden entirely.
+      await expect(
+        memberPage.getByRole("link", { name: "Audit", exact: true }),
+      ).toHaveCount(0);
+
+      // Direct navigation should be blocked by the page-permission guard;
+      // the member stays at the URL but sees the 403 forbidden page.
+      await goToMemberPage(AUDIT_LOGS_PATH);
+      await memberPage.waitForLoadState("domcontentloaded");
+      await expect(
+        memberPage.getByText("You don't have permission to access this page."),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test("editor does not see the Audit tab", async ({
+      editorPage,
+      goToEditorPage,
+    }) => {
+      await goToEditorPage("/llm/logs");
+      await editorPage.waitForLoadState("domcontentloaded");
+
+      // Editor also lacks auditLog:read — the Audit tab must be hidden.
+      await expect(
+        editorPage.getByRole("link", { name: "Audit", exact: true }),
+      ).toHaveCount(0);
+    });
   });
-
-  test("member does not see the Audit tab and is blocked from direct nav", async ({
-    memberPage,
-    goToMemberPage,
-  }) => {
-    await goToMemberPage("/llm/logs");
-    await memberPage.waitForLoadState("domcontentloaded");
-
-    // Member lacks auditLog:read so the tab is hidden entirely.
-    await expect(
-      memberPage.getByRole("link", { name: "Audit", exact: true }),
-    ).toHaveCount(0);
-
-    // Direct navigation should be blocked by the page-permission guard;
-    // the member stays at the URL but sees the 403 forbidden page.
-    await goToMemberPage(AUDIT_LOGS_PATH);
-    await memberPage.waitForLoadState("domcontentloaded");
-    await expect(
-      memberPage.getByText("You don't have permission to access this page."),
-    ).toBeVisible({ timeout: 10_000 });
-  });
-
-  test("editor does not see the Audit tab", async ({
-    editorPage,
-    goToEditorPage,
-  }) => {
-    await goToEditorPage("/llm/logs");
-    await editorPage.waitForLoadState("domcontentloaded");
-
-    // Editor also lacks auditLog:read — the Audit tab must be hidden.
-    await expect(
-      editorPage.getByRole("link", { name: "Audit", exact: true }),
-    ).toHaveCount(0);
-  });
-});

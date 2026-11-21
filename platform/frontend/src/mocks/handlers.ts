@@ -88,6 +88,8 @@ import {
   toolCallUsageFor,
   userStatisticsFor,
 } from "./data/statistics";
+import { unifiedLogsDetailHandlers } from "./log-event-details";
+import { unifiedLogsHandlers } from "./log-events";
 import { registryHandlers } from "./registry";
 import { scheduledRunsHandlers } from "./scheduled-runs";
 
@@ -179,6 +181,10 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...unifiedLogsHandlers,
+  // Detail pages for the events the unified Logs feed lists. Each answers
+  // only for the feed's own ids and sessions and falls through otherwise.
+  ...unifiedLogsDetailHandlers,
   ...(process.env.NEXT_PUBLIC_SCHEDULE_REVIEW === "enabled"
     ? scheduledRunsHandlers
     : []),

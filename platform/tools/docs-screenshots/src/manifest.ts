@@ -704,7 +704,7 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_yells",
-    route: () => "/consults/logs?type=yell",
+    route: () => "/logs?type=guardrails&record=yell",
     prepare: async (page) => {
       await page
         .getByText("Blocked from opening an issue in acme/sdk")

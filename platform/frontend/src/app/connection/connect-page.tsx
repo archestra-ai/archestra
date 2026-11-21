@@ -154,11 +154,10 @@ export function ConnectPage() {
   // the switches below.
   const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
   const connected = useConnectedAgents();
-  // The statistics cover every member: with clientConnection:read alone the
-  // page it opens lists only the viewer's own events.
-  const { data: canSeeStatistics } = useHasPermissions({
-    clientConnection: ["admin"],
-  });
+  // Same access as the Adoption page it links to.
+  const { data: canSeeStatistics } = useHasPermissions(
+    requiredPagePermissionsMap["/adoption"] ?? {},
+  );
   // Links (connect.md, docs) can open the page on an app. Picks are written
   // back.
   const searchParams = useSearchParams();
@@ -243,7 +242,7 @@ export function ConnectPage() {
                 size="sm"
                 className="shadow-xs dark:bg-background"
               >
-                <Link href="/connections/logs">
+                <Link href="/adoption">
                   <ChartColumn />
                   Statistics
                 </Link>

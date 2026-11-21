@@ -2308,13 +2308,15 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
 
   // Logs
-  "/llm/logs": { log: ["read"] },
-  "/mcp/logs": { log: ["read"] },
-  "/audit/logs": { auditLog: ["read"] },
-  "/consults/logs": { guardrailsLog: ["read"] },
+  // One timeline for every log type: each type's own `read` opens it
+  // (`alternativePagePermissionsMap`), and the page shows what the caller
+  // may read.
+  "/logs": { log: ["read"] },
   "/consults/logs/[id]": { guardrailsLog: ["read"] },
   "/consults/logs/yells/[id]": { guardrailsLog: ["read"] },
-  "/connections/logs": { clientConnection: ["read"] },
+  "/audit/logs/[id]": { auditLog: ["read"] },
+  "/adoption": { clientConnection: ["admin"] },
+  "/connections/logs/[id]": { clientConnection: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
@@ -2361,11 +2363,17 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 };
 
 /**
- * Pages that also open with a second set of permissions, for a page that
- * shows two kinds of record each gated on its own: holding either set opens
- * it, and the page shows what the caller may read.
+ * Pages that also open with other sets of permissions, for a page that shows
+ * several kinds of record each gated on its own: holding any one set opens it,
+ * and the page shows what the caller may read.
  */
-export const alternativePagePermissionsMap: Record<string, Permissions> = {};
+export const alternativePagePermissionsMap: Record<string, Permissions[]> = {
+  "/logs": [
+    { guardrailsLog: ["read"] },
+    { clientConnection: ["read"] },
+    { auditLog: ["read"] },
+  ],
+};
 
 // === Internal helpers
 

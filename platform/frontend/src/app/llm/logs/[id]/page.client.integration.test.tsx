@@ -96,9 +96,9 @@ it("replaces authorization-filtered session details with access guidance and a w
   );
   expect(screen.getByText(/ask an administrator/)).toBeVisible();
   for (const link of screen.getAllByRole("link", {
-    name: "Back to Sessions",
+    name: "Back to Logs",
   })) {
-    expect(link).toHaveAttribute("href", "/llm/logs");
+    expect(link).toHaveAttribute("href", "/logs");
   }
   expect(screen.queryByText("Requests")).not.toBeInTheDocument();
   expect(screen.queryByRole("table")).not.toBeInTheDocument();

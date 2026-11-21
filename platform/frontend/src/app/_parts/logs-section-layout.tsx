@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import {
+  type ComponentProps,
   createContext,
   type ReactNode,
   useContext,
@@ -14,34 +15,30 @@ import {
   useCompactFilters,
 } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
-import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
 
 /**
- * The shared "Logs" header — title, description and the LLM Proxy / MCP
- * Gateway / Audit tabs — for one of the three log list pages.
+ * The header — title, description and a top-right action slot for the time
+ * range — of a list page whose segment also holds detail routes.
  *
- * A detail route under the same segment is handed through untouched. The
- * detail pages state the record they are about in their own `PageLayout`
- * header: the session's own name, the tool that was called. Under this layout
- * they inherited the section header instead, so the page said "Logs" while
- * "Back to Sessions" and the record's own title were stranded in the body,
- * below the tab bar, as the first two rows of content. That is also why the
- * detail pages get no tab bar: the tabs answer "which log am I reading?",
- * which the reader of one record has already answered.
+ * A detail route under the same segment is handed through untouched: detail
+ * pages state the record they are about in their own `PageLayout` header.
  */
 export function LogsSectionLayout({
   listPath,
+  title,
   description,
+  tabs,
   children,
 }: {
-  /** The list route this segment's header belongs to, e.g. `/llm/logs`. */
+  /** The list route this segment's header belongs to. */
   listPath: string;
-  /** Replaces the shared Logs description while this tab is shown. */
-  description?: string;
+  title: string;
+  description: string;
+  /** Header tabs for views of the list route. */
+  tabs?: ComponentProps<typeof PageLayout>["tabs"];
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const config = useLogsLayoutConfig();
   const [actionButton, setActionButton] = useState<ReactNode>(null);
   const contextValue = useMemo(() => ({ setActionButton }), []);
   const compact = useCompactFilters();
@@ -55,9 +52,10 @@ export function LogsSectionLayout({
       <CompactFilterExtrasProvider extras={compact ? actionButton : null}>
         {({ claimed }) => (
           <PageLayout
-            {...config}
-            description={description ?? config.description}
+            title={title}
+            description={description}
             actionButton={claimed ? null : actionButton}
+            tabs={tabs}
           >
             {children}
           </PageLayout>

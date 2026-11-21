@@ -119,52 +119,56 @@ async function runSlackChatOpsCompletion(params: {
   return { sessionId, prompt };
 }
 
-test.describe("LLM Logs - Slack (ChatOps) source", {
-  tag: ["@firefox", "@webkit"],
-}, () => {
-  test("lists a Slack ChatOps run and keeps it under the Slack source filter", async ({
-    request,
-    adminPage,
-    goToAdminPage,
-    getLlmProxy,
-    makeApiRequest,
-  }) => {
-    // The organization's singleton LLM Proxy (created on first use); its id
-    // in the proxy URL collapses to the singleton.
-    const proxyResponse = await getLlmProxy(request);
-    const proxy = await proxyResponse.json();
-    const proxyId = proxy.id;
+// TODO: rewrite against the unified Logs page (`/logs?type=llm`) once the
+// backend serves the unified feed (`GET /api/logs/events`). This drove the
+// removed LLM Proxy list and its Source filter.
+test.describe
+  .fixme("LLM Logs - Slack (ChatOps) source", {
+    tag: ["@firefox", "@webkit"],
+  }, () => {
+    test("lists a Slack ChatOps run and keeps it under the Slack source filter", async ({
+      request,
+      adminPage,
+      goToAdminPage,
+      getLlmProxy,
+      makeApiRequest,
+    }) => {
+      // The organization's singleton LLM Proxy (created on first use); its id
+      // in the proxy URL collapses to the singleton.
+      const proxyResponse = await getLlmProxy(request);
+      const proxy = await proxyResponse.json();
+      const proxyId = proxy.id;
 
-    const passthroughKey = (await (
-      await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/llm-virtual-keys",
-        data: {
-          name: `slack-source-${crypto.randomUUID().slice(0, 8)}`,
-          keyType: "passthrough",
-        },
-      })
-    ).json()) as { id: string; value: string };
+      const passthroughKey = (await (
+        await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: "/api/llm-virtual-keys",
+          data: {
+            name: `slack-source-${crypto.randomUUID().slice(0, 8)}`,
+            keyType: "passthrough",
+          },
+        })
+      ).json()) as { id: string; value: string };
 
-    try {
-      await runSlackLogsChecks({
-        request,
-        adminPage,
-        goToAdminPage,
-        proxyId,
-        passthroughKey: passthroughKey.value,
-      });
-    } finally {
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/llm-virtual-keys/${passthroughKey.id}`,
-        ignoreStatusCheck: true,
-      }).catch(() => {});
-    }
+      try {
+        await runSlackLogsChecks({
+          request,
+          adminPage,
+          goToAdminPage,
+          proxyId,
+          passthroughKey: passthroughKey.value,
+        });
+      } finally {
+        await makeApiRequest({
+          request,
+          method: "delete",
+          urlSuffix: `/api/llm-virtual-keys/${passthroughKey.id}`,
+          ignoreStatusCheck: true,
+        }).catch(() => {});
+      }
+    });
   });
-});
 
 async function runSlackLogsChecks({
   request,

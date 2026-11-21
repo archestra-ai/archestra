@@ -193,7 +193,7 @@ ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDE
 }
 
 /**
- * Thirty fixed calendar days of model requests give Costs & Limits and My Usage
+ * Thirty fixed calendar days of model requests give Costs and My Usage
  * numbers to show. Each stream belongs to one person and one agent or coding client.
  * The rows are tagged with a session prefix, and a rerun replaces them.
  */

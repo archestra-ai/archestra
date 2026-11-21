@@ -11,8 +11,9 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 
+// Costs is its own page under Insights; Limits and Exports share the Cost
+// Controls tab bar.
 const TABS = [
-  { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
   { label: "Exports", href: "/llm/cost-exports" },
 ];
@@ -139,8 +140,8 @@ export default function CostsLayout({
     pageMap?.["/llm/costs"] === false &&
     limitsAccess.isTeamAdmin;
   const config = PAGE_CONFIG[pathname] ?? {
-    title: "Costs & Limits",
-    description: "Monitor and manage AI model usage costs.",
+    title: "Cost Controls",
+    description: "Set spend and rate limits, and export cost data.",
   };
   const description = teamScopedCosts ? (
     <TeamCostsDescription canReadModels={pageMap?.["/llm/models"] === true} />
@@ -172,7 +173,7 @@ export default function CostsLayout({
             description
           )
         }
-        tabs={tabs.length > 1 ? tabs : []}
+        tabs={pathname !== "/llm/costs" && tabs.length > 1 ? tabs : []}
         actionButton={actionButton}
       >
         {children}

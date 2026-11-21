@@ -515,7 +515,7 @@ export const CHANNEL_BINDINGS = {
   ],
 } as const;
 
-/** Monthly budgets on Costs & Limits → Limits, by the kind of record they apply to. */
+/** Monthly budgets on Cost Controls → Limits, by the kind of record they apply to. */
 export const LIMITS = [
   { entity: "organization", name: "id", dollars: 2500 },
   { entity: "teams", name: "Platform Engineering", dollars: 800 },

@@ -39,7 +39,7 @@ Tool calls include authentication, access checks and call logging.
 | --- | ---: | ---: | ---: | ---: |
 | Archestra | 478.6 | 101.52 ms | 116.01 ms | 139.37 ms |
 
-16 vCPU / ~63 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
+Archestra 1.5.0-rc.42 on 16 vCPU / ~63 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
 <!-- mcp-gateway-benchmark-results:end -->
 
 Added latency uses the gateway’s internal timer minus the mock MCP server’s duration. It differs from the LLM comparison’s client timer.

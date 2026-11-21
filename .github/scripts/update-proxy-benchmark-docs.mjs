@@ -22,6 +22,8 @@ const blocks = {
 };
 const workloads = ["chat", "tools", "stream", "mcp"];
 const sha = /^[a-f0-9]{40}$/;
+const releaseTitle =
+  /^chore\([^)]+\): release platform (\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$/;
 
 /** Required docs validation holds release PRs out of the queue until codegen lands. */
 export async function verifyBenchmarkDocs({ github, context }) {
@@ -106,7 +108,11 @@ export async function verifyBenchmarkDocs({ github, context }) {
     throw new Error("Benchmark docs are not a bounded Markdown file");
   const markdown = Buffer.from(file.content, "base64").toString("utf8");
   try {
-    if (updateBenchmarkTable(markdown, summary) !== markdown)
+    if (
+      updateBenchmarkTable(markdown, summary, {
+        version: releaseVersion(source),
+      }) !== markdown
+    )
       return pending("Waiting for the generated benchmark tables");
   } catch {
     return pending("Benchmark record or generated tables are invalid");
@@ -114,7 +120,12 @@ export async function verifyBenchmarkDocs({ github, context }) {
   return { ready: true, reason: `Tables match benchmark ${payload.gitCommit}` };
 }
 
-export function updateBenchmarkTable(markdown, summary) {
+/** The platform version a release-please PR title announces, if it names one. */
+export function releaseVersion(pr) {
+  return releaseTitle.exec(pr?.title ?? "")?.[1];
+}
+
+export function updateBenchmarkTable(markdown, summary, { version } = {}) {
   renderSummary(summary);
   if (
     !summary.complete ||
@@ -169,7 +180,7 @@ export function updateBenchmarkTable(markdown, summary) {
       "| --- | ---: | ---: | ---: | ---: |",
       `| Archestra | ${row.requestsPerSecond.toFixed(1)} | ${["p50", "p95", "p99"].map((key) => `${row.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
       "",
-      `${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM; one worker, ${row.concurrency} concurrent calls, ${row.attempted} measured calls and zero errors.`,
+      `${version ? `Archestra ${version} on ` : ""}${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM; one worker, ${row.concurrency} concurrent calls, ${row.attempted} measured calls and zero errors.`,
     ].join("\n") : [
       `| Runner resources | ${requests} | Median added latency | P95 added latency | P99 added latency |`,
       "| --- | ---: | ---: | ---: | ---: |",
@@ -224,7 +235,9 @@ export async function commitBenchmarkDocs({
   if (file.type !== "file" || file.encoding !== "base64" || file.size > 256000)
     throw new Error("Benchmark docs are not a bounded Markdown file");
   const markdown = Buffer.from(file.content, "base64").toString("utf8");
-  const updated = updateBenchmarkTable(markdown, summary);
+  const updated = updateBenchmarkTable(markdown, summary, {
+    version: releaseVersion(source),
+  });
   if (updated === markdown) return "unchanged";
 
   const { data: parent } = await github.rest.repos.getCommit({

@@ -8,15 +8,13 @@ FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f
 
 FROM ghcr.io/astral-sh/uv:0.9.30@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 AS uv-bin
 
-# TODO: return to Alpine's `nodejs` apk once v3.23 aarch64 ships nodejs>=24.22.1-r0
-# (CVE-2026-111497); it lagged at 24.18.1-r0 while x86_64 already had the fix.
-# Same Node base as platform/Dockerfile; it bundles its own Brotli.
-FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS node-runtime
+# The hardened Node runtime bundles its own Brotli.
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS node-runtime
 
 # Multi-stage build for minimal final image
 # Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
 # are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
-FROM python:3.12.16-alpine3.23@sha256:9a7b46da82fe49a9118e0aa7e35ac3b831aa53ad4f4ebf3e16654732bc958a62 AS python-builder
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43 AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -118,7 +116,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM python:3.12.16-alpine3.23@sha256:9a7b46da82fe49a9118e0aa7e35ac3b831aa53ad4f4ebf3e16654732bc958a62
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
@@ -202,7 +200,7 @@ RUN apk add --no-cache \
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go
 
-COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/bin/node /usr/local/bin/node
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm
@@ -210,15 +208,9 @@ COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_mod
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# Remove pip and setuptools from the system interpreter instead of chasing
-# their CVEs: the base image ships setuptools 70.3.0 (CVE-2025-47273) and a
-# pip whose _vendor tree carries setuptools 70.3.0 and msgpack 1.1.2
-# (GHSA-6v7p-g79w-8964) — versions pip upstream still vendors, so no
-# upgrade fixes them. Nothing in this image installs with pip: uv is the
-# installer, and the skill sandbox already shims pip off (see
-# sandbox-core's dagger backend). The shim left behind gives a clear error
-# instead of "command not found".
-RUN python -m pip uninstall -y setuptools pip && \
+# Nothing in this image installs with pip: uv is the installer. Remove the
+# system pip and setuptools packages and leave a shim with a clear error.
+RUN apk del py3.12-setuptools py3.12-pip && \
     printf '%s\n' '#!/bin/sh' 'echo "error: pip is not available in this image. Use uv instead." >&2' 'exit 1' > /usr/local/bin/pip && \
     chmod +x /usr/local/bin/pip && \
     ln -sf pip /usr/local/bin/pip3 && \

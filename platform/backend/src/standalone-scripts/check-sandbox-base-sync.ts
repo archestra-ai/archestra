@@ -6,7 +6,7 @@
  * image / provenance marker diverge, prebuilt mode fails silently in production
  * while non-prebuilt still works. The provenance marker only proves which image
  * is running; this guards that the two build paths agree on the apt set, python
- * dep *names*, venv path, base image, and marker. Resolved versions aren't
+ * dep *names*, venv path, compatible base families, and marker. Resolved versions aren't
  * compared — the baked image pins requirements.lock while the runtime fallback
  * floats `uv add`.
  */
@@ -67,12 +67,20 @@ function tomlDependencies(): string[] {
   return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
 }
 
-// 1. base image (the Dockerfile may pin a @sha256 digest on top of the tag)
+// 1. The fallback warm base uses uv's image, and the baked DHI base copies
+// uv from that same release. Keep their Python and Debian families aligned.
 const baseImage = strConst("DEFAULT_BASE_IMAGE");
-if (baseImage && !dockerfile.includes(`FROM ${baseImage}`)) {
+if (baseImage && !dockerfile.includes(`FROM ${baseImage}@sha256:`)) {
   errors.push(
-    `Dockerfile FROM is not the DEFAULT_BASE_IMAGE tag "${baseImage}"`,
+    `Dockerfile uv source is not the DEFAULT_BASE_IMAGE tag "${baseImage}"`,
   );
+}
+if (
+  !/^FROM dhi\.io\/python:3\.14\.\d+-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
+    dockerfile,
+  )
+) {
+  errors.push("baked sandbox base must pin DHI Python 3.14 Debian 13 dev");
 }
 
 // 2. apt toolbelt: compare the package lists in both directions.

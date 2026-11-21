@@ -41,6 +41,7 @@ workflows:
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/build-p4-shim-docker-image.yml':
         - 'actions/checkout@v7.0.1'
+        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
     '.github/workflows/build-platform-release-image.yml': []
     '.github/workflows/build-sandbox-base-docker-image.yml':

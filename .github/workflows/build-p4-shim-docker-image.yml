@@ -90,6 +90,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/docker-login
+        with:
+          registry: dhi.io
+          username: archestra
+          password: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
+
       - name: Build p4 shim image
         uses: $/.github/actions/build-docker-image
         with:

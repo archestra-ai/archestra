@@ -83,7 +83,9 @@ class ReleasePolicyTests(unittest.TestCase):
             if call:
                 wrapper = (ROOT / ".github/workflows" / call[1]).read_text()
                 published.update(re.findall(r"^\s+image_name: ([a-z0-9-]+)\s*$", job + wrapper, re.M))
-        self.assertEqual(set(by_image), published | {"platform-slim"})
+                # A matrix of images ({ name: platform, target: "" }).
+                published.update(re.findall(r"^\s+- \{ name: ([a-z0-9-]+),", job, re.M))
+        self.assertEqual(set(by_image), published)
         for name in (image for image in published if image.startswith("agent-")):
             self.assertEqual(by_image[name]["target"], name)
             self.assertEqual(by_image[name]["context"], "./platform")

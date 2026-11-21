@@ -90,6 +90,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/docker-login
+        with:
+          registry: dhi.io
+          username: archestra
+          password: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
+
       - name: Build p4 shim image
         uses: $/.github/actions/build-docker-image
         with:
@@ -99,7 +106,5 @@ jobs:
           push: "false"
           load: "true"
           tags: p4-shim:${{ github.sha }}
-          # Pull requests do not receive the dhi.io OIDC credential.
-          build-args: RUNTIME_BASE=public
           # Read-only: the publish paths own cache export for this image.
           cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/p4-shim:buildcache-amd64

@@ -67,7 +67,7 @@ const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             type: "oauthbearertoken",
             name: "OAuth Bearer Token",
-            description: "An Archestra service-account token",
+            description: "A service account token",
           },
         ],
       }),

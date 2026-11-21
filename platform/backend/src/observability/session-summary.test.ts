@@ -8,6 +8,7 @@ import InteractionModel from "@/models/interaction";
 import { expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { drainBackgroundWork } from "@/utils/background-work";
+import { SessionSummaryExport } from "./session-summary";
 import { sessionTraceId } from "./tracing/session";
 
 test("persisted session snapshots match UI totals across billing modes without exporting content or key values", async ({
@@ -156,4 +157,23 @@ test("concurrent writes each export their own summary from shared aggregations",
     await provider.shutdown();
     logs.disable();
   }
+});
+
+test("a busy session rests between aggregations and still exports its latest totals", async () => {
+  const calls: number[] = [];
+  const exporter = new SessionSummaryExport(async () => {
+    calls.push(performance.now());
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return [];
+  });
+  const key = { sessionId: "busy-session", interactionId: null };
+  exporter.enqueue(key);
+  for (let write = 0; write < 5; write++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    exporter.enqueue(key);
+  }
+  await drainBackgroundWork();
+  // One aggregation for the first write, one trailing aggregation for the rest.
+  expect(calls).toHaveLength(2);
+  expect(calls[1] - calls[0]).toBeGreaterThanOrEqual(25 * 5 - 5);
 });

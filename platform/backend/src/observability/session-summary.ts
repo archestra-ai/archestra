@@ -1,4 +1,6 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { LRUCacheManager } from "@/cache-manager";
 import type { SessionSummary } from "@/types/interaction";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { sessionTraceId } from "./tracing/session";
@@ -20,9 +22,19 @@ type SummaryRow = SessionSummary & { totalDurationMs?: number | null };
  * export runs: one aggregation then covers all of them, instead of one query
  * per request. A quiet session still exports at once. Summaries are cumulative,
  * so a session written twice in one batch exports its latest totals once.
+ *
+ * Aggregating a session reads all of its requests, so a long, busy session
+ * (every request carrying the same OpenAI `user`, say) would otherwise be
+ * re-aggregated back to back. After each export a session rests for a
+ * multiple of what its aggregation took; its latest totals export after that.
  */
 export class SessionSummaryExport {
   private readonly queued = new Map<string, SessionKey>();
+  /** When each recently exported session may export again. */
+  private readonly resting = new LRUCacheManager<number>({
+    maxSize: 10_000,
+    defaultTtl: 60_000,
+  });
   private running = false;
 
   constructor(
@@ -40,14 +52,32 @@ export class SessionSummaryExport {
     try {
       while (this.queued.size > 0) {
         // The session page bounds the aggregation; keep each batch that size.
-        const page = [...this.queued.entries()].slice(0, MAX_BATCH);
+        const page: [string, SessionKey][] = [];
+        let wakeAt = Number.POSITIVE_INFINITY;
+        for (const entry of this.queued) {
+          const readyAt = this.resting.get(entry[0]);
+          if (readyAt === undefined) page.push(entry);
+          else wakeAt = Math.min(wakeAt, readyAt);
+          if (page.length === MAX_BATCH) break;
+        }
+        if (page.length === 0) {
+          await sleep(Math.max(1, wakeAt - Date.now()));
+          continue;
+        }
         for (const [id] of page) this.queued.delete(id);
+        const started = performance.now();
         try {
           const rows = await this.summarize(page.map(([, key]) => key));
           for (const row of rows) exportSessionSummary(row);
         } catch {
           /* Best effort; export cannot fail a persisted request. */
         }
+        const rest = Math.round(
+          (performance.now() - started) * REST_PER_AGGREGATION,
+        );
+        if (rest > 0)
+          for (const [id] of page)
+            this.resting.set(id, Date.now() + rest, rest);
       }
     } finally {
       this.running = false;
@@ -106,3 +136,5 @@ function exportSessionSummary(
 }
 
 const MAX_BATCH = 100;
+/** A busy session's aggregation then uses at most a fifth of the time. */
+const REST_PER_AGGREGATION = 4;

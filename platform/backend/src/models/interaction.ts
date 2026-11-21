@@ -3851,7 +3851,6 @@ class InteractionModel {
                   }
                   if (routingUsage)
                     await RoutingUsageModel.record(tx, routingUsage);
-                  const created = await write(tx);
                   if (claimed && data.billingMode !== "subscription") {
                     await LimitModel.settleBillableUsage({
                       tx,
@@ -3859,7 +3858,10 @@ class InteractionModel {
                       attribution: billingAttribution,
                     });
                   }
-                  return created;
+                  // Last before commit: the append locks rows every request
+                  // of its session and user shares (the session head and the
+                  // user's activity counters) until the transaction ends.
+                  return write(tx);
                 }),
               ),
           })

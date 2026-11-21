@@ -1390,7 +1390,7 @@ const CLIENTS: Record<
   },
   Codex: { id: CODEX_CLIENT_ID, source: "api", sessionSource: "codex_session" },
   Cursor: { id: CURSOR_CLIENT_ID, source: "api", sessionSource: null },
-  "Chat": { id: null, source: "chat", sessionSource: null },
+  Chat: { id: null, source: "chat", sessionSource: null },
   Slack: { id: null, source: "chatops:slack", sessionSource: null },
   "Open WebUI": { id: "open-webui", source: "api", sessionSource: null },
   n8n: { id: "n8n", source: "api", sessionSource: null },

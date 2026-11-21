@@ -1,0 +1,64 @@
+{
+  "waivers": [
+    {
+      "images": [
+        "docker.io/archestra/platform"
+      ],
+      "check": "CIS-DI-0001",
+      "reason": "The full image is the single-container quickstart: it starts the bundled PostgreSQL as the postgres user and uses the host's Docker socket, so it starts as root. docker run --user 10001 runs it without root against an external database, and the Helm chart runs it as UID 10001."
+    },
+    {
+      "images": [
+        "ghcr.io/archestra-ai/agent-*",
+        "ghcr.io/archestra-ai/p4-shim",
+        "ghcr.io/archestra-ai/sandbox-base"
+      ],
+      "check": "DKL-DI-0003",
+      "reason": "No layer runs dist-upgrade. Dockle 0.4.15 reports any apt-get command that also names the apt package; these layers install apt and libapt-pkg as fixed-version floors.",
+      "alerts": [
+        "*apt libapt-pkg*"
+      ]
+    },
+    {
+      "images": [
+        "ghcr.io/archestra-ai/mcp-server-base",
+        "ghcr.io/archestra-ai/agent-hermes"
+      ],
+      "check": "CIS-DI-0010",
+      "reason": "settings.py of the MCP Python SDK is source code (the auth server's settings model), not a credential; Dockle matches the file name only. The release secret scan reads file contents.",
+      "alerts": [
+        "Suspicious filename found : */site-packages/mcp/server/auth/settings.py *"
+      ]
+    },
+    {
+      "images": [
+        "ghcr.io/archestra-ai/agent-openclaw"
+      ],
+      "check": "CIS-DI-0010",
+      "reason": "The bottleneck npm package ships a 37-byte .env test configuration that sets only REDIS_HOST and REDIS_PORT; it holds no credential. The release secret scan reads file contents.",
+      "alerts": [
+        "Suspicious filename found : opt/agent-openclaw/node_modules/.pnpm/bottleneck@2.19.5/node_modules/bottleneck/.env *"
+      ]
+    },
+    {
+      "images": [
+        "ghcr.io/archestra-ai/mcp-server-base"
+      ],
+      "check": "DKL-DI-0004",
+      "reason": "The apk add without --no-cache is the python base image's own layer (apk add --no-network for the runtime dependencies), which leaves /var/cache/apk empty.",
+      "alerts": [
+        "*apk add --no-network --virtual .python-rundeps*"
+      ]
+    },
+    {
+      "images": [
+        "ghcr.io/archestra-ai/sandbox-base"
+      ],
+      "check": "DKL-DI-0005",
+      "reason": "The flagged layer is the Debian 13 base image's own, which clears /var/lib/apt/lists with apt-get dist-clean; Dockle 0.4.15 only recognises rm -rf.",
+      "alerts": [
+        "*apt-get dist-clean # buildkit"
+      ]
+    }
+  ]
+}

@@ -295,6 +295,7 @@ tests:
 
   - it: keeps the vault volume alongside archestra.extraVolumes
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.initContainers.vaultSecrets.enabled: true
       archestra.initContainers.vaultSecrets.secrets:
         - envVar: ARCHESTRA_DATABASE_URL
@@ -324,6 +325,7 @@ tests:
 
   - it: skips PVC-backed archestra.extraVolumes and their mounts
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.extraVolumes:
         - name: app-data
           persistentVolumeClaim:
@@ -353,6 +355,7 @@ tests:
 
   - it: renders no volumes when the only extra volume is PVC-backed
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.extraVolumes:
         - name: app-data
           persistentVolumeClaim:

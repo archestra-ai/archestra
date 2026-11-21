@@ -1225,6 +1225,9 @@ pgvector extension setup, and PostgreSQL readiness.
   volumeMounts:
     - name: vault-secrets
       mountPath: /vault/secrets
+    {{- with include "archestra-platform.writableDirMounts" . | trim }}
+    {{- . | nindent 4 }}
+    {{- end }}
 {{- end }}
 {{- if .Values.postgresql.enabled }}
 # Ensure the pgvector extension exists in the application database.
@@ -1390,13 +1393,109 @@ source: no bundled or external database and no named entry supplies it.
 securityContext for the chart's own containers, from archestra.containerSecurityContext.
 */}}
 {{- define "archestra-platform.containerSecurityContext" -}}
+{{- with include "archestra-platform.containerSecurityContextValues" . | fromJson -}}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+The container securityContext as JSON: archestra.containerSecurityContext
+plus the runAsNonRoot and readOnlyRootFilesystem defaults, which its own
+values win over.
+*/}}
+{{- define "archestra-platform.containerSecurityContextValues" -}}
 {{- $context := deepCopy (.Values.archestra.containerSecurityContext | default dict) }}
 {{- if .Values.archestra.runAsNonRoot }}
 {{- $context = merge $context (dict "capabilities" (dict "drop" (list "ALL"))) }}
+{{- /* hasKey, not merge: merge would replace an operator's false. */}}
+{{- if and .Values.archestra.readOnlyRootFilesystem (not (hasKey $context "readOnlyRootFilesystem")) }}
+{{- $_ := set $context "readOnlyRootFilesystem" true }}
 {{- end }}
-{{- with $context -}}
-securityContext:
-  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- toJson $context }}
+{{- end }}
+
+{{/*
+The emptyDir volumes a read-only root filesystem needs, as a JSON list of
+{name, mountPath}: one for each path the platform image writes. Empty when
+the root filesystem stays writable. A path that another mount of the
+container already covers keeps that mount instead. The migration Job passes
+its own mount paths as jobMountPaths; the web and worker pods use their
+shared mounts.
+*/}}
+{{- define "archestra-platform.writableDirs" -}}
+{{- $dirs := list }}
+{{- if (include "archestra-platform.containerSecurityContextValues" . | fromJson).readOnlyRootFilesystem }}
+{{- $taken := list }}
+{{- if hasKey . "jobMountPaths" }}
+{{- $taken = .jobMountPaths }}
+{{- else }}
+{{- $taken = include "archestra-platform.sharedMountPaths" . | fromJsonArray }}
+{{- end }}
+{{- $normalized := list }}
+{{- range $taken }}
+{{- $normalized = append $normalized (clean (toString .)) }}
+{{- end }}
+{{- range $dir := list
+  (dict "name" "writable-tmp" "mountPath" "/tmp")
+  (dict "name" "writable-run" "mountPath" "/run/archestra")
+  (dict "name" "writable-supervisor-log" "mountPath" "/var/log/supervisor")
+  (dict "name" "writable-data" "mountPath" "/app/data")
+  (dict "name" "writable-home" "mountPath" "/home/archestra")
+  (dict "name" "writable-next-cache" "mountPath" "/app/frontend/.next/cache") }}
+{{- if not (has $dir.mountPath $normalized) }}
+{{- $dirs = append $dirs $dir }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $dirs }}
+{{- end }}
+
+{{/*
+Mount paths of the shared web and worker container mounts, as a JSON list.
+*/}}
+{{- define "archestra-platform.sharedMountPaths" -}}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- $paths := list }}
+{{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+{{- $paths = append $paths .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
+{{- end }}
+{{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+{{- $paths = append $paths "/vault/secrets" }}
+{{- end }}
+{{- if .Values.archestra.diagnostics.enabled }}
+{{- $paths = append $paths "/var/diagnostics" }}
+{{- end }}
+{{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+{{- $paths = append $paths .Values.archestra.fileStorage.filesystem.mountPath }}
+{{- end }}
+{{- if $iamAuth.injectWebIdentityTokenVolume }}
+{{- $paths = append $paths "/var/run/secrets/aws-iam-token/serviceaccount" }}
+{{- end }}
+{{- range .Values.archestra.extraVolumeMounts }}
+{{- $paths = append $paths .mountPath }}
+{{- end }}
+{{- toJson $paths }}
+{{- end }}
+
+{{/*
+volumeMounts entries for the writable emptyDirs of archestra-platform.writableDirs.
+*/}}
+{{- define "archestra-platform.writableDirMounts" -}}
+{{- range include "archestra-platform.writableDirs" . | fromJsonArray }}
+- name: {{ .name }}
+  mountPath: {{ .mountPath }}
+{{- end }}
+{{- end }}
+
+{{/*
+volumes entries for the writable emptyDirs of archestra-platform.writableDirs.
+*/}}
+{{- define "archestra-platform.writableDirVolumes" -}}
+{{- range include "archestra-platform.writableDirs" . | fromJsonArray }}
+- name: {{ .name }}
+  emptyDir: {}
 {{- end }}
 {{- end }}
 
@@ -1459,7 +1558,8 @@ Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumes }}
+{{- $writableDirVolumes := include "archestra-platform.writableDirVolumes" . | trim -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumes $writableDirVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1494,6 +1594,9 @@ volumes:
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
+  {{- with $writableDirVolumes }}
+  {{- . | nindent 2 }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
@@ -1502,7 +1605,8 @@ Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumeMounts }}
+{{- $writableDirMounts := include "archestra-platform.writableDirMounts" . | trim -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumeMounts $writableDirMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1531,6 +1635,9 @@ volumeMounts:
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}
   {{- toYaml . | nindent 2 }}
+  {{- end }}
+  {{- with $writableDirMounts }}
+  {{- . | nindent 2 }}
   {{- end }}
 {{- end }}
 {{- end }}

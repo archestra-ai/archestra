@@ -112,6 +112,7 @@ tests:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+            readOnlyRootFilesystem: true
         documentSelector:
           path: kind
           value: Deployment

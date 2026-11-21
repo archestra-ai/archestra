@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { ConnectedClientModel } from "@/models";
 import { lastDays } from "@/models/connected-client";
@@ -72,7 +73,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetConnectedClientLog,
         description:
-          "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.",
+          "Log of agent connections, newest first (the caller's own clients unless they hold `clientConnection:admin`): an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.",
         tags: ["Connection Setups"],
         querystring: CursorQuerySchema.extend({
           userId: z
@@ -100,16 +101,26 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async ({
       organizationId,
+      user,
       query: { limit, cursor, userId, action, startDate, endDate },
-    }) =>
-      ConnectedClientModel.listEvents({
+    }) => {
+      // clientConnection:read scopes the log to the caller's own clients;
+      // clientConnection:admin lifts it to the whole organization.
+      const canSeeEveryone = await userHasPermission(
+        user.id,
+        organizationId,
+        "clientConnection",
+        "admin",
+      );
+      return ConnectedClientModel.listEvents({
         organizationId,
         pagination: { limit, cursor },
-        userId,
+        userId: canSeeEveryone ? userId : user.id,
         action,
         startDate,
         endDate,
-      }),
+      });
+    },
   );
 
   app.get(

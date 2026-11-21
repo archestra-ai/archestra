@@ -39,7 +39,12 @@ class OpenAppaTrustAudienceService {
         openappaBatteriesService.coverageSnapshot(params.organizationId),
         // Consults are recorded per session; an org-wide status needs the
         // permission that shows every session's consults.
-        userHasPermission(params.userId, params.organizationId, "log", "admin"),
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "guardrailsLog",
+          "admin",
+        ),
       ]);
     const batteries = resolution.entries.flatMap((included) => {
       const deployed = viewed.get(included.entry);

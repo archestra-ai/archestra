@@ -5,6 +5,7 @@ import { KpiTile } from "@/app/llm/(costs)/costs/cost-overview";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAgentAdoption,
   useAgentAdoptionUsage,
@@ -35,6 +36,19 @@ const LEGACY_USAGE_VIEWS: Record<string, Dimension> = {
 };
 
 export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
+  // Usage and User connections read every member, so they need
+  // clientConnection:admin; with read alone the page is your own events.
+  const { data: canSeeEveryone, isPending } = useHasPermissions({
+    clientConnection: ["admin"],
+  });
+  if (isPending) return <Skeleton className="h-80 rounded-xl" />;
+  if (!canSeeEveryone) {
+    return <ConnectionLogTable window={window} everyone={false} />;
+  }
+  return <AdoptionExplorer window={window} />;
+}
+
+function AdoptionExplorer({ window }: { window: ConnectionsWindow }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -155,7 +169,7 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
               Setup downloads, agent sign-ins, and disconnects.
             </p>
           </div>
-          <ConnectionLogTable window={window} />
+          <ConnectionLogTable window={window} everyone />
         </section>
       ) : (
         <ConnectionUsageExplorer

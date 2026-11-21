@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 8
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -51,12 +51,16 @@ By default, logs keep the conversation text but not the images, audio, and files
 
 ## Who Can Read Them
 
-One permission shows your own logs. An admin permission shows everyone's.
+Each tab has its own permission. Its `read` action shows your own records, and its `admin` action shows everyone's.
 
 | Tab | Your own | Everyone's |
 | --- | --- | --- |
-| LLM Proxy, MCP Gateway, Guardrails | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
+| LLM Proxy, MCP Gateway | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
+| Guardrails | [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) | [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) |
+| Agent connections | [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) | [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin) |
 | Audit | [`auditLog:read`](/docs/reference/permissions#auditLog:read) | [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) |
+
+With [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) alone, **Agent connections** lists only your own connect and disconnect events. **Usage** and **User connections** cover every member, so they need [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin).
 
 Sharing an agent or a gateway with someone does not let them read its logs.
 

@@ -15,7 +15,6 @@
 // agents, or the manual steps themselves.
 
 import { DocsPage, resolveMcpClientServerName } from "@archestra/shared";
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   BookOpen,
@@ -155,10 +154,11 @@ export function ConnectPage() {
   // the switches below.
   const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
   const connected = useConnectedAgents();
-  // Same access as the Agent connections log it links to.
-  const { data: canSeeStatistics } = useHasPermissions(
-    requiredPagePermissionsMap["/connections/logs"] ?? {},
-  );
+  // The statistics cover every member: with clientConnection:read alone the
+  // page it opens lists only the viewer's own events.
+  const { data: canSeeStatistics } = useHasPermissions({
+    clientConnection: ["admin"],
+  });
   // Links (connect.md, docs) can open the page on an app. Picks are written
   // back.
   const searchParams = useSearchParams();

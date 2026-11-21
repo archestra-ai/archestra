@@ -124,16 +124,19 @@ describe("WithPagePermissions", () => {
   });
 
   it.each([
-    [{ log: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs/yells/yell-1", true],
-    [{ log: ["read", "admin"] }, "/consults/logs/yells/yell-1", false],
+    [{ guardrailsLog: ["read"] }, "/consults/logs", true],
+    [{ guardrailsLog: ["read"] }, "/consults/logs/consult-1", true],
+    [{ guardrailsLog: ["read"] }, "/consults/logs/yells/yell-1", true],
+    // `log` covers only the LLM and MCP logs now.
+    [{ log: ["read", "admin"] }, "/consults/logs", false],
     [{ guardrailsPolicy: ["read"] }, "/consults/logs", false],
+    [{ clientConnection: ["read"] }, "/connections/logs", true],
+    [{ log: ["admin"], member: ["read"] }, "/connections/logs", false],
   ] as [
     Permissions,
     string,
     boolean,
-  ][])("opens the Guardrails log with log or yell access (%o at %s: %s)", (permissions, pathname, opens) => {
+  ][])("opens each log page with its own permission (%o at %s: %s)", (permissions, pathname, opens) => {
     signInAs(permissions);
     renderAt(pathname);
     if (opens) expect(screen.getByText("Page content")).toBeVisible();

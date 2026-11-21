@@ -64,7 +64,7 @@ function page(rows: ConnectionEvent[]): ConnectionLogPage {
   };
 }
 
-function renderTable(search = "") {
+function renderTable(search = "", { everyone = true } = {}) {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(search) as unknown as ReturnType<
       typeof useSearchParams
@@ -72,7 +72,7 @@ function renderTable(search = "") {
   );
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <ConnectionLogTable window={WINDOW} />
+      <ConnectionLogTable window={WINDOW} everyone={everyone} />
     </QueryClientProvider>,
   );
 }
@@ -137,5 +137,20 @@ describe("ConnectionLogTable", () => {
         action: "disconnected",
       }),
     );
+  });
+
+  it("shows a viewer without clientConnection:admin only their own events", () => {
+    mockUseConnectionLog.mockReturnValue({
+      data: page([]),
+      isFetching: false,
+    });
+
+    renderTable("userId=user-2", { everyone: false });
+
+    expect(mockUseConnectionLog).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: undefined }),
+    );
+    expect(screen.queryByText("All users")).not.toBeInTheDocument();
+    expect(screen.queryByText("Filter by user")).not.toBeInTheDocument();
   });
 });

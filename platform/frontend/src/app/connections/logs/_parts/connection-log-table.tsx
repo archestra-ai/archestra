@@ -63,7 +63,14 @@ function parseAction(value: string | null): ConnectionEventAction | undefined {
  * Each time a member connected an agent through the Connect page, and each
  * time one was disconnected.
  */
-export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
+export function ConnectionLogTable({
+  window,
+  everyone,
+}: {
+  window: ConnectionsWindow;
+  /** Every member's events, with a user filter; otherwise the viewer's own. */
+  everyone: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -103,7 +110,7 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   const { data, isFetching, isLoadingError, refetch } = useConnectionLog({
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor ?? undefined,
-    userId,
+    userId: everyone ? userId : undefined,
     action,
     startDate: window.startDate,
     endDate: window.endDate,
@@ -116,6 +123,7 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   } = useMemberSearch({
     limit: USER_FILTER_LIMIT,
     selectedUserIds: userId ? [userId] : [],
+    enabled: everyone,
   });
   const userOptions = useMemo(
     () =>
@@ -150,16 +158,18 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
     <div>
       <CollectionFilters>
         <FilterBar onClearFilters={hasFilters ? clearFilters : undefined}>
-          <FilterSelect
-            value={userId ?? ALL_VALUE}
-            onValueChange={filterChange("userId")}
-            placeholder="Filter by user"
-            items={userOptions}
-            pinnedItems={[{ value: ALL_VALUE, label: "All users" }]}
-            onSearchQueryChange={onUserSearchChange}
-            emptyMessage={userEmptyMessage}
-            inactiveValue={ALL_VALUE}
-          />
+          {everyone && (
+            <FilterSelect
+              value={userId ?? ALL_VALUE}
+              onValueChange={filterChange("userId")}
+              placeholder="Filter by user"
+              items={userOptions}
+              pinnedItems={[{ value: ALL_VALUE, label: "All users" }]}
+              onSearchQueryChange={onUserSearchChange}
+              emptyMessage={userEmptyMessage}
+              inactiveValue={ALL_VALUE}
+            />
+          )}
           <FilterSelect
             value={action ?? ALL_VALUE}
             onValueChange={filterChange("action")}

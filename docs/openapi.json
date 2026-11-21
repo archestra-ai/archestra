@@ -206961,7 +206961,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "Log of agent connections, newest first (the caller's own clients unless they hold [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin)): an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`clientConnection:read`](/docs/reference/permissions#clientConnection:read): View the connection events of your own coding clients and agents\n\n[`clientConnection:read`](/docs/reference/permissions#clientConnection:read) returns the events of the caller's own clients. [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin) includes every member's.",
         "parameters": [
           {
             "schema": {
@@ -207447,9 +207447,9 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`clientConnection:read` returns the events of the caller's own clients. `clientConnection:admin` includes every member's.",
           "permissions": [
-            "log:admin",
-            "member:read"
+            "clientConnection:read"
           ]
         }
       }
@@ -207460,7 +207460,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin): View every member's connection events, and Adoption: who has connected and how much each client is used (also requires Read)",
         "parameters": [
           {
             "schema": {
@@ -207962,8 +207962,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:admin",
-            "member:read"
+            "clientConnection:admin"
           ]
         }
       }
@@ -207974,7 +207973,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n[`member:read`](/docs/reference/permissions#member:read): View organization members and their roles",
+        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin): View every member's connection events, and Adoption: who has connected and how much each client is used (also requires Read)",
         "parameters": [
           {
             "schema": {
@@ -208294,8 +208293,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:admin",
-            "member:read"
+            "clientConnection:admin"
           ]
         }
       }
@@ -254652,7 +254650,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy request logs in the active organization with pagination and sorting. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "List LLM Proxy request logs in the active organization with pagination and sorting. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -308646,7 +308644,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy request log metadata without request and response payloads. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "List LLM Proxy request log metadata without request and response payloads. [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows; [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -309367,7 +309365,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "List LLM Proxy log sessions with aggregated usage and cost. [`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions; [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions. [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the active organization.",
+        "description": "List LLM Proxy log sessions with aggregated usage and cost. [`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions; [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions. [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -310184,7 +310182,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -310477,7 +310475,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) covers every session in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -310946,7 +310944,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own runs; [`log:admin`](/docs/reference/permissions#log:admin) covers every run in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. [`log:read`](/docs/reference/permissions#log:read) covers the caller's own runs; [`log:admin`](/docs/reference/permissions#log:admin) covers every run in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -311351,7 +311349,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get external agent IDs from visible logs in the active organization. [`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's attributed rows; [`log:admin`](/docs/reference/permissions#log:admin) returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes identifiers from every row in the active organization.",
+        "description": "Get external agent IDs from visible logs in the active organization. [`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's attributed rows; [`log:admin`](/docs/reference/permissions#log:admin) returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes identifiers from every row in the active organization.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -311627,7 +311625,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. [`log:read`](/docs/reference/permissions#log:read) returns only the caller; [`log:admin`](/docs/reference/permissions#log:admin) returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's identity. [`log:admin`](/docs/reference/permissions#log:admin) includes every represented user in the active organization.",
+        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. [`log:read`](/docs/reference/permissions#log:read) returns only the caller; [`log:admin`](/docs/reference/permissions#log:admin) returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns the caller's identity. [`log:admin`](/docs/reference/permissions#log:admin) includes every represented user in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -311941,7 +311939,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get the saved auto-routing decision for an LLM Proxy log. Null means no decision was retained, not that routing was disabled. Does not re-score the request.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "Get the saved auto-routing decision for an LLM Proxy log. Null means no decision was retained, not that routing was disabled. Does not re-score the request.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {
@@ -312523,7 +312521,7 @@
         "tags": [
           "LLM Proxy Logs"
         ],
-        "description": "Get an LLM Proxy request log by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller; [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
+        "description": "Get an LLM Proxy request log by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller; [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -443195,7 +443193,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. [`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
+        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. [`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -443788,7 +443786,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get an MCP tool call in the active organization by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
+        "description": "Get an MCP tool call in the active organization by ID. [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy and MCP tool call logs in the active organization\n\n[`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -489636,7 +489634,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. Consults need [`log:read`](/docs/reference/permissions#log:read), which returns the consults of the caller's own sessions; [`log:admin`](/docs/reference/permissions#log:admin) returns every consult in the organization. Yells need [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read), which returns the yells of the caller's own sessions; [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) returns every yell in the organization. A kind the caller may not read is left out, and a caller who may read neither is refused. A consult is served as the consults export serves it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read) or [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read). Consults are returned with [`log:read`](/docs/reference/permissions#log:read), scoped to the caller's sessions unless the caller also holds [`log:admin`](/docs/reference/permissions#log:admin). Yells are returned with [`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read), scoped to the caller's sessions unless the caller also holds [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin).",
+        "description": "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) returns the consults and yells of the caller's own sessions; [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) returns every one in the organization. A consult is served as the consults export serves it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) returns the consults and yells of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) includes every session in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -490388,9 +490386,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "dynamic",
-          "note": "Requires `log:read` or `guardrailsYell:read`. Consults are returned with `log:read`, scoped to the caller's sessions unless the caller also holds `log:admin`. Yells are returned with `guardrailsYell:read`, scoped to the caller's sessions unless the caller also holds `guardrailsYell:admin`.",
-          "permissions": []
+          "kind": "static",
+          "note": "`guardrailsLog:read` returns the consults and yells of the caller's sessions. `guardrailsLog:admin` includes every session in the active organization.",
+          "permissions": [
+            "guardrailsLog:read"
+          ]
         }
       }
     },
@@ -490400,7 +490400,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. [`log:read`](/docs/reference/permissions#log:read) returns the consults of the caller's own sessions. [`log:admin`](/docs/reference/permissions#log:admin) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without [`member:read`](/docs/reference/permissions#member:read). Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) returns the consults of the caller's own sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without [`member:read`](/docs/reference/permissions#member:read). Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) returns the consults of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) includes every session in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -490970,8 +490970,9 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsLog:read` returns the consults of the caller's sessions. `guardrailsLog:admin` includes every session in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsLog:read"
           ]
         }
       }
@@ -490982,7 +490983,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) permits a consult of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) permits any consult in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -491403,8 +491404,9 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsLog:read` permits a consult of the caller's sessions. `guardrailsLog:admin` permits any consult in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsLog:read"
           ]
         }
       }
@@ -498425,7 +498427,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization",
+        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) permits the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) permits any session in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -498818,8 +498820,9 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`guardrailsLog:read` permits the caller's sessions. `guardrailsLog:admin` permits any session in the active organization.",
           "permissions": [
-            "log:read"
+            "guardrailsLog:read"
           ]
         }
       }
@@ -503241,12 +503244,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
-          "note": "`guardrailsYell:read` returns the caller's yells. `guardrailsYell:admin` includes every yell in the active organization.",
+          "note": "`guardrailsLog:read` returns the caller's yells. `guardrailsLog:admin` includes every yell in the active organization.",
           "permissions": [
-            "guardrailsYell:read"
+            "guardrailsLog:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) returns the caller's yells. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) includes every yell in the active organization."
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) returns the caller's yells. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) includes every yell in the active organization."
       }
     },
     "/api/openappa/yells/summary": {
@@ -503514,12 +503517,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
-          "note": "`guardrailsYell:read` counts the caller's yells. `guardrailsYell:admin` counts every yell in the active organization.",
+          "note": "`guardrailsLog:read` counts the caller's yells. `guardrailsLog:admin` counts every yell in the active organization.",
           "permissions": [
-            "guardrailsYell:read"
+            "guardrailsLog:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) counts the caller's yells. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) counts every yell in the active organization."
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) counts the caller's yells. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) counts every yell in the active organization."
       }
     },
     "/api/openappa/yells/{id}": {
@@ -503966,12 +503969,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
-          "note": "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
+          "note": "`guardrailsLog:read` permits a yell of the caller's sessions. `guardrailsLog:admin` permits any yell in the active organization.",
           "permissions": [
-            "guardrailsYell:read"
+            "guardrailsLog:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) permits a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) permits any yell in the active organization."
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) permits a yell of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) permits any yell in the active organization."
       },
       "patch": {
         "operationId": "updateOpenAppaYell",
@@ -504434,12 +504437,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
-          "note": "`guardrailsYell:read` resolves a yell of the caller's sessions. `guardrailsYell:admin` resolves any yell in the active organization.",
+          "note": "`guardrailsLog:read` resolves a yell of the caller's sessions. `guardrailsLog:admin` resolves any yell in the active organization.",
           "permissions": [
-            "guardrailsYell:read"
+            "guardrailsLog:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) resolves a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) resolves any yell in the active organization."
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) resolves a yell of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) resolves any yell in the active organization."
       }
     },
     "/api/openappa/yells/{id}/archive": {
@@ -504467,12 +504470,12 @@
         },
         "x-required-permissions": {
           "kind": "static",
-          "note": "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
+          "note": "`guardrailsLog:read` permits a yell of the caller's sessions. `guardrailsLog:admin` permits any yell in the active organization.",
           "permissions": [
-            "guardrailsYell:read"
+            "guardrailsLog:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read): View and resolve the Guardrails yells of your own sessions\n\n[`guardrailsYell:read`](/docs/reference/permissions#guardrailsYell:read) permits a yell of the caller's sessions. [`guardrailsYell:admin`](/docs/reference/permissions#guardrailsYell:admin) permits any yell in the active organization."
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read): View the Guardrails consults and yells of your own sessions, and resolve those yells\n\n[`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) permits a yell of the caller's sessions. [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) permits any yell in the active organization."
       }
     },
     "/v1/openrouter/chat/completions": {

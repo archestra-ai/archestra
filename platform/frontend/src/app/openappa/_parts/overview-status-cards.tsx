@@ -60,7 +60,7 @@ export function OverviewStatusCards() {
     guardrailsPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
-    guardrailsYell: ["read"],
+    guardrailsLog: ["read"],
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (

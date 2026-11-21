@@ -96,7 +96,7 @@ export function ConsultsTable() {
     from: filters.from,
     to: filters.to,
   };
-  const { data: canResolve } = useHasPermissions({ guardrailsYell: ["read"] });
+  const { data: canResolve } = useHasPermissions({ guardrailsLog: ["read"] });
   const resolve = useResolveOpenAppaYell();
 
   const {

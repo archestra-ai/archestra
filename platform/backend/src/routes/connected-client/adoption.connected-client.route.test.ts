@@ -1,10 +1,14 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
 import type { Agent, ConnectionSetupClientId, User } from "@/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -70,6 +74,38 @@ describe("GET /api/connected-clients/adoption", () => {
 
   const memberById = async (userId: string) =>
     (await getAdoption()).members.find((m) => m.userId === userId);
+
+  test.for([
+    [ADMIN_ROLE_NAME, 200],
+    // clientConnection:read shows an editor their own events, not everyone's.
+    [EDITOR_ROLE_NAME, 403],
+  ] as const)("needs clientConnection:admin: %s gets %i", async ([
+    role,
+    statusCode,
+  ], { makeUser, makeMember }) => {
+    const caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role });
+    const { default: routes } = await import("./connected-client.routes");
+    const gated = await authenticatedRouteApp({
+      organizationId,
+      routes: [routes],
+    });
+    try {
+      for (const url of [
+        "/api/connected-clients/adoption",
+        "/api/connected-clients/adoption/usage",
+      ]) {
+        const response = await gated.inject({
+          method: "GET",
+          url,
+          headers: { [USER_HEADER]: caller.id },
+        });
+        expect(response.statusCode).toBe(statusCode);
+      }
+    } finally {
+      await gated.close();
+    }
+  });
 
   test("a member with no setup and no traffic is not connected", async ({
     makeUser,

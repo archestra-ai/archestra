@@ -16,8 +16,8 @@ The LLM Proxy sits between your clients and your model providers. Clients keep t
 - One URL for every provider. The [Unified Model API](/docs/llm-proxy/unified-model) sends `anthropic:claude-sonnet-4-6` to Anthropic and `openai:gpt-5.4` to OpenAI.
 - Failover between provider keys. A [model pool](/docs/llm-proxy/model-pools) serves one model name from several keys, and moves to the next key when one fails.
 - A cheaper model for easy work. An [auto router](/docs/llm-proxy/auto-routing) sends each session to a fast, normal, or smart model, within a daily budget.
-- Cost per person, team, and app, with budgets that block requests when spend reaches them. Claude and ChatGPT subscription traffic shows separately, at $0 billed. See [Costs & Limits](/docs/llm-proxy/costs-and-limits).
-- A log of every request, with the model, the caller, tokens, and cost. See [Logs and Auditing](/docs/admin/logs).
+- Cost per person, team, and app, with budgets that block requests when spend reaches them. Claude and ChatGPT subscription traffic shows separately, at $0 billed. See [Costs & Limits](/docs/llm-proxy/cost-controls).
+- A log of every request, with the model, the caller, tokens, and cost. See [Logs](/docs/insights/logs).
 
 ```mermaid
 flowchart LR
@@ -40,7 +40,7 @@ An app or agent uses the proxy when you change two things: its base URL and its 
   1. Go to **LLM Proxy** and copy the URL for your provider.
   2. Create a credential for the app. For most apps, this is a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
   3. Put the URL and the credential where the app expects the provider's base URL and API key.
-  4. Send a request, and check that it shows in the [logs](/docs/admin/logs).
+  4. Send a request, and check that it shows in the [logs](/docs/insights/logs).
 
 <span id="custom-headers"></span><span id="usage"></span>
 

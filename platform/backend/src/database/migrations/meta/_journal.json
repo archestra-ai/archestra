@@ -4586,6 +4586,13 @@
       "when": 1795192300555,
       "tag": "0654_solid_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 655,
+      "version": "7",
+      "when": 1795270703472,
+      "tag": "0655_guardrails-log-and-client-connection-permissions",
+      "breakpoints": true
     }
   ]
 }

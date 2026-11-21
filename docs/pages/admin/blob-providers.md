@@ -7,7 +7,7 @@ lastUpdated: 2026-11-11
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/costs-and-limits/exports#schedule-exports-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
+Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/cost-controls/exports#schedule-exports-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
 
 A blob provider writes to one of three stores:
 

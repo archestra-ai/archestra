@@ -11,7 +11,7 @@ Run any MCP server for your whole team, even one built to run on a laptop. Many 
 
 - It deploys and restarts them. Each install gets its own pod.
 - It holds their secrets. Credentials go into the pod, not into anyone's config file.
-- It shows their logs. Container logs are on the server's page. Each tool call is in [Logs](/docs/admin/logs).
+- It shows their logs. Container logs are on the server's page. Each tool call is in [Logs](/docs/insights/logs).
 - It keeps them on your network. The [environment](/docs/admin/environments) limits which hosts a server can reach.
 
 ## Set Up the Cluster

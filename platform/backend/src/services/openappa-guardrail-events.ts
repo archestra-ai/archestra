@@ -1,11 +1,9 @@
-import { userHasPermission } from "@/auth";
 import { encodeCursor } from "@/database/utils/pagination";
 import {
   externalConsultAccess,
   listExternalConsults,
 } from "@/services/openappa-external-consults";
 import { listOpenAppaYells } from "@/services/openappa-yells";
-import { ApiError } from "@/types";
 import type {
   ExternalConsult,
   ExternalConsultOutcome,
@@ -20,12 +18,10 @@ export type GuardrailEvent =
 /**
  * One page of what Guardrails recorded for a viewer, newest first: its
  * consults of external services and the yells agents raised, in one timeline.
- * Each kind is read under its own permission: consults under `log:read` (the
- * viewer's own sessions without `log:admin`), yells under
- * `guardrailsYell:read` (the viewer's own without `guardrailsYell:admin`). A
- * kind the viewer may not read is left out; a viewer who may read neither is
- * refused. The two pages are merged on the position both lists share, the
- * creation time and then the id.
+ * Both are read under `guardrailsLog:read`, which the route checks: the
+ * viewer's own sessions, or every session with `guardrailsLog:admin`. The two
+ * pages are merged on the position both lists share, the creation time and
+ * then the id.
  */
 export async function listGuardrailEvents(params: {
   organizationId: string;
@@ -47,19 +43,8 @@ export async function listGuardrailEvents(params: {
   pagination: { limit: number; nextCursor: string | null; hasNext: boolean };
 }> {
   const { organizationId, userId, query, limit, cursor } = params;
-  const [canReadConsults, canReadYells] = await Promise.all([
-    userHasPermission(userId, organizationId, "log", "read"),
-    userHasPermission(userId, organizationId, "guardrailsYell", "read"),
-  ]);
-  if (!canReadConsults && !canReadYells) {
-    throw new ApiError(
-      403,
-      "Reading the Guardrails log requires log:read or guardrailsYell:read",
-    );
-  }
-  const wantConsults =
-    canReadConsults && query.type !== "yell" && query.yellStatus === "all";
-  const wantYells = canReadYells && query.type !== "consult" && !query.outcome;
+  const wantConsults = query.type !== "yell" && query.yellStatus === "all";
+  const wantYells = query.type !== "consult" && !query.outcome;
 
   const [consults, yells] = await Promise.all([
     wantConsults

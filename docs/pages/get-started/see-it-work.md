@@ -2,7 +2,7 @@
 title: See It Work
 description: Send your first message in Chat and from a connected client, then find both in the logs
 order: 3
-lastUpdated: 2026-10-08
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,11 +40,11 @@ Use the client you connected in [Connect Your Agents](/docs/get-started/connect)
 
 ## Find It in the Logs
 
-Open **Logs** in the Archestra sidebar:
+Open **Logs** in the Archestra sidebar. It lists every event on one timeline; click a type's tile to narrow it:
 
-- **LLM Proxy** lists sessions, with their requests and spend.
-- **MCP Gateway** lists each tool call, with its caller and result.
+- **LLM Proxy** shows model requests, with their session and spend.
+- **MCP Gateway** shows each tool call, with its caller and result.
 
-Click a row to see the full request. Your requests from Chat and from your client are both there. See [Logs and Auditing](/docs/admin/logs) for the other tabs.
+Click a row to see the full request. Your requests from Chat and from your client are both there. See [Logs](/docs/insights/logs) for the other types.
 
 **Next:** [build an agent](/docs/agents), [add MCP servers](/docs/mcp/servers) to give your agents more tools, or [migrate your agents](/docs/get-started/migrate).

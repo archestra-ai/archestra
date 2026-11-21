@@ -151,7 +151,7 @@ describe("GET /api/openappa/guardrail-events", () => {
     ).toEqual([`consult:${answered}`, `consult:${timedOut}`]);
   });
 
-  test("without log:admin a reader sees only the records of their own sessions", async ({
+  test("without guardrailsLog:admin a reader sees only the records of their own sessions", async ({
     makeUser,
     makeMember,
   }) => {
@@ -177,7 +177,7 @@ describe("GET /api/openappa/guardrail-events", () => {
     ]);
   });
 
-  test("each kind follows its own permission: yell admins see every yell and no consults, log admins every consult and no yells", async ({
+  test("guardrailsLog alone opens both kinds, and log no longer opens consults", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -191,19 +191,22 @@ describe("GET /api/openappa/guardrail-events", () => {
       caller = await makeUser();
       await makeMember(caller.id, organizationId, { role: role.role });
     };
+    const status = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/openappa/guardrail-events",
+        })
+      ).statusCode;
 
-    await as({ guardrailsYell: ["read", "admin"] });
-    expect(ids(await list())).toEqual([`yell:${yell}`]);
+    await as({ guardrailsLog: ["read", "admin"] });
+    expect(ids(await list())).toEqual([`yell:${yell}`, `consult:${consult}`]);
 
     await as({ log: ["read", "admin"] });
-    expect(ids(await list())).toEqual([`consult:${consult}`]);
+    expect(await status()).toBe(403);
 
     await as({ guardrailsPolicy: ["read"] });
-    const refused = await app.inject({
-      method: "GET",
-      url: "/api/openappa/guardrail-events",
-    });
-    expect(refused.statusCode).toBe(403);
+    expect(await status()).toBe(403);
   });
 });
 

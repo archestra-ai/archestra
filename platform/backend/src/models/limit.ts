@@ -1947,7 +1947,7 @@ export class LimitValidationService {
             params.unmeteredOperation
               ? "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies."
               : params.unpricedModel
-                ? "This vLLM model has unknown token prices and cannot run while a spend budget applies. Configure input and output token prices (including explicit zero for a free model) in Costs & Limits."
+                ? "This vLLM model has unknown token prices and cannot run while a spend budget applies. Configure input and output token prices (including explicit zero for a free model) in the model's Pricing settings under Models."
                 : "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
           );
       }

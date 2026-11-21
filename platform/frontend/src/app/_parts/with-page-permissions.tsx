@@ -13,7 +13,10 @@ import {
 } from "@/app/_parts/settings-navigation";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
-import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import {
+  useHasAnyPagePermissions,
+  useHasPagePermissions,
+} from "@/lib/auth/auth.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 
@@ -26,10 +29,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
   const required = useHasPagePermissions(requiredPermissions || {});
-  // A page that shows two kinds of record also opens with the permission of
-  // the second kind (`alternativePagePermissionsMap`).
+  // A page that shows several kinds of record also opens with the permission
+  // of any other kind (`alternativePagePermissionsMap`).
   const alternativePermissions = alternativePagePermissionsMap[pathname];
-  const alternative = useHasPagePermissions(alternativePermissions ?? {});
+  const alternative = useHasAnyPagePermissions(alternativePermissions ?? []);
   const hasRequiredPermissions =
     required.data || (!!alternativePermissions && alternative.data);
   const isPending =

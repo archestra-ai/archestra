@@ -70,9 +70,3 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
     </ExternalDocsLink>
   </>
 );
-
-export const LOGS_LAYOUT_CONFIG = {
-  title: "Logs",
-  description:
-    "Trace requests, tool calls, guardrail decisions and changes across your organization.",
-};

@@ -98,4 +98,4 @@ Remote MCP servers run elsewhere. Archestra checks its connection to their URL h
 
 Your cluster must [support and enforce the selected rules](/docs/admin/deployment/networking#enforce-workload-egress). Start an allowlist with **Common Dependencies** or **Package Managers**, then add your APIs and private registries.
 
-Set [cost limits](/docs/llm-proxy/costs-and-limits) per environment when staging and production need separate budgets.
+Set [cost limits](/docs/llm-proxy/cost-controls) per environment when staging and production need separate budgets.

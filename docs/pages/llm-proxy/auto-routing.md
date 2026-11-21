@@ -112,7 +112,7 @@ The request runs on the provider key of the tier the router picks, and the answe
 
 ## Daily Budget and Presets
 
-The daily budget is the average daily spend a router aims for, not a hard ceiling; spend on a busy day can run above it. To block requests at a strict cap, [add a spend limit](/docs/llm-proxy/costs-and-limits/limits#create-a-limit) under **Limits** for the team or virtual keys that call the router.
+The daily budget is the average daily spend a router aims for, not a hard ceiling; spend on a busy day can run above it. To block requests at a strict cap, [add a spend limit](/docs/llm-proxy/cost-controls/limits#create-a-limit) under **Limits** for the team or virtual keys that call the router.
 
 Pick a preset and Archestra derives the budget from the router's recent traffic, then updates it every time the plan refits:
 
@@ -182,7 +182,7 @@ Archestra routes a session to the router's normal model whenever it cannot make 
 
 ## Inspect Decisions and Savings
 
-Open [Logs](/docs/admin/logs) under **Logs → LLM Proxy** to see why a request got its model. Auto-routed rows are marked **auto→**; opening one shows **Auto routing** with the router name, how the scorer rated the task for each tier, the tier picked and why, and the estimated savings against the smart model.
+Open [Logs](/docs/insights/logs) under **Logs → LLM Proxy** to see why a request got its model. Auto-routed rows are marked **auto→**; opening one shows **Auto routing** with the router name, how the scorer rated the task for each tier, the tier picked and why, and the estimated savings against the smart model.
 
 To read the saved decision programmatically without calling the scorer again, call [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing). It returns the router, chosen model and tier, routing reason, scorer features and version, plan ID, selection probability, budget multiplier, and expected cost. A `null` decision means no retained decision is linked to that log (the request was not auto-routed, or the decision expired).
 
@@ -196,4 +196,4 @@ Some models charge higher rates past a prompt-length threshold. On a model's set
 
 - Routing decisions are kept for 90 days. After that, the same session ID is scored and routed again as a new session.
 - Deleting a router removes its plans and learned history; agents and chats assigned to it fall back to their own model.
-- Every routed request still runs through your existing [cost limits](/docs/llm-proxy/costs-and-limits) and [Guardrails](/docs/agents/guardrails).
+- Every routed request still runs through your existing [cost limits](/docs/llm-proxy/cost-controls) and [Guardrails](/docs/agents/guardrails).

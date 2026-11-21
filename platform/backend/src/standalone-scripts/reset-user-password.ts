@@ -25,8 +25,8 @@
  * (`ARCHESTRA_DATABASE_URL` or `DATABASE_URL`), the same as the server.
  *
  *   e.g. K8s / external-DB Docker (URL already in the pod/container env):
- *     kubectl exec -it deploy/archestra-platform -- sh -c \
- *       'cd /app/backend && node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+ *     kubectl exec -it deploy/archestra-platform -- \
+ *       node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
  *
  *   e.g. all-in-one quickstart image with bundled Postgres (the URL is not
  *   exported to an `exec` shell, so pass it explicitly — adjust if you

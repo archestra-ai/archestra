@@ -1688,3 +1688,32 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
+
+  # Only the nightly run on main covers the hibernation suite and the
+  # firefox/webkit projects, and no merge depends on it, so a failure there
+  # would otherwise go unnoticed.
+  notify:
+    name: Report a nightly failure
+    needs:
+      [
+        platform-e2e-build,
+        platform-e2e-k8s-tests,
+        platform-e2e-hibernation-tests,
+        platform-e2e-lite-tests,
+        platform-quickstart-e2e-tests,
+        platform-rust-napi-musl-smoke,
+      ]
+    if: ${{ always() && github.event_name == 'schedule' && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Post to #alerts
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: "The nightly Platform E2E run on main failed. These suites run only nightly, so nothing else catches these failures."
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

@@ -31,6 +31,8 @@ const allowed = new Set([
   "output",
   "diagnostic",
   "web-workers",
+  "backend-cpus",
+  "backend-memory-bytes",
 ]);
 for (const key of Object.keys(options))
   if (!allowed.has(key)) throw new Error(`Unknown option: ${key}`);
@@ -44,6 +46,10 @@ const integer = (key, fallback) => {
     throw new Error(`${key} must be a positive integer`);
   return value;
 };
+if (
+  Boolean(options["backend-cpus"]) !== Boolean(options["backend-memory-bytes"])
+)
+  throw new Error("Backend limits need both CPUs and memory");
 const count = integer("requests", 1000);
 const streamCount = integer("stream-requests", 100);
 const warmup = integer("warmup", 30);
@@ -116,6 +122,15 @@ const report = {
     ...(options.diagnostic ? { diagnostic: options.diagnostic } : {}),
     ...(options["web-workers"]
       ? { webWorkers: integer("web-workers", 1) }
+      : {}),
+    // The cgroup limits ci.sh read back from the web process's scope.
+    ...(options["backend-cpus"]
+      ? {
+          backendLimits: {
+            cpus: integer("backend-cpus"),
+            memoryBytes: integer("backend-memory-bytes"),
+          },
+        }
       : {}),
     workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),

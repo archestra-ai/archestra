@@ -16,6 +16,7 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
+import { readMcpServerBaseImage } from "./hibernation-pinned-image";
 import { assertHibernationTimingProfile } from "./hibernation-timing";
 
 /**
@@ -35,6 +36,11 @@ const MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION =
  * Deployment (unschedulable pod, unpullable image) and one restarts every
  * install of its catalog, so pointing any of that at the fixture other specs
  * share would fail them instead.
+ *
+ * The catalog item names the base image as its own `dockerImage`. On the
+ * default base image the runtime would move the Deployment back to the
+ * configured base image before every wake, undoing the unpullable image the
+ * registry test injects (see {@link readMcpServerBaseImage}).
  */
 const CATALOG_ITEM_NAME = "e2e-hibernation-capacity";
 const RAW_TOOL_NAME = "print_archestra_test";
@@ -287,6 +293,10 @@ test.describe("MCP idle hibernation - capacity and registry failure modes", () =
       coreApi = kc.makeApiClient(k8s.CoreV1Api);
 
       const defaultTeam = await getTeamByName(request, DEFAULT_TEAM_NAME);
+      const pinnedImage = await readMcpServerBaseImage({
+        request,
+        makeApiRequest,
+      });
 
       // Deterministic name, so a run that died before its teardown leaves
       // something reusable rather than an accumulating pile of catalog items.
@@ -296,15 +306,21 @@ test.describe("MCP idle hibernation - capacity and registry failure modes", () =
         urlSuffix: "/api/internal_mcp_catalog",
       });
       const catalogPayload = await catalogResponse.json();
-      const catalogItems: Array<{ id: string; name: string }> = Array.isArray(
-        catalogPayload,
-      )
+      const catalogItems: Array<{
+        id: string;
+        name: string;
+        localConfig?: { dockerImage?: string } | null;
+      }> = Array.isArray(catalogPayload)
         ? catalogPayload
         : (catalogPayload?.data ?? []);
       const existingCatalogItem = catalogItems.find(
         (item) => item.name === CATALOG_ITEM_NAME,
       );
       if (existingCatalogItem) {
+        expect(
+          existingCatalogItem.localConfig?.dockerImage,
+          `the leftover "${CATALOG_ITEM_NAME}" catalog item must pin the base image; delete it and rerun`,
+        ).toBe(pinnedImage);
         catalogItemId = existingCatalogItem.id;
       } else {
         const createResponse = await createMcpCatalogItem(request, {
@@ -313,6 +329,7 @@ test.describe("MCP idle hibernation - capacity and registry failure modes", () =
             "Dedicated fixture for the MCP hibernation capacity and registry e2e spec.",
           serverType: "local",
           localConfig: {
+            dockerImage: pinnedImage,
             command: "sh",
             arguments: ["-c", testMcpServerCommand],
             transportType: "stdio",

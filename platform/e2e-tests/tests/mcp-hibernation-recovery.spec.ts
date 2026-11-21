@@ -17,6 +17,7 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
+import { readMcpServerBaseImage } from "./hibernation-pinned-image";
 import { assertHibernationTimingProfile } from "./hibernation-timing";
 
 /**
@@ -145,6 +146,13 @@ const CLUSTER_POLL_INTERVALS = [1_000, 2_000, 5_000];
  * therefore its own physical Deployment. The sibling hibernation specs run in
  * the same Playwright project and share the internal-dev-test-server
  * installation — pointing THAT deployment at a broken image would fail them.
+ *
+ * The catalog item names the base image as its own `dockerImage`. On the
+ * default base image the runtime would move the Deployment back to the
+ * configured base image before the wake scaled it up, undoing the wedge (see
+ * {@link readMcpServerBaseImage}). A custom image is never moved, which is the
+ * real-world case this spec stands for: an install whose own image has gone
+ * missing from its registry.
  *
  * The install is pinned `hibernationMode: "disabled"` in `beforeAll`. That is
  * not a way around the feature: on-demand wake is deliberately not gated on
@@ -436,16 +444,22 @@ test.describe("MCP hibernation - administrator recovery", () => {
       coreApi = kc.makeApiClient(k8s.CoreV1Api);
 
       const defaultTeam = await getTeamByName(request, DEFAULT_TEAM_NAME);
+      const pinnedImage = await readMcpServerBaseImage({
+        request,
+        makeApiRequest,
+      });
 
       // Dedicated catalog item and installation: this spec deliberately breaks
       // the deployment it targets, so it must not share one with any other
-      // spec in this project.
+      // spec in this project. Its image is pinned so the wedge survives the
+      // wake (see the describe block's comment).
       const catalogResponse = await createMcpCatalogItem(request, {
         name: `e2e-hibernation-recovery-${Date.now()}`,
         description:
           "Dedicated fixture for the MCP hibernation hard-reset e2e spec.",
         serverType: "local",
         localConfig: {
+          dockerImage: pinnedImage,
           command: "sh",
           arguments: ["-c", testMcpServerCommand.replace(/\n/g, " ")],
           transportType: "stdio",

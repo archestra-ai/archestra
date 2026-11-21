@@ -71,7 +71,11 @@ describe("collectPreviewedChanges", () => {
       collectPreviewedChanges(conversation({ output: valid }), shortName).get(
         "propose-1",
       ),
-    ).toMatchObject({ output: valid });
+    ).toMatchObject({
+      previewToolCallId: "preview-1",
+      output: valid,
+      pendingApproval: true,
+    });
     for (const name of [
       "propose_guardrails_server_rules_change",
       `${PREFIX}propose_guardrails_server_rules_change`,
@@ -88,6 +92,24 @@ describe("collectPreviewedChanges", () => {
           shortName,
         ).has("propose-1"),
       ).toBe(true);
+  });
+
+  it("marks pendingApproval false once a split proposal settles to an output", () => {
+    const messages = conversation({ output: valid });
+    const parts = messages[0].parts as unknown as Array<
+      Record<string, unknown>
+    >;
+    parts.push({
+      ...parts[1],
+      state: "output-available",
+      output: stored({ stage: "proposed", delivery: "pull_request" }),
+    });
+    expect(
+      collectPreviewedChanges(messages, shortName).get("propose-1"),
+    ).toMatchObject({
+      previewToolCallId: "preview-1",
+      pendingApproval: false,
+    });
   });
 
   it("reads run_tool arguments sent as JSON text, as run_tool itself does", () => {

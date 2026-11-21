@@ -97,13 +97,20 @@ export function getToolHeaderState({
   return state;
 }
 
+export type CompactToolState =
+  | "running"
+  | "approval-requested"
+  | "completed"
+  | "error"
+  | "denied";
+
 export function getCompactToolState({
   part,
   toolResultPart,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
-}): "running" | "completed" | "error" | "denied" {
+}): CompactToolState {
   if (getToolErrorText({ part, toolResultPart })) {
     return "error";
   }
@@ -122,6 +129,10 @@ export function getCompactToolState({
   // "running" and render a blue pulsing dot forever. Surface it as "denied".
   if (part.state === "output-denied") {
     return "denied";
+  }
+
+  if (part.state === "approval-requested") {
+    return "approval-requested";
   }
 
   return "running";
@@ -144,51 +155,62 @@ export function getHumanRulingDisplay({
   return { ruling, label: HUMAN_RULING_LABELS[ruling] };
 }
 
+/**
+ * Whether a tool call renders as a circle in `CompactToolGroup` rather than
+ * a standalone interactive widget. Only `todo_write` stays outside the circle
+ * row (along with `ask_user` via `nonCompactToolNames`); approvals and auth
+ * prompts all render under their own circle.
+ */
 export function isCompactEligible(params: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
 }): boolean {
-  const { part, toolResultPart, toolName, getToolShortName } = params;
+  const { toolName, getToolShortName } = params;
 
   const shortName = getToolShortName?.(toolName);
   if (shortName === TOOL_TODO_WRITE_SHORT_NAME) {
     return false;
   }
 
-  if (part.state === "approval-requested") {
-    return false;
-  }
+  return true;
+}
 
+/**
+ * Whether a tool call carries an authentication prompt that must stay visible
+ * under its circle (and prevents an MCP App call from mounting as an app pill).
+ */
+export function hasToolAuthPrompt(params: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+}): boolean {
+  const { part, toolResultPart } = params;
   const errorText = getToolErrorText({ part, toolResultPart });
-  const structuredError = extractMcpToolError(
-    toolResultPart?.output ?? part.output,
-  );
+  const rawOutput = toolResultPart?.output ?? part.output;
+  const structuredError = extractMcpToolError(rawOutput);
+
   if (errorText) {
     if (
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"
     ) {
-      return false;
+      return true;
     }
 
     if (isAuthErrorText(errorText, toolResultPart ?? part)) {
-      return false;
+      return true;
     }
-
-    return true;
   }
 
-  const rawOutput = toolResultPart?.output ?? part.output;
   if (typeof rawOutput === "string") {
     if (isAuthErrorText(rawOutput, toolResultPart ?? part)) {
-      return false;
+      return true;
     }
   }
 
-  return true;
+  return false;
 }
 
 const HUMAN_RULING_LABELS: Record<McpHumanRuling, string> = {

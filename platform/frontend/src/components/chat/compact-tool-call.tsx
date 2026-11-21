@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  type ArchestraToolShortName,
   extractMcpExecutedAs,
   parseFullToolName,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -30,6 +31,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useSession } from "@/lib/auth/auth.query";
 import {
+  type CompactToolState,
   getCompactToolState,
   getHumanRulingDisplay,
   getToolHeaderState,
@@ -43,6 +45,7 @@ import {
 } from "./battery-credentials-tool";
 import {
   type AppEntryRender,
+  getApprovalToolDisplay,
   getToolCardTitle,
   resolveAppEntryRender,
   resolveRunToolTargetName,
@@ -68,6 +71,7 @@ import { isPolicyChangeTool } from "./openappa-policy-change.utils";
 import {
   PreviewedChangeReview,
   proposalApprovalText,
+  usePinnedPreviewToolCallIds,
   usePreviewedChange,
 } from "./previewed-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
@@ -146,7 +150,7 @@ function CompactCircle({
 }: {
   toolName: string;
   toolCallId?: string;
-  state: "running" | "completed" | "error" | "denied";
+  state: CompactToolState;
   /** Displays specific status text, such as a user review decision. */
   stateLabel?: string;
   isExpanded: boolean;
@@ -168,13 +172,15 @@ function CompactCircle({
     ? " (running in the background)"
     : stateLabel
       ? ` (${stateLabel.toLowerCase()})`
-      : state === "running"
-        ? " (running)"
-        : state === "error"
-          ? " (error)"
-          : state === "denied"
-            ? " (denied)"
-            : "";
+      : state === "approval-requested"
+        ? " (approval required)"
+        : state === "running"
+          ? " (running)"
+          : state === "error"
+            ? " (error)"
+            : state === "denied"
+              ? " (denied)"
+              : "";
   const label =
     getToolCardTitle(toolName) ??
     parseFullToolName(toolName).toolName.replace(/_/g, " ");
@@ -211,6 +217,9 @@ function CompactCircle({
                 isCancelled && "bg-muted-foreground",
                 !isCancelled && state === "completed" && "bg-green-500",
                 !isCancelled &&
+                  state === "approval-requested" &&
+                  "bg-amber-500 animate-pulse",
+                !isCancelled &&
                   state === "running" &&
                   (isBackground
                     ? "bg-amber-500 animate-pulse"
@@ -229,6 +238,8 @@ function CompactCircle({
             <span>{` (running in the background · ${formatElapsed(elapsed)})`}</span>
           ) : stateLabel ? (
             <span>{` (${stateLabel.toLowerCase()})`}</span>
+          ) : state === "approval-requested" ? (
+            <span>{" (approval required)"}</span>
           ) : state === "running" ? (
             <span>{" (running)"}</span>
           ) : state === "error" ? (
@@ -254,7 +265,7 @@ function ToolCallSkillPill({
 }: {
   toolName: string;
   skillName: string | null;
-  state: "running" | "completed" | "error" | "denied";
+  state: CompactToolState;
 }) {
   const display = getSkillPillDisplay(skillName);
   const tooltipLabel = (() => {
@@ -262,6 +273,8 @@ function ToolCallSkillPill({
     const target = display.source
       ? `${display.name} from ${display.source}`
       : display.name;
+    if (state === "approval-requested")
+      return `Approval required for ${target}`;
     if (state === "running") return `Loading ${target}`;
     if (state === "error") return `Failed to load ${target}`;
     if (state === "denied") return `Access denied for ${target}`;
@@ -277,11 +290,14 @@ function ToolCallSkillPill({
       tabIndex={display.source ? 0 : undefined}
       showNativeTitle={false}
     >
-      {state === "running" || state === "error" ? (
+      {state === "running" ||
+      state === "approval-requested" ||
+      state === "error" ? (
         <span
           className={cn(
             "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
             state === "running" && "bg-blue-500 animate-pulse",
+            state === "approval-requested" && "bg-amber-500 animate-pulse",
             state === "error" && "bg-destructive",
           )}
         />
@@ -368,34 +384,16 @@ function HookCircle({
   );
 }
 
-export function CompactToolGroup({
-  tools,
-  toolIconMap,
-  canExpandToolCalls = true,
-  onToolApprovalResponse,
-  appContext,
-}: {
-  tools: CompactEntry[];
-  toolIconMap?: ToolIconMap;
-  canExpandToolCalls?: boolean;
-  onToolApprovalResponse?: (params: {
-    id: string;
-    approved: boolean;
-    reason?: string;
-  }) => void;
-  appContext?: CompactAppContext;
-}) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const { isToolName, getToolShortName } = useArchestraMcpIdentity();
-  const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
-  // The latest proposed or saved Guardrails change opens its circle once, so
-  // the diff or the save result shows without a click; a circle the user
-  // picked is left alone. It opens for every reader, also one who cannot
-  // open tool calls: a change the person is asked to approve is theirs to
-  // see, not a detail of how the agent worked.
-  const userToggledRef = useRef(false);
-  const autoOpenedRef = useRef(new Set<string>());
-  const policyChangeKey = tools.findLast((entry) => {
+/**
+ * Finds the key of the latest Guardrails policy preview or save entry across a
+ * sequence of compact entries, so only the newest one in a message auto-opens.
+ */
+export function findLatestPolicyChangeKey(params: {
+  entries: ReadonlyArray<CompactEntry>;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}): string | undefined {
+  const { entries, getToolShortName } = params;
+  return entries.findLast((entry) => {
     if (entry.kind === "hook") return false;
     const shortName = getToolShortName(
       resolveRunToolTargetName(entry.part, entry.toolName, {
@@ -409,15 +407,134 @@ export function CompactToolGroup({
         isOpenAppaPreview({ shortName, output, input: entry.part.input }))
     );
   })?.key;
+}
+
+export function CompactToolGroup({
+  tools,
+  toolIconMap,
+  canExpandToolCalls = true,
+  onToolApprovalResponse,
+  appContext,
+  autoOpenPolicyKey,
+  renderAuthCard,
+}: {
+  tools: CompactEntry[];
+  toolIconMap?: ToolIconMap;
+  canExpandToolCalls?: boolean;
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
+  appContext?: CompactAppContext;
+  /**
+   * Message-wide key of the latest policy preview/save entry that should
+   * auto-open. When omitted, defaults to the latest policy change in this row.
+   */
+  autoOpenPolicyKey?: string | null;
+  /**
+   * Renders an inline authentication card directly under the circle row when a
+   * tool call requires user action.
+   */
+  renderAuthCard?: (params: {
+    toolName: string;
+    part: ToolUIPart | DynamicToolUIPart;
+    toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+    errorText: string | undefined;
+  }) => React.ReactNode;
+}) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [dismissedApprovalKeys, setDismissedApprovalKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const [dismissedPinnedPreviewKeys, setDismissedPinnedPreviewKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const { isToolName, getToolShortName } = useArchestraMcpIdentity();
+  const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
+  const pinnedPreviewToolCallIds = usePinnedPreviewToolCallIds();
+  // The latest proposed or saved Guardrails change opens its circle once, so
+  // the diff or the save result shows without a click; a circle the user
+  // picked is left alone. It opens for every reader, also one who cannot
+  // open tool calls: a change the person is asked to approve is theirs to
+  // see, not a detail of how the agent worked.
+  const userToggledRef = useRef(false);
+  const autoOpenedRef = useRef(new Set<string>());
+  const policyChangeKey =
+    autoOpenPolicyKey !== undefined
+      ? autoOpenPolicyKey &&
+        tools.some((entry) => entry.key === autoOpenPolicyKey)
+        ? autoOpenPolicyKey
+        : undefined
+      : findLatestPolicyChangeKey({ entries: tools, getToolShortName });
   useEffect(() => {
-    if (!policyChangeKey || autoOpenedRef.current.has(policyChangeKey)) return;
+    if (!policyChangeKey) {
+      if (autoOpenPolicyKey !== undefined && !userToggledRef.current) {
+        setExpandedKey((prev) =>
+          prev && autoOpenedRef.current.has(prev) ? null : prev,
+        );
+      }
+      return;
+    }
+    if (autoOpenedRef.current.has(policyChangeKey)) return;
     autoOpenedRef.current.add(policyChangeKey);
     if (!userToggledRef.current) setExpandedKey(policyChangeKey);
-  }, [policyChangeKey]);
+  }, [policyChangeKey, autoOpenPolicyKey]);
+
+  // Tool calls waiting on user approval stay open directly under their circles,
+  // even alongside an auto-opened policy diff preview in the same row and even
+  // for viewers who cannot expand ordinary tool calls.
+  const approvalPendingKeys = new Set(
+    tools.filter(isApprovalPendingEntry).map((entry) => entry.key),
+  );
+  // Previews still referenced by an unresolved proposal ("The change previewed
+  // above") stay open even when a newer preview arrives in this or a later row.
+  const pinnedPreviewKeys = new Set(
+    tools
+      .filter(
+        (entry) =>
+          entry.kind !== "hook" &&
+          entry.part.toolCallId !== undefined &&
+          pinnedPreviewToolCallIds.has(entry.part.toolCallId),
+      )
+      .map((entry) => entry.key),
+  );
+
+  const isEntryExpanded = (key: string) =>
+    approvalPendingKeys.has(key)
+      ? !dismissedApprovalKeys.has(key)
+      : pinnedPreviewKeys.has(key)
+        ? !dismissedPinnedPreviewKeys.has(key)
+        : expandedKey === key;
 
   const handleToggle = (key: string) => {
+    if (approvalPendingKeys.has(key)) {
+      setDismissedApprovalKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+      return;
+    }
     if (!canExpandToolCalls) return;
     userToggledRef.current = true;
+    if (pinnedPreviewKeys.has(key)) {
+      setDismissedPinnedPreviewKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+      setExpandedKey((prev) => (prev === key ? null : prev));
+      return;
+    }
     // Expanding a tool card collapses any inline app open in this row — the
     // mirror of an app pill collapsing an expanded tool card, so only one
     // thing unfolds under the row at a time. Panel-hosted apps are untouched
@@ -436,7 +553,20 @@ export function CompactToolGroup({
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
-  const expandedEntry = tools.find((t) => t.key === expandedKey);
+  const openEntries = tools.filter((entry) => isEntryExpanded(entry.key));
+
+  const authCards = renderAuthCard
+    ? tools.flatMap((entry) => {
+        if (entry.kind === "hook") return [];
+        const card = renderAuthCard({
+          toolName: entry.toolName,
+          part: entry.part,
+          toolResultPart: entry.toolResultPart,
+          errorText: entry.errorText,
+        });
+        return card ? [{ key: entry.key, card }] : [];
+      })
+    : [];
 
   // Resolve each app entry's render once: the pill needs the app identity, the
   // content below the row needs the full mount props. A `null` render (e.g. a
@@ -471,12 +601,16 @@ export function CompactToolGroup({
     <div className="mb-4">
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((entry) => {
+          const entryExpanded = isEntryExpanded(entry.key);
+          const entryExpandable =
+            canExpandToolCalls || approvalPendingKeys.has(entry.key);
+
           if (entry.kind === "hook") {
             return (
               <HookCircle
                 key={entry.key}
                 data={entry.data}
-                isExpanded={expandedKey === entry.key}
+                isExpanded={entryExpanded}
                 isExpandable={canExpandToolCalls}
                 onClick={() => handleToggle(entry.key)}
               />
@@ -503,8 +637,8 @@ export function CompactToolGroup({
                   toolName={displayToolName}
                   toolCallId={entry.part.toolCallId}
                   state={state}
-                  isExpanded={expandedKey === entry.key}
-                  isExpandable={canExpandToolCalls}
+                  isExpanded={entryExpanded}
+                  isExpandable={entryExpandable}
                   onClick={() => handleToggle(entry.key)}
                   {...iconProps}
                 />
@@ -527,7 +661,10 @@ export function CompactToolGroup({
               />
             );
           }
-          if (getToolShortName(entry.toolName) === TOOL_LOAD_SKILL_SHORT_NAME) {
+          if (
+            getToolShortName(entry.toolName) === TOOL_LOAD_SKILL_SHORT_NAME &&
+            state !== "approval-requested"
+          ) {
             const input = (entry.part.input ?? {}) as {
               name?: unknown;
               path?: unknown;
@@ -557,12 +694,20 @@ export function CompactToolGroup({
           }
           // A run_tool dispatch belongs visually to its *target* tool: unwrap
           // so the circle shows the underlying MCP server's icon (and tooltip
-          // name) instead of the generic Archestra built-in icon.
-          const displayToolName = resolveRunToolTargetName(
-            entry.part,
-            entry.toolName,
-            { getToolShortName },
-          );
+          // name) instead of the generic Archestra built-in icon. Approval
+          // prompts also fall back to the raw short name so branded prefixes
+          // unwrap before identity data resolves.
+          const displayToolName =
+            state === "approval-requested"
+              ? getApprovalToolDisplay({
+                  toolName: entry.toolName,
+                  input: entry.part.input,
+                  isApprovalRequested: true,
+                  getToolShortName,
+                }).toolName
+              : resolveRunToolTargetName(entry.part, entry.toolName, {
+                  getToolShortName,
+                });
           const iconInfo = toolIconMap?.get(displayToolName);
           const fallbackCatalogId =
             iconInfo?.catalogId ??
@@ -581,8 +726,8 @@ export function CompactToolGroup({
                   toolResultPart: entry.toolResultPart,
                 })?.label
               }
-              isExpanded={expandedKey === entry.key}
-              isExpandable={canExpandToolCalls}
+              isExpanded={entryExpanded}
+              isExpandable={entryExpandable}
               onClick={() => handleToggle(entry.key)}
               icon={iconInfo?.icon}
               catalogId={fallbackCatalogId}
@@ -630,15 +775,30 @@ export function CompactToolGroup({
           />
         );
       })}
-      {expandedEntry && (
-        <div className="mt-2">
-          {expandedEntry.kind === "hook" ? (
-            <HookRunChip data={expandedEntry.data} defaultOpen />
-          ) : (
-            <ExpandedToolCard
-              tool={expandedEntry}
-              onToolApprovalResponse={onToolApprovalResponse}
-            />
+      {authCards.length > 0 && (
+        <div className="mt-2 flex flex-col gap-2">
+          {authCards.map(({ key, card }) => (
+            <div key={key}>{card}</div>
+          ))}
+        </div>
+      )}
+      {openEntries.length > 0 && (
+        <div className="mt-2 flex flex-col gap-2">
+          {openEntries.map((entry) =>
+            entry.kind === "hook" ? (
+              <HookRunChip
+                key={entry.key}
+                data={entry.data}
+                defaultOpen
+                className="mb-0"
+              />
+            ) : (
+              <ExpandedToolCard
+                key={entry.key}
+                tool={entry}
+                onToolApprovalResponse={onToolApprovalResponse}
+              />
+            ),
           )}
         </div>
       )}
@@ -689,6 +849,12 @@ export function CompactToolGroup({
   );
 }
 
+/** Whether an entry is waiting on a user approval decision. */
+function isApprovalPendingEntry(entry: CompactEntry): boolean {
+  if (entry.kind === "hook") return false;
+  return !entry.toolResultPart && entry.part.state === "approval-requested";
+}
+
 function ExpandedToolCard({
   tool,
   onToolApprovalResponse,
@@ -708,6 +874,15 @@ function ExpandedToolCard({
     cancel: cancelTask,
     isCancelling: isCancellingTask,
   } = useMcpTaskFor(part.toolCallId);
+  const isApprovalRequested = part.state === "approval-requested";
+  const approvalDisplay = getApprovalToolDisplay({
+    toolName,
+    input: part.input,
+    isApprovalRequested,
+    getToolShortName,
+  });
+  const displayToolName = approvalDisplay.toolName;
+  const displayShortName = getToolShortName(displayToolName);
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
   const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
@@ -736,22 +911,23 @@ function ExpandedToolCard({
   const previewedChange =
     previewed && !saveResult && !policyChange && !errorText ? previewed : null;
   const input = withoutProxyTransportArguments({
-    toolName,
-    shortName: toolShortName,
+    toolName: displayToolName,
+    shortName: displayShortName,
     input:
       toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
         ? withParsedArguments(part.input)
-        : part.input,
+        : isApprovalRequested
+          ? approvalDisplay.input
+          : part.input,
   });
   const hasInput = input && Object.keys(input).length > 0;
-  const isApprovalRequested = part.state === "approval-requested";
   // Whose credential the gateway used against the upstream server.
   const executedAs = extractMcpExecutedAs(
     toolResultPart ? toolResultPart.output : part.output,
   );
 
   const logsButton = errorText ? (
-    <ToolErrorLogsButton toolName={toolName} />
+    <ToolErrorLogsButton toolName={displayToolName} />
   ) : null;
   const humanRuling = getHumanRulingDisplay({ part, toolResultPart });
   const headerState =
@@ -766,10 +942,10 @@ function ExpandedToolCard({
           });
 
   return (
-    <Tool open>
+    <Tool open className="mb-0">
       <ToolHeader
-        type={`tool-${toolName}`}
-        title={getToolCardTitle(toolName)}
+        type={`tool-${displayToolName}`}
+        title={getToolCardTitle(displayToolName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}

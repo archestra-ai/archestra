@@ -6,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface AuthErrorToolProps {
   title: string;
@@ -21,6 +22,7 @@ export interface AuthErrorToolProps {
    * action). Defaults to "error" — the outstanding-auth state.
    */
   variant?: "error" | "success";
+  className?: string;
 }
 
 export function AuthErrorTool({
@@ -32,9 +34,15 @@ export function AuthErrorTool({
   actionTooltipText,
   openInNewTab = true,
   variant = "error",
+  className,
 }: AuthErrorToolProps) {
   return (
-    <div className="mt-3 rounded-xl border border-border px-5 py-4">
+    <div
+      className={cn(
+        "mt-3 rounded-xl border border-border px-5 py-4",
+        className,
+      )}
+    >
       <div className="flex flex-wrap items-start gap-3 text-sm">
         {variant === "success" ? (
           <Check className="mt-0.5 size-4 flex-none text-emerald-600" />

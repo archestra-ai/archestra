@@ -200,6 +200,20 @@ archestra:
   # OpenShift, whose restricted SCC assigns its own non-root UID instead.
   runAsNonRoot: true
 
+  # With runAsNonRoot, also run the web, worker, and migration containers and
+  # the chart's init containers with a read-only root filesystem. The chart
+  # mounts an emptyDir at each path the platform image writes: /tmp
+  # (supervisord and the backend's temporary files), /run/archestra
+  # (supervisord's config and pid file), /var/log/supervisor, /app/data (Node
+  # diagnostic reports), /home/archestra (HOME: the skill marketplace, Dagger
+  # CLI, and kubectl caches), and /app/frontend/.next/cache (Next.js optimized
+  # images). A volume of your own mounted at one of these paths
+  # through extraVolumes and extraVolumeMounts, or the file-storage volume,
+  # replaces its emptyDir, for example to set a sizeLimit. Set false if a
+  # custom image or command writes anywhere else; readOnlyRootFilesystem in
+  # containerSecurityContext wins over this value.
+  readOnlyRootFilesystem: true
+
   # Pod-level securityContext for the web, worker, and migration pods.
   # RuntimeDefault applies the container runtime's default syscall filter,
   # which the platform image runs under unchanged.
@@ -214,10 +228,8 @@ archestra:
   # To harden further, add for example:
   #   capabilities:
   #     drop: ["ALL"]
-  # To run as non-root, set runAsNonRoot above. readOnlyRootFilesystem needs
-  # writable emptyDir mounts (see extraVolumes) for /tmp, /run/archestra,
-  # /var/log/supervisor, /app/data, /home/archestra, and
-  # /app/frontend/.next/cache.
+  # runAsNonRoot and readOnlyRootFilesystem above add the non-root and
+  # read-only settings; a value set here wins over them.
   containerSecurityContext:
     allowPrivilegeEscalation: false
 

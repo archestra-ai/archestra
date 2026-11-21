@@ -13,3 +13,4 @@ lastUpdated: 2026-11-20
 A v1.4 values file renders with the v1.5 chart, but these keys need changes:
 
 - `archestra.runAsNonRoot`: the web, worker, and migration pods run as UID 10001 by default. Before you upgrade, run `chown -R 10001` on file-storage and diagnostics volumes on NFS or `hostPath`: Kubernetes regroups other volume types for you. On OpenShift, set it to `false`, so its restricted SCC assigns the UID. To keep running as root, set it to `false`.
+- `archestra.readOnlyRootFilesystem`: with `archestra.runAsNonRoot`, the platform containers' root filesystem is read-only by default. The chart mounts an `emptyDir` at `/tmp`, `/run/archestra`, `/var/log/supervisor`, `/app/data`, `/home/archestra`, and `/app/frontend/.next/cache`. If you run a custom image or command that writes anywhere else, mount a volume at that path with `archestra.extraVolumes` and `archestra.extraVolumeMounts`, or set this value to `false`.

@@ -7,7 +7,8 @@
 # It copies whole Alpine packages, never loose libraries, and writes their
 # entries into the base's package database, so image scanners list every
 # package the image holds, at its real version:
-# - git and git-daemon (git-http-backend), which the skill marketplace runs
+# - git, git-daemon (git-http-backend) and git-init-template, which the skill
+#   marketplace runs
 # - the packages that own a shared library that the native addons under /app,
 #   kubectl, dagger or git load, followed until nothing new is needed
 # A package the base already has is replaced by the runtime's copy, which the
@@ -57,7 +58,8 @@ needed_paths() {
         done
 }
 
-packages="git git-daemon"
+# git-init-template holds the templates `git init` copies into a new repository.
+packages="git git-daemon git-init-template"
 elves=$(elf_files /app /usr/local/bin/kubectl /usr/local/bin/dagger /usr/bin/git /usr/libexec/git-core)
 seen=""
 # Follow library dependencies until no new library appears.
@@ -80,11 +82,15 @@ done
 packages=$(echo "$packages" | tr ' ' '\n' | grep -v -x -e '' -e busybox | sort -u | tr '\n' ' ')
 echo "Packages copied into the Kubernetes image: $packages"
 
-# Every file of each package, with its ownership and mode.
-for name in $packages; do
-    apk info --contents "$name" | sed -n '/^[^ ]/{/contains:$/!p}'
-done | sort -u > /tmp/slim-package-files
-(cd / && tar -cf - -T /tmp/slim-package-files) | tar -xf - -C "$ROOTFS"
+# Every directory and file of each package, from its database entry (F: is a
+# directory, R: a file in it); `apk info --contents` leaves some files out,
+# such as git's templates.
+awk -v copy=" $packages " '
+    /^P:/ { keep = index(copy, " " substr($0, 3) " ") > 0 }
+    keep && /^F:/ { directory = substr($0, 3); print directory }
+    keep && /^R:/ { print directory "/" substr($0, 3) }
+' "$DB" | sort -u > /tmp/slim-package-files
+(cd / && tar --no-recursion -cf - -T /tmp/slim-package-files) | tar -xf - -C "$ROOTFS"
 
 # The base's package entries, minus the ones replaced, then the copied ones.
 mkdir -p "$ROOTFS/lib/apk/db"

@@ -58,6 +58,8 @@ kubectl exec -it deploy/archestra-platform -- \
   node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
 ```
 
+When the chart loads the database URL from Vault (`archestra.initContainers.vaultSecrets`), it is not in the pod's environment. Put `node /app/with-vault-env.mjs` in front of `node`, so the command loads those secrets first.
+
 ### Docker Quickstart
 
 Pass the database connection URL into the container command:

@@ -123,6 +123,12 @@ const AWS_APPLICATION_NETWORK_POLICY_RESOURCE = {
 // How long streamLogs will keep an open WS waiting for the pod to become
 // Ready before giving up. 5 minutes covers a slow image pull on first install.
 const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
+/**
+ * The container runtime's default syscall filter for MCP server pods. Kubernetes
+ * runs a pod without a profile unconfined unless the kubelet sets
+ * `--seccomp-default`.
+ */
+const RUNTIME_DEFAULT_SECCOMP: k8s.V1SeccompProfile = { type: "RuntimeDefault" };
 
 /**
  * Default transport-level health contract for managed HTTP MCP servers.
@@ -2337,6 +2343,7 @@ export default class K8sDeployment {
         },
       ],
       restartPolicy: "Always",
+      securityContext: { seccompProfile: RUNTIME_DEFAULT_SECCOMP },
     };
 
     // Build pod template metadata
@@ -2496,6 +2503,19 @@ export default class K8sDeployment {
     // SPDX-SnippetEnd
 
     // Apply additional system-managed settings that may not be in YAML
+    // 0. The runtime's default syscall filter, unless the manifest picks its
+    //    own profile (a Localhost profile, say). MCP servers run third-party
+    //    code; without a profile most clusters run them unconfined.
+    if (
+      deployment.spec?.template?.spec &&
+      !deployment.spec.template.spec.securityContext?.seccompProfile
+    ) {
+      deployment.spec.template.spec.securityContext = {
+        ...deployment.spec.template.spec.securityContext,
+        seccompProfile: RUNTIME_DEFAULT_SECCOMP,
+      };
+    }
+
     // 1. Apply nodeSelector if provided
     if (
       nodeSelector &&

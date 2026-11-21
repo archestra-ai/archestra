@@ -182,11 +182,14 @@ class StageShapeTests(unittest.TestCase):
         self.assertTrue(any('sha256sum -c "$sums"' in line for line in lines[download:download + 12]))
 
     def test_runtime_image_takes_the_stage_output(self):
-        slim = DOCKERFILE.split("\nFROM base AS unified-slim\n", 1)[1].split("\nFROM ", 1)[0]
-        # Relative to /app; `unified` is built from this stage, so both get it.
-        self.assertTrue(slim.startswith("WORKDIR /app\n"))
-        self.assertTrue("\nCOPY --from=archestra-cli-release /out/ ./archestra-cli/\n" in slim)
-        self.assertTrue("\nFROM unified-slim AS unified\n" in DOCKERFILE)
+        runtime = re.split(r"\nFROM dhi\.io/node:\S+ AS runtime\n", DOCKERFILE, maxsplit=1)[1].split("\nFROM ", 1)[0]
+        # Relative to /app; both published images are built from this stage.
+        self.assertTrue(runtime.startswith("WORKDIR /app\n"))
+        self.assertTrue("\nCOPY --from=archestra-cli-release /out/ ./archestra-cli/\n" in runtime)
+        # The Kubernetes image copies /app out of it (build-slim-rootfs.sh).
+        self.assertTrue("\nFROM runtime AS slim-rootfs\n" in DOCKERFILE)
+        self.assertTrue("\nFROM runtime-base-distroless AS unified-slim\n" in DOCKERFILE)
+        self.assertTrue("\nFROM runtime AS unified\n" in DOCKERFILE)
 
     def test_lock_is_in_the_docker_context_and_in_the_tilt_build(self):
         ignore = (ROOT / "platform/.dockerignore").read_text().splitlines()

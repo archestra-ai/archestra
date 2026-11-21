@@ -49,26 +49,6 @@ export function hitlReviewCardAnswer(
   return undefined;
 }
 
-/**
- * The labels of the previous card layout. A card stays open for up to 30
- * minutes, so an answer to one issued before a deploy can arrive after it.
- */
-export const PREVIOUS_HITL_CARD_LABELS = ["Approve", "Deny", "Inspect details"];
-
-/**
- * What a previous-layout label decides. Its Approve is asked again on the
- * current card: that layout decided which reviews could be approved
- * differently, and an approval is never granted on a guess.
- */
-export function previousHitlCardAnswer(
-  label: string,
-): "deny" | "inspect" | "ask-again" | undefined {
-  if (label === "Approve") return "ask-again";
-  if (label === "Deny") return "deny";
-  if (label === "Inspect details") return "inspect";
-  return undefined;
-}
-
 /** The staged review a card and the full text both render from. */
 type HitlInspectableReview = {
   offerId?: string;

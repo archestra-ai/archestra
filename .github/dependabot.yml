@@ -1,4 +1,14 @@
 version: 2
+# Docker's hardened images (dhi.io) refuse anonymous pulls, so Dependabot needs
+# a login to bump the platform runtime's base. DOCKERHUB_DHI_TOKEN is a
+# Dependabot secret: a Docker Hub organization access token that can pull
+# from dhi.io.
+registries:
+  dhi:
+    type: docker-registry
+    url: dhi.io
+    username: archestra
+    password: ${{secrets.DOCKERHUB_DHI_TOKEN}}
 updates:
   - package-ecosystem: npm
     directory: platform
@@ -81,6 +91,8 @@ updates:
   # (test_base_image_pins.py enforces it). New majors, and minors outside Node,
   # stay deliberate.
   - package-ecosystem: docker
+    registries:
+      - dhi
     directories:
       - platform
       - platform/docker_images/agent
@@ -121,6 +133,8 @@ updates:
   # The sandbox base: its uv base image is pinned to sandbox-core's
   # DEFAULT_BASE_IMAGE, so only its other bases are bumped here.
   - package-ecosystem: docker
+    registries:
+      - dhi
     directories:
       - platform/docker_images/sandbox_base
     schedule:
@@ -157,6 +171,8 @@ updates:
 
   # Same as above, for a supported release line.
   - package-ecosystem: docker
+    registries:
+      - dhi
     target-branch: release/1.4
     directories:
       - platform
@@ -196,6 +212,8 @@ updates:
       default-days: 7
 
   - package-ecosystem: docker
+    registries:
+      - dhi
     target-branch: release/1.4
     directories:
       - platform/docker_images/sandbox_base
@@ -224,6 +242,80 @@ updates:
       # The uv base must equal DEFAULT_BASE_IMAGE in sandbox-core's dagger.rs
       # (check:sandbox-base), so it is bumped by hand together with that constant.
       - dependency-name: "*uv"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  # The shipped npm, Cargo and Go dependencies of a supported release line
+  # (.github/backport-targets.json). Patch releases only: a release line takes
+  # fixes, not features. Main's entries above group minors and patches, and
+  # main alone gets GitHub's security updates. test_dependabot_release_lines.py
+  # keeps one of each per line.
+  - package-ecosystem: npm
+    target-branch: release/1.4
+    directory: platform
+    schedule:
+      interval: weekly
+    groups:
+      platform-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: cargo
+    target-branch: release/1.4
+    directory: platform/archestra-rs
+    schedule:
+      interval: weekly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: gomod
+    target-branch: release/1.4
+    directory: platform/docker/dagger-dockercompat
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
     labels:
       - dependencies
     commit-message:

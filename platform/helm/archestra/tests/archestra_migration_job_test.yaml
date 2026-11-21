@@ -295,6 +295,7 @@ tests:
 
   - it: keeps the vault volume alongside archestra.extraVolumes
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.initContainers.vaultSecrets.enabled: true
       archestra.initContainers.vaultSecrets.secrets:
         - envVar: ARCHESTRA_DATABASE_URL
@@ -324,6 +325,7 @@ tests:
 
   - it: skips PVC-backed archestra.extraVolumes and their mounts
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.extraVolumes:
         - name: app-data
           persistentVolumeClaim:
@@ -353,6 +355,7 @@ tests:
 
   - it: renders no volumes when the only extra volume is PVC-backed
     set:
+      archestra.readOnlyRootFilesystem: false
       archestra.extraVolumes:
         - name: app-data
           persistentVolumeClaim:
@@ -591,3 +594,18 @@ tests:
             name: aws-iam-token
             mountPath: /var/run/secrets/aws-iam-token/serviceaccount
             readOnly: true
+
+  - it: runs the migrations through the Node vault wrapper when vault secrets are on
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["node", "/app/with-vault-env.mjs"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "./scripts/migrate-with-lock.mjs"]

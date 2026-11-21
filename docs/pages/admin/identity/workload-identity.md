@@ -2,14 +2,14 @@
 title: Workload Identity Federation
 description: Let CI jobs and workloads sign in as a service account or an OAuth client with their own OIDC token instead of a stored key or secret
 order: 6
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Let a CI job sign in as a service account with the OIDC token its platform already issues, so no Archestra API key sits in your CI secrets. A GitHub Actions job that deploys from `main` gets a one-hour token; the same workflow run from a pull request gets nothing.
 
-Workload identity federation is an [Enterprise feature](/docs/get-started/pricing-model). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Workload identity federation is an [Enterprise feature](/pricing). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## When to Use It
 
@@ -184,7 +184,7 @@ Changing a credential's issuer, audience, subject, or conditions revokes the tok
 
 ## Troubleshooting
 
-A refused exchange answers `400` with an `error` code. The **Audit** tab of [Logs and Auditing](/docs/admin/logs) shows why: open the **Service account token exchanged** event for the account and read `reason`.
+A refused exchange answers `400` with an `error` code. The **Audit** events in [Logs](/docs/insights/logs) show why: open the **Service account token exchanged** event for the account and read `reason`.
 
 | Reason | Fix |
 | --- | --- |

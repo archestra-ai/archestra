@@ -95,23 +95,21 @@ export function GuardrailsProvider({
   onSelectSpan: (key: string | null) => void;
   children: ReactNode;
 }) {
-  const openappaEnabled = Boolean(useFeature("openappaEnabled"));
+  // What Guardrails recorded has its own permission, apart from the logs
+  // this page needs.
+  const { data: canReadGuardrails } = useHasPermissions({
+    guardrailsLog: ["read"],
+  });
+  const enabled = Boolean(useFeature("openappaEnabled") && canReadGuardrails);
   const { data: consults, isLoading: consultsLoading } = useSessionConsults({
     llmSessionId: sessionId,
-    enabled: openappaEnabled,
+    enabled,
   });
   const { data: labelChanges, isLoading: labelChangesLoading } =
-    useSessionLabelChanges({
-      llmSessionId: sessionId,
-      enabled: openappaEnabled,
-    });
-  // Yells have their own permission, apart from the logs this page needs.
-  const { data: canReadYells } = useHasPermissions({
-    guardrailsYell: ["read"],
-  });
+    useSessionLabelChanges({ llmSessionId: sessionId, enabled });
   const { data: yells, isLoading: yellsLoading } = useSessionYells({
     llmSessionId: sessionId,
-    enabled: openappaEnabled && canReadYells,
+    enabled,
   });
   // A label change a client-run tool caused, whose asking request sits on
   // another page: found by the call id its response recorded.

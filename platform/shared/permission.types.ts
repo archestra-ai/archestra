@@ -27,7 +27,8 @@ export const resources = [
   "plugin",
   "app",
   "guardrailsPolicy",
-  "guardrailsYell",
+  "guardrailsLog",
+  "clientConnection",
   "mcpGateway",
   "llmProxy",
   "log",
@@ -78,7 +79,8 @@ export const resourceLabels: Record<Resource, string> = {
   plugin: "Plugins",
   app: "Apps",
   guardrailsPolicy: "Guardrails Policy",
-  guardrailsYell: "Guardrails Yells",
+  guardrailsLog: "Guardrails Logs",
+  clientConnection: "Client Connections",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
@@ -120,9 +122,11 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Proxy endpoint that routes LLM requests with security policies and logging",
   guardrailsPolicy:
     "Guardrails (OpenAPPA) policies that inspect and filter prompts and tool calls",
-  guardrailsYell:
-    "Reports agents raise when Guardrails blocks them or a block is waived",
-  log: "Request logs from the LLM Proxy, MCP tool calls, and Guardrails consults",
+  guardrailsLog:
+    "What Guardrails recorded: its consults of external services, and the yells agents raise when it blocks them",
+  clientConnection:
+    "Coding clients and agents members connect through the Connect page, and how much each one is used",
+  log: "Request logs from the LLM Proxy and MCP tool calls",
   chat: "Conversations with agents and models in the chat interface",
   project:
     "Shared workspaces containing chats, files, schedules, and agent runs",
@@ -189,7 +193,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Other: ["chat", "project", "knowledgeSource"],
   // Who can see what happened: each is `read` for your own records and
   // `admin` for everyone's.
-  Logs: ["log", "guardrailsYell", "auditLog"],
+  Logs: ["log", "guardrailsLog", "clientConnection", "auditLog"],
   Administration: [
     "accessPolicies",
     "member",

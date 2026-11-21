@@ -109,7 +109,7 @@ describe("transactional interaction user activity", () => {
           organizationId: org.id,
           limit: 100,
         }),
-      ).toEqual([{ id: user.id, name: user.name }]);
+      ).toEqual([{ id: user.id, name: user.name, email: user.email }]);
     } finally {
       await db.execute(
         sql`DROP TRIGGER test_negative_activity_balance ON interaction_user_activity_users`,
@@ -118,7 +118,9 @@ describe("transactional interaction user activity", () => {
     }
     await InteractionUserActivityModel.invalidate();
     await rebuild();
-    expect(await ranked(org.id)).toEqual([{ id: user.id, name: user.name }]);
+    expect(await ranked(org.id)).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
   });
 
   test("incomplete backfill falls back; resumable batches preserve exact counts, ties and historical users", async ({
@@ -208,8 +210,8 @@ describe("transactional interaction user activity", () => {
     await insert({ userId: excluded.id, profileId: foreign.id });
     await rebuild();
     const expected = [
-      { id: busy.id, name: busy.name },
-      { id: quiet.id, name: quiet.name },
+      { id: busy.id, name: busy.name, email: busy.email },
+      { id: quiet.id, name: quiet.name, email: quiet.email },
     ];
     const cold = await recordQueries(() =>
       InteractionModel.getUserFilterOptions({
@@ -284,7 +286,9 @@ describe("transactional interaction user activity", () => {
         attribution: { userId: user.id },
       });
     }
-    expect(await ranked(org.id)).toEqual([{ id: user.id, name: user.name }]);
+    expect(await ranked(org.id)).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
     expect(
       (await db.select().from(schema.interactionUserActivityTable))[0]
         .activityCount,
@@ -346,7 +350,7 @@ describe("transactional interaction user activity", () => {
         organizationId: org.id,
         limit: 100,
       }),
-    ).toEqual([{ id: user.id, name: user.name }]);
+    ).toEqual([{ id: user.id, name: user.name, email: user.email }]);
     await rebuild();
     expect(await ranked(org.id)).toHaveLength(1);
   });
@@ -396,7 +400,9 @@ describe("transactional interaction user activity", () => {
       .where(eq(schema.agentsTable.id, agent.id));
     await rebuild();
     expect(await ranked(org.id)).toEqual([]);
-    expect(await ranked(other.id)).toEqual([{ id: user.id, name: user.name }]);
+    expect(await ranked(other.id)).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
     await db
       .delete(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.id, connector.id));
@@ -450,7 +456,7 @@ describe("transactional interaction user activity", () => {
     });
     expect(await ranked(org.id)).toEqual([]);
     expect(await ranked(foreign.id)).toEqual([
-      { id: second.id, name: second.name },
+      { id: second.id, name: second.name, email: second.email },
     ]);
     await InteractionUserActivityModel.updateAttribution({
       id: row.id,
@@ -464,7 +470,7 @@ describe("transactional interaction user activity", () => {
       attribution: { userId: first.id },
     });
     expect(await ranked(foreign.id)).toEqual([
-      { id: first.id, name: first.name },
+      { id: first.id, name: first.name, email: first.email },
     ]);
   });
 
@@ -547,7 +553,9 @@ describe("transactional interaction user activity", () => {
       }),
     ).toEqual([]);
     await rebuild();
-    expect(await ranked(other.id)).toEqual([{ id: user.id, name: user.name }]);
+    expect(await ranked(other.id)).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
   });
 
   test("owner matrix uses every nonnull owner, not membership; a missing owner created later invalidates", async ({
@@ -632,7 +640,7 @@ describe("transactional interaction user activity", () => {
         organizationId: org.id,
         limit: 100,
       }),
-    ).toEqual([{ id: user.id, name: user.name }]);
+    ).toEqual([{ id: user.id, name: user.name, email: user.email }]);
     await rebuild();
     expect(
       (await db.select().from(schema.interactionUserActivityTable))[0]
@@ -656,7 +664,9 @@ describe("transactional interaction user activity", () => {
     expect(await ranked(org.id)).toEqual([]);
     const user = await makeUser();
     await insert({ profileId: agent.id, userId: user.id });
-    expect(await ranked(org.id)).toEqual([{ id: user.id, name: user.name }]);
+    expect(await ranked(org.id)).toEqual([
+      { id: user.id, name: user.name, email: user.email },
+    ]);
   });
 });
 

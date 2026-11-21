@@ -1225,6 +1225,9 @@ pgvector extension setup, and PostgreSQL readiness.
   volumeMounts:
     - name: vault-secrets
       mountPath: /vault/secrets
+    {{- with include "archestra-platform.writableDirMounts" . | trim }}
+    {{- . | nindent 4 }}
+    {{- end }}
 {{- end }}
 {{- if .Values.postgresql.enabled }}
 # Ensure the pgvector extension exists in the application database.
@@ -1390,7 +1393,122 @@ source: no bundled or external database and no named entry supplies it.
 securityContext for the chart's own containers, from archestra.containerSecurityContext.
 */}}
 {{- define "archestra-platform.containerSecurityContext" -}}
-{{- with .Values.archestra.containerSecurityContext -}}
+{{- with include "archestra-platform.containerSecurityContextValues" . | fromJson -}}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+The container securityContext as JSON: archestra.containerSecurityContext
+plus the runAsNonRoot and readOnlyRootFilesystem defaults, which its own
+values win over.
+*/}}
+{{- define "archestra-platform.containerSecurityContextValues" -}}
+{{- $context := deepCopy (.Values.archestra.containerSecurityContext | default dict) }}
+{{- if .Values.archestra.runAsNonRoot }}
+{{- $context = merge $context (dict "capabilities" (dict "drop" (list "ALL"))) }}
+{{- /* hasKey, not merge: merge would replace an operator's false. */}}
+{{- if and .Values.archestra.readOnlyRootFilesystem (not (hasKey $context "readOnlyRootFilesystem")) }}
+{{- $_ := set $context "readOnlyRootFilesystem" true }}
+{{- end }}
+{{- end }}
+{{- toJson $context }}
+{{- end }}
+
+{{/*
+The emptyDir volumes a read-only root filesystem needs, as a JSON list of
+{name, mountPath}: one for each path the platform image writes. Empty when
+the root filesystem stays writable. A path that another mount of the
+container already covers keeps that mount instead. The migration Job passes
+its own mount paths as jobMountPaths; the web and worker pods use their
+shared mounts.
+*/}}
+{{- define "archestra-platform.writableDirs" -}}
+{{- $dirs := list }}
+{{- if (include "archestra-platform.containerSecurityContextValues" . | fromJson).readOnlyRootFilesystem }}
+{{- $taken := list }}
+{{- if hasKey . "jobMountPaths" }}
+{{- $taken = .jobMountPaths }}
+{{- else }}
+{{- $taken = include "archestra-platform.sharedMountPaths" . | fromJsonArray }}
+{{- end }}
+{{- $normalized := list }}
+{{- range $taken }}
+{{- $normalized = append $normalized (clean (toString .)) }}
+{{- end }}
+{{- range $dir := list
+  (dict "name" "writable-tmp" "mountPath" "/tmp")
+  (dict "name" "writable-run" "mountPath" "/run/archestra")
+  (dict "name" "writable-data" "mountPath" "/app/data")
+  (dict "name" "writable-home" "mountPath" "/home/archestra")
+  (dict "name" "writable-next-cache" "mountPath" "/app/frontend/.next/cache") }}
+{{- if not (has $dir.mountPath $normalized) }}
+{{- $dirs = append $dirs $dir }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $dirs }}
+{{- end }}
+
+{{/*
+Mount paths of the shared web and worker container mounts, as a JSON list.
+*/}}
+{{- define "archestra-platform.sharedMountPaths" -}}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- $paths := list }}
+{{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+{{- $paths = append $paths .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
+{{- end }}
+{{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+{{- $paths = append $paths "/vault/secrets" }}
+{{- end }}
+{{- if .Values.archestra.diagnostics.enabled }}
+{{- $paths = append $paths "/var/diagnostics" }}
+{{- end }}
+{{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+{{- $paths = append $paths .Values.archestra.fileStorage.filesystem.mountPath }}
+{{- end }}
+{{- if $iamAuth.injectWebIdentityTokenVolume }}
+{{- $paths = append $paths "/var/run/secrets/aws-iam-token/serviceaccount" }}
+{{- end }}
+{{- range .Values.archestra.extraVolumeMounts }}
+{{- $paths = append $paths .mountPath }}
+{{- end }}
+{{- toJson $paths }}
+{{- end }}
+
+{{/*
+volumeMounts entries for the writable emptyDirs of archestra-platform.writableDirs.
+*/}}
+{{- define "archestra-platform.writableDirMounts" -}}
+{{- range include "archestra-platform.writableDirs" . | fromJsonArray }}
+- name: {{ .name }}
+  mountPath: {{ .mountPath }}
+{{- end }}
+{{- end }}
+
+{{/*
+volumes entries for the writable emptyDirs of archestra-platform.writableDirs.
+*/}}
+{{- define "archestra-platform.writableDirVolumes" -}}
+{{- range include "archestra-platform.writableDirs" . | fromJsonArray }}
+- name: {{ .name }}
+  emptyDir: {}
+{{- end }}
+{{- end }}
+
+{{/*
+Pod-level securityContext for the web, worker, and migration pods. With
+archestra.runAsNonRoot they run as the image's archestra user (UID 10001);
+values in archestra.podSecurityContext win.
+*/}}
+{{- define "archestra-platform.podSecurityContext" -}}
+{{- $context := deepCopy (.Values.archestra.podSecurityContext | default dict) }}
+{{- if .Values.archestra.runAsNonRoot }}
+{{- $context = merge $context (dict "runAsNonRoot" true "runAsUser" 10001 "runAsGroup" 10001 "fsGroup" 10001) }}
+{{- end }}
+{{- with $context -}}
 securityContext:
   {{- toYaml . | nindent 2 }}
 {{- end }}
@@ -1439,7 +1557,8 @@ Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumes }}
+{{- $writableDirVolumes := include "archestra-platform.writableDirVolumes" . | trim -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumes $writableDirVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1474,6 +1593,9 @@ volumes:
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
+  {{- with $writableDirVolumes }}
+  {{- . | nindent 2 }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
@@ -1482,7 +1604,8 @@ Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumeMounts }}
+{{- $writableDirMounts := include "archestra-platform.writableDirMounts" . | trim -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumeMounts $writableDirMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1512,24 +1635,37 @@ volumeMounts:
   {{- with .Values.archestra.extraVolumeMounts }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
+  {{- with $writableDirMounts }}
+  {{- . | nindent 2 }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
 {{/*
-Vault secrets command wrapper for the main container.
-Sources /vault/secrets/env before exec'ing the given entrypoint command.
-Usage: Pass the desired entrypoint as the argument.
+Vault secrets command wrapper for the platform's containers: with-vault-env.mjs
+adds the secrets the vault-secrets init container wrote to /vault/secrets/env
+to the environment, then becomes the given command. Node, not a shell: the
+Kubernetes image has none.
+Usage: pass the command as one space-separated string.
 */}}
 {{- define "archestra-platform.vaultSecretsCommand" -}}
-command: ["/bin/sh", "-c"]
-args:
-  - |
-    if [ -f /vault/secrets/env ]; then
-      set -a
-      . /vault/secrets/env
-      set +a
-    fi
-    exec {{ . }}
+command: ["node", "/app/with-vault-env.mjs"]
+args: {{ splitList " " . | toJson }}
+{{- end }}
+
+{{/*
+The platform container's command under Vault secret injection:
+archestra.initContainers.vaultSecrets.entrypoint, or the Node entrypoint, which
+both images have. /docker-entrypoint.sh, the old default, maps to it too: the
+Kubernetes image has no shell to run that script.
+*/}}
+{{- define "archestra-platform.vaultEntrypoint" -}}
+{{- $entrypoint := .Values.archestra.initContainers.vaultSecrets.entrypoint | default "" | trim -}}
+{{- if or (not $entrypoint) (eq $entrypoint "/docker-entrypoint.sh") -}}
+node /app/entrypoint.mjs
+{{- else -}}
+{{ $entrypoint }}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -1541,15 +1677,20 @@ This helper constructs the image reference smartly:
 This maintains backward compatibility with existing deployments that set the full image:tag
 in archestra.image, while also supporting the new imageTag field used by release-please.
 
+A tag the chart builds gets imageVariant's suffix: the default `slim` picks the
+Kubernetes image (1.0.0-slim), empty picks the docker run image (1.0.0).
+
 A released chart also pins the default image (archestra/platform at the
-chart's own version) to the digest in archestra.releaseImageDigests.images.platform.
-Any other image or tag is used as configured.
+chart's own version) to its digest in archestra.releaseImageDigests.images:
+`platform-<variant>`, or `platform` without one. Any other image or tag is
+used as configured.
 
 Examples:
-  image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0"
-    (released 1.0.0 chart: "archestra/platform:1.0.0@sha256:...")
+  image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0-slim"
+    (released 1.0.0 chart: "archestra/platform:1.0.0-slim@sha256:...")
+  image: "archestra/platform", imageTag: "1.0.0", imageVariant: "" -> "archestra/platform:1.0.0"
   image: "archestra/platform:ci-test", imageTag: "1.0.0" -> "archestra/platform:ci-test"
-  image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0"
+  image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0-slim"
 */}}
 {{- define "archestra-platform.image" -}}
 {{- $image := .Values.archestra.image -}}
@@ -1562,13 +1703,15 @@ Examples:
 {{- /* Image already has a tag, use as-is */ -}}
 {{- $image -}}
 {{- else -}}
-{{- /* No tag in image, append imageTag */ -}}
+{{- /* No tag in image, append imageTag and the variant's suffix */ -}}
+{{- $variant := toString (.Values.archestra.imageVariant | default "") -}}
+{{- $tag := ternary (printf "%s-%s" (toString $imageTag) $variant) (toString $imageTag) (ne $variant "") -}}
 {{- $pins := .Values.archestra.releaseImageDigests | default dict -}}
-{{- $digest := get ($pins.images | default dict) "platform" -}}
+{{- $digest := get ($pins.images | default dict) (ternary (printf "platform-%s" $variant) "platform" (ne $variant "")) -}}
 {{- if and $digest (eq (toString $pins.version) (toString $imageTag)) (has $image (list "archestra/platform" "docker.io/archestra/platform")) -}}
-{{- printf "%s:%s@%s" $image $imageTag $digest -}}
+{{- printf "%s:%s@%s" $image $tag $digest -}}
 {{- else -}}
-{{- printf "%s:%s" $image $imageTag -}}
+{{- printf "%s:%s" $image $tag -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

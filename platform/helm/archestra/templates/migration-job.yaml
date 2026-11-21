@@ -46,6 +46,21 @@ still hold their claims, so a ReadWriteOnce claim would leave it unschedulable.
 {{- $jobExtraVolumeMounts = append $jobExtraVolumeMounts . -}}
 {{- end -}}
 {{- end }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- /* The Job's own mounts, so a read-only root filesystem gets an emptyDir only where none of them is. */}}
+{{- $jobMountPaths := list -}}
+{{- if .Values.archestra.initContainers.vaultSecrets.enabled -}}
+{{- $jobMountPaths = append $jobMountPaths "/vault/secrets" -}}
+{{- end -}}
+{{- if $iamAuth.injectWebIdentityTokenVolume -}}
+{{- $jobMountPaths = append $jobMountPaths "/var/run/secrets/aws-iam-token/serviceaccount" -}}
+{{- end -}}
+{{- range $jobExtraVolumeMounts -}}
+{{- $jobMountPaths = append $jobMountPaths .mountPath -}}
+{{- end -}}
+{{- $_ := set $migrationContext "jobMountPaths" $jobMountPaths -}}
+{{- $writableDirMounts := include "archestra-platform.writableDirMounts" $migrationContext | trim -}}
+{{- $writableDirVolumes := include "archestra-platform.writableDirVolumes" $migrationContext | trim }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -81,9 +96,8 @@ spec:
       {{- end }}
       automountServiceAccountToken: {{ $automount }}
       restartPolicy: Never
-      {{- with .Values.archestra.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "archestra-platform.podSecurityContext" . }}
+      {{- . | nindent 6 }}
       {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}
@@ -191,8 +205,7 @@ spec:
           other PVCs stay off because the hook overlaps running web/worker
           pods during upgrades.
           */}}
-          {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
-          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumeMounts }}
+          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumeMounts $writableDirMounts }}
           volumeMounts:
             {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
             - name: vault-secrets
@@ -207,6 +220,9 @@ spec:
             {{- with $jobExtraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+            {{- with $writableDirMounts }}
+            {{- . | nindent 12 }}
+            {{- end }}
           {{- end }}
       {{- with .Values.archestra.nodeSelector }}
       nodeSelector:
@@ -216,7 +232,7 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumes }}
+      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumes $writableDirVolumes }}
       volumes:
         {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
         - name: vault-secrets
@@ -235,6 +251,9 @@ spec:
         {{- end }}
         {{- with $jobExtraVolumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $writableDirVolumes }}
+        {{- . | nindent 8 }}
         {{- end }}
       {{- end }}
 {{- end }}

@@ -3,6 +3,7 @@ import {
   AGENT_PLACEMENT,
   CHANNEL_BINDINGS,
   COLLEAGUES,
+  CONNECTIONS,
   DESKTOP_DEVICE,
   KNOWLEDGE_BASE_AGENTS,
   KNOWLEDGE_BASES,
@@ -58,6 +59,7 @@ ON CONFLICT DO NOTHING;`);
   seedYells(state);
   seedLogSession(state);
   seedDesktopDevice(state);
+  seedConnections(state);
 }
 
 /** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
@@ -169,7 +171,7 @@ INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sq
   );
 }
 
-/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. Dated from now, since the Logs page reads the last three days. */
 /**
  * The persona's device, linked and online. A device is online while its MCP
  * bridge polls; no bridge runs here, so the last poll is set far ahead and the
@@ -181,19 +183,44 @@ VALUES (${sql(DESKTOP_DEVICE.id)}, ${sql(state.organization.id)}, ${sql(state.us
 ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, platform = EXCLUDED.platform, last_polled_at = EXCLUDED.last_polled_at, client_version = EXCLUDED.client_version, created_at = EXCLUDED.created_at;`);
 }
 
+/**
+ * Redeemed Connect-page setups: what Adoption counts as connected and what
+ * the Client connections log lists. Coding clients reach the model through the
+ * organization's LLM Proxy, so each setup points at it. Dated from now, since
+ * the Logs page reads the last three days. A rerun resets them.
+ */
+function seedConnections(state: SeedState): void {
+  const organizationId = sql(state.organization.id);
+  runSql(
+    CONNECTIONS.map((connection) => {
+      const disconnected =
+        "disconnectedHoursAgo" in connection
+          ? `now() - make_interval(hours => ${connection.disconnectedHoursAgo})`
+          : "NULL";
+      const redeemedAt = `now() - make_interval(hours => ${connection.hoursAgo})`;
+      return `INSERT INTO connection_setups (id, organization_id, user_id, client_id, platform, base_url, llm_proxy_id, proxy_auth, token_hash, token_start, expires_at, consumed_at, revoked_at, revoked_by_user_id, device_name, created_at)
+VALUES (${sql(connection.id)}, ${organizationId}, ${sql(state.users[connection.user])}, ${sql(connection.client)}, ${sql(connection.platform)}, 'http://localhost:9000/v1',
+  (SELECT id FROM agents WHERE agent_type = 'llm_proxy' AND organization_id = ${organizationId} LIMIT 1), 'provider-key',
+  encode(sha256(${sql(`docs-connection-${connection.id}`)}::bytea), 'hex'), ${sql(`docs-${connection.id.slice(-6)}`)},
+  ${redeemedAt} + interval '10 minutes', ${redeemedAt}, ${disconnected}, ${disconnected === "NULL" ? "NULL" : sql(state.users[connection.user])}, ${sql(connection.device)}, ${redeemedAt} - interval '1 minute')
+ON CONFLICT (id) DO UPDATE SET consumed_at = EXCLUDED.consumed_at, revoked_at = EXCLUDED.revoked_at, revoked_by_user_id = EXCLUDED.revoked_by_user_id, device_name = EXCLUDED.device_name, created_at = EXCLUDED.created_at;`;
+    }).join("\n"),
+  );
+}
+
 function seedYells(state: SeedState): void {
   const organizationId = state.organization.id;
   runSql(
     YELLS.map(
       (yell) => `INSERT INTO openappa_yells (id, organization_id, caller_id, session_id, tool_call_id, message, with_trajectory, superyell, created_at)
-VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, ${FIXTURE_TIME_SQL} - make_interval(mins => ${yell.minutesAgo}))
-ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message;`,
+VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, now() - make_interval(mins => ${yell.minutesAgo}))
+ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message, created_at = EXCLUDED.created_at;`,
     ).join("\n"),
   );
 }
 
 /**
- * Thirty fixed calendar days of model requests give Costs & Limits and My Usage
+ * Thirty fixed calendar days of model requests give Costs and My Usage
  * numbers to show. Each stream belongs to one person and one agent or coding client.
  * The rows are tagged with a session prefix, and a rerun replaces them.
  */

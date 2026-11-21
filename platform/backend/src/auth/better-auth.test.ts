@@ -1272,11 +1272,11 @@ describe("handleBeforeHook", () => {
       const assignment = handleBeforeHook(escalate);
       await expect(assignment).rejects.toThrow(APIError);
       // Platform administrators cannot grant access to other users' logs,
-      // yells, or audit records.
+      // Guardrails records, client connections, or audit records.
       await expect(assignment).rejects.toMatchObject({
         body: {
           message: expect.stringContaining(
-            "log:admin, guardrailsYell:admin, auditLog:admin",
+            "log:admin, guardrailsLog:admin, clientConnection:admin, auditLog:admin",
           ),
         },
       });

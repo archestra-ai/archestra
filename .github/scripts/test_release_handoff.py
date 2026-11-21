@@ -319,7 +319,7 @@ class WorkflowHandoffTests(unittest.TestCase):
 
     def test_relay_inventory_matches_publishers_and_release_build_has_no_rebuild_fallback(self):
         policy = HANDOFF.load_module("release-image-policy")
-        expected = {row["image"] for row in policy.candidate_matrix(ROOT)["include"]} - {"platform-slim"}
+        expected = {row["image"] for row in policy.candidate_matrix(ROOT)["include"]}
         release = (ROOT / ".github/workflows/release-please.yml").read_text()
         relay = release.split("  relay-release-candidates:\n", 1)[1].split("\n  release-pr:\n", 1)[0]
         matrix = relay.split("        image:\n", 1)[1].split("    steps:\n", 1)[0]

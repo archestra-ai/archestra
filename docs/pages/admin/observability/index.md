@@ -5,7 +5,7 @@ order: 9
 lastUpdated: 2026-11-03
 ---
 
-Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/admin/logs).
+Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/insights/logs).
 
 | Need | Set up |
 | --- | --- |
@@ -74,7 +74,7 @@ Each dashboard scopes its optional data sources and aggregates multi-replica met
 
 ## Real User Monitoring (RUM)
 
-Frontend monitoring requires an [Enterprise license](/docs/get-started/pricing-model).
+Frontend monitoring requires an [Enterprise license](/pricing).
 
 1. Set the collector endpoint in your environment:
    ```bash

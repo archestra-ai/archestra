@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-20
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -28,7 +28,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.41" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.42" # x-release-please-version
    helm show values \
      oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
@@ -128,4 +128,4 @@ Reconnect notification streams to a live replica. An interrupted tool call can a
 
 For Docker, set the same [shutdown environment variables](/docs/admin/deployment/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
 
-New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.
+New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub; the chart runs its `<version>-slim` tag. If you mirror images internally, mirror that tag, import the release’s companion images from GHCR, and preserve your Helm registry overrides. Existing releases remain at their original addresses.

@@ -1683,9 +1683,12 @@ describe("APPA feature boundary", () => {
       "deny",
       "allow",
     ]);
-    // The runtime never saw these calls, so it holds no ruling for their ids.
+    // The runtime never saw these calls, so it holds no ruling for their ids
+    // and the proxy answers their results.
     expect(decisions[1]).not.toHaveProperty("recorded");
     expect(decisions[2]).not.toHaveProperty("recorded");
+    expect(decisions[1]).toMatchObject({ unanswered: true });
+    expect(decisions[2]).toMatchObject({ unanswered: true });
     const dispatched = native.dispatchHook.mock.calls.map(([raw]) =>
       JSON.parse(raw),
     );

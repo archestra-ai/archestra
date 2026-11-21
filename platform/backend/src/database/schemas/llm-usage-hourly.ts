@@ -1,5 +1,6 @@
 import type {
   BillingMode,
+  InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import {
@@ -156,5 +157,10 @@ function usageColumns() {
     modelCost: numeric("model_cost").notNull(),
     modelBaselineCost: numeric("model_baseline_cost").notNull(),
     modelCacheSavings: numeric("model_cache_savings").notNull(),
+    // What sent the requests (Slack, Chat, a coding client's turn kind);
+    // the Logs page counts and filters by it. Null on hours rolled before it.
+    source: varchar("source").$type<InteractionSource>(),
+    // Requests whose response was an error (`interactions.failed`).
+    failedRequests: integer("failed_requests").notNull().default(0),
   };
 }

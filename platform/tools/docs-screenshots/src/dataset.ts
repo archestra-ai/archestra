@@ -515,7 +515,7 @@ export const CHANNEL_BINDINGS = {
   ],
 } as const;
 
-/** Monthly budgets on Costs & Limits → Limits, by the kind of record they apply to. */
+/** Monthly budgets on Cost Controls → Limits, by the kind of record they apply to. */
 export const LIMITS = [
   { entity: "organization", name: "id", dollars: 2500 },
   { entity: "teams", name: "Platform Engineering", dollars: 800 },
@@ -546,6 +546,22 @@ export const USAGE = [
   { user: "persona", agent: null, client: "openai_codex", type: "openai:responses", model: "gpt-5.4", billingMode: "subscription", authMethod: "passthrough_virtual_key", source: "api", perDay: 25, inputTokens: 30000, outputTokens: 1500, inputPrice: 2.5, outputPrice: 15, cacheShare: 0.6 },
   { user: "persona", agent: null, client: "cursor", type: "anthropic:messages", model: "claude-sonnet-4-6", billingMode: "metered", authMethod: "virtual_key", source: "api", perDay: 30, inputTokens: 20000, outputTokens: 900, inputPrice: 3, outputPrice: 15, cacheShare: 0.5 },
   { user: "persona", agent: "Research Assistant", client: null, type: "openai:responses", model: "gpt-5.4", billingMode: "metered", authMethod: "internal", source: "chat", perDay: 10, inputTokens: 16000, outputTokens: 1800, inputPrice: 2.5, outputPrice: 15, cacheShare: 0.3 },
+] as const;
+
+/**
+ * Coding clients members set up through the Connect page, for Adoption and the
+ * Client connections type in Logs. Sofia and Daniel set up nothing, so
+ * Coverage shows who has not connected; Marcus's Cursor makes no calls, so he
+ * is connected but inactive. Times count back from the capture, inside the
+ * three days the Logs page reads; `disconnectedHoursAgo` adds a disconnect.
+ */
+export const CONNECTIONS = [
+  { id: "c0ec7100-0000-4000-8000-000000000001", user: "persona", client: "claude-code", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 52 },
+  { id: "c0ec7100-0000-4000-8000-000000000002", user: "persona", client: "codex", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 31 },
+  { id: "c0ec7100-0000-4000-8000-000000000003", user: "persona", client: "cursor", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 19 },
+  { id: "c0ec7100-0000-4000-8000-000000000004", user: "priya", client: "claude-code", platform: "macos", device: "priya-mbp", hoursAgo: 44 },
+  { id: "c0ec7100-0000-4000-8000-000000000005", user: "marcus", client: "cursor", platform: "linux", device: "marcus-workstation", hoursAgo: 7 },
+  { id: "c0ec7100-0000-4000-8000-000000000006", user: "marcus", client: "codex", platform: "linux", device: "marcus-workstation", hoursAgo: 66, disconnectedHoursAgo: 3 },
 ] as const;
 
 /** Which team runs each agent, and where it runs, so team and environment budgets have usage. */

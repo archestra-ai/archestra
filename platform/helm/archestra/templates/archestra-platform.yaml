@@ -152,9 +152,8 @@ spec:
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      {{- with .Values.archestra.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "archestra-platform.podSecurityContext" . }}
+      {{- . | nindent 6 }}
       {{- end }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
@@ -166,7 +165,7 @@ spec:
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" (.Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh") | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" (include "archestra-platform.vaultEntrypoint" .) | nindent 10 }}
           {{- end }}
           ports:
             - name: backend

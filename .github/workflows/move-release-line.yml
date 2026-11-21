@@ -1,0 +1,114 @@
+name: Move Release Line
+run-name: Make the release line of ${{ inputs.release_tag }} the supported one
+
+# When a stable X.Y.0 is published, release/X.Y becomes the one supported
+# release line and the previous line stops getting automated updates. This
+# opens a pull request on main that moves .github/backport-targets.json
+# (backports, the nightly release image scan, client-version updates) and
+# every Dependabot target-branch in .github/dependabot.yml to release/X.Y
+# (set-release-line.py). It waits for review like any change to main's
+# release automation.
+#
+# Release Finalize dispatches it after publishing a stable X.Y.0. Run it by
+# hand on main to repeat that.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Published stable X.Y.0 release, such as platform-v1.5.0"
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: move-release-line
+  cancel-in-progress: false
+
+jobs:
+  move:
+    name: Open the pull request
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out main and read the release.
+    steps:
+      - name: Check the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^platform-v([0-9]+)\.([0-9]+)\.0$ ]]; then
+            echo "::error::$RELEASE_TAG is not a stable platform-vX.Y.0 release"
+            exit 1
+          fi
+          line="release/${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease \
+            --jq 'if .isDraft or .isPrerelease then error("not a published stable release") else empty end'
+          gh api "repos/$GH_REPO/branches/$line" --jq .name >/dev/null
+          echo "line=$line" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Move the release line
+        id: move
+        env:
+          LINE: ${{ steps.release.outputs.line }}
+        run: |
+          set -euo pipefail
+          python3 -I .github/scripts/set-release-line.py "$LINE"
+          python3 -m unittest discover -s .github/scripts -p 'test_dependabot_release_lines.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_base_image_pins.py'
+          if git diff --quiet; then
+            echo "$LINE is already the supported release line."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The App token makes the push and the new PR trigger ordinary CI.
+      - name: Generate releaser token
+        if: steps.move.outputs.changed == 'true'
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        if: steps.move.outputs.changed == 'true'
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Open or update the pull request
+        if: steps.move.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          LINE: ${{ steps.release.outputs.line }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          branch="automation/release-line-${LINE#release/}"
+          git switch -c "$branch"
+          git add .github/backport-targets.json .github/dependabot.yml
+          git -c core.hooksPath=/dev/null commit -m "chore(release): make $LINE the supported release line"
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+          body="$RELEASE_TAG is published, so \`$LINE\` becomes the one supported release line: backports, the nightly release image scan, client-version updates and Dependabot move to it, and the previous line gets no more automated updates."
+          existing="$(gh api "repos/$GH_REPO/pulls?state=open&head=${GH_REPO%%/*}:$branch&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing" ]]; then
+            gh pr create --base main --head "$branch" --title "chore(release): make $LINE the supported release line" --body "$body"
+          else
+            echo "Updated #$existing"
+          fi

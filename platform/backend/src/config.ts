@@ -1320,7 +1320,7 @@ export function parseActiveChatRunPollIntervalMs(params: {
  * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
  * unset) plus every URL in `ARCHESTRA_API_BASE_URL` — the same
  * comma-separated list the frontend's `getExternalProxyUrls` reads (after
- * supervisord re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
+ * the image's supervisor re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
  * Next.js process). The backend inherits the canonical `ARCHESTRA_API_BASE_URL`
  * directly, so we read that here.
  *
@@ -2656,7 +2656,7 @@ const config = {
      * closes it. Must stay above the keep-alive timeout of anything proxying
      * this server — see {@link parseKeepAliveTimeoutMs}. Configurable via
      * ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS, which also drives the Next.js
-     * server (mapped to KEEP_ALIVE_TIMEOUT in the container's supervisord
+     * server (mapped to KEEP_ALIVE_TIMEOUT by the container's supervisor
      * config) so both processes share one setting.
      */
     keepAliveTimeoutMs: parseKeepAliveTimeoutMs(
@@ -4032,18 +4032,18 @@ const config = {
         x64: {
           url:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64 ||
-            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
+            "https://ftp.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
           sha256:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64 ||
-            "ba4b931bd37a1fd073785c3194a608906934f62b52d407178121a8184bee8ae6",
+            "8fdaee81e28b5a46e0c241acd97ddeceea388af374cadd57221c2e01b4cb0489",
         },
         arm64: {
           url:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64 ||
-            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
+            "https://ftp.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
           sha256:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64 ||
-            "a67bcae67dd810fdc099525289457ab6af6f647f6e3aceadc0260f42d19cbc93",
+            "b533066632ba80a7a39699d698b89e114af86805c4f3a6c6b40242c5afabdbe3",
         },
       },
     },

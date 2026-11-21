@@ -27,13 +27,17 @@ release_platform="$release_root/source/platform"
 mkdir -p benchmarks/results/release
 # The release builds with its own dependencies. Cargo reuses this checkout's
 # compiled dependencies; no credentials or workflow token reach the build.
+# Releases whose harness predates backend limits run unlimited; their report
+# then shows a different setup and the release comment does not compare them.
+limits=()
+if grep -q -- '--backend-limits)' "$release_platform/benchmarks/ci.sh"; then limits=(--backend-limits); fi
 status=0
 (
   cd "$release_platform"
   env -i PATH="$PATH" HOME="$HOME" CI=true NPM_CONFIG_USERCONFIG=/dev/null \
     pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
   env -i PATH="$PATH" HOME="$HOME" CARGO_TARGET_DIR="$platform_root/archestra-rs/target" \
-    bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2
+    bash benchmarks/ci.sh ${limits[@]+"${limits[@]}"} --requests=300 --stream-requests=300 --repeats=2
 ) > benchmarks/results/release/run.log 2>&1 || status=$?
 cp "$release_platform"/benchmarks/results/*.log benchmarks/results/release/ 2>/dev/null || true
 if [[ -f "$release_platform/benchmarks/results/ci/report.json" ]]; then

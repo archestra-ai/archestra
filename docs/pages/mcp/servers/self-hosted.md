@@ -11,7 +11,7 @@ Run any MCP server for your whole team, even one built to run on a laptop. Many 
 
 - It deploys and restarts them. Each install gets its own pod.
 - It holds their secrets. Credentials go into the pod, not into anyone's config file.
-- It shows their logs. Container logs are on the server's page. Each tool call is in [Logs](/docs/admin/logs).
+- It shows their logs. Container logs are on the server's page. Each tool call is in [Logs](/docs/insights/logs).
 - It keeps them on your network. The [environment](/docs/admin/environments) limits which hosts a server can reach.
 
 ## Set Up the Cluster
@@ -29,7 +29,7 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 - **Private image:** add an image pull secret, or the registry's credentials.
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
 - **CPU and memory:** choose a **Runtime tier** under **Resources**, from the MCP-specific tiers managed in **Settings → MCP**. Choose **Deployment defaults** to use the MCP deployment settings. You need **Full access + deploy** on the server; see [Granular Access Control](/docs/admin/access-control#granular-access-control).
-- **Custom deployment:** edit the **K8s YAML** tab for volumes or node rules. When custom YAML is saved, configure resources there instead.
+- **Custom deployment:** edit the **K8s YAML** tab for volumes or node rules. When custom YAML is saved, configure resources there instead. Server pods run under the container runtime's default seccomp profile; to use another, set `spec.template.spec.securityContext.seccompProfile` in the YAML.
 - **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. Everyone else edits only the name, icon, description, and labels.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/idp-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 
@@ -53,7 +53,7 @@ Find the symptom, then open the server in MCP Registry to fix it. Its **Logs**, 
 
 ## Idle Hibernation
 
-Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/docs/get-started/pricing-model). Turn it on in **Settings → MCP**.
+Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/pricing). Turn it on in **Settings → MCP**.
 
 A server sleeps after 30 minutes with no calls. To change that, set [`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS).
 

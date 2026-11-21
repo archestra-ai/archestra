@@ -1394,8 +1394,9 @@ type AppaCallDecision =
        */
       recorded?: true;
       /**
-       * The call's annotator gave no answer. The runtime has no record of
-       * the call, so its result is answered by the proxy, not the runtime.
+       * The runtime has no record of the call: its annotator gave no answer,
+       * or the call was denied before the runtime saw it. Its result is
+       * answered by the proxy, not the runtime.
        */
       unanswered?: true;
     };
@@ -1474,6 +1475,7 @@ export async function evaluateToolCalls(
           kind: "deny" as const,
           feedback:
             "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+          unanswered: true as const,
         };
       }
       // Direct remedy control calls bypass evaluation and execute via gateway.

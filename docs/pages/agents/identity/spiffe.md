@@ -40,7 +40,7 @@ Your identity provider needs to know where Archestra publishes its keys. Every v
 
 Every agent and MCP Gateway that exchanges at this provider now acts as its SPIFFE ID. When this is an agent's **Identity Provider**, its **Identity** section shows the ID, ready to copy into your provider's policies.
 
-To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows the agent's SPIFFE ID as the acting agent.
+To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows the agent's SPIFFE ID as the acting agent.
 
 ## Federate With SPIRE
 

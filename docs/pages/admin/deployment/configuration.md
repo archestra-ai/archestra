@@ -123,7 +123,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
   - Values: `true`, `false`
-  - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
+  - See [Pricing](/pricing) for what it unlocks.
   - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
   - Turns [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) off unless that variable is set.
 
@@ -645,7 +645,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
-  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost).
 
 ## Chat
 
@@ -1507,7 +1507,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives [Real User Monitoring](/docs/admin/observability#real-user-monitoring) events from the web UI. Setting it turns RUM on.
   - Default: unset (RUM off)
-  - Requires an [Enterprise license](/docs/get-started/pricing-model). The backend does not start when this is set without one.
+  - Requires an [Enterprise license](/pricing). The backend does not start when this is set without one.
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for basic authentication to the RUM endpoint.
   - Default: unset. Used only together with [`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD).
@@ -1561,7 +1561,7 @@ To disable captured prompt/response and tool argument/result fields on trace spa
 
 ## Data Retention
 
-Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started/pricing-model). Each value is a whole number of days; any other value turns that window off.
+Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/pricing). Each value is a whole number of days; any other value turns that window off.
 
 - **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to keep LLM proxy logs and Guardrails consult records.
   - Default: `0` (keep forever)

@@ -10,5 +10,5 @@
   "apps": ["Apps", "Connectors", "Connection Setups", "Credentials", "Git Credentials", "GitHub App Configs", "GitHub PATs"],
   "projects-chat": ["Projects", "Chat", "ChatOps", "ChatOps Webhooks", "Incoming Email", "Sessions", "Webhooks"],
   "knowledge": ["Knowledge Bases", "Knowledge Files"],
-  "operations": ["Audit Log", "Statistics", "Cost Exports", "RUM", "Dev Feedback", "Onboarding", "Health", "GitHub Actions"]
+  "operations": ["Logs", "Audit Log", "Statistics", "Cost Exports", "RUM", "Dev Feedback", "Onboarding", "Health", "GitHub Actions"]
 }

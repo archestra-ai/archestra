@@ -676,11 +676,6 @@ export async function getHitlInspectableAskUserArguments(params: {
       /** The staged payload this card is issued from; rides its claim. */
       digest: string;
       reviewText?: string;
-      /**
-       * The questions the previous card layout asked for this review, so an
-       * answer to a card issued before a deploy can still be read.
-       */
-      previousQuestions: string[];
     }
   | undefined
 > {
@@ -740,11 +735,6 @@ export async function getHitlInspectableAskUserArguments(params: {
     card,
     digest,
     ...(reviewText ? { reviewText } : {}),
-    // The previous layout asked the plain card's short question, or this
-    // fixed one when that question did not fit its compact card.
-    previousQuestions: [
-      ...new Set([base.shortQuestion ?? base.question, "Approve this call?"]),
-    ],
   };
 }
 

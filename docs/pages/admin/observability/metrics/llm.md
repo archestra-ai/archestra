@@ -16,7 +16,7 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 | <span id="llm_tokens_total"></span>`llm_tokens_total` | Counter | `type` (`input`, `output`) | Tokens used. `input` excludes prompt-cache tokens. |
 | <span id="llm_cache_tokens_total"></span>`llm_cache_tokens_total` | Counter | `cache_type` (`read`, `write`) | Prompt-cache tokens read from or written to the provider cache |
 | <span id="llm_token_usage"></span>`llm_token_usage` | Histogram | | Input plus output tokens per request |
-| <span id="llm_cost_total"></span>`llm_cost_total` | Counter | `billing_mode`, `auth_method` | Estimated list-price cost in USD. Needs [model pricing](/docs/llm-proxy/costs-and-limits#model-pricing). |
+| <span id="llm_cost_total"></span>`llm_cost_total` | Counter | `billing_mode`, `auth_method` | Estimated list-price cost in USD. Needs [model pricing](/docs/llm-proxy/cost-controls#model-pricing). |
 | <span id="llm_cache_cost_total"></span>`llm_cache_cost_total` | Counter | | Cost in USD of prompt-cache reads and writes |
 | <span id="llm_cache_savings_total"></span>`llm_cache_savings_total` | Counter | | USD saved by cache reads at the discounted price |
 | <span id="llm_time_to_first_token_seconds"></span>`llm_time_to_first_token_seconds` | Histogram | | Streaming: from the upstream call to the provider's first chunk |
@@ -61,7 +61,7 @@ The metric covers inference requests handled by the shared proxy and unified mod
 
 `incomplete` identifies a provider terminal such as an output-token limit; it has no error origin.
 
-If a streaming request fails after HTTP `200` headers are sent, `status_code` stays `200` while `outcome` and `error_origin` record the midstream failure. To keep cardinality bounded, this histogram carries only the six labels above and omits model, agent, user, team, and key dimensions. For per-request attribution, use the metadata-only `archestra.llm_proxy.request` OpenTelemetry log event in [Proxy Request Log Events](/docs/admin/observability/tracing#proxy-request-log-events); existing token, cache, and cost metrics above, [costs and limits](/docs/llm-proxy/costs-and-limits), and [LLM spans](/docs/admin/observability/tracing#llm-spans) keep their existing dimensions.
+If a streaming request fails after HTTP `200` headers are sent, `status_code` stays `200` while `outcome` and `error_origin` record the midstream failure. To keep cardinality bounded, this histogram carries only the six labels above and omits model, agent, user, team, and key dimensions. For per-request attribution, use the metadata-only `archestra.llm_proxy.request` OpenTelemetry log event in [Proxy Request Log Events](/docs/admin/observability/tracing#proxy-request-log-events); existing token, cache, and cost metrics above, [costs and limits](/docs/llm-proxy/cost-controls), and [LLM spans](/docs/admin/observability/tracing#llm-spans) keep their existing dimensions.
 
 Scrape Archestra's standard `/metrics` endpoint to collect this histogram, and query `llm_proxy_request_duration_seconds_count` for throttle and error rates:
 

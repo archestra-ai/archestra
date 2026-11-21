@@ -367,7 +367,17 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: archestra/platform:test-version
+          value: archestra/platform:test-version-slim
+
+  - it: should run the full image when the variant is cleared
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.imageVariant: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:1.6.0
 
   # Image helper tests - ensures backward compatibility with existing deployments
   # that set the full image:tag in archestra.image
@@ -389,7 +399,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: registry.io:5000/archestra/platform:1.0.0
+          value: registry.io:5000/archestra/platform:1.0.0-slim
 
   - it: should use image as-is when registry has port and image has tag
     documentIndex: 1
@@ -980,10 +990,39 @@ tests:
         version: "1.6.0"
         images:
           platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          platform-slim: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0-slim@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+
+  - it: should pin the full platform image to its own release digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.imageVariant: ""
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          platform-slim: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: "archestra/platform:1.6.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  - it: should not pin the slim image to the full image's digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0-slim"
 
   - it: should use another platform image or tag as configured despite a release digest
     documentIndex: 1
@@ -997,7 +1036,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "registry.example.com/archestra/platform:1.6.0"
+          value: "registry.example.com/archestra/platform:1.6.0-slim"
 
   - it: should not pin the platform image when its tag differs from the released version
     documentIndex: 1
@@ -1010,7 +1049,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "archestra/platform:1.6.1"
+          value: "archestra/platform:1.6.1-slim"
 
   - it: should pass the bootstrap service accounts as JSON
     documentIndex: 1
@@ -1387,10 +1426,10 @@ tests:
     set:
       archestra.orchestrator.kubernetes.kubeconfig.enabled: false
     asserts:
-      - isNull:
-          path: spec.template.spec.containers[0].volumeMounts
-      - isNull:
-          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "kubeconfig")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "kubeconfig")]
 
   - it: should not mount kubeconfig volume when secretName is empty
     documentIndex: 1
@@ -1398,10 +1437,10 @@ tests:
       archestra.orchestrator.kubernetes.kubeconfig.enabled: true
       archestra.orchestrator.kubernetes.kubeconfig.secretName: ""
     asserts:
-      - isNull:
-          path: spec.template.spec.containers[0].volumeMounts
-      - isNull:
-          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "kubeconfig")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "kubeconfig")]
 
   - it: should mount kubeconfig volume when kubeconfig is enabled
     documentIndex: 1
@@ -1435,6 +1474,8 @@ tests:
 
   - it: should not mount extra volumes or volume mounts by default
     documentIndex: 1
+    set:
+      archestra.readOnlyRootFilesystem: false
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].volumeMounts
@@ -3266,7 +3307,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].image
-          value: archestra/platform:1.0.37
+          value: archestra/platform:1.0.37-slim
 
   - it: should pass existing env vars to vault-secrets init container
     documentIndex: 1
@@ -3414,7 +3455,8 @@ tests:
             mountPath: /vault/secrets
             readOnly: true
 
-  - it: should wrap main container command to source vault secrets
+  # The Kubernetes image has no shell, so the wrapper is Node.
+  - it: should load vault secrets into the main container through the Node wrapper
     documentIndex: 1
     set:
       archestra.initContainers.vaultSecrets.enabled: true
@@ -3425,13 +3467,38 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].command
-          value: ["/bin/sh", "-c"]
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "/vault/secrets/env"
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "exec /docker-entrypoint.sh"
+          value: ["node", "/app/with-vault-env.mjs"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/entrypoint.mjs"]
+
+  - it: should map the old /docker-entrypoint.sh default to the Node entrypoint
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.entrypoint: /docker-entrypoint.sh
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/entrypoint.mjs"]
+
+  - it: should run a custom entrypoint under vault secrets
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.entrypoint: node /app/custom.mjs --flag
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/custom.mjs", "--flag"]
 
   - it: should not wrap main container command when vault secrets is disabled
     documentIndex: 1

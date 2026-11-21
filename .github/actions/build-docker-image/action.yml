@@ -35,6 +35,10 @@ inputs:
     description: "Custom --output configuration (e.g., for push-by-digest). Takes precedence over push/load."
     required: false
     default: ""
+  build-args:
+    description: "Optional build arguments, one KEY=VALUE per line"
+    required: false
+    default: ""
   target:
     description: "Optional Dockerfile target stage"
     required: false
@@ -142,6 +146,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
+        INPUT_BUILD_ARGS: ${{ inputs.build-args }}
         REUSE_BUILDER: ${{ inputs.setup-builder == 'false' }}
         SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
       run: |
@@ -176,6 +181,10 @@ runs:
         [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )
         [ -n "${INPUT_SBOM}" ] && ARGS+=( --sbom "${INPUT_SBOM}" )
         [ -n "${INPUT_VERSION}" ] && ARGS+=( --build-arg "VERSION=${INPUT_VERSION}" )
+        while IFS= read -r build_arg; do
+          build_arg="$(echo "${build_arg}" | xargs)"
+          [ -n "${build_arg}" ] && ARGS+=( --build-arg "${build_arg}" )
+        done <<< "${INPUT_BUILD_ARGS}"
 
         # Tags arrive newline- or comma-separated.
         while IFS= read -r tag; do

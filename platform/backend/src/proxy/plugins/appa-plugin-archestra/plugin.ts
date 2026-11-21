@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -96,8 +96,6 @@ import {
 import {
   HITL_INSPECT_LABEL,
   hitlReviewCardAnswer,
-  PREVIOUS_HITL_CARD_LABELS,
-  previousHitlCardAnswer,
 } from "@/openappa/hitl-review-overview";
 import { NO_REMEDY_PLAN_HINT } from "@/openappa/no-remedy-plan-hint";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -1947,6 +1945,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
         !relays.has(call.id) &&
+        !withheldRelayDecisions.has(call.id) &&
         !peerInbox.has(call.id),
     );
     const decisions = rest.length
@@ -1962,6 +1961,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of withheldRelayDecisions) {
+      decisionById.set(id, decision);
+    }
     await holdConflictingRemedyCalls({
       session,
       calls: rest,
@@ -1970,23 +1972,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const [id, decision] of decisionById) {
       // Only the notice of this call runs. The runtime holds no record of the
       // call, so the result the client sends back is answered from here and
-      // never ruled on as a call that ran.
-      if (decision.kind === "deny" && decision.unanswered)
-        await cacheManager.set(
-          unansweredNoticeKey({ session, callId: id }),
-          decision.feedback,
-          TimeInMs.Day,
-        );
+      // never ruled on as a call that ran. Without the retained reason the
+      // runtime answers that result as withheld, so a failed write is not fatal.
+      if (decision.kind === "deny" && decision.unanswered) {
+        try {
+          await cacheManager.set(
+            unansweredNoticeKey({ session, callId: id }),
+            decision.feedback,
+            TimeInMs.Day,
+          );
+        } catch (err) {
+          logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+        }
+      }
     }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
-      // The runtime holds no record of this call, so the result the client
-      // sends back for it is answered from here.
-      await cacheManager.set(
-        notLoadedRulingKey({ session, callId: id }),
-        feedback,
-        TimeInMs.Day,
-      );
     }
     for (const id of blockedTranscriptCalls) {
       decisionById.set(id, {
@@ -1999,13 +2000,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const [id, feedback] of reusedNames) {
       decisionById.set(id, { kind: "deny", feedback });
     }
-    for (const [id, decision] of withheldRelayDecisions) {
-      decisionById.set(id, decision);
-    }
     for (const [id, relay] of relays) {
       if (relay.kind === "deny") {
         decisionById.set(id, { kind: "deny", feedback: relay.feedback });
       }
+    }
+    for (const id of notLoaded.keys()) {
+      const decision = decisionById.get(id);
+      if (decision?.kind !== "deny") continue;
+      // The runtime holds no record of this call, so the result the client
+      // sends back for it is answered from here, with the ruling shown now.
+      await cacheManager.set(
+        notLoadedRulingKey({ session, callId: id }),
+        decision.feedback,
+        TimeInMs.Day,
+      );
     }
 
     const refusals = [...decisionById.values()].flatMap((decision) =>
@@ -2027,7 +2036,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
     const notice = binding.request.tools?.notice;
     // Only the ordinary calls the runtime ruled on here can be waived.
-    const evaluatedIds = new Set(rest.map((call) => call.id));
+    const evaluatedIds = new Set([
+      ...rest.map((call) => call.id),
+      ...withheldRelayDecisions.keys(),
+    ]);
     // The calls the runtime admitted; a batch that never reaches the client
     // cancels them, so no call stays open that will never run.
     const admittedCalls = () =>
@@ -3349,7 +3361,7 @@ function remedylessRefusalNote(params: {
   // needs a sign-in. The client known to send one is Codex in code mode, which
   // runs its tools outside the request, so the text names its setting.
   if (params.binding.request.declaredTools.length === 0) {
-    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set features.code_mode_host = false: code mode keeps its tools out of the request.`;
   }
   const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
   const hint = params.binding.adapter?.gatewayToolsHint?.(server);
@@ -5103,10 +5115,7 @@ async function governRelays(params: {
       continue;
     }
     if (relay.value.length === 0) {
-      outcomes.set(call.id, {
-        kind: "deny",
-        feedback: RELAY_UNKNOWN_RECIPIENT,
-      });
+      outcomes.set(call.id, { kind: "deny", feedback: RELAY_EMPTY_MESSAGE });
       continue;
     }
     const target = await resolveRelayTarget({
@@ -5350,7 +5359,16 @@ async function resolveNamedChild(params: {
   if (!childNativeId) return childOfNamedSpawn({ ...params, aliases, started });
   const childStarted = started.includes(childNativeId);
   if (!spawnCallId) return { childNativeId, started: childStarted };
-  if (durable) return { childNativeId, spawnCallId, started: childStarted };
+  if (durable) {
+    const off = await startedUnenforced({
+      ...params.parent,
+      session_id: childSessionId(params.parent.session_id, childNativeId),
+      parent_id: params.parent.session_id,
+    });
+    return off
+      ? { childNativeId, spawnCallId, started: childStarted, unchecked: true }
+      : { childNativeId, spawnCallId, started: childStarted };
+  }
   const allowed = await OpenAppaSpawnCorrelationModel.allowedSpawn({
     organizationId: params.parent.organization_id,
     callerId: params.parent.caller_id,
@@ -5433,6 +5451,8 @@ async function childOfNamedSpawn(params: {
 
 const RELAY_BROADCAST =
   "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
+const RELAY_EMPTY_MESSAGE =
+  "This message has no text, so OpenAPPA did not send it. Send the teammate a message that has text.";
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_AMBIGUOUS_RECIPIENT =
@@ -7183,9 +7203,6 @@ function externalRemedyWorkflowGuidance(
   ].join(" ");
 }
 
-const LEGACY_NATIVE_QUESTION_ID_PATTERN =
-  /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
-
 function isSpecialToolMember(
   binding: AppaPluginBinding,
   call: { name: string; namespace?: string },
@@ -7314,16 +7331,14 @@ async function claimNativeQuestionResults(params: {
     if (typeof result.id !== "string" || result.id.length === 0) return [];
     const name = nativeQuestionName(params.binding, result.name);
     if (!name || !releasesUserQuestion(params.binding, result)) return [];
-    const scope = { session: params.binding.session, id: result.id };
-    const legacyKey = legacyNativeQuestionCacheKey(scope);
     return [
       {
         result,
         name,
-        keys: [
-          nativeQuestionCacheKey(scope),
-          ...(legacyKey ? [legacyKey] : []),
-        ],
+        key: nativeQuestionCacheKey({
+          session: params.binding.session,
+          id: result.id,
+        }),
       },
     ];
   });
@@ -7338,19 +7353,12 @@ async function claimNativeQuestionResults(params: {
         reviewText?: unknown;
         digest?: unknown;
         askedQuestion?: unknown;
-        /** A pre-upgrade page card's binding; those cards are gone. */
-        page?: unknown;
-      }>(candidates.flatMap((candidate) => candidate.keys))
+      }>(candidates.map((candidate) => candidate.key))
     ).map((entry) => [entry.key, entry.value]),
   );
   for (const candidate of candidates) {
-    const entry = candidate.keys
-      .map((key) => claimed.get(key))
-      .find((value) => value?.name === candidate.name);
-    if (entry) {
-      // A card issued by the removed paged review never grants anything:
-      // its answer is unverified, and the review re-asks or stays open.
-      if (entry.page !== undefined) continue;
+    const entry = claimed.get(candidate.key);
+    if (entry?.name === candidate.name) {
       const offerIds = Array.isArray(entry.offerIds)
         ? entry.offerIds.filter(
             (offerId): offerId is string =>
@@ -7609,12 +7617,10 @@ type InspectableHitlAnswerOutcome =
 
 /**
  * Reads the answer to a card that offered Inspect. Allow and Deny record the
- * ruling; Inspect asks for the complete review as conversation text. An
- * answer to a previous-layout card counts the same, except that its Approve
- * shows the current card again. A known no-answer seals the review as
- * before; an unreadable answer fails closed without the form. A stale
- * answer — a card superseded before its inspection text was delivered, a
- * forged marker — changes nothing.
+ * ruling; Inspect asks for the complete review as conversation text. A known
+ * no-answer seals the review; an unreadable answer fails closed without the
+ * form. A stale answer — a card superseded before its inspection text was
+ * delivered, a forged marker — changes nothing.
  */
 async function recordInspectableHitlAnswer(params: {
   askedQuestion?: string;
@@ -7664,35 +7670,13 @@ async function recordInspectableHitlAnswer(params: {
   const cardLabels = asked.card.options.map((option) => option.label);
   // A client whose answer names its question reads the answer itself.
   const nativeQuestion = binding.adapter?.nativeQuestion;
-  let reading = nativeQuestion?.selectionFromResult
+  const reading = nativeQuestion?.selectionFromResult
     ? nativeQuestion.selectionFromResult(result, shownQuestion, cardLabels)
     : labeledQuestionRuling(result, shownQuestion, cardLabels);
-  let answer =
+  const answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
       : undefined;
-  if (reading === "unrecognized" && !params.askedQuestion) {
-    // A card of the previous layout, issued before a deploy, can still be open.
-    for (const question of asked.previousQuestions) {
-      const previous = labeledQuestionRuling(
-        result,
-        question,
-        PREVIOUS_HITL_CARD_LABELS,
-      );
-      if (typeof previous !== "object") continue;
-      const choice = previousHitlCardAnswer(previous.label);
-      if (choice === "ask-again") {
-        logger.warn(
-          { client: binding.adapter?.id, offerId },
-          "OpenAPPA asked again for an approval given on a previous card layout",
-        );
-        return stale;
-      }
-      reading = previous;
-      answer = choice;
-      break;
-    }
-  }
   if (typeof reading === "object") {
     if (answer) {
       const resolved = await resolveHitlInspectableAnswer({
@@ -8014,34 +7998,6 @@ async function renewContinuationLease(
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not refresh a review continuation");
   }
-}
-
-/** Pending pre-upgrade questions expire after ten minutes. New IDs use no MAC. */
-function legacyNativeQuestionCacheKey(params: {
-  session: OpenAppaSession;
-  id: string;
-}): AllowedCacheKey | undefined {
-  if (
-    !config.openappa.offerSigningSecret ||
-    !LEGACY_NATIVE_QUESTION_ID_PATTERN.test(params.id)
-  )
-    return undefined;
-  const scope = createHmac("sha256", config.openappa.offerSigningSecret)
-    .update("archestra-native-question-v1\0")
-    .update(
-      JSON.stringify([
-        params.session.organization_id,
-        params.session.caller_id ?? "",
-        params.session.session_id,
-        params.session.parent_id ?? "",
-        "cache",
-        params.id,
-      ]),
-    )
-    .digest()
-    .subarray(0, 16)
-    .toString("base64url");
-  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
 }
 
 /**
@@ -8767,6 +8723,20 @@ function insertRequestGuidance(params: {
   const { request, guidance } = params;
   const wire = nativeAppaGuidanceWire(params.interactionType);
   if (!wire) return;
+  if (
+    wire === "openai:responses" &&
+    isRecord(request) &&
+    typeof request.input === "string"
+  ) {
+    if (params.onContinue === "skip") return;
+    request.input = [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: request.input }],
+      },
+    ];
+  }
   if (
     wire !== "openai:responses" ||
     !isRecord(request) ||

@@ -1,50 +1,18 @@
 {
   "schema": 1,
-  "sourceSha": "09c5096f27d621fa36560bbd776509895514d586",
-  "baseSha": "9396dc72d000aa5aaf7d5e37e5e611a2a178fd86",
-  "runId": 44750807189,
+  "sourceSha": "03f9f75fc4f5143a45ce84b50915e265725ad018",
+  "baseSha": "fa6e0aa6aee2f399fc74b3e4ff68406aa59c54b3",
+  "runId": 44851546648,
   "attempt": 1,
-  "platformTree": "d8bf8a3154a1b8f468d65391324429690ca2c9aa",
+  "platformTree": "a504b79a1145c87c9c2572d3eb32aac1dc554314",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "3aec6bbd6d475119f4f228a0ae86c6038df0918b"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "c07651f9fc7d7d26cb131d04f8fdf9a2ec9aaf1d"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "0e6822e92f83e099e8886b754d86d9d1973f4934"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "1c2c10ab0050f6771f30a27ee99f3e3610f83ae5"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "c46d299215c871fc35ba8b299cf777ad437be0ec"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
-      "blob": "6ae5feb1a7412c9ad78ab051fb0cb6e9d66ff32c"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
-      "blob": "7eab8ffc3f14de25889285bc7888c44d9126f4f8"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_validations.dark.webp",
-      "blob": "2a55fe4d4fdaa1cfe91ad91694aa9b7ac1df5b9d"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_validations.webp",
-      "blob": "28caa3e7fe8432a55466946f6e7f3807679e8600"
+      "blob": "c36a3e2c624d858de64352e58804c259c3ae9ce3"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "d2322f2b6ac759cdbdd141d9623a6f23ad0e0e22"
+      "blob": "709f1e6aec7b71c7ead03f5932ff4f1ce976921e"
     }
   ]
 }

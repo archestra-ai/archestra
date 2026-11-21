@@ -54,7 +54,7 @@ The stored key stays hidden. Leave it blank to keep it.
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
 2. Under **Identity**, pick your provider under **Identity Provider**, paste the agent's client ID into **Agent client ID**, and click **Save changes**.
 
-To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows the agent's client ID as the acting agent.
+To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows the agent's client ID as the acting agent.
 
 ## Require an Agent Identity
 

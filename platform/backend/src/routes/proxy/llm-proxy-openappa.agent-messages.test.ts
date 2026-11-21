@@ -354,6 +354,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain("appapm1-");
       expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
+      // The runtime rules on the withheld send once.
+      expect(
+        h.events.filter(
+          (event) =>
+            event.event === "tool_call" && event.tool === "SendMessage",
+        ),
+      ).toHaveLength(1);
     });
 
     test("a teammate's protocol message is sent unchanged and does not end the sender", async () => {
@@ -488,6 +495,91 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(
         h.events.filter((event) => event.event === "tool_call"),
       ).toHaveLength(0);
+    });
+
+    test("a reused-name spawn the session has not loaded reads the same ruling on later requests", async () => {
+      await db.insert(database.schema.openappaSessionsTable).values({
+        actor: openappaActor(scoped(`${lead}:${auditor}`)),
+        root: openappaActor(scoped(lead)),
+        organizationId: h.agent.organizationId,
+        callerId: `user:${h.userId}`,
+        sessionId: scoped(`${lead}:${auditor}`),
+        parentId: scoped(lead),
+        startDecision: { decision: "ack" },
+      });
+      // A client that defers its tools, here without Agent loaded.
+      const sendDeferring = (messages: unknown[]) => {
+        const body = h.payload(true, messages);
+        body.tools.push(
+          {
+            name: "ToolSearch",
+            description: "Search for deferred tools",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "DeferredToolPlaceholder",
+            description: "Deferred",
+            input_schema: { type: "object", properties: {} },
+            defer_loading: true,
+          } as (typeof body.tools)[number],
+        );
+        return h.app.inject({
+          method: "POST",
+          url: h.url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...claudeCodeHeaders(undefined) },
+          payload: body,
+        });
+      };
+      const ask = [
+        { role: "user", content: "Audit the triggers again with a teammate" },
+      ];
+      reply("Agent", spawnInput);
+      const refused = await sendDeferring(ask);
+      expect(refused.statusCode, refused.body).toBe(200);
+      const notice = noticeFrom(refused.body, true);
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+
+      answerText();
+      const next = await sendDeferring([
+        ...ask,
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: notice.name,
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the model",
+            },
+          ],
+        },
+      ]);
+      expect(next.statusCode, next.body).toBe(200);
+      const results = (
+        h.providerRequests.at(-1) as {
+          messages: { content: unknown }[];
+        }
+      ).messages.flatMap((message) =>
+        Array.isArray(message.content)
+          ? message.content.filter(
+              (block: { type?: string }) => block.type === "tool_result",
+            )
+          : [],
+      );
+      expect(
+        results.map((block: { content?: unknown }) => block.content),
+      ).toEqual([notice.input.ruling]);
     });
 
     test("a teammate's message the peer check denies is not sent", async () => {
@@ -1964,9 +2056,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(h.providerRequests).toHaveLength(1);
       });
 
-      test("a teammate spawned while it was on that first ran while it was off stays out of OpenAPPA, and gets no message from its lead", async () => {
+      test.for([
+        "in the request",
+        "on record",
+      ] as const)("a teammate spawned while it was on that first ran while it was off stays out of OpenAPPA, and gets no message from its lead (launch result %s)", async (launch) => {
         const spawned = await spawnTeammate();
         await recordSpawn("toolu_test_weather");
+        if (launch === "on record")
+          await db
+            .insert(database.schema.openappaProcessedResultsTable)
+            .values({
+              organizationId: h.agent.organizationId,
+              callerId: `user:${h.userId}`,
+              sessionId: scoped(lead),
+              toolCallId: "toolu_test_weather",
+              root: openappaActor(scoped(lead)),
+              status: "complete",
+              approvedOutput: launchReceipt(auditor, "auditor"),
+              decision: { decision: "ack" },
+            });
         await GuardrailsDeploymentModel.setEnabled(false);
         answerText();
         const first = await send(auditor, [
@@ -1988,12 +2096,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           ),
         ).toEqual([]);
 
-        const history = [
+        const history = (launchResult: string) => [
           { role: "user", content: "Audit the triggers with a teammate" },
           toolUse(spawned.callId, "Agent", spawnInput),
-          toolResult(spawned.callId, [
-            { type: "text", text: launchReceipt(auditor, "auditor") },
-          ]),
+          toolResult(spawned.callId, [{ type: "text", text: launchResult }]),
           { role: "assistant", content: "The auditor is running." },
           {
             role: "user",
@@ -2003,13 +2109,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           },
         ];
         answerText();
-        const read = await send(undefined, history);
+        const read = await send(
+          undefined,
+          history(launchReceipt(auditor, "auditor")),
+        );
         expect(read.statusCode, read.body).toBe(200);
         expect(forwarded()).toContain("Three triggers are stuck");
         expect(forwarded()).not.toContain("[appa] Message withheld");
 
         reply("SendMessage", { to: "auditor", message: "Report again" });
-        const told = await send(undefined, history);
+        // On record, only the stored launch result names the teammate.
+        const told = await send(
+          undefined,
+          history(
+            launch === "on record"
+              ? "The auditor is starting."
+              : launchReceipt(auditor, "auditor"),
+          ),
+        );
         expect(told.statusCode, told.body).toBe(200);
         const notice = noticeFrom(told.body, true);
         expect(notice.name).toBe("archestra__get_remedy_plans");
@@ -2019,6 +2136,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(
           h.events.filter((event) => event.event === "child_address"),
         ).toEqual([]);
+        expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
       });
 
       test("a Codex wait result from a child that ran while it was off reaches its parent", async () => {

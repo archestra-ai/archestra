@@ -101,7 +101,7 @@ An app can call only its assigned tools and its own storage, file, and LLM metho
 - `archestra.llm.prompt` - A tagged-template helper that builds a prompt string.
 
 - The completion uses the model of the [App Runtime LLM Agent](/docs/agents/subagents/built-in#app-runtime-llm-agent), or the organization default when it has none. The app cannot choose one.
-- It counts against the viewer's [usage limits](/docs/llm-proxy/costs-and-limits) and appears in the logs. `prompt` takes up to 100,000 characters, and `system` up to 10,000.
+- It counts against the viewer's [usage limits](/docs/llm-proxy/cost-controls) and appears in the logs. `prompt` takes up to 100,000 characters, and `system` up to 10,000.
 - With `jsonMode`, the model returns one JSON value, which the app still parses.
 
 ### Host UI

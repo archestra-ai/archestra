@@ -9,6 +9,7 @@ import { dropInvalidConcurrentIndexes } from "./concurrent-index-leftovers.mjs";
 import { buildPgConnectionConfig } from "./rds-iam.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const DRIZZLE_KIT = path.join(scriptDir, "..", "node_modules", "drizzle-kit", "bin.cjs");
 const migrationsDir = path.resolve(scriptDir, "../src/database/migrations");
 
 dotenv.config({
@@ -96,7 +97,9 @@ try {
     }
     // Without the lease, another process may already be migrating.
     if (heartbeatError) throw heartbeatError;
-    child = spawn("./node_modules/.bin/drizzle-kit", ["migrate"], {
+    // Node runs drizzle-kit's entry point itself: node_modules/.bin holds
+    // `#!/bin/sh` shims, and the Kubernetes image has no shell.
+    child = spawn(process.execPath, [DRIZZLE_KIT, "migrate"], {
       cwd: process.cwd(),
       env: process.env,
       stdio: "inherit",

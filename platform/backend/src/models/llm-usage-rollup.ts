@@ -733,6 +733,11 @@ function usageFactsQuery(
         sql<string>`${split("cache_savings", i.cacheSavings)}::numeric`
           .mapWith(h.modelCacheSavings)
           .as("model_cache_savings"),
+      source: i.source,
+      failedRequests:
+        sql<number>`(COUNT(*) FILTER (WHERE ${parentRow} AND ${i.failed}))::integer`
+          .mapWith(h.failedRequests)
+          .as("failed_requests"),
     })
     .from(i)
     .$dynamic();
@@ -761,6 +766,7 @@ function usageFactsQuery(
       billedModel,
       i.billingMode,
       labels,
+      i.source,
     );
 }
 
@@ -808,6 +814,8 @@ function rollupColumns(
     modelCost: h.modelCost,
     modelBaselineCost: h.modelBaselineCost,
     modelCacheSavings: h.modelCacheSavings,
+    source: h.source,
+    failedRequests: h.failedRequests,
   };
 }
 
@@ -834,4 +842,5 @@ const KEY_COLUMNS = [
   "billedModel",
   "billingMode",
   "attributionLabels",
+  "source",
 ] as const satisfies (keyof typeof rollupSelection)[];

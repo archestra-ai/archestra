@@ -133,8 +133,11 @@ test("user filters rank only visible activity and preserve users with matching n
       isAgentAdmin: true,
     }),
   ).toEqual([
-    ...[first.id, second.id].sort().map((id) => ({ id, name: "Alpha" })),
-    { id: third.id, name: "Zulu" },
+    // Same-named users stay apart by their email.
+    ...[first, second]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(({ id, email }) => ({ id, name: "Alpha", email })),
+    { id: third.id, name: "Zulu", email: third.email },
   ]);
 });
 

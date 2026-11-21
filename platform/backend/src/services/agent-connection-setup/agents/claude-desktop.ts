@@ -574,7 +574,7 @@ def main():
             raise RuntimeError('Configuration saved, but Desktop could not start. Open it from your applications menu to see the startup error.')
     except subprocess.TimeoutExpired:
         pass
-    print('Desktop is configured. Send a message and check LLM Proxy Logs.')
+    print('Desktop is configured. Send a message and check the Logs page.')
     if SETUP.get('mcp'):
         print('In Desktop Settings > Connectors, connect the gateway and finish its browser sign-in.')
     if SETUP.get('skills'):

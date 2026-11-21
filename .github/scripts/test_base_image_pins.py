@@ -16,15 +16,19 @@ DOCKERFILES = sorted({image["dockerfile"].removeprefix("./")
 FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(?P<image>\S+)(?:\s+AS\s+(?P<stage>\S+))?\s*$", re.I | re.M)
 # Dependabot reads only literal FROM lines; it needs a version tag to propose
 # bumps and a digest to keep builds reproducible.
-PINNED = re.compile(r"[a-z0-9./-]+:[0-9][\w.-]*@sha256:[0-9a-f]{64}")
+# Debian's versioned DHI base uses its release codename plus the major version.
+PINNED = re.compile(r"[a-z0-9./-]+:(?:[0-9][\w.-]*|trixie-debian13-dev)@sha256:[0-9a-f]{64}")
 
 
 class BaseImagePinTest(unittest.TestCase):
     def test_every_release_image_base_is_a_versioned_digest_on_its_from_line(self):
         for dockerfile in DOCKERFILES:
+            text = (ROOT / dockerfile).read_text()
             stages = set()
-            for line in FROM.finditer((ROOT / dockerfile).read_text()):
-                image = line["image"]
+            for line in FROM.finditer(text):
+                # A stage chosen by a build argument (FROM base-${FLAVOR})
+                # resolves to an earlier stage by its default.
+                image = expand_global_args(line["image"], text)
                 with self.subTest(dockerfile=dockerfile, image=image):
                     if image not in stages:
                         self.assertRegex(image, PINNED)
@@ -58,6 +62,13 @@ class BaseImagePinTest(unittest.TestCase):
                 with self.subTest(target=entry["target"] or "main"):
                     self.assertEqual(entry["directories"], ["platform/docker_images/sandbox_base"])
                     self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*uv"\n(?!        update-types:)')
+
+def expand_global_args(image, dockerfile):
+    """Substitutes the defaults of the ARGs declared before the first FROM."""
+    preamble = dockerfile.split("\nFROM ", 1)[0]
+    defaults = dict(re.findall(r"(?m)^ARG\s+(\w+)=(\S+)\s*$", preamble))
+    return re.sub(r"\$\{(\w+)\}", lambda match: defaults.get(match[1], match[0]), image)
+
 
 def docker_entries():
     text = (ROOT / ".github/dependabot.yml").read_text()

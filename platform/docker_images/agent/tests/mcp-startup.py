@@ -550,8 +550,12 @@ class StartupTest(unittest.TestCase):
                     declared = [description for name, description in server.descriptions.items() if name.endswith(tool.removeprefix("archestra__"))]
                     self.assertEqual(declared, [DESCRIPTION], (tool, server.descriptions))
             # Every client served over Chat Completions gets signed IDs.
+            # A steer can cancel a model request before its reply arrives
+            # (Kimi Code), so an issued call may never reach the client; every
+            # result that does come back must carry an issued ID.
             if server.issued_call_ids:
-                self.assertEqual(server.returned_call_ids, set(server.issued_call_ids), "Tool results came back under changed call IDs")
+                self.assertLessEqual(server.returned_call_ids, set(server.issued_call_ids), "Tool results came back under changed call IDs")
+                self.assertGreaterEqual(len(server.returned_call_ids), len(TOOLS), "A gateway tool's result did not come back")
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")
                 if CLIENT == "grok":

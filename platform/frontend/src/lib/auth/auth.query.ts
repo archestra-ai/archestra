@@ -142,6 +142,24 @@ export function useHasPermissions(
  * Page discovery accepts an object read grant; it does not imply global read.
  * A page that no grant can open does not wait for the scoped capabilities.
  */
+/** Whether the user holds at least one of `options`; false for none. */
+export function useHasAnyPagePermissions(options: Permissions[]) {
+  const needsCapabilities = options.some(pageUsesCapabilities);
+  const permissions = useAllPermissions();
+  const capabilities = useScopedCapabilities(needsCapabilities);
+  return {
+    data: options.some((required) =>
+      hasPagePermissions({
+        userPermissions: permissions.data,
+        required,
+        capabilities: capabilities.data ?? [],
+      }),
+    ),
+    isPending:
+      permissions.isPending || (needsCapabilities && capabilities.isPending),
+  };
+}
+
 export function useHasPagePermissions(required: Permissions) {
   const needsCapabilities = pageUsesCapabilities(required);
   const permissions = useAllPermissions();
@@ -265,7 +283,7 @@ export function usePermissionsRevalidatingOnMount(): boolean {
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
-  alternatives?: Partial<Record<Key, Permissions>>,
+  alternatives?: Partial<Record<Key, Permissions | Permissions[]>>,
 ): Record<Key, boolean> | null {
   const { isPending: isSessionPending } = useSession();
   const { data: userPermissions, isLoading } = useAllPermissions();
@@ -289,7 +307,7 @@ export function usePermissionMap<Key extends string>(
     Permissions,
   ][]) {
     const alternative = alternatives?.[key];
-    result[key] = [requiredPermissions, ...(alternative ? [alternative] : [])]
+    result[key] = [requiredPermissions, ...[alternative ?? []].flat()]
       .map((required) =>
         hasPagePermissions({
           userPermissions,

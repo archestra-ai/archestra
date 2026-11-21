@@ -20,7 +20,7 @@ RUN apt-get update -qq \
 
 # Upstream gh 2.103.2 and 2.103.3 embed x/net 0.60.0 (CVE-2026-78661).
 # Rebuild the existing CLI release with the fixed module until upstream ships it.
-FROM golang:1.27.3-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0 AS gh-build
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS gh-build
 WORKDIR /src
 RUN curl -fsSL --retry 3 \
       https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
@@ -277,7 +277,15 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
- && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["python"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ # Python itself is pinned here, not taken from Hermes' lock: the lock's
+ # CPython 3.14.9 lacks the 3.14.10 fix to the ssl module's denylist of
+ # compromised intermediate certificates. Same python-build-standalone
+ # install_only build, a newer release. Digests from its SHA256SUMS.
+ && case "${TARGETARCH}" in \
+      amd64) set -- x86_64 3fe0d7c0538eb5d190c34582992d26230532551355cbd789fabc6591621cfc07 ;; \
+      arm64) set -- aarch64 e59f83159984a55e719bb3805a0b2b5b281f645769222218084b78b92eedc07f ;; \
+    esac \
+ && set -- "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.14.10+20261110-$1-unknown-linux-gnu-install_only.tar.gz" "$2" \
  && curl -fsSL "$1" -o /tmp/hermes-python.tgz \
  && echo "$2  /tmp/hermes-python.tgz" | sha256sum -c - \
  && mkdir -p /opt/hermes-python \
@@ -297,7 +305,7 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
  && mkdir -p /tmp/hermes-pnpm \
  && tar -xzf /tmp/hermes-pnpm.tgz -C /tmp/hermes-pnpm --strip-components=1 \
  && rm /tmp/hermes-pnpm.tgz \
- && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
+ && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:3] >= (3, 14, 10); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
  # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
  && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
@@ -315,7 +323,13 @@ RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image
       --source docker --distribution docker --update-mechanism external \
  && printf '%s\n' docker > .install_method \
  # Discard superseded wheels and build-only installers, including pip's vendored packages.
- && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+ # Hermes runs only HERMES_NODE at runtime; the npm and corepack its Node
+ # tarball bundles are build tools (npm 11.20.0 carries brace-expansion 5.0.9
+ # and undici 6.28.0). The pnpm store holds only the TUI build's packages,
+ # including lefthook's Go binary (go1.27.0, x/net 0.59.0).
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes /usr/local/share/pnpm/store \
+      /opt/hermes-node/lib/node_modules/npm /opt/hermes-node/lib/node_modules/corepack \
+      /opt/hermes-node/bin/npm /opt/hermes-node/bin/npx /opt/hermes-node/bin/corepack \
       /opt/hermes-python/lib/python3.14/site-packages/pip \
       /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
       /opt/hermes-python/lib/python3.14/ensurepip \
@@ -412,8 +426,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
- && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.3)" kimi-code.tgz \
+ && echo "403ad8e450362d05d09b785c045edeb9efc02cc7adeca1aadb9bb0cab800214969e6ebe7e21e75e35c58d9449efa6f767ffaabe64ed3e37c07c5f19274b07693  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -423,7 +437,8 @@ RUN apt-get update \
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
- && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py \
+ && python3 /tmp/agent-image-patches/kimi-late-mcp-tools.py
 USER 1000:1000
 
 RUN --network=none \

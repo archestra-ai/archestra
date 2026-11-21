@@ -44,6 +44,7 @@ import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
+import type { CompactToolState } from "@/lib/chat/chat-tools-display.utils";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -201,7 +202,7 @@ export function McpAppEntryPill({
   toolName: string;
   toolCallId?: string;
   /** Tool-call state for the status dot, matching the tool-call circles. */
-  state?: "running" | "completed" | "error" | "denied";
+  state?: CompactToolState;
   /** Runs on every pill click, before the app toggle (e.g. to collapse an
    * expanded tool-call card so only one thing opens under the row). */
   onClick?: () => void;

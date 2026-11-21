@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { isPlatformReleasePr } from "./proxy-benchmark-baseline.mjs";
 import {
   benchmarkDocsPath,
+  releaseVersion,
   updateBenchmarkTable,
 } from "./update-proxy-benchmark-docs.mjs";
 
@@ -331,7 +332,10 @@ export async function publishGeneration({
   if (docs.type !== "file" || docs.encoding !== "base64" || docs.size > 256000)
     throw new Error("Invalid benchmark docs");
   const before = Buffer.from(docs.content, "base64").toString("utf8");
-  const after = updateBenchmarkTable(before, summary); // Retains all #9662 completeness/diagnostic checks.
+  // Retains all #9662 completeness/diagnostic checks.
+  const after = updateBenchmarkTable(before, summary, {
+    version: releaseVersion(source),
+  });
   if (after !== before)
     entries.push({ path: benchmarkDocsPath, data: Buffer.from(after) });
   if (entries.length >= 299)

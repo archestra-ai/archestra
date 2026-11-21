@@ -8,7 +8,7 @@ lastUpdated: 2026-11-09
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Encrypt saved conversations, model payloads, and tool results with a deployment-held key, independently of [stored credentials](/docs/admin/credentials#secrets-storage). This is an [Enterprise feature](/docs/get-started/pricing-model), disabled by default.
+Encrypt saved conversations, model payloads, and tool results with a deployment-held key, independently of [stored credentials](/docs/admin/credentials#secrets-storage). This is an [Enterprise feature](/pricing), disabled by default.
 
 [Encrypted chats](/docs/chat#encrypted-chats) instead use a browser-held key with organization escrow. Both features protect stored content; the server still processes plaintext while handling requests.
 
@@ -52,7 +52,7 @@ Replace the key without downtime: every replica learns the new key before any re
 
    ```bash
    kubectl -n archestra exec deploy/archestra-platform -- \
-     sh -c 'cd /app/backend && node dist/standalone-scripts/reencrypt-content.ee.mjs'
+     node /app/backend/dist/standalone-scripts/reencrypt-content.ee.mjs
    ```
 
    It exits successfully and its last line shows `"status":"completed"`. Run it again: `"totalRewritten":0` confirms no content is left under the old key.

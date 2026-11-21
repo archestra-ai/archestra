@@ -1,5 +1,5 @@
 {
-  "id": "b8489e1d-c79b-45e2-a9f3-2eaaeede97a7",
+  "id": "cc4f0401-386a-4fc3-9564-7e5fa7a6393e",
   "prevId": "a00a26bc-6126-4f80-9769-2ca283e64c5a",
   "version": "7",
   "dialect": "postgresql",
@@ -18473,6 +18473,19 @@
           "type": "numeric",
           "primaryKey": false,
           "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_requests": {
+          "name": "failed_requests",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -18736,6 +18749,19 @@
           "type": "numeric",
           "primaryKey": false,
           "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_requests": {
+          "name": "failed_requests",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -33961,18 +33987,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "soft_deleted": {
-          "name": "soft_deleted",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scim_provisioned": {
-          "name": "scim_provisioned",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

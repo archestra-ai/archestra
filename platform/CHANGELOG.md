@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.4.38](https://github.com/archestra-ai/archestra/compare/platform-v1.4.37...platform-v1.4.38) (2026-11-21)
+
+
+### Features
+
+* **database:** backport PostgreSQL Entra authentication to 1.4 ([#11073](https://github.com/archestra-ai/archestra/issues/11073)) ([985b02a](https://github.com/archestra-ai/archestra/commit/985b02af145e3ce7ac927c01c89ae97c7e4b4c65))
+* **plugins:** authorize plugins through per-plugin grants (backport release/1.4) ([#11054](https://github.com/archestra-ai/archestra/issues/11054)) ([dbd664c](https://github.com/archestra-ai/archestra/commit/dbd664cacf357a1e5d9fa7d1f2c23ce81cab2f3f))
+
+
+### Bug Fixes
+
+* **apps:** fix the unsaved-changes prompt in app settings (backport release/1.4) ([#11072](https://github.com/archestra-ai/archestra/issues/11072)) ([8d060b2](https://github.com/archestra-ai/archestra/commit/8d060b2540e00d9b25b5473ec4c3dc6bdb3913ca))
+* **chat:** order tool-call circles and open cards under circles (backport release/1.4) ([#11081](https://github.com/archestra-ai/archestra/issues/11081)) ([d38b806](https://github.com/archestra-ai/archestra/commit/d38b80675208907b4a450680347b373204ce7c7a))
+* **chat:** stop MCP server circles from flashing in agent selector (backport release/1.4) ([#11035](https://github.com/archestra-ai/archestra/issues/11035)) ([fd66fa1](https://github.com/archestra-ai/archestra/commit/fd66fa1bc07aaeef333a330a4e27ebf0a78759ce))
+* **logs:** show each user's email in the LLM logs user filter (backport release/1.4) ([#11074](https://github.com/archestra-ai/archestra/issues/11074)) ([3e407bd](https://github.com/archestra-ai/archestra/commit/3e407bdf4cf77518bcbd4ffa6b402ef7ff3c2efb))
+* **mcp:** keep shared MCP server names unique within an environment (backport release/1.4) ([#11077](https://github.com/archestra-ai/archestra/issues/11077)) ([4268fb0](https://github.com/archestra-ai/archestra/commit/4268fb0bae0ab52287b12e79149837ece8945dc2))
+* **openappa:** recognize proxy tools and confirm unknown tools (backport release/1.4) ([#11038](https://github.com/archestra-ai/archestra/issues/11038)) ([402af7c](https://github.com/archestra-ai/archestra/commit/402af7ca5e0cb443ac1197bdeee9a8df51559dc1))
+* **security:** move to containerd 2.2.10 and mcp 1.30.0 (backport release/1.4) ([#11078](https://github.com/archestra-ai/archestra/issues/11078)) ([1c35496](https://github.com/archestra-ai/archestra/commit/1c35496e856e4065c8a2fea131e5e5c5b818cb1b))
+* **security:** move to go-jose 4.1.7 and rmcp 3.9.0 (backport release/1.4) ([#11047](https://github.com/archestra-ai/archestra/issues/11047)) ([c1b2ccd](https://github.com/archestra-ai/archestra/commit/c1b2ccd8580f497437554acedb7a1003db8f4f44))
+
+
+### Dependencies
+
+* bump the go-dependencies group in /platform/docker/dagger-dockercompat with 2 updates ([#11058](https://github.com/archestra-ai/archestra/issues/11058)) ([649c336](https://github.com/archestra-ai/archestra/commit/649c336056397833e422267808197771b1ab4d02))
+
+
+### Miscellaneous Chores
+
+* update client versions (release/1.4) ([#11041](https://github.com/archestra-ai/archestra/issues/11041)) ([a524359](https://github.com/archestra-ai/archestra/commit/a5243599711c1c6a9117c738cfedf58a264ce781))
+* update client versions (release/1.4) ([#11067](https://github.com/archestra-ai/archestra/issues/11067)) ([968d4a7](https://github.com/archestra-ai/archestra/commit/968d4a74f3fe83fc4d41a0257472e398b745ee3e))
+
 ## [1.4.37](https://github.com/archestra-ai/archestra/compare/platform-v1.4.36...platform-v1.4.37) (2026-11-20)
 
 

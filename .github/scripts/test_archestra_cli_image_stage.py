@@ -186,7 +186,9 @@ class StageShapeTests(unittest.TestCase):
         # Relative to /app; both published images are built from this stage.
         self.assertTrue(runtime.startswith("WORKDIR /app\n"))
         self.assertTrue("\nCOPY --from=archestra-cli-release /out/ ./archestra-cli/\n" in runtime)
-        self.assertTrue("\nFROM runtime AS unified-slim\n" in DOCKERFILE)
+        # The Kubernetes image copies /app out of it (build-slim-rootfs.sh).
+        self.assertTrue("\nFROM runtime AS slim-rootfs\n" in DOCKERFILE)
+        self.assertTrue("\nFROM runtime-base-distroless AS unified-slim\n" in DOCKERFILE)
         self.assertTrue("\nFROM runtime AS unified\n" in DOCKERFILE)
 
     def test_lock_is_in_the_docker_context_and_in_the_tilt_build(self):

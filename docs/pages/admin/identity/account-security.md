@@ -55,7 +55,7 @@ Run the reset script inside the platform deployment pod:
 
 ```bash
 kubectl exec -it deploy/archestra-platform -- \
-  sh -c 'cd /app/backend && node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+  node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
 ```
 
 ### Docker Quickstart
@@ -63,9 +63,9 @@ kubectl exec -it deploy/archestra-platform -- \
 Pass the database connection URL into the container command:
 
 ```bash
-docker exec -it <container> sh -c 'cd /app/backend && \
-  ARCHESTRA_DATABASE_URL=postgresql://user:password@localhost:5432/database \
-  node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+docker exec -it \
+  -e ARCHESTRA_DATABASE_URL=postgresql://user:password@localhost:5432/database \
+  <container> node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
 ```
 
 ### Script Flags

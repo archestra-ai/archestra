@@ -56,9 +56,9 @@ spec:
           {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" "./scripts/start-production.sh" | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" "node ./scripts/start-production.mjs" | nindent 10 }}
           {{- else }}
-          command: ["./scripts/start-production.sh"]
+          command: ["node", "./scripts/start-production.mjs"]
           {{- end }}
           ports:
             - name: backend

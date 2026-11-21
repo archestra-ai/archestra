@@ -1,8 +1,8 @@
 // Runs the platform image's processes in one container, in place of
 // supervisord (which needed Python): the bundled PostgreSQL (full image, no
 // ARCHESTRA_DATABASE_URL), the backend, the frontend, and the one-shot startup
-// banner. docker-entrypoint.sh prepares the environment and execs this as the
-// container's main process.
+// banner. docker-entrypoint.sh (docker run image) prepares the environment and
+// starts this; entrypoint.mjs (Kubernetes image) runs its programs in process.
 //
 // - Each process inherits the container's stdout and stderr.
 // - A process that exits on its own is started again, after a delay that
@@ -54,7 +54,7 @@ export function platformPrograms({ env, bundledPostgres }) {
     {
       name: "backend",
       // Waits for the bundled database, runs the migrations, then the server.
-      command: ["/app/start-backend.sh"],
+      command: ["node", "/app/start-backend.mjs"],
       cwd: "/app/backend",
       env: bundledPostgres ? { ARCHESTRA_DATABASE_BUNDLED: "true" } : {},
       stopSeconds: positiveInteger(
@@ -75,7 +75,7 @@ export function platformPrograms({ env, bundledPostgres }) {
     },
     {
       name: "startup-banner",
-      command: ["/app/docker-banner.sh"],
+      command: ["node", "/app/docker-banner.mjs"],
       stopSeconds: 5,
       restart: false,
       stage: "first",
@@ -128,7 +128,7 @@ export class Supervisor {
     const [command, ...args] = program.command;
     const startedAt = Date.now();
     // detached: its own process group, so a stop timeout can kill the
-    // processes it started too (start-backend.sh's children).
+    // processes it started too (start-backend.mjs's children).
     const child = spawn(command, args, {
       cwd: program.cwd,
       env: { ...this.env, ...program.env },

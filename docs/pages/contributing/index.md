@@ -1,7 +1,7 @@
 ---
 title: Contributing
 description: Propose changes and report bugs through GitHub issues, and report vulnerabilities privately
-order: 9
+order: 10
 lastUpdated: 2026-10-19
 ---
 

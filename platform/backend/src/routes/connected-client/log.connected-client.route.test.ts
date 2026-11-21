@@ -232,14 +232,47 @@ describe("GET /api/connected-clients/log", () => {
     expect((await getLog()).data).toEqual([]);
   });
 
-  test.for([
-    [ADMIN_ROLE_NAME, 200],
-    [EDITOR_ROLE_NAME, 403],
-    [MEMBER_ROLE_NAME, 403],
-  ] as const)("is for admins only: %s gets %i", async ([role, statusCode], {
+  test("without clientConnection:admin a caller sees only their own clients' events", async ({
     makeUser,
     makeMember,
   }) => {
+    const editor = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
+    const other = await makeUser({ name: "Grace Hopper" });
+    await makeMember(other.id, organizationId);
+    await redeem(editor.id, "codex");
+    await redeem(other.id, "cursor");
+    const { default: routes } = await import("./connected-client.routes");
+    const gated = await authenticatedRouteApp({
+      organizationId,
+      routes: [routes],
+    });
+    try {
+      // Asking for someone else's events still returns only the caller's.
+      const response = await gated.inject({
+        method: "GET",
+        url: `/api/connected-clients/log?limit=10&userId=${other.id}`,
+        headers: { [USER_HEADER]: editor.id },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .data.map((entry: { userName: string }) => entry.userName),
+      ).toEqual(["Ada Lovelace"]);
+    } finally {
+      await gated.close();
+    }
+  });
+
+  test.for([
+    [ADMIN_ROLE_NAME, 200],
+    [EDITOR_ROLE_NAME, 200],
+    [MEMBER_ROLE_NAME, 403],
+  ] as const)("needs clientConnection:read: %s gets %i", async ([
+    role,
+    statusCode,
+  ], { makeUser, makeMember }) => {
     const caller = await makeUser();
     await makeMember(caller.id, organizationId, { role });
     const { default: routes } = await import("./connected-client.routes");

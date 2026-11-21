@@ -14,7 +14,7 @@ import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
 /**
- * The yells a viewer may read and resolve: with `guardrailsYell:admin`, every
+ * The yells a viewer may read and resolve: with `guardrailsLog:admin`, every
  * yell in the organization; otherwise only the yells of the viewer's own
  * sessions, as for the logs.
  */
@@ -25,7 +25,7 @@ export async function openAppaYellScope(params: {
   const canSeeAllYells = await userHasPermission(
     params.userId,
     params.organizationId,
-    "guardrailsYell",
+    "guardrailsLog",
     "admin",
   );
   return {

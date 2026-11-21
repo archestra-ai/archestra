@@ -1,7 +1,7 @@
 ---
 title: Integrations
 description: Connect your AI clients and frameworks to Archestra
-order: 8
+order: 9
 lastUpdated: 2026-10-30
 ---
 

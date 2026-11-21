@@ -3,7 +3,11 @@ import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import {
+  useHasAnyPagePermissions,
+  useHasPagePermissions,
+  usePermissionMap,
+} from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
@@ -39,6 +43,21 @@ function signInAs(userPermissions: Permissions | null) {
           : false,
         isPending: userPermissions === null,
       }) as ReturnType<typeof useHasPagePermissions>,
+  );
+  vi.mocked(useHasAnyPagePermissions).mockImplementation(
+    (options) =>
+      ({
+        data: userPermissions
+          ? options.some((required) =>
+              hasPagePermissions({
+                userPermissions,
+                required,
+                capabilities: [],
+              }),
+            )
+          : false,
+        isPending: userPermissions === null,
+      }) as ReturnType<typeof useHasAnyPagePermissions>,
   );
 }
 
@@ -124,16 +143,20 @@ describe("WithPagePermissions", () => {
   });
 
   it.each([
-    [{ log: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs/yells/yell-1", true],
+    [{ log: ["read"] }, "/logs", true],
+    [{ guardrailsLog: ["read"] }, "/logs", true],
+    [{ clientConnection: ["read"] }, "/logs", true],
+    [{ auditLog: ["read"] }, "/logs", true],
+    [{ guardrailsLog: ["read"] }, "/consults/logs/yells/yell-1", true],
     [{ log: ["read", "admin"] }, "/consults/logs/yells/yell-1", false],
-    [{ guardrailsPolicy: ["read"] }, "/consults/logs", false],
+    [{ guardrailsPolicy: ["read"] }, "/logs", false],
+    [{ clientConnection: ["admin"] }, "/adoption", true],
+    [{ clientConnection: ["read"] }, "/adoption", false],
   ] as [
     Permissions,
     string,
     boolean,
-  ][])("opens the Guardrails log with log or yell access (%o at %s: %s)", (permissions, pathname, opens) => {
+  ][])("opens Logs with any log type's read access (%o at %s: %s)", (permissions, pathname, opens) => {
     signInAs(permissions);
     renderAt(pathname);
     if (opens) expect(screen.getByText("Page content")).toBeVisible();

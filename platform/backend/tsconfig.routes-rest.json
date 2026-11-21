@@ -17,6 +17,7 @@
     "src/routes/archestra-catalog-proxy.ts",
     "src/routes/archestra-cli/archestra-cli.routes.ts",
     "src/routes/audit-log/audit-log.routes.ts",
+    "src/routes/log-events/log-events.routes.ts",
     "src/routes/auto-routing/auto-routing.routes.ts",
     "src/routes/bootstrap.ts",
     "src/routes/browser-storage-state/browser-storage-state.routes.ts",

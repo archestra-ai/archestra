@@ -1,4 +1,7 @@
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import {
+  alternativePagePermissionsMap,
+  requiredPagePermissionsMap,
+} from "@archestra/shared/access-control";
 import { useMemo } from "react";
 import { usePermissionMap, useScopedCapabilities } from "@/lib/auth/auth.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
@@ -18,7 +21,10 @@ import {
  * reader whose only way into Settings may be a grant on one credential.
  */
 export function useNavPermissionMap(): Record<string, boolean> | null {
-  const pageMap = usePermissionMap(requiredPagePermissionsMap);
+  const pageMap = usePermissionMap(
+    requiredPagePermissionsMap,
+    alternativePagePermissionsMap,
+  );
   const limitsAccess = useTeamLimitAccess();
   const serverRules = useServerRulesAccess();
   const manageMap = usePermissionMap(SETTINGS_MANAGE_PERMISSIONS);

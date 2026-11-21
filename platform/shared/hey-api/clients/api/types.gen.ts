@@ -110571,6 +110571,456 @@ export type UpdateLlmProxyResponses = {
 
 export type UpdateLlmProxyResponse = UpdateLlmProxyResponses[keyof UpdateLlmProxyResponses];
 
+export type GetLogEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Comma-separated record types
+         */
+        sources?: string;
+        /**
+         * Comma-separated statuses
+         */
+        statuses?: string;
+        /**
+         * Comma-separated Guardrails decisions
+         */
+        decision?: string;
+        /**
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
+         */
+        q?: string;
+        sessionId?: string;
+        /**
+         * An agent's name
+         */
+        agent?: string;
+        /**
+         * An actor's name
+         */
+        actor?: string;
+        client?: string;
+        model?: string;
+        mcpServer?: string;
+        connectionAction?: string;
+        auditAction?: string;
+        auditCategory?: string;
+        resourceType?: string;
+        resourceName?: string;
+        actorKind?: string;
+        /**
+         * The window, back from now, in hours
+         */
+        hours?: number;
+        limit?: number;
+        /**
+         * The previous page's nextCursor
+         */
+        cursor?: string;
+    };
+    url: '/api/logs/events';
+};
+
+export type GetLogEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLogEventsError = GetLogEventsErrors[keyof GetLogEventsErrors];
+
+export type GetLogEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            source: 'llm' | 'mcp' | 'guardrails' | 'connections' | 'audit';
+            /**
+             * ISO 8601
+             */
+            timestamp: string;
+            status: 'ok' | 'error' | 'blocked' | 'pending' | 'warning';
+            /**
+             * The model, the tool, the external, the action
+             */
+            title: string;
+            summary?: string;
+            actor: {
+                kind: 'user' | 'agent' | 'service_account' | 'system';
+                name: string;
+                email?: string;
+            };
+            agent?: {
+                id: string;
+                name: string;
+                kind: 'agent' | 'mcp_gateway' | 'llm_proxy';
+            };
+            /**
+             * The client app the call came from
+             */
+            client?: string;
+            sessionId?: string;
+            sessionTitle?: string;
+            durationMs?: number;
+            /**
+             * The record's own detail page
+             */
+            href: string;
+            llm?: {
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                model: string;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                /**
+                 * USD at list price
+                 */
+                cost: number;
+                billingMode: 'metered' | 'subscription';
+                stream: boolean;
+                toolCallsRequested: number;
+                errorCode?: number;
+            };
+            mcp?: {
+                server: string;
+                tool?: string;
+                method: string;
+                authMethod: string;
+                arguments?: {
+                    [key: string]: unknown;
+                };
+                resultPreview?: string;
+                errorMessage?: string;
+            };
+            guardrail?: {
+                decision: 'allow' | 'deny' | 'review' | 'consult' | 'yell';
+                policy: string;
+                rule: string;
+                tool: string;
+                reason: string;
+                reviewer?: string;
+            };
+            connection?: {
+                action: 'connected' | 'first_seen' | 'authorized' | 'token_refreshed' | 'disconnected';
+                client: string;
+                gateway: string;
+                clientVersion?: string;
+            };
+            audit?: {
+                action: string;
+                category: string;
+                resourceType: string;
+                resourceName: string;
+                httpMethod: string;
+                statusCode: number;
+                ip: string;
+                diff?: Array<{
+                    field: string;
+                    before: string | null;
+                    after: string | null;
+                }>;
+            };
+        }>;
+        /**
+         * Pass back as `cursor` for the next page; null on the last
+         */
+        nextCursor: string | null;
+    };
+};
+
+export type GetLogEventsResponse = GetLogEventsResponses[keyof GetLogEventsResponses];
+
+export type GetLogStatsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Comma-separated record types
+         */
+        sources?: string;
+        /**
+         * Comma-separated statuses
+         */
+        statuses?: string;
+        /**
+         * Comma-separated Guardrails decisions
+         */
+        decision?: string;
+        /**
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
+         */
+        q?: string;
+        sessionId?: string;
+        /**
+         * An agent's name
+         */
+        agent?: string;
+        /**
+         * An actor's name
+         */
+        actor?: string;
+        client?: string;
+        model?: string;
+        mcpServer?: string;
+        connectionAction?: string;
+        auditAction?: string;
+        auditCategory?: string;
+        resourceType?: string;
+        resourceName?: string;
+        actorKind?: string;
+        /**
+         * The window, back from now, in hours
+         */
+        hours?: number;
+    };
+    url: '/api/logs/stats';
+};
+
+export type GetLogStatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLogStatsError = GetLogStatsErrors[keyof GetLogStatsErrors];
+
+export type GetLogStatsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        total: number;
+        facets: {
+            source: Array<{
+                value: string;
+                count: number;
+            }>;
+            status: Array<{
+                value: string;
+                count: number;
+            }>;
+            agent: Array<{
+                value: string;
+                count: number;
+            }>;
+            actor: Array<{
+                value: string;
+                count: number;
+            }>;
+            client: Array<{
+                value: string;
+                count: number;
+            }>;
+            model: Array<{
+                value: string;
+                count: number;
+            }>;
+            mcpServer: Array<{
+                value: string;
+                count: number;
+            }>;
+            decision: Array<{
+                value: string;
+                count: number;
+            }>;
+            connectionAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            auditAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            auditCategory: Array<{
+                value: string;
+                count: number;
+            }>;
+            resourceType: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "resourceType::resourceName" pairs
+             */
+            resourceName: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "auditCategory::auditAction" pairs
+             */
+            auditCategoryAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "actorKind::actorName" pairs
+             */
+            actorByKind: Array<{
+                value: string;
+                count: number;
+            }>;
+        };
+        /**
+         * One bucket per hour of the window
+         */
+        buckets: Array<{
+            start: string;
+            end: string;
+            bySource: {
+                [key: string]: number;
+            };
+            errors: number;
+        }>;
+        /**
+         * What the facets name: each agent's kind, model's maker, person's email
+         */
+        directory: {
+            agents: Array<{
+                name: string;
+                kind: 'agent' | 'mcp_gateway' | 'llm_proxy';
+            }>;
+            models: Array<{
+                name: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            }>;
+            emails: Array<{
+                name: string;
+                email: string;
+            }>;
+        };
+        /**
+         * A small type had more events in the window than one count reads
+         */
+        truncated: boolean;
+    };
+};
+
+export type GetLogStatsResponse = GetLogStatsResponses[keyof GetLogStatsResponses];
+
 export type McpAppProxyPostData = {
     body: {
         [key: string]: unknown;

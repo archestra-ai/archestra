@@ -152,7 +152,7 @@ Once a blueprint is set, an agent or MCP Gateway whose identity provider is your
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
 2. Under **Identity**, pick your Entra provider under **Identity Provider**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
 
-To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Entra agent identity** and its ID.
+To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows **Entra agent identity** and its ID.
 
 Who may bind an agent, and what binding does not do, is on [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 

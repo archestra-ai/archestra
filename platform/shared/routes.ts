@@ -1154,6 +1154,10 @@ export const RouteId = {
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
+  // Unified Logs
+  GetLogEvents: "getLogEvents",
+  GetLogStats: "getLogStats",
+
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",

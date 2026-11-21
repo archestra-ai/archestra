@@ -318,7 +318,7 @@ describe("OpenAPPA yells", () => {
     makeAgent,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { guardrailsYell: ["read"] },
+      permission: { guardrailsLog: ["read"] },
     });
     const admin = user;
     const other = await record("Colleague's report", { superyell: true });
@@ -664,7 +664,7 @@ describe("OpenAPPA yells", () => {
   }) => {
     const other = await record("Colleague's report");
     const role = await makeCustomRole(organizationId, {
-      permission: { guardrailsYell: ["read", "admin"] },
+      permission: { guardrailsLog: ["read", "admin"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
@@ -682,7 +682,7 @@ describe("OpenAPPA yells", () => {
     expect(resolved.statusCode, resolved.body).toBe(200);
   });
 
-  test("denies callers without guardrailsYell:read, even log admins", async ({
+  test("denies callers without guardrailsLog:read, even log admins", async ({
     makeUser,
     makeMember,
     makeCustomRole,

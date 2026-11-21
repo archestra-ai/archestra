@@ -120,7 +120,7 @@ with open("reference.png", "rb") as image, open("mask.png", "rb") as mask:
 
 Send between 1 and 16 PNG, JPEG, or WebP references, each smaller than 50 MiB and at most 16,777,216 pixels. An optional PNG mask must be smaller than 4 MiB, match the first image's dimensions, and contain an alpha channel with fully transparent pixels. The configured [proxy body limit](/docs/admin/deployment/configuration#ARCHESTRA_API_BODY_LIMIT) also bounds the complete multipart request. Invalid MIME declarations, duplicate scalar parameters, malformed uploads, URL references, and unsupported fields are rejected before inference.
 
-The selected deployment and API version must support image editing, input formats, and the parameters you request. Known DALL-E 2 deployments accept one square PNG reference smaller than 4 MiB. Returned token usage is recorded when available. Image edits have no price, so they record no cost. A hard [spend limit](/docs/llm-proxy/costs-and-limits/limits) that covers the model refuses the request before Azure is called.
+The selected deployment and API version must support image editing, input formats, and the parameters you request. Known DALL-E 2 deployments accept one square PNG reference smaller than 4 MiB. Returned token usage is recorded when available. Image edits have no price, so they record no cost. A hard [spend limit](/docs/llm-proxy/cost-controls/limits) that covers the model refuses the request before Azure is called.
 
 ### Use Provider Files
 

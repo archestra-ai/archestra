@@ -1,13 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePermissionMap } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { LogsSectionLayout } from "./logs-section-layout";
 
 vi.mock("next/navigation");
-vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 describe("LogsSectionLayout", () => {
@@ -17,90 +13,39 @@ describe("LogsSectionLayout", () => {
     );
   });
 
-  it("renders the section header and tabs on the list route", () => {
-    vi.mocked(usePathname).mockReturnValue("/llm/logs");
+  it("renders the section header on the list route", () => {
+    vi.mocked(usePathname).mockReturnValue("/adoption");
 
     render(
-      <LogsSectionLayout listPath="/llm/logs">
+      <LogsSectionLayout
+        listPath="/adoption"
+        title="Adoption"
+        description="Who connected what."
+      >
         <div>list content</div>
       </LogsSectionLayout>,
     );
 
-    expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
-    // PageLayout renders every tab twice, in a desktop row and a mobile one.
-    expect(
-      screen.getAllByRole("link", { name: "MCP Gateway" }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Adoption" })).toBeVisible();
     expect(screen.getByText("list content")).toBeVisible();
   });
 
   it("hands a detail route through without the section header", () => {
-    // The detail pages render their own PageLayout naming the record they are
-    // about. Wrapping them here too gave the page two headers stacked on each
-    // other, with the record's own title and back link stranded in the body
-    // below the tab bar.
-    vi.mocked(usePathname).mockReturnValue("/llm/logs/abc");
+    // Detail pages render their own PageLayout naming the record they are
+    // about; wrapping them here too would stack two headers.
+    vi.mocked(usePathname).mockReturnValue("/adoption/abc");
 
     render(
-      <LogsSectionLayout listPath="/llm/logs">
+      <LogsSectionLayout
+        listPath="/adoption"
+        title="Adoption"
+        description="Who connected what."
+      >
         <div>detail content</div>
       </LogsSectionLayout>,
     );
 
     expect(screen.getByText("detail content")).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "Logs" })).toBeNull();
-    expect(screen.queryAllByRole("link", { name: "MCP Gateway" })).toHaveLength(
-      0,
-    );
-  });
-
-  it("keeps the header for a sibling segment's list route", () => {
-    // Each segment passes its own list path, so /mcp/logs is a detail route to
-    // the LLM layout and a list route to its own.
-    vi.mocked(usePathname).mockReturnValue("/mcp/logs");
-
-    render(
-      <LogsSectionLayout listPath="/mcp/logs">
-        <div>mcp list</div>
-      </LogsSectionLayout>,
-    );
-
-    expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
-  });
-
-  it("orders the tabs by the request's path: proxy, gateway, guardrails, connections, then audit", () => {
-    vi.mocked(usePathname).mockReturnValue("/llm/logs");
-    vi.mocked(useFeature).mockReturnValue(true);
-    vi.mocked(usePermissionMap).mockReturnValue({
-      "/consults/logs": true,
-      "/connections/logs": true,
-      "/audit/logs": true,
-    });
-
-    render(
-      <LogsSectionLayout listPath="/llm/logs">
-        <div>list content</div>
-      </LogsSectionLayout>,
-    );
-
-    const tabs = screen
-      .getAllByRole("link")
-      .map((link) => link.textContent)
-      .filter((name) =>
-        [
-          "LLM Proxy",
-          "MCP Gateway",
-          "Guardrails",
-          "Agent connections",
-          "Audit",
-        ].includes(name ?? ""),
-      );
-    expect([...new Set(tabs)]).toEqual([
-      "LLM Proxy",
-      "MCP Gateway",
-      "Guardrails",
-      "Agent connections",
-      "Audit",
-    ]);
+    expect(screen.queryByRole("heading", { name: "Adoption" })).toBeNull();
   });
 });

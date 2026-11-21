@@ -16,6 +16,11 @@ export const awaitBootstrapSeed = vi.fn(async () => null);
 export const useSession = vi.fn();
 export const useHasPermissions = vi.fn();
 export const useHasPagePermissions = useHasPermissions;
+/** No alternative page permissions unless a test grants them. */
+export const useHasAnyPagePermissions = vi.fn(() => ({
+  data: false,
+  isPending: false,
+}));
 const emptyCapabilities = { data: [], isPending: false, isLoading: false };
 export const useScopedCapabilities = vi.fn(() => emptyCapabilities);
 export const useMissingPermissions = vi.fn();

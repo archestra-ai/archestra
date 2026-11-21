@@ -106,7 +106,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaGuardrailEvents,
         description:
-          "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. Consults need `log:read`, which returns the consults of the caller's own sessions; `log:admin` returns every consult in the organization. Yells need `guardrailsYell:read`, which returns the yells of the caller's own sessions; `guardrailsYell:admin` returns every yell in the organization. A kind the caller may not read is left out, and a caller who may read neither is refused. A consult is served as the consults export serves it.",
+          "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. `guardrailsLog:read` returns the consults and yells of the caller's own sessions; `guardrailsLog:admin` returns every one in the organization. A consult is served as the consults export serves it.",
         tags: ["OpenAPPA"],
         querystring: EventsQuerySchema,
         response: constructResponseSchema(
@@ -143,7 +143,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `guardrailsLog:read` returns the consults of the caller's own sessions. `guardrailsLog:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(

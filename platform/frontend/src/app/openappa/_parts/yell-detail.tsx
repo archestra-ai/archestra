@@ -27,10 +27,10 @@ import {
 export function YellDetail({ id }: { id: string }) {
   const yell = useOpenAppaYell(id);
   const resolve = useResolveOpenAppaYell();
-  const { data: canResolve } = useHasPermissions({ guardrailsYell: ["read"] });
+  const { data: canResolve } = useHasPermissions({ guardrailsLog: ["read"] });
   const back = (
-    <PageBackLink href="/consults/logs?type=yell" labelled>
-      <span>Back to Guardrails logs</span>
+    <PageBackLink href="/logs" labelled>
+      <span>Back to Logs</span>
     </PageBackLink>
   );
 

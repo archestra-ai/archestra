@@ -22,7 +22,7 @@ A failed check stops setup with repair instructions. On Ubuntu or Debian, run `s
 1. On **Connect**, select **ChatGPT**. Keep **LLM proxy** on under **Choose what to include**.
 2. Click **Copy** and run the command in a terminal on the computer with the desktop app. Review and approve the ChatGPT setup in your browser.
 3. The installer configures model routing, connects the gateway, and installs the Archestra plugin with its gateway, onboarding workflow, and selected shared skills through the native marketplace. Sign in to the gateway when asked; a separate plugin ZIP upload is unnecessary for local desktop conversations.
-4. Restart ChatGPT and start a Work task. In the [logs](/docs/admin/logs), its requests show the ChatGPT client.
+4. Restart ChatGPT and start a Work task. In the [logs](/docs/insights/logs), its requests show the ChatGPT client.
 
 - The setup needs the `codex` CLI on your `PATH`. It changes `~/.codex/config.toml`, so Codex CLI on the same computer uses the same settings. See [Connect Your Agents](/docs/get-started/connect#before-you-start) for the other prerequisites.
 - On Windows, use the Windows command also when ChatGPT runs Codex in WSL. Codex in WSL cannot read Windows Credential Manager. So while ChatGPT runs Codex in WSL, the setup signs in to the gateway with Codex's `mcp_oauth_credentials_store=file` setting. Codex then saves the sign-in in `.credentials.json` in your Codex folder, where both Codex for Windows and Codex in WSL read it.

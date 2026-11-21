@@ -39,7 +39,11 @@ fi
 BANNER_WAIT_SECONDS=180
 waited=0
 while [ "$waited" -lt "$BANNER_WAIT_SECONDS" ]; do
-    ready_body=$(curl -s --max-time 5 -w '%{http_code}' "${BACKEND_URL}/ready" 2>/dev/null)
+    # The body followed by the status code. The image has no curl, and BusyBox
+    # wget prints no body for a 503.
+    ready_body=$(node -e 'fetch(process.argv[1], { signal: AbortSignal.timeout(5000) })
+        .then(async (r) => process.stdout.write((await r.text()) + r.status)).catch(() => {})' \
+        "${BACKEND_URL}/ready" 2>/dev/null)
     case "$ready_body" in
         *200 | *'"kubernetes":"starting"'*503) backend_up=1 ;;
         *) backend_up="" ;;

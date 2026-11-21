@@ -727,7 +727,19 @@ COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 # `pnpm deploy` there); this runtime stage runs no pnpm at all — DB migrations
 # call drizzle-kit directly (see docker/supervisord/supervisord.conf) — so drop
 # corepack/pnpm from the final image entirely.
-RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
+#
+# Nothing at runtime uses the base image's yarn or corepack either, the curl CLI
+# (libcurl stays: git's HTTPS transport links it), or apk itself: no later step
+# installs a package, and a package manager in a running container only helps
+# an intruder. `apk del` removes apk last and keeps its database, so image
+# scanners still list every OS package.
+RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx \
+           /usr/local/bin/corepack /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* && \
+    apk del --no-cache curl apk-tools && \
+    test -s /lib/apk/db/installed && \
+    ! test -e /usr/bin/curl && ! test -e /sbin/apk && \
+    git --version
 
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the

@@ -69,7 +69,13 @@ RUN apt-get update -qq \
 # own postgresql-common enables the PGDG repository: Debian's pgvector
 # predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
 # and the shared socket directory lets local clients connect without flags.
-RUN apt-get update -qq \
+# The DHI mirror has served postgresql-common archives that do not match its
+# signed index. Resolve these helpers from signed Debian and PGDG repositories.
+RUN printf '%s\n' \
+      'Package: postgresql-common postgresql-client-common postgresql-common-dev' \
+      'Pin: origin "dhi.io"' \
+      'Pin-Priority: -1' > /etc/apt/preferences.d/postgresql-common \
+ && apt-get update -qq \
  && apt-get install -y --no-install-recommends postgresql-common \
  && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
  && sed -i 's/^#*\s*create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \

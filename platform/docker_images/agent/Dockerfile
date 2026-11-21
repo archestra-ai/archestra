@@ -40,7 +40,10 @@ RUN curl -fsSL --retry 3 \
 
 FROM dhi.io/node:24.22.3-debian13-dev@sha256:9354eb131b6856f43fc9c7eba8cb54f5d0200fe7fbf5495bf6065be8a4a43e3b AS agent-base
 ARG TARGETARCH
-RUN mkdir -p /usr/local/bin && ln -s /usr/bin/node /usr/local/bin/node
+# DHI's apt mirror can serve a stale archive after its signed index changes.
+# Request fresh packages while retaining apt's index and archive verification.
+RUN printf '%s\n' 'Acquire::http::No-Cache "true";' > /etc/apt/apt.conf.d/99dhi-no-cache \
+ && mkdir -p /usr/local/bin && ln -s /usr/bin/node /usr/local/bin/node
 
 # Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
 # CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
@@ -92,11 +95,11 @@ COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpic
 # Keep the venv bootstrap wheel and system pip on fixed, checksum-verified
 # versions. Debian 13 no longer seeds setuptools into newly created venvs.
 RUN find /usr/share/python-wheels -maxdepth 1 -name 'setuptools-*.whl' -delete \
- && curl -fsSL \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl" \
       -o /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl \
  && echo "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670  /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl" | sha256sum -c - \
- && curl -fsSL \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
       -o /tmp/pip-25.3-py3-none-any.whl \
  && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \

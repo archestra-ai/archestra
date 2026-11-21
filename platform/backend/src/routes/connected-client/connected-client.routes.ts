@@ -1,6 +1,8 @@
 import {
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -9,13 +11,17 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { ConnectedClientModel } from "@/models";
 import { lastDays } from "@/models/connected-client";
+import { agentAdoptionReports } from "@/services/agent-adoption";
 import {
   disconnectClient,
   listConnectedClients,
 } from "@/services/connected-client";
 import { issueDisconnectReference } from "@/services/connection-disconnect-reference";
 import {
+  AdoptionMemberSortBySchema,
+  AgentAdoptionMemberSchema,
   AgentAdoptionSchema,
+  AgentAdoptionStatusSchema,
   AgentAdoptionUsageSchema,
   ApiError,
   ConnectedClientIdSchema,
@@ -24,6 +30,7 @@ import {
   ConnectionEventSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  SortDirectionSchema,
 } from "@/types";
 
 /** The window when none is picked; calls in the window make a member active. */
@@ -129,17 +136,62 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAgentAdoption,
         description:
-          "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.",
+          "How many organization members there are, and each member with agents or traffic: their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran. Every other member is not connected; the adoption members endpoint lists every member a page at a time.",
         tags: ["Connection Setups"],
         querystring: WindowQuerySchema,
         response: constructResponseSchema(AgentAdoptionSchema),
       },
     },
     async ({ organizationId, query }) =>
-      ConnectedClientModel.getAdoption({
+      agentAdoptionReports.get({
         organizationId,
+        range: query,
         window: adoptionWindow(query),
       }),
+  );
+
+  app.get(
+    "/api/connected-clients/adoption/members",
+    {
+      schema: {
+        operationId: RouteId.GetAgentAdoptionMembers,
+        description:
+          "Every organization member a page at a time, as the adoption summary describes them over the same window: members without an agent or traffic are not connected. Filter by state and search names, emails and agent names; sort by state (members without an agent first), name, or last MCP or LLM proxy call (newest first).",
+        tags: ["Connection Setups"],
+        querystring: WindowQuerySchema.extend(
+          PaginationQuerySchema.shape,
+        ).extend({
+          // Large enough for an export to page through quickly.
+          limit: z.coerce.number().int().min(1).max(1000).default(25),
+          state: AgentAdoptionStatusSchema.optional().describe(
+            "Only members in this state",
+          ),
+          search: z
+            .string()
+            .optional()
+            .describe("Matches names, emails and agent names"),
+          sortBy: AdoptionMemberSortBySchema.default("state"),
+          sortDirection: SortDirectionSchema.default("asc"),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(AgentAdoptionMemberSchema),
+        ),
+      },
+    },
+    async ({ organizationId, query }) => {
+      const { startDate, endDate, limit, offset, ...list } = query;
+      const adoption = await agentAdoptionReports.get({
+        organizationId,
+        range: { startDate, endDate },
+        window: adoptionWindow({ startDate, endDate }),
+      });
+      return ConnectedClientModel.listAdoptionMembers({
+        organizationId,
+        adoption,
+        ...list,
+        pagination: { limit, offset },
+      });
+    },
   );
 
   app.get(

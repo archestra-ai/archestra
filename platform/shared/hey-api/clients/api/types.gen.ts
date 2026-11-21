@@ -55251,6 +55251,7 @@ export type GetAgentAdoptionResponses = {
     200: {
         since: string;
         until: string;
+        memberCount: number;
         members: Array<{
             userId: string;
             name: string;
@@ -55297,6 +55298,162 @@ export type GetAgentAdoptionResponses = {
 };
 
 export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
+export type GetAgentAdoptionMembersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Only members in this state
+         */
+        state?: 'active' | 'inactive' | 'notConnected';
+        /**
+         * Matches names, emails and agent names
+         */
+        search?: string;
+        sortBy?: 'state' | 'user' | 'gateway' | 'llm';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/connected-clients/adoption/members';
+};
+
+export type GetAgentAdoptionMembersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionMembersError = GetAgentAdoptionMembersErrors[keyof GetAgentAdoptionMembersErrors];
+
+export type GetAgentAdoptionMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive' | 'notConnected';
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            agents: Array<{
+                clientId: string | null;
+                name: string;
+                status: 'active' | 'inactive' | 'notConnected';
+                setupAt: string | null;
+                signedIn: boolean;
+                viaToken: boolean;
+                lastGatewayCallAt: string | null;
+                lastLlmCallAt: string | null;
+            }>;
+            gatewayUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            llmUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAgentAdoptionMembersResponse = GetAgentAdoptionMembersResponses[keyof GetAgentAdoptionMembersResponses];
 
 export type GetAgentAdoptionUsageData = {
     body?: never;

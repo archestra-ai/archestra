@@ -289,6 +289,10 @@ export const unifiedLogsDetailHandlers: HttpHandler[] = [
     const p = new URL(request.url).searchParams;
     return HttpResponse.json(adoptionUsage(p));
   }),
+  http.get("/api/connected-clients/adoption/members", ({ request }) => {
+    const p = new URL(request.url).searchParams;
+    return HttpResponse.json(adoptionMembers(p));
+  }),
   http.get("/api/connected-clients/adoption", ({ request }) => {
     const p = new URL(request.url).searchParams;
     return HttpResponse.json(adoption(p));
@@ -1328,7 +1332,50 @@ function adoption(p: URLSearchParams): Adoption {
       };
     },
   );
-  return { since, until, members };
+  return { since, until, memberCount: members.length, members };
+}
+
+/** The members list over the mock's adoption: filtered, sorted and paged. */
+function adoptionMembers(p: URLSearchParams) {
+  const state = p.get("state");
+  const search = (p.get("search") ?? "").toLowerCase();
+  const limit = Number(p.get("limit") ?? 25);
+  const offset = Number(p.get("offset") ?? 0);
+  const order = ["notConnected", "inactive", "active"];
+  const sortBy = p.get("sortBy") ?? "state";
+  const dir = p.get("sortDirection") === "desc" ? -1 : 1;
+  const key = (m: AdoptionMember): string | number =>
+    sortBy === "state"
+      ? order.indexOf(m.status)
+      : sortBy === "gateway"
+        ? (m.gatewayLastSeenAt ?? "")
+        : sortBy === "llm"
+          ? (m.llmLastSeenAt ?? "")
+          : m.name || m.email;
+  const rows = adoption(p)
+    .members.filter(
+      (m) =>
+        (!state || m.status === state) &&
+        (!search ||
+          [m.name, m.email, ...m.agents.map((a) => a.name)]
+            .join(" ")
+            .toLowerCase()
+            .includes(search)),
+    )
+    .sort((a, b) => (key(a) < key(b) ? -dir : key(a) > key(b) ? dir : 0));
+  const totalPages = Math.ceil(rows.length / limit);
+  const currentPage = Math.floor(offset / limit) + 1;
+  return {
+    data: rows.slice(offset, offset + limit),
+    pagination: {
+      currentPage,
+      limit,
+      total: rows.length,
+      totalPages,
+      hasNext: currentPage < totalPages,
+      hasPrev: currentPage > 1,
+    },
+  };
 }
 
 function adoptionUsage(p: URLSearchParams): AdoptionUsage {

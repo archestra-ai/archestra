@@ -13,32 +13,40 @@ import { LlmUsageRollupModel } from "@/models";
  * whatever it has not reached, so they are correct throughout and get faster
  * as it goes. Between hours it pauses for a multiple of the time the hour
  * took, so the walk takes a bounded share of database time.
+ *
+ * With neither to do, it refreshes an hour rolled before the rollup kept
+ * `run`, newest first, until none is left; Adoption reads those hours from raw
+ * rows meanwhile.
  */
 class LlmUsageRollupService {
   async run(
     params: { timeBudgetMs?: number; throttleRatio?: number } = {},
-  ): Promise<{ recomputed: number; rolled: number }> {
+  ): Promise<{ recomputed: number; rolled: number; refreshed: number }> {
     const deadline = Date.now() + (params.timeBudgetMs ?? RUN_TIME_BUDGET_MS);
     const throttleRatio = params.throttleRatio ?? THROTTLE_RATIO;
     let recomputed = 0;
     let rolled = 0;
+    let refreshed = 0;
 
     // Alternate the two kinds of work, so a stream of changes to rolled hours
     // cannot hold back rolling, nor rolling the changes.
     let rollFirst = false;
     while (Date.now() < deadline) {
       const started = Date.now();
-      const done: "rolled" | "recomputed" | null = rollFirst
-        ? (await this.roll()) || (await this.recompute())
-        : (await this.recompute()) || (await this.roll());
+      const done: "rolled" | "recomputed" | "refreshed" | null =
+        (rollFirst
+          ? (await this.roll()) || (await this.recompute())
+          : (await this.recompute()) || (await this.roll())) ||
+        (await this.refresh());
       if (!done) break;
       if (done === "rolled") rolled++;
-      else recomputed++;
+      else if (done === "recomputed") recomputed++;
+      else refreshed++;
       rollFirst = done === "recomputed";
       const pause = (Date.now() - started) * throttleRatio;
       if (pause > 0) await sleep(pause);
     }
-    return { recomputed, rolled };
+    return { recomputed, rolled, refreshed };
   }
 
   private async recompute(): Promise<"recomputed" | null> {
@@ -46,6 +54,13 @@ class LlmUsageRollupService {
     if (!marked) return null;
     await LlmUsageRollupModel.recomputeMarkedHour(marked);
     return "recomputed";
+  }
+
+  private async refresh(): Promise<"refreshed" | null> {
+    const hour = await LlmUsageRollupModel.nextHourWithoutRun();
+    if (!hour) return null;
+    await LlmUsageRollupModel.refreshHour(hour);
+    return "refreshed";
   }
 
   private async roll(): Promise<"rolled" | null> {

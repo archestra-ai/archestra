@@ -58,6 +58,7 @@ function member(overrides: Partial<AgentAdoptionMember>): AgentAdoptionMember {
 const adoption: AgentAdoption = {
   since: window.startDate,
   until: latest,
+  memberCount: 3,
   members: [
     member({
       gatewayUses: [

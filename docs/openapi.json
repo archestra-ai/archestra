@@ -526091,6 +526091,10 @@
                           "invitationId": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "scimProvisioned": {
+                            "type": "boolean",
+                            "description": "Whether an identity provider created the user through SCIM provisioning."
                           }
                         },
                         "required": [
@@ -526100,7 +526104,8 @@
                           "image",
                           "role",
                           "provider",
-                          "invitationId"
+                          "invitationId",
+                          "scimProvisioned"
                         ],
                         "additionalProperties": false
                       }

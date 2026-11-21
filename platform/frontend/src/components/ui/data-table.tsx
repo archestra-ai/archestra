@@ -38,6 +38,7 @@ import {
   type CursorPaginationState,
   DataTablePagination,
 } from "./data-table-pagination";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
@@ -91,6 +92,8 @@ interface DataTableProps<TData, TValue> {
   renderExpandedRows?: (props: { row: Row<TData> }) => React.ReactNode;
   /** Return an optional class name for each rendered row. */
   getRowClassName?: (row: TData) => string | undefined;
+  /** Return an optional note shown in a tooltip while the row is hovered. */
+  getRowTooltip?: (row: TData) => string | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
   isLoading?: boolean;
   /** Headline for the empty state (defaults to "No results") */
@@ -158,6 +161,7 @@ export function DataTable<TData, TValue>({
   renderSubComponent,
   renderExpandedRows,
   getRowClassName,
+  getRowTooltip,
   isLoading = false,
   emptyMessage = "No results",
   emptyDescription,
@@ -460,49 +464,51 @@ export function DataTable<TData, TValue>({
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
                   <React.Fragment key={row.id}>
-                    <TableRow
-                      data-state={row.getIsSelected() && "selected"}
-                      className={cn(
-                        onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
-                        getRowClassName?.(row.original),
-                      )}
-                      onClick={(e) => onRowClick?.(row.original, e)}
-                    >
-                      {row.getVisibleCells().map((cell, index, cells) => (
-                        <TableCell
-                          key={cell.id}
-                          data-column-id={cell.column.id}
-                          onClick={
-                            cell.column.id === SELECT_COLUMN_ID
-                              ? handleSelectCellClick
-                              : undefined
-                          }
-                          className={getColumnClassName(
-                            cell.column.id,
-                            cells[index - 1]?.column.id,
-                          )}
-                          style={getColumnStyle({
-                            columnId: cell.column.id,
-                            configuredSize: cell.column.columnDef.size,
-                            minSize: cell.column.columnDef.minSize,
-                            renderedSize: cell.column.getSize(),
-                            fixedWidth: fixedWidthColumnIds.includes(
+                    <RowTooltip content={getRowTooltip?.(row.original)}>
+                      <TableRow
+                        data-state={row.getIsSelected() && "selected"}
+                        className={cn(
+                          onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
+                          getRowClassName?.(row.original),
+                        )}
+                        onClick={(e) => onRowClick?.(row.original, e)}
+                      >
+                        {row.getVisibleCells().map((cell, index, cells) => (
+                          <TableCell
+                            key={cell.id}
+                            data-column-id={cell.column.id}
+                            onClick={
+                              cell.column.id === SELECT_COLUMN_ID
+                                ? handleSelectCellClick
+                                : undefined
+                            }
+                            className={getColumnClassName(
                               cell.column.id,
-                            ),
-                            flexibleWidth: flexibleColumnIds.includes(
-                              cell.column.id,
-                            ),
-                            fixedColumnsSize,
-                            flexibleColumnsSize,
-                          })}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
+                              cells[index - 1]?.column.id,
+                            )}
+                            style={getColumnStyle({
+                              columnId: cell.column.id,
+                              configuredSize: cell.column.columnDef.size,
+                              minSize: cell.column.columnDef.minSize,
+                              renderedSize: cell.column.getSize(),
+                              fixedWidth: fixedWidthColumnIds.includes(
+                                cell.column.id,
+                              ),
+                              flexibleWidth: flexibleColumnIds.includes(
+                                cell.column.id,
+                              ),
+                              fixedColumnsSize,
+                              flexibleColumnsSize,
+                            })}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </RowTooltip>
                     {renderExpandedRows &&
                       row.getIsExpanded() &&
                       renderExpandedRows({ row })}
@@ -715,4 +721,26 @@ function minimumTableWidth<TData>(params: {
       return total + Math.min(column.getSize(), FLEXIBLE_COLUMN_FLOOR);
     return total + column.getSize();
   }, 0);
+}
+
+/**
+ * Shows `content` in a tooltip while the row is hovered. The trigger is the
+ * `<tr>` itself, so the row keeps its place in the table.
+ */
+function RowTooltip({
+  content,
+  children,
+}: {
+  content: string | undefined;
+  children: React.ReactElement;
+}) {
+  if (!content) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-sm">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
 }

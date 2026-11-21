@@ -135066,6 +135066,10 @@ export type GetMemberSignupStatusResponses = {
             role: string;
             provider: string | null;
             invitationId: string | null;
+            /**
+             * Whether an identity provider created the user through SCIM provisioning.
+             */
+            scimProvisioned: boolean;
         }>;
     };
 };

@@ -17,7 +17,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AssignedRoles } from "@/components/assigned-roles";
-import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -71,6 +70,10 @@ import {
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { useSetSettingsAction } from "../layout";
+import {
+  deactivatedUserNote,
+  pendingSignupLabel,
+} from "./_parts/user-row-status";
 
 export default function UsersPageClient() {
   return (
@@ -424,21 +427,6 @@ function MembersTab({
       header: "",
       cell: ({ row }) => {
         const member = row.original;
-        const pending = pendingSignupFor(member);
-        if (pending) {
-          return (
-            <div className="flex items-center justify-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border bg-muted/40">
-                <AuthProviderIcon
-                  providerId={pending.provider}
-                  size={16}
-                  className="rounded-sm"
-                />
-              </div>
-            </div>
-          );
-        }
-
         const initials = getInitials(member.name || member.email);
         return (
           <div className="flex items-center justify-center">
@@ -464,14 +452,6 @@ function MembersTab({
             <span className="font-medium truncate">
               {row.original.name || "Unknown"}
             </span>
-            {row.original.softDeleted && (
-              <Badge
-                variant="destructive"
-                title={`Deactivated in your identity provider on ${new Date(row.original.softDeleted).toLocaleDateString()}. They cannot sign in.`}
-              >
-                Deactivated
-              </Badge>
-            )}
           </div>
           <div className="text-xs text-muted-foreground truncate">
             {row.original.email}
@@ -515,18 +495,29 @@ function MembersTab({
     {
       id: "joined",
       header: "Joined",
-      cell: ({ row }) =>
-        pendingSignupFor(row.original) ? (
+      cell: ({ row }) => {
+        const member = row.original;
+        if (member.softDeleted) {
+          return (
+            <span className="text-sm text-muted-foreground">Deactivated</span>
+          );
+        }
+        const pending = pendingSignupFor(member);
+        if (pending) {
+          return (
+            <span className="text-sm text-muted-foreground">
+              {pendingSignupLabel(pending)}
+            </span>
+          );
+        }
+        return (
           <span className="text-sm text-muted-foreground">
-            Pending (auto-provisioned)
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">
-            {formatDistanceToNow(new Date(row.original.createdAt), {
+            {formatDistanceToNow(new Date(member.createdAt), {
               addSuffix: true,
             })}
           </span>
-        ),
+        );
+      },
     },
     {
       id: "actions",
@@ -555,7 +546,7 @@ function MembersTab({
                 },
                 {
                   icon: <Trash2 className="h-4 w-4" />,
-                  label: "Remove pending user",
+                  label: "Remove user",
                   variant: "destructive",
                   permissions: { member: ["delete"] },
                   onClick: () =>
@@ -662,6 +653,18 @@ function MembersTab({
         <DataTable
           columns={columns}
           data={members}
+          // A deactivated user is greyed out, except the row menu that
+          // removes them; hovering the row says why.
+          getRowClassName={(member) =>
+            member.softDeleted
+              ? "[&>td:not(:last-child)]:opacity-50"
+              : undefined
+          }
+          getRowTooltip={(member) =>
+            member.softDeleted
+              ? deactivatedUserNote(member.softDeleted)
+              : undefined
+          }
           rowSelection={effectiveRowSelection}
           onRowSelectionChange={onRowSelectionChange}
           hideSelectedCount

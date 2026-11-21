@@ -1037,6 +1037,7 @@ export type PendingSignupMember = {
   role: string;
   provider: string | null;
   invitationId: string | null;
+  scimProvisioned: boolean;
 };
 
 /**

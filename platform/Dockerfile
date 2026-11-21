@@ -531,10 +531,9 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 # Same Node release and Alpine branch as the builder stages above, so their
 # native addons load here. Pulling it needs a Docker login (`docker login
 # dhi.io`, any Docker account); CI logs in where it builds this file
-# (.github/actions/dhi-login).
-# supply-chain-policy: allow-unverified-image Docker signs its hardened images with a cosign key and
-# publishes their provenance, SBOM and VEX, but the base-image check can't log in to dhi.io or verify a
-# key-based signature yet; this stays until base-images.toml in archestra-ai/.github lists dhi.io.
+# (.github/actions/dhi-login). The organization's base-image check verifies
+# its signature with Docker's signing key (supply-chain-policy/base-images.toml
+# in archestra-ai/.github).
 FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime-base-hardened
 FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-public
 # The same hardened Node release without the -dev tools: no shell, no apk, only

@@ -766,11 +766,11 @@ jobs:
     needs: [release-please, release-subjects, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-      contents: read # read vex/openvex.json from main (release-publish.yml)
+      contents: read # read vex/openvex.json and the benchmark waivers from main (release-publish.yml)
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@43e4115a56f2afd000a95ef49211a6a08587f0a7 # v1.37.2
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.39.0 # TODO: the v1.39.0 commit SHA
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -784,6 +784,10 @@ jobs:
       # release/* does too.
       vex-document: vex/openvex.json
       vex-ref: main
+      # The waivers the Image Benchmark required workflow applies before
+      # merge, read from main with the VEX document; each image's benchmark
+      # is attested with the waivers it used.
+      benchmark-waivers: .github/image-benchmark-waivers.json
       wait: false
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
@@ -885,7 +889,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@43e4115a56f2afd000a95ef49211a6a08587f0a7 # v1.37.2
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.39.0 # TODO: the v1.39.0 commit SHA
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

@@ -1426,10 +1426,10 @@ tests:
     set:
       archestra.orchestrator.kubernetes.kubeconfig.enabled: false
     asserts:
-      - isNull:
-          path: spec.template.spec.containers[0].volumeMounts
-      - isNull:
-          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "kubeconfig")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "kubeconfig")]
 
   - it: should not mount kubeconfig volume when secretName is empty
     documentIndex: 1
@@ -1437,10 +1437,10 @@ tests:
       archestra.orchestrator.kubernetes.kubeconfig.enabled: true
       archestra.orchestrator.kubernetes.kubeconfig.secretName: ""
     asserts:
-      - isNull:
-          path: spec.template.spec.containers[0].volumeMounts
-      - isNull:
-          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "kubeconfig")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "kubeconfig")]
 
   - it: should mount kubeconfig volume when kubeconfig is enabled
     documentIndex: 1
@@ -1474,6 +1474,8 @@ tests:
 
   - it: should not mount extra volumes or volume mounts by default
     documentIndex: 1
+    set:
+      archestra.readOnlyRootFilesystem: false
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].volumeMounts

@@ -5,7 +5,7 @@ order: 10
 lastUpdated: 2026-11-20
 ---
 
-Prove that the Archestra image you run is the one Archestra released, and see every package inside it, without trusting the registry. Each release image carries signed attestations next to it in its registry: where it was built, its SBOM, and scans for live credentials and malware. `gh`, cosign, and admission controllers such as Kyverno read them.
+Prove that the Archestra image you run is the one Archestra released, and see every package inside it, without trusting the registry. Each release image carries signed attestations next to it in its registry: where it was built, its SBOM, scans for live credentials and malware, and how it is configured against the CIS Docker Benchmark. `gh`, cosign, and admission controllers such as Kyverno read them.
 
 ## What Each Image Carries
 
@@ -18,6 +18,7 @@ Every attestation is signed with a GitHub Actions identity from an Archestra wor
 | SBOM (CycloneDX) | The same packages, in CycloneDX | `https://cyclonedx.org/bom` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Secret scan | How many credentials a scan found, by type and whether they were live | `https://archestra.ai/attestations/secret-scan/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Malware scan | What a ClamAV scan of every file in the image found, and which signature database it used | `https://archestra.ai/attestations/malware-scan/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
+| Image benchmark | How the image is configured against the CIS Docker Benchmark's image checks, and the reason for each check Archestra waived | `https://archestra.ai/attestations/image-benchmark/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | VEX | Which reported vulnerabilities do not affect the image, and why | `https://openvex.dev/ns/v0.2.0` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Verification summary | That the build provenance passed Archestra's [SLSA Build L3](https://slsa.dev/spec/v1.0/levels#build-l3) policy, so you can check one attestation instead | `https://slsa.dev/verification_summary/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 
@@ -26,7 +27,7 @@ They cover `docker.io/archestra/platform`, its `-slim` tags included, plus `mcp-
 What to know:
 
 - The SBOMs list the `linux/amd64` image. The `linux/arm64` image is built from the same source and is covered by the same provenance.
-- An image with a live credential or a malware detection is never released. The secret scan holds counts only, never a secret or where it was found.
+- An image with a live credential, a malware detection, or a failed benchmark check that Archestra has not waived is never released. The secret scan holds counts only, never a secret or where it was found.
 - Each image is built and scanned in Archestra's merge queue, and the release publishes those exact bytes. Its provenance is signed there, in a job that runs none of the build's steps, so a build cannot forge it ([SLSA Build L3](https://slsa.dev/spec/v1.0/levels#build-l3)). The certificate names Archestra's repository, the merge group's commit, and the run that built the image.
 
 ## Verify Archestra Images

@@ -7,12 +7,12 @@
 # Archestra publishes redistributes Perforce software and the pod's egress can
 # stay pinned to the customer's Perforce server alone.
 #
-# The official `p4` binary needs glibc, so this image uses Debian 12.
+# The official `p4` binary needs glibc, so this image uses Debian 13.
 # The published image needs only Node, glibc and tini. Keep apt and the shell
 # in a throwaway stage, then copy the process reaper into the runtime image.
-FROM dhi.io/node:24.22.3-debian12-dev@sha256:cab4b2c693a761af346c0de57a9c53acfc0dfd75acd502b31dd7182fef2104e1 AS tini-build
+FROM dhi.io/debian-base:trixie-debian13-dev@sha256:1aa0a2307eea88ae00d07c7b3c8e804187ee272ccc89cde7b51667b3b065fb1d AS tini-build
 RUN apt-get update && apt-get install -y --no-install-recommends tini
-FROM dhi.io/node:24.22.3-debian12@sha256:f86966eca7244d136d7383debd6572d0917c8836200e3ff87282ebcbd7970875
+FROM dhi.io/node:24.22.3-debian13@sha256:62c93ab05c09dce569199f42d14be5b9c11471d318f1ba11383f9d5e652d52c1
 COPY --from=tini-build /usr/bin/tini /usr/bin/tini
 
 # Explicit world-readable mode: COPY preserves the build context's file mode,

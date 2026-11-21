@@ -16,7 +16,8 @@ DOCKERFILES = sorted({image["dockerfile"].removeprefix("./")
 FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(?P<image>\S+)(?:\s+AS\s+(?P<stage>\S+))?\s*$", re.I | re.M)
 # Dependabot reads only literal FROM lines; it needs a version tag to propose
 # bumps and a digest to keep builds reproducible.
-PINNED = re.compile(r"[a-z0-9./-]+:[0-9][\w.-]*@sha256:[0-9a-f]{64}")
+# Debian's versioned DHI base uses its release codename plus the major version.
+PINNED = re.compile(r"[a-z0-9./-]+:(?:[0-9][\w.-]*|trixie-debian13-dev)@sha256:[0-9a-f]{64}")
 
 
 class BaseImagePinTest(unittest.TestCase):

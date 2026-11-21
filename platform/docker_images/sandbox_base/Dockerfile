@@ -10,9 +10,14 @@
 # Debian mirror.
 # TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
 # onnxruntime ship cp315 on PyPI.
-FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS node-runtime
+FROM dhi.io/node:24.22.3-debian13@sha256:62c93ab05c09dce569199f42d14be5b9c11471d318f1ba11383f9d5e652d52c1 AS node-runtime
 
-FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4a8e9a016128b0c61041cf182ea49fd788023e52842bc147
+FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4a8e9a016128b0c61041cf182ea49fd788023e52842bc147 AS uv-bin
+
+FROM dhi.io/python:3.14.10-debian13-dev@sha256:e84d616360a8ca598446289cadeeeaba36aa7d6e5d83878923e0c6123b268b0f
+COPY --from=uv-bin /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=uv-bin /usr/local/bin/uvx /usr/local/bin/uvx
+RUN ln -s /usr/bin/python3 /usr/local/bin/python3
 
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the
 # model is never tempted to `pip install` into a location the venv won't see).
@@ -24,7 +29,7 @@ FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4
 # Upgrade inherited apt packages too; CVE-2026-109518 is fixed in 3.0.4.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g unzip zip \
+      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g gzip unzip zip \
  && for package in apt libapt-pkg7.0; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 3.0.4 || exit 1; \
     done \
@@ -48,9 +53,12 @@ RUN apt-get update -qq \
 RUN apt-get purge -y --auto-remove nodejs npm \
  && rm -rf /usr/local/lib/python3.14/site-packages/pip \
       /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
-      /usr/local/lib/python3.14/ensurepip
+      /usr/lib/python3/dist-packages/pip \
+      /usr/lib/python3/dist-packages/pip-*.dist-info \
+      /usr/local/lib/python3.14/ensurepip \
+      /usr/lib/python3.14/ensurepip
 
-COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/bin/node /usr/local/bin/node
 
 # These archives are unpacked without executing package lifecycle scripts.
 # npm 11.21.1 includes the fixed tar/brace-expansion/pacote dependencies, but

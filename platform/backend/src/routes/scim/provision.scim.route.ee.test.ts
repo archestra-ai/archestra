@@ -244,15 +244,23 @@ describe("SCIM /api/scim/v2/Users", () => {
     });
   });
 
-  test("is refused without an enterprise license", async () => {
+  test("works without an enterprise license, like ChatOps auto-provisioning", async () => {
     const spy = vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(false);
     try {
-      const response = await createUser("unlicensed@example.com");
-      expect(response.statusCode).toBe(403);
-      expectScimError(response, 403);
+      const created = await createUser("unlicensed@example.com");
+      expect(created.statusCode, created.body).toBe(201);
+      const { id } = created.json();
       expect(
         await UserModel.findByEmail("unlicensed@example.com"),
-      ).toBeUndefined();
+      ).toMatchObject({ id });
+
+      const deactivated = await patchActive(id, "False");
+      expect(deactivated.statusCode, deactivated.body).toBe(200);
+      expect(await UserModel.getSoftDeleted(id)).toBeInstanceOf(Date);
+
+      const restored = await patchActive(id, "True");
+      expect(restored.statusCode, restored.body).toBe(200);
+      expect(await UserModel.getSoftDeleted(id)).toBeNull();
     } finally {
       spy.mockRestore();
     }
@@ -389,48 +397,6 @@ describe("SCIM /api/scim/v2/Users", () => {
     expect((await replaceDisplayName(signedIn.id)).json().displayName).toBe(
       "Ada Lovelace",
     );
-  });
-
-  test("without an enterprise license a user can still be deactivated, and nothing else", async () => {
-    const byPatch = (await createUser("unassigned@example.com")).json();
-    const byDelete = (await createUser("removed@example.com")).json();
-    await createUser("free-email@example.com");
-    const spy = vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(false);
-    try {
-      // The userName in the same request is not applied.
-      const deactivated = await app.inject({
-        method: "PATCH",
-        url: `/api/scim/v2/Users/${byPatch.id}`,
-        headers: { "content-type": "application/scim+json" },
-        payload: JSON.stringify({
-          Operations: [
-            {
-              op: "Replace",
-              value: { userName: "renamed@example.com", active: false },
-            },
-          ],
-        }),
-      });
-      expect(deactivated.statusCode, deactivated.body).toBe(200);
-      expect(deactivated.json()).toMatchObject({
-        userName: "unassigned@example.com",
-        active: false,
-      });
-
-      const deleted = await app.inject({
-        method: "DELETE",
-        url: `/api/scim/v2/Users/${byDelete.id}`,
-      });
-      expect(deleted.statusCode).toBe(204);
-      expect(await UserModel.getSoftDeleted(byDelete.id)).toBeInstanceOf(Date);
-
-      const restored = await patchActive(byPatch.id, "True");
-      expect(restored.statusCode).toBe(403);
-      expectScimError(restored, 403);
-      expect(await UserModel.getSoftDeleted(byPatch.id)).toBeInstanceOf(Date);
-    } finally {
-      spy.mockRestore();
-    }
   });
 
   test("a path SCIM does not serve here is a SCIM 404", async () => {

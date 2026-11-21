@@ -2,7 +2,6 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { enterpriseTier } from "@/enterprise-tier";
 import { scimProvisioningService } from "@/services/scim-provisioning.ee";
 import { ApiError } from "@/types";
 
@@ -14,16 +13,10 @@ import { ApiError } from "@/types";
  * user becomes.
  */
 const scimRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Scoped to this plugin's routes. Deactivation stays open without a licence:
-  // a user the identity provider removed must lose access either way.
-  fastify.addHook("preHandler", async (request) => {
-    if (enterpriseTier.isCoreActive() || isDeactivation(request)) return;
-    throw new ApiError(
-      403,
-      "SCIM provisioning is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-    );
-  });
-
+  // No licence check here, like ChatOps auto-provisioning: users the identity
+  // provider pushes are always created. Past the small-team tier without a
+  // licence they cannot sign in yet, because Single Sign-On is off, and they
+  // can as soon as the licence is set.
   // Every response is SCIM's media type, and every error body is a SCIM error
   // (RFC 7644 section 3.12). The app's error handler still picks the status
   // and logs; this only reshapes its `{ error }` body, including errors raised
@@ -449,21 +442,6 @@ function displayNameFromPatch(body: z.infer<typeof ScimPatchSchema>) {
     .findLast((value) => value.trim() !== "");
 }
 
-/**
- * Whether the request only takes access away: a DELETE, or an update that sets
- * `active: false`. Runs after validation, so `active` is already a boolean.
- */
-function isDeactivation(request: FastifyRequest): boolean {
-  if (request.routeOptions.url !== `${SCIM_BASE}/Users/:id`) return false;
-  if (request.method === "DELETE") return true;
-  if (request.method === "PUT")
-    return (request.body as ScimUserInput).active === false;
-  return (
-    request.method === "PATCH" &&
-    activeFromPatch(request.body as z.infer<typeof ScimPatchSchema>) === false
-  );
-}
-
 async function getUserOrThrow(params: {
   organizationId: string;
   userId: string;
@@ -497,35 +475,32 @@ async function applyChanges(
     await scimProvisioningService.softDeleteUser({ organizationId, userId });
 
   let profileChanged = false;
-  // Without a licence only deactivation gets here (see the preHandler hook).
-  if (enterpriseTier.isCoreActive()) {
-    if (params.userName !== undefined) {
-      const result = await scimProvisioningService.changeUserName({
-        organizationId,
-        userId,
-        userName: params.userName,
-      });
-      // A deactivation is never refused: the identity provider gets the
-      // conflict when it next sends the userName alone.
-      if (result === "exists" && active !== false)
-        throw new ApiError(
-          409,
-          "A user with this userName already exists",
-          "uniqueness",
-        );
-      profileChanged = result === "changed";
-    }
-    if (params.displayName !== undefined) {
-      const result = await scimProvisioningService.changeDisplayName({
-        organizationId,
-        userId,
-        displayName: params.displayName,
-      });
-      profileChanged ||= result === "changed";
-    }
-    if (active === true)
-      await scimProvisioningService.restoreUser({ organizationId, userId });
+  if (params.userName !== undefined) {
+    const result = await scimProvisioningService.changeUserName({
+      organizationId,
+      userId,
+      userName: params.userName,
+    });
+    // A deactivation is never refused: the identity provider gets the
+    // conflict when it next sends the userName alone.
+    if (result === "exists" && active !== false)
+      throw new ApiError(
+        409,
+        "A user with this userName already exists",
+        "uniqueness",
+      );
+    profileChanged = result === "changed";
   }
+  if (params.displayName !== undefined) {
+    const result = await scimProvisioningService.changeDisplayName({
+      organizationId,
+      userId,
+      displayName: params.displayName,
+    });
+    profileChanged ||= result === "changed";
+  }
+  if (active === true)
+    await scimProvisioningService.restoreUser({ organizationId, userId });
 
   const user = await getUserOrThrow({ organizationId, userId });
   if (!profileChanged && user.active === before.active)

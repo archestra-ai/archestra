@@ -132,7 +132,7 @@ jobs:
         run: echo "Full E2E image builds run in merge queue, on the nightly/manual runs, or when the run-e2e label is added."
 
   # Build Docker images for e2e tests (platform and MCP server base).
-  # Trusted runs push the platform image to Artifact Registry so
+  # Trusted runs push the platform image to GHCR so
   # the e2e jobs can pull layers directly instead of downloading a tarball artifact.
   # Untrusted PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
@@ -321,7 +321,7 @@ jobs:
       # Full image for the docker run jobs: `unified` and `unified-slim` share
       # the runtime stage, so on the slim build's live builder only the
       # bundled PostgreSQL and quickstart layers are new.
-      - name: Build Platform image and push to Artifact Registry
+      - name: Build Platform image and push to GHCR
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: $/.github/actions/build-docker-image
         with:

@@ -428,7 +428,7 @@ jobs:
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
@@ -451,7 +451,7 @@ jobs:
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
@@ -476,7 +476,7 @@ jobs:
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
@@ -501,7 +501,7 @@ jobs:
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish

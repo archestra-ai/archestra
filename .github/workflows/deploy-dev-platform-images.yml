@@ -126,8 +126,6 @@ jobs:
       # uploading source maps.
       environment: ${{ github.ref == 'refs/heads/main' && 'staging-build' || '' }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
 
   publish-dev-mcp-server-base-image:
@@ -140,12 +138,9 @@ jobs:
       attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-dev-agent-catalog-images:
     name: Build Agent Catalog Dev Images
@@ -157,12 +152,9 @@ jobs:
       attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-dev-p4-shim-image:
     name: Build p4 Shim Dev Image
@@ -174,14 +166,11 @@ jobs:
       attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ inputs.version || github.sha }}
       # Main publishes p4 under each commit SHA. If its Docker context did not
       # change, retag the previous main image instead of rebuilding both arches.
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-dev-sandbox-base-image:
     name: Build Sandbox Base Dev Image
@@ -193,9 +182,6 @@ jobs:
       attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

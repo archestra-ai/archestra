@@ -114,6 +114,9 @@ export function createSummary(report) {
       ...(report.metadata.webWorkers
         ? { webWorkers: report.metadata.webWorkers }
         : {}),
+      ...(report.metadata.backendLimits
+        ? { backendLimits: report.metadata.backendLimits }
+        : {}),
       node: report.metadata.node,
       os: report.metadata.os,
       arch: report.metadata.arch,
@@ -131,6 +134,13 @@ export function createSummary(report) {
     },
     logicalCpus: report.metadata.logicalCpus,
     memoryGiB: report.metadata.totalMemoryBytes / 1024 ** 3,
+    ...(report.metadata.backendLimits
+      ? {
+          backendCpus: report.metadata.backendLimits.cpus,
+          backendMemoryGiB:
+            report.metadata.backendLimits.memoryBytes / 1024 ** 3,
+        }
+      : {}),
     repeats: report.metadata.repeats,
     requestsPerBlock: report.metadata.count,
     streamingRequestsPerBlock: report.metadata.streamCount,
@@ -231,7 +241,7 @@ export function renderSummary(summary, baseline = null) {
   }
   lines.push(
     "",
-    `${cpu ? `${cpu}, ` : ""}${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/performance-benchmarks)`,
+    `${cpu ? `${cpu}, ` : ""}${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB runner${summary.backendCpus == null ? "" : `, backend limited to ${number(summary.backendCpus, 0)} vCPU / ${number(summary.backendMemoryGiB, 1)} GiB`} · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/performance-benchmarks)`,
   );
   return `${lines.join("\n")}\n`;
 }

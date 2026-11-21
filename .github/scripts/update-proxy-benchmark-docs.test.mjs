@@ -373,6 +373,27 @@ test("runner resources refresh from each measured host", () => {
   assert.doesNotMatch(updated, /4 vCPU|16 GiB/);
 });
 
+test("a limited run states the backend's own resources instead of the runner's", () => {
+  const f = fixture();
+  f.summary.logicalCpus = 16;
+  f.summary.memoryGiB = 62.8;
+  f.summary.backendCpus = 4;
+  f.summary.backendMemoryGiB = 8;
+  const updated = updateBenchmarkTable(markdown, f.summary, {
+    version: "1.5.0-rc.43",
+  });
+  assert.match(
+    updated,
+    /\nArchestra 1\.5\.0-rc\.43 on 4 logical CPUs, 8 GiB RAM; one worker/,
+  );
+  assert.doesNotMatch(
+    updated.slice(updated.indexOf("mcp-gateway-benchmark-results:start")),
+    /16 vCPU|63 GiB/,
+  );
+  f.summary.backendMemoryGiB = 0;
+  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+});
+
 test("diagnostic CPU profiles cannot replace release docs", async () => {
   const f = fixture();
   f.summary.diagnostic = "cpu-profile";

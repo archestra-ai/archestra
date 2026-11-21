@@ -135,6 +135,11 @@ export function updateBenchmarkTable(markdown, summary, { version } = {}) {
     summary.logicalCpus <= 0 ||
     !Number.isFinite(summary.memoryGiB) ||
     summary.memoryGiB <= 0 ||
+    (summary.backendCpus != null &&
+      (!Number.isInteger(summary.backendCpus) ||
+        summary.backendCpus <= 0 ||
+        !Number.isFinite(summary.backendMemoryGiB) ||
+        summary.backendMemoryGiB <= 0)) ||
     summary.rows.length !== workloads.length ||
     workloads.some(
       (scenario) => !summary.rows.some((row) => row.scenario === scenario),
@@ -160,6 +165,12 @@ export function updateBenchmarkTable(markdown, summary, { version } = {}) {
     );
   if (typeof markdown !== "string" || Buffer.byteLength(markdown) > 256000)
     throw new Error("Benchmark docs must contain exactly one results block");
+  // Limited runs state the web process's own resources, as the LLM
+  // comparison does; older runs only know the whole runner.
+  const resources =
+    summary.backendCpus == null
+      ? `${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM`
+      : `${summary.backendCpus} logical CPUs, ${Math.round(summary.backendMemoryGiB)} GiB RAM`;
   let updated = markdown;
   for (const [scenario, { start, end, requests }] of Object.entries(blocks)) {
     // Existing release branches can still carry the former internal LLM table.
@@ -180,7 +191,7 @@ export function updateBenchmarkTable(markdown, summary, { version } = {}) {
       "| --- | ---: | ---: | ---: | ---: |",
       `| Archestra | ${row.requestsPerSecond.toFixed(1)} | ${["p50", "p95", "p99"].map((key) => `${row.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
       "",
-      `${version ? `Archestra ${version} on ` : ""}${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM; one worker, ${row.concurrency} concurrent calls, ${row.attempted} measured calls and zero errors.`,
+      `${version ? `Archestra ${version} on ` : ""}${resources}; one worker, ${row.concurrency} concurrent calls, ${row.attempted} measured calls and zero errors.`,
     ].join("\n") : [
       `| Runner resources | ${requests} | Median added latency | P95 added latency | P99 added latency |`,
       "| --- | ---: | ---: | ---: | ---: |",

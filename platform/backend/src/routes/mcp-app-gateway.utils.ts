@@ -53,6 +53,7 @@ import {
 } from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import type { CommonToolCall } from "@/types";
 import { ApiError, appOwner } from "@/types";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
@@ -326,6 +327,10 @@ export async function validateAppGatewayToken(
 ): Promise<AppGatewayTokenAuth> {
   const userToken = await UserTokenModel.validateToken(token);
   if (userToken) {
+    // Deactivated in the identity provider (SCIM): the token no longer works.
+    if (await softDeletedUsers.isSoftDeleted(userToken.userId)) {
+      return { ok: false, reason: "invalid" };
+    }
     return {
       ok: true,
       userId: userToken.userId,
@@ -383,6 +388,9 @@ export async function validateAppConnectorOAuthToken(params: {
   // A token with no acting user (client credentials) carries no viewer.
   if (!accessToken.userId) {
     return { ok: false, reason: "no_viewer" };
+  }
+  if (await softDeletedUsers.isSoftDeleted(accessToken.userId)) {
+    return { ok: false, reason: "invalid" };
   }
   const app = await AppModel.findById(params.appId);
   if (!app) {

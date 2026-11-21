@@ -41,6 +41,7 @@ import {
 } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { beforeEach, describe, expect, test } from "@/test";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 
@@ -244,6 +245,43 @@ describe("handleScheduleTriggerRunExecution", () => {
     const updated = await ScheduleTriggerRunModel.findById(run.id);
     expect(updated?.status).toBe("failed");
     expect(updated?.error).toBe("Scheduled trigger actor no longer exists");
+  });
+
+  test("marks run as failed when the identity provider deactivated the actor", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    await UserModel.setSoftDeleted({
+      userId: actor.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(actor.id);
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe(
+      "Scheduled trigger actor was deactivated in the identity provider",
+    );
   });
 
   test("marks run as failed when actor lost agent access", async ({

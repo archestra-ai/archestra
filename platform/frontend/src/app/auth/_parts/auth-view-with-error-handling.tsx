@@ -83,6 +83,11 @@ const SSO_ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
     message:
       "Your SSO account could not be linked to an existing account. Please contact your administrator to verify the SSO provider configuration.",
   },
+  account_deactivated: {
+    title: "Account Deactivated",
+    message:
+      "Your account was deactivated in your identity provider. Contact your administrator.",
+  },
   sso_subject_conflict: {
     title: "Account Belongs to Someone Else",
     message:

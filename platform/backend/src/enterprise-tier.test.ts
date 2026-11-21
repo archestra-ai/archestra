@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import config from "@/config";
+import UserModel from "@/models/user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { enterpriseTier } from "./enterprise-tier";
 
@@ -105,5 +106,24 @@ describe("enterpriseTier", () => {
     await enterpriseTier.refresh();
 
     expect(enterpriseTier.getState().userCount).toBeGreaterThanOrEqual(2);
+  });
+
+  test("soft-deleted users do not count toward the small-team threshold", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await enterpriseTier.refresh();
+    const withUser = enterpriseTier.getState().userCount;
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    await enterpriseTier.refresh();
+    expect(enterpriseTier.getState().userCount).toBe(withUser - 1);
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    await enterpriseTier.refresh();
+    expect(enterpriseTier.getState().userCount).toBe(withUser);
   });
 });

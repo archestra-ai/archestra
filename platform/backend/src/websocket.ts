@@ -56,6 +56,7 @@ import {
   type PgNotifyHub,
 } from "@/services/pg-notify-hub";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import type { AgentRunRecord } from "@/types";
 
 /** `/v1/unified-model/realtime`, the legacy `/v1/model-router/realtime`, and `/v1/openai/realtime`, with or without an agent id. */
@@ -159,6 +160,7 @@ export class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
   private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+  private softDeletedSweepInterval: NodeJS.Timeout | null = null;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -380,6 +382,12 @@ export class WebSocketService {
     this.enableCrossReplicaDelivery(createCrossReplicaNotifyHub());
 
     this.startDeploymentMetricsPolling();
+    this.softDeletedSweepInterval = setInterval(() => {
+      this.closeSoftDeletedClients().catch((error) =>
+        logger.warn({ error }, "Failed to close deactivated users' WebSockets"),
+      );
+    }, SOFT_DELETED_SWEEP_INTERVAL_MS);
+    this.softDeletedSweepInterval.unref?.();
 
     this.wss.on(
       "connection",
@@ -461,6 +469,12 @@ export class WebSocketService {
   ): Promise<void> {
     const clientContext = this.getClientContext(ws);
     if (!clientContext) {
+      return;
+    }
+    // The connection was authenticated when it opened. A user the identity
+    // provider deactivated since then (SCIM) loses it with their next message.
+    if (await softDeletedUsers.isSoftDeleted(clientContext.userId)) {
+      this.sendUnauthorized(ws);
       return;
     }
 
@@ -1905,6 +1919,10 @@ export class WebSocketService {
       clearInterval(this.deploymentMetricsInterval);
       this.deploymentMetricsInterval = null;
     }
+    if (this.softDeletedSweepInterval) {
+      clearInterval(this.softDeletedSweepInterval);
+      this.softDeletedSweepInterval = null;
+    }
     for (const [ws] of this.mcpLogsSubscriptions) {
       this.unsubscribeMcpLogs(ws);
     }
@@ -1958,6 +1976,8 @@ export class WebSocketService {
         const { organizationId, ...user } = await UserModel.getById(
           session.user.id,
         );
+        // Deactivated in the identity provider (SCIM): no connection.
+        if (user.softDeleted) return null;
         return {
           userId: user.id,
           organizationId,
@@ -1982,6 +2002,8 @@ export class WebSocketService {
           const { organizationId, ...user } = await UserModel.getById(
             apiKeyResult.key.referenceId,
           );
+          // Deactivated in the identity provider (SCIM): no connection.
+          if (user.softDeleted) return null;
           return {
             userId: user.id,
             organizationId,
@@ -2007,6 +2029,22 @@ export class WebSocketService {
     }
 
     return context;
+  }
+
+  /**
+   * Close the connections of users the identity provider deactivated (SCIM)
+   * since they connected. Runs on a timer on every replica, so a connection
+   * that only receives, such as a log or shell stream, is closed too.
+   */
+  private async closeSoftDeletedClients(): Promise<void> {
+    const userIds = new Set(
+      [...this.clientContexts.values()].map((context) => context.userId),
+    );
+    const softDeleted = await UserModel.findSoftDeletedIds([...userIds]);
+    if (softDeleted.size === 0) return;
+    for (const [ws, context] of this.clientContexts) {
+      if (softDeleted.has(context.userId)) this.sendUnauthorized(ws);
+    }
   }
 
   private sendUnauthorized(ws: WebSocket): void {
@@ -2226,6 +2264,8 @@ export default websocketService;
 
 // Upper bound on one shared deployment-status refresh: releases the poll
 // guard even if a K8s call never settles.
+/** How often open connections are checked for users deactivated since. */
+const SOFT_DELETED_SWEEP_INTERVAL_MS = 30_000;
 const MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS = 60_000;
 /**
  * Minimum age of the last state refresh before a poll tick re-polls K8s

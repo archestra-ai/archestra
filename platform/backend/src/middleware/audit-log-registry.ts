@@ -1116,6 +1116,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (userId, orgId) =>
       MemberModel.findByUserIdForAudit(userId, orgId),
   },
+  // SCIM provisioning from an identity provider. The SCIM user id is the
+  // Archestra user id. Deactivation and deletion soft-delete the user, and a
+  // PATCH that changes nothing (identity providers send many) is not recorded.
+  "/api/scim/v2/Users": {
+    resourceType: "member",
+    fetchById: (userId, orgId) =>
+      MemberModel.findByUserIdForAudit(userId, orgId),
+  },
+  "/api/scim/v2/Users/:id": {
+    resourceType: "member",
+    fetchById: (userId, orgId) =>
+      MemberModel.findByUserIdForAudit(userId, orgId),
+    actionByMethod: {
+      PUT: "member.provisioning_updated",
+      PATCH: "member.provisioning_updated",
+      DELETE: "member.soft_deleted",
+    },
+    onlyWhenChanged: true,
+  },
 
   // Deployment environments
   "/api/environments": {

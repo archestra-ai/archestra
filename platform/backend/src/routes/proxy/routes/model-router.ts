@@ -114,6 +114,7 @@ import {
   parseImageEditRequest,
 } from "../image-edit-handler";
 import {
+  assertUserNotSoftDeleted,
   resolveAgent,
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
@@ -1423,6 +1424,18 @@ async function getModelRouterAuth(
  * a Fastify request: a WebSocket upgrade carries the same bearer token.
  */
 export async function authenticateModelRouterBearer(params: {
+  authorization: string | undefined;
+  ip: string;
+}): Promise<ModelRouterAuth> {
+  const auth = await resolveModelRouterBearer(params);
+  // Here, so that inference, model listing and realtime sessions all refuse a
+  // user the identity provider deactivated (SCIM).
+  const userId = modelRouterAuthenticatedUserId(auth);
+  if (userId) await assertUserNotSoftDeleted(userId);
+  return auth;
+}
+
+async function resolveModelRouterBearer(params: {
   authorization: string | undefined;
   ip: string;
 }): Promise<ModelRouterAuth> {

@@ -630,6 +630,60 @@ describe("Authnz", () => {
       delete (requiredEndpointPermissionsMap as any)[testOpId];
     });
 
+    test("rejects a valid session of a user the identity provider soft-deleted", async () => {
+      const { auth: betterAuth } = await import("@/auth/better-auth");
+      const { UserModel } = await import("@/models");
+      const { requiredEndpointPermissionsMap } = await import(
+        "@archestra/shared/access-control"
+      );
+
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
+        response: {
+          user: { id: "user-soft-deleted" },
+          session: { id: "session-soft-deleted" },
+        },
+        headers: new Headers(),
+      } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
+
+      vi.spyOn(UserModel, "getById").mockResolvedValue({
+        id: "user-soft-deleted",
+        organizationId: "org-soft-deleted",
+        name: "Soft Deleted",
+        email: "soft-deleted@example.com",
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        image: null,
+        twoFactorEnabled: null,
+        softDeleted: new Date(),
+      } as Awaited<ReturnType<typeof UserModel.getById>>);
+
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      const testOpId = "__softDeletedSessionTest__" as any;
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      (requiredEndpointPermissionsMap as any)[testOpId] = {};
+
+      const request = {
+        url: "/api/some-route",
+        method: "GET",
+        headers: { cookie: "session=soft-deleted" },
+        id: "req-soft-deleted",
+        routeOptions: { schema: { operationId: testOpId } },
+      } as unknown as FastifyRequest;
+      const reply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await expect(authnz.handle(request, reply)).rejects.toMatchObject({
+        statusCode: 401,
+        message: "Your account was deactivated in your identity provider",
+      });
+
+      // biome-ignore lint/suspicious/noExplicitAny: cleanup
+      delete (requiredEndpointPermissionsMap as any)[testOpId];
+    });
+
     test("sets authMethod=api_key when API key auth succeeds", async () => {
       const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");

@@ -77,6 +77,7 @@ import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
 import type { A2AOAuthExecution } from "@/types/a2a-actor";
@@ -1241,6 +1242,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     encryptedChatAudit,
   } = ctx;
   throwIfAborted(abortSignal);
+  // A turn outlives the request that started it. A user the identity provider
+  // deactivated since then (SCIM) runs no more tools.
+  if (userId && (await softDeletedUsers.isSoftDeleted(userId)))
+    throw new Error("Your account was deactivated in your identity provider");
   const startTime = Date.now();
 
   // For browser tools, ensure the correct conversation tab is selected first

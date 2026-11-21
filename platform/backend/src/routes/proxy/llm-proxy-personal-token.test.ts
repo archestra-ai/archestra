@@ -9,7 +9,7 @@ import {
 import { vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
-import { UserTokenModel, VirtualApiKeyModel } from "@/models";
+import { UserModel, UserTokenModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createOpenAiTestClient,
@@ -109,6 +109,51 @@ describe("LLM proxy with a personal platform token", () => {
       .where(eq(schema.interactionsTable.profileId, testAgent.id));
     expect(interaction.userId).toBe(user.id);
     expect(interaction.authMethod).toBe("personal_token");
+  });
+
+  test("refuses the token of a user the identity provider deactivated", async ({
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, testAgent.organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      testAgent.organizationId,
+      secret.id,
+      { provider: "openai" },
+    );
+    const userToken = await UserTokenModel.ensureUserToken(
+      user.id,
+      testAgent.organizationId,
+    );
+    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: completionUrl(),
+      headers: {
+        authorization: `Bearer ${tokenValue}`,
+        [CHAT_API_KEY_ID_HEADER]: providerKey.id,
+      },
+      payload: chatPayload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe(
+      "Your account was deactivated in your identity provider",
+    );
+    const interactions = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, testAgent.id));
+    expect(interactions).toEqual([]);
   });
 
   test("authenticates a call through a keyless provider key", async ({

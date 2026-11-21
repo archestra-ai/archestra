@@ -20,5 +20,5 @@ A v1.4 values file renders with the v1.5 chart, but these keys need changes:
 
 If a script reads the member list from the Adoption API, switch it to the new endpoint:
 
-- `GET /api/connected-clients/adoption` now returns `memberCount` and only the members with an agent or traffic. Members who have connected nothing are counted but not listed.
-- To list every member, page through `GET /api/connected-clients/adoption/members`. It filters by `state`, searches with `search`, and returns up to 1000 members per page.
+- [`GET /api/connected-clients/adoption`](/docs/reference/api/apps#tag/connection-setups/GET/api/connected-clients/adoption) now returns `memberCount` and only the members with an agent or traffic. Members who have connected nothing are counted but not listed.
+- To list every member, page through [`GET /api/connected-clients/adoption/members`](/docs/reference/api/apps#tag/connection-setups/GET/api/connected-clients/adoption/members). It filters by `state`, searches with `search`, and returns up to 1000 members per page.

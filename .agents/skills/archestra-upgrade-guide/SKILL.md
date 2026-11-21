@@ -1,6 +1,6 @@
 ---
 name: archestra-upgrade-guide
-description: Use when writing or updating an Archestra upgrade guide (docs/pages/admin/upgrade-vA-B-to-vX-Y.md) for a new stable line, when a change on main alters what operators must do on upgrade (add it to the draft guide), or when a release PR fails "Require an upgrade guide for a new stable line". Covers finding every operator-impacting change between two release lines, verifying it in code, and writing the page for the platform admin who runs the upgrade.
+description: Use when writing or updating an Archestra upgrade guide (docs/pages/admin/upgrade-vA-B-to-vX-Y.md) for a new stable line, or when a release PR fails "Require an upgrade guide for a new stable line". Covers finding every operator-impacting change between two release lines, verifying it in code, and writing the page for the platform admin who runs the upgrade.
 ---
 
 # Archestra Upgrade Guide
@@ -8,16 +8,6 @@ description: Use when writing or updating an Archestra upgrade guide (docs/pages
 Every new stable line `X.Y` ships one page: `docs/pages/admin/upgrade-vA-B-to-vX-Y.md`, where `A.B` is the previous stable line. It must be on `release/X.Y` before `X.Y.0` publishes; the `Release Freeze Check` on the release PR fails without it. The v1.3 → v1.4 page (`docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`) is the model.
 
 Read `archestra-docs-writer` before writing. This skill adds what is specific to upgrade guides.
-
-## The Draft on Main
-
-While `X.Y` is in development on `main`, its guide lives there as a draft: `docs/pages/admin/upgrade-vA-B-to-vX-Y.md` with `draft: true` in its frontmatter, which keeps it off the docs site. Collect notes in it as changes land:
-
-- A PR that changes what an operator must do on upgrade (a Helm default, a removed value, an env var, data a migration deletes) adds its item to the draft in the same PR. Create the draft if it does not exist yet.
-- Put upgrade steps only here. Feature and deployment pages describe the current product, never "before you upgrade".
-- A rough item under the right heading is fine. It is a draft: you refine it when you finish the page.
-
-When you cut `release/X.Y`, finish the page from this skill and delete `draft: true`. The `Release Freeze Check` fails on a guide that is still a draft.
 
 ## The Reader
 
@@ -85,8 +75,7 @@ Rules:
 
 ## Finish
 
-1. Delete `draft: true` from the frontmatter.
-2. Run the docs checks from the repository root:
+1. Run the docs checks from the repository root:
 
    ```bash
    for check in links env-var-links mcp-tool-links permission-links api-links navigation; do
@@ -94,5 +83,5 @@ Rules:
    done
    ```
 
-3. View the page in the website's `vX.Y` docs (see the website repository's `app/docs/README.md` to preview an unmerged branch).
-4. Merge it to `release/X.Y` through the queue. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.
+2. View the page in the website's `vX.Y` docs (see the website repository's `app/docs/README.md` to preview an unmerged branch).
+3. Merge it to `release/X.Y` through the queue. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.

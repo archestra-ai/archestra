@@ -15,14 +15,14 @@ class ReleaseUpgradeGuideTest(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
 
-    def release(self, version, guide=None, frontmatter="title: Upgrade\n"):
+    def release(self, version, guide=None):
         manifest = self.root / ".github/release-please/.release-please-manifest.json"
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(json.dumps({"platform": version}))
         if guide:
             page = self.root / "docs/pages/admin" / guide
             page.parent.mkdir(parents=True, exist_ok=True)
-            page.write_text(f"---\n{frontmatter}---\n")
+            page.write_text("---\ntitle: Upgrade\n---\n")
         return subprocess.run(
             [sys.executable, str(SCRIPT)], cwd=self.root, capture_output=True, text=True, env=os.environ.copy()
         )
@@ -35,12 +35,6 @@ class ReleaseUpgradeGuideTest(unittest.TestCase):
     def test_new_stable_line_with_its_guide_passes(self):
         self.assertEqual(self.release("1.5.0", "upgrade-v1-4-to-v1-5.md").returncode, 0)
         self.assertEqual(self.release("2.0.0", "upgrade-v1-9-to-v2-0.md").returncode, 0)
-
-    def test_a_draft_guide_does_not_count(self):
-        result = self.release("1.5.0", "upgrade-v1-4-to-v1-5.md", "title: Upgrade\ndraft: true\n")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("still a draft", result.stdout)
-        self.assertEqual(self.release("1.5.0", "upgrade-v1-4-to-v1-5.md", "title: Upgrade\ndraft: false\n").returncode, 0)
 
     def test_a_guide_for_another_line_does_not_count(self):
         self.assertEqual(self.release("1.5.0", "upgrade-v1-3-to-v1-4.md").returncode, 1)

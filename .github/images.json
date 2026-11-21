@@ -1,0 +1,102 @@
+{
+  "images": [
+    {
+      "key": "docker.io/archestra/platform",
+      "dockerfile": "platform/Dockerfile",
+      "context": "platform",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "docker.io/archestra/platform:slim",
+      "dockerfile": "platform/Dockerfile",
+      "context": "platform",
+      "target": "unified-slim",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/mcp-server-base",
+      "dockerfile": "platform/docker_images/mcp_server/Dockerfile",
+      "context": "platform/docker_images/mcp_server"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/p4-shim",
+      "dockerfile": "platform/docker_images/p4_shim/Dockerfile",
+      "context": "platform/docker_images/p4_shim"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/sandbox-base",
+      "dockerfile": "platform/docker_images/sandbox_base/Dockerfile",
+      "context": "platform/docker_images/sandbox_base"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-claude-code",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-claude-code",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-codex",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-codex",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-opencode",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-opencode",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-hermes",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-hermes",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-openclaw",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-openclaw",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-grok",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-grok",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-kimi",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-kimi",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
+      "key": "ghcr.io/archestra-ai/agent-copilot",
+      "dockerfile": "platform/docker_images/agent/Dockerfile",
+      "context": "platform",
+      "target": "agent-copilot",
+      "runner": "ubuntu-24.04-16core"
+    }
+  ],
+  "unreleased": [
+    {
+      "dockerfile": ".github/bench/Dockerfile",
+      "reason": "Benchmark runner layered on a platform image in CI; never released."
+    },
+    {
+      "dockerfile": "platform/benchmarks/cross-proxy/archestra.Dockerfile",
+      "reason": "Harness for the cross-proxy benchmark; never released."
+    },
+    {
+      "dockerfile": "platform/dev/lite-runtime/Dockerfile",
+      "reason": "Development image for Agent Runtime pods, built by hand; never released."
+    }
+  ]
+}

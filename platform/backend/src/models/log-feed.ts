@@ -30,6 +30,7 @@ class LogFeedModel {
         agentName: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
         externalAgentId: interactions.externalAgentId,
+        source: interactions.source,
         type: interactions.type,
         model: interactions.model,
         inputTokens: interactions.inputTokens,

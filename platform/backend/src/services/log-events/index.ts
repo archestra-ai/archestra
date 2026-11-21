@@ -1,4 +1,7 @@
 import {
+  clientForExternalAgentIds,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -136,7 +139,7 @@ async function readLlm(params: ReadParams): Promise<LogEvent[]> {
         }
       : { kind: "system", name: "System" },
     agent: agentOf(row.agentId, row.agentName, row.agentType),
-    client: row.externalAgentId ?? undefined,
+    client: clientOf(row.externalAgentId, row.source),
     sessionId: row.sessionId ?? undefined,
     durationMs: row.durationMs ?? undefined,
     href: row.sessionId
@@ -352,6 +355,23 @@ async function readAudit(params: ReadParams): Promise<LogEvent[]> {
       },
     };
   });
+}
+
+/**
+ * The app a request came from, as the Client filter names it: a known coding
+ * client ("Claude Code"), Archestra's own chat, or a ChatOps channel
+ * ("Slack").
+ */
+function clientOf(
+  externalAgentId: string | null,
+  source: InteractionSource | null,
+): string | undefined {
+  const family = clientForExternalAgentIds([externalAgentId]);
+  if (family) return family.label;
+  if (source === "chat" || source?.startsWith("chat:")) return "Archestra Chat";
+  if (source?.startsWith("chatops:"))
+    return INTERACTION_SOURCE_DISPLAY[source].label;
+  return undefined;
 }
 
 /** `anthropic:messages` → `anthropic`. */

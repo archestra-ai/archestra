@@ -367,7 +367,17 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: archestra/platform:test-version
+          value: archestra/platform:test-version-slim
+
+  - it: should run the full image when the variant is cleared
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.imageVariant: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:1.6.0
 
   # Image helper tests - ensures backward compatibility with existing deployments
   # that set the full image:tag in archestra.image
@@ -389,7 +399,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: registry.io:5000/archestra/platform:1.0.0
+          value: registry.io:5000/archestra/platform:1.0.0-slim
 
   - it: should use image as-is when registry has port and image has tag
     documentIndex: 1
@@ -980,10 +990,39 @@ tests:
         version: "1.6.0"
         images:
           platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          platform-slim: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0-slim@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+
+  - it: should pin the full platform image to its own release digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.imageVariant: ""
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          platform-slim: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: "archestra/platform:1.6.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  - it: should not pin the slim image to the full image's digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0-slim"
 
   - it: should use another platform image or tag as configured despite a release digest
     documentIndex: 1
@@ -997,7 +1036,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "registry.example.com/archestra/platform:1.6.0"
+          value: "registry.example.com/archestra/platform:1.6.0-slim"
 
   - it: should not pin the platform image when its tag differs from the released version
     documentIndex: 1
@@ -1010,7 +1049,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "archestra/platform:1.6.1"
+          value: "archestra/platform:1.6.1-slim"
 
   - it: should pass the bootstrap service accounts as JSON
     documentIndex: 1
@@ -3268,7 +3307,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].image
-          value: archestra/platform:1.0.37
+          value: archestra/platform:1.0.37-slim
 
   - it: should pass existing env vars to vault-secrets init container
     documentIndex: 1

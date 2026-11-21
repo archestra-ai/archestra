@@ -267,8 +267,10 @@ def release_indexes(records):
         if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", image):
             raise ValueError(f"Unexpected release image name: {image}")
         data = oci.multi_arch_index(proofs)
+        # platform-slim is a variant in the platform's own repository
+        # (archestra/platform:<version>-slim), attested under its name.
         indexes[image] = {"digest": "sha256:" + hashlib.sha256(data).hexdigest(),
-                          "public_name": "docker.io/archestra/platform" if image == "platform"
+                          "public_name": "docker.io/archestra/platform" if image in ("platform", "platform-slim")
                           else f"ghcr.io/archestra-ai/{image}"}
     return indexes
 

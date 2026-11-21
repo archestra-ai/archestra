@@ -507,14 +507,17 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
 RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 
-# <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
-# `unified-slim` is the complete, runnable platform image minus the ~352MB
-# dagger-engine.tar, which only the quickstart docker-run path consumes (the
-# entrypoint kind-loads it into the embedded KinD cluster). CI e2e shards build
-# --target unified-slim so they never pull or kind-load that dead weight; the
-# default `unified` stage below layers the tar back on top for quickstart and
-# published release images.
-FROM base AS unified-slim
+# <----- Runtime stage (shared by both published images) ----->
+# Everything both images run: the backend, the frontend, supervisord, git,
+# kubectl and the Dagger CLI. Two images are built on it:
+#   unified-slim  the Kubernetes image (archestra/platform:<version>-slim, the
+#                 Helm chart's default): no bundled PostgreSQL, no quickstart.
+#   unified       the docker run image (archestra/platform:<version>): adds
+#                 PostgreSQL and the quickstart's docker CLI, KinD, manifests and
+#                 Dagger Engine archive.
+# Both share these layers, so the second costs one build of its own layers and
+# a registry stores and serves the shared ones once.
+FROM base AS runtime
 WORKDIR /app
 
 ARG VERSION=dev
@@ -587,21 +590,9 @@ RUN apk --no-cache upgrade && \
     # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
     # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
     apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
-    # Install PostgreSQL 18 with its contrib modules, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
-    #
-    # PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
-    # pg_trgm, which migrations 0116/0378 use for the conversation and user
-    # search indexes (they skip the indexes when the extension is missing).
-    #
-    # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
-    # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-    # CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
-    # pin: the bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
-    # guarantee the fixed versions and bust the cache.
-    apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
-        postgresql-pgvector su-exec git git-daemon && \
+    apk add --no-cache git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
@@ -616,12 +607,10 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# Build with Go 1.26.9 for the October 2026 stdlib security fixes.
-COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
-COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+# kubectl: the Dagger CLI reaches the code sandbox's engine through its
+# kube-pod:// connection, which runs kubectl exec.
 COPY --from=kubectl-builder /kubectl-binary /usr/local/bin/kubectl
-RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.11, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
@@ -687,10 +676,6 @@ RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
     python3 -c "import pkg_resources, setuptools" && \
     supervisord --version
 
-# Create postgres directories (user already exists from postgresql package)
-RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
-    chown -R postgres:postgres /var/lib/postgresql /run/postgresql
-
 # The image starts as root, which the quickstart needs (the Docker socket, the
 # embedded PostgreSQL). It can also run as the archestra user (UID 10001), as
 # the Helm chart's `archestra.runAsNonRoot` does, or as an arbitrary UID in
@@ -702,8 +687,7 @@ RUN addgroup -g 10001 archestra && \
     chown 10001:0 /app/data /run/archestra /var/log/supervisor /home/archestra && \
     chmod 0775 /app/data /run/archestra /var/log/supervisor /home/archestra
 
-# Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data /app/data
+VOLUME /app/data
 
 # Runtime files. The backend and its full node_modules arrive as a single
 # self-contained tree from the builder's `pnpm deploy` output (copied below),
@@ -713,42 +697,19 @@ COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
 COPY docker/scripts/start-backend.sh /app/start-backend.sh
-# slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
-# mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
-# Real deployments provision engines in code instead — the quickstart runs this one
-# and points the backend at it through ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST.
-# The engine IMAGE archive itself is added only in the final `unified` stage below —
-# the entrypoint falls back to a registry pull when the tar is absent.
-COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
-# Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
-# quickstart mode: every Agent Runtime run is one of its Sandbox resources. Real deployments install it themselves;
-# keep this version in step with the Agent Runtime prerequisites in
-# docs/pages/platform-deployment.md.
-ARG AGENT_SANDBOX_VERSION=v1.0.1
-RUN wget -O /app/agent-sandbox.quickstart.yaml \
-        "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" && \
-    echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
-COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
 # /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
 # reach it. pnpm is only needed in the builder stage (the `pnpm build` +
 # `pnpm deploy` there); this runtime stage runs no pnpm at all — DB migrations
 # call drizzle-kit directly (see docker/supervisord/supervisord.conf) — so drop
-# corepack/pnpm from the final image entirely.
-#
-# Nothing at runtime uses the base image's yarn or corepack either, the curl CLI
-# (libcurl stays: git's HTTPS transport links it), or apk itself: no later step
-# installs a package, and a package manager in a running container only helps
-# an intruder. `apk del` removes apk last and keeps its database, so image
-# scanners still list every OS package.
+# corepack/pnpm from the final image entirely. Nothing at runtime uses the base
+# image's yarn or corepack either. Each image removes apk itself last
+# (at the end of this file), after its own packages.
 RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx \
            /usr/local/bin/corepack /usr/local/lib/node_modules/corepack \
            /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* && \
-    apk del --no-cache curl apk-tools && \
-    test -s /lib/apk/db/installed && \
-    ! test -e /usr/bin/curl && ! test -e /sbin/apk && \
     git --version
 
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
@@ -797,7 +758,7 @@ RUN chmod +x /docker-entrypoint.sh
 RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
-EXPOSE 5432 9000 9050 3000
+EXPOSE 9000 9050 3000
 
 # Health check. Probes a static public file rather than `/`: `/` redirects to
 # /chat, and rendering a page fetches appearance settings from the backend,
@@ -807,13 +768,75 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# <----- Final unified stage (default target: quickstart / release) ----->
-# unified-slim plus the pre-baked Dagger Engine docker-archive. Quickstart
-# kind-loads it into the embedded node at boot so the engine starts offline
-# instead of pulling ~352MB from the registry on every run (KinD recreates its
-# node each boot and its containerd cannot see the host Docker image cache) —
-# see docker-entrypoint.sh and the commit that introduced the tar (#5275).
-# This MUST remain the last stage: builds without --target (releases,
-# quickstart CI, fork PRs, local docker build) get the full image.
-FROM unified-slim AS unified
+# Nothing at runtime uses the curl CLI (libcurl stays: git's HTTPS transport
+# links it) or apk itself, and a package manager in a running container only
+# helps an intruder. `apk del` removes apk last and keeps its database, so
+# image scanners still list every OS package. Each image below runs it as its
+# last step, after any packages of its own.
+
+# <----- Kubernetes image (archestra/platform:<version>-slim) ----->
+# The Helm chart's default image. The database is external and the cluster is
+# real, so it carries no PostgreSQL and none of the quickstart's tooling; the
+# entrypoint says which image to use when started without a database URL or
+# with ARCHESTRA_QUICKSTART. CI's Kubernetes e2e jobs build this target.
+FROM runtime AS unified-slim
+RUN apk del --no-cache curl apk-tools && \
+    test -s /lib/apk/db/installed && \
+    ! test -e /usr/bin/curl && ! test -e /sbin/apk
+# Nothing in this image needs root (no bundled PostgreSQL, no Docker socket),
+# so it runs as the archestra user wherever it starts, not only under the
+# chart's securityContext. Numeric, so Kubernetes can verify runAsNonRoot.
+USER 10001
+
+# <----- docker run image (archestra/platform:<version>, default target) ----->
+# The runtime plus the bundled PostgreSQL and the quickstart. This MUST remain
+# the last stage: builds without --target (releases, quickstart CI, fork PRs,
+# local docker build) get the full image.
+FROM runtime AS unified
+# PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
+# pg_trgm, which migrations 0116/0378 use for the conversation and user
+# search indexes (they skip the indexes when the extension is missing).
+# su-exec runs it as its own system user.
+#
+# 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
+# CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
+# CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
+# pin: a bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
+# guarantee the fixed versions and bust the cache.
+RUN apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
+        postgresql-pgvector su-exec && \
+    # The postgres user comes with the package.
+    mkdir -p /var/lib/postgresql/data /run/postgresql && \
+    chown -R postgres:postgres /var/lib/postgresql /run/postgresql
+VOLUME /var/lib/postgresql/data
+COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
+EXPOSE 5432
+
+# The quickstart's embedded KinD cluster: the docker CLI drives the host's
+# Docker through the mounted socket. Built with Go 1.26.9 for the October 2026
+# stdlib security fixes.
+COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+# Dagger Engine manifest applied into the embedded KinD cluster; backs the
+# skill sandbox / code runtime (archestra__run_command and friends). Real
+# deployments provision engines in code instead — the quickstart runs this one
+# and points the backend at it through ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST.
+COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
+# Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
+# quickstart mode: every Agent Runtime run is one of its Sandbox resources. Real deployments install it themselves;
+# keep this version in step with the Agent Runtime prerequisites in
+# docs/pages/platform-deployment.md.
+ARG AGENT_SANDBOX_VERSION=v1.0.1
+RUN wget -O /app/agent-sandbox.quickstart.yaml \
+        "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" && \
+    echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
+# The pre-baked Dagger Engine docker-archive. Quickstart kind-loads it into the
+# embedded node at boot so the engine starts offline instead of pulling ~352MB
+# from the registry on every run (KinD recreates its node each boot and its
+# containerd cannot see the host Docker image cache) — see docker-entrypoint.sh
+# and the commit that introduced the tar (#5275).
 COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar
+RUN apk del --no-cache curl apk-tools && \
+    test -s /lib/apk/db/installed && \
+    ! test -e /usr/bin/curl && ! test -e /sbin/apk

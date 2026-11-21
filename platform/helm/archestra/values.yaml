@@ -11,6 +11,13 @@ archestra:
   # See: https://github.com/googleapis/release-please/issues/2195
   imageTag: "1.5.0-rc.42" # x-release-please-version
 
+  # Which build of the image the chart runs, as a suffix on imageTag.
+  # `slim` (the default) is the Kubernetes image: no bundled PostgreSQL and no
+  # quickstart tooling, so it is smaller and carries fewer packages to patch.
+  # Set "" for the full image (archestra/platform:<version>), which `docker run`
+  # uses. Ignored when `image` names a tag.
+  imageVariant: slim
+
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
@@ -196,8 +203,9 @@ archestra:
   # a value set there wins. fsGroup lets these users write the file-storage
   # and diagnostics volumes, including files a root pod wrote before, on
   # volume types that support ownership changes (NFS and hostPath do not:
-  # chown them to 10001 first). Set false to run the pods as root, or on
-  # OpenShift, whose restricted SCC assigns its own non-root UID instead.
+  # chown them to 10001 first). Set false on OpenShift, whose restricted SCC
+  # assigns its own non-root UID instead. The -slim image itself runs as 10001,
+  # so to run the pods as root, also set podSecurityContext.runAsUser: 0.
   runAsNonRoot: true
 
   # With runAsNonRoot, also run the web, worker, and migration containers and

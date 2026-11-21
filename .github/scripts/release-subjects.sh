@@ -5,8 +5,10 @@
 #   release-subjects.txt  attestation subjects, each under its public name
 #   release-images.json   {"<public name>": "sha256:<digest>"} for the publisher
 #   release-pins.json     {"<image>": "sha256:<digest>"} for the chart to pin
-# The platform's public name is docker.io/archestra/platform; every other
-# image's is <companion registry>/<image>. The chart is attested by file name.
+# The platform's public name is docker.io/archestra/platform; platform-slim is
+# its variant docker.io/archestra/platform:slim (published as <version>-slim),
+# attested under the repository's name. Every other image's is
+# <companion registry>/<image>. The chart is attested by file name.
 #
 # Usage: release-subjects.sh <staged references dir> <companion registry> [chart.tgz]
 set -euo pipefail
@@ -35,15 +37,19 @@ for file in "$directory"/*; do
     || { echo "::error::Unexpected staged reference for $name"; exit 1; }
   digest=${BASH_REMATCH[1]}
   destination="$companion_registry/$name"
-  [ "$name" = platform ] && destination=docker.io/archestra/platform
-  printf '%s  %s\n' "$digest" "$destination" >> "$subjects"
+  case "$name" in
+    platform) destination=docker.io/archestra/platform ;;
+    platform-slim) destination=docker.io/archestra/platform:slim ;;
+  esac
+  # A variant is attested under its repository's name.
+  printf '%s  %s\n' "$digest" "${destination%:*}" >> "$subjects"
   jq --arg key "$destination" --arg digest "sha256:$digest" '.[$key] = $digest' "$images" > "$images.tmp"
   mv "$images.tmp" "$images"
   jq --arg key "$name" --arg digest "sha256:$digest" '.[$key] = $digest' "$pins" > "$pins.tmp"
   mv "$pins.tmp" "$pins"
 done
 # Both ship with every release; an absence means a missing build.
-for required in platform mcp-server-base; do
+for required in platform platform-slim mcp-server-base; do
   jq -e --arg name "$required" 'has($name)' "$pins" > /dev/null \
     || { echo "::error::Missing the $required release image"; exit 1; }
 done

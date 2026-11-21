@@ -265,10 +265,10 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      # Slim variant FIRST: the same image minus the ~352MB Dagger engine tar
-      # that only the quickstart job's pristine instance uses. The full build
-      # below reuses this builder's layers before the dependent test jobs start.
-      - name: Build slim Platform image (lite/K8s jobs, no Dagger engine tar) and push
+      # Slim (Kubernetes) image FIRST: what the Helm chart runs, so the K8s
+      # and hibernation jobs test it. The full build below (docker run: lite,
+      # docs screenshots, quickstart) reuses the shared runtime layers.
+      - name: Build slim Platform image (K8s jobs) and push
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: $/.github/actions/build-docker-image
         with:
@@ -304,9 +304,9 @@ jobs:
           # connection (rpc EOF) after the images were already pushed.
           cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
-      # Full image for the quickstart job: `unified` is `unified-slim` plus one
-      # COPY of the Dagger engine tar, so on the slim build's live builder only
-      # that stage is new.
+      # Full image for the docker run jobs: `unified` and `unified-slim` share
+      # the runtime stage, so on the slim build's live builder only the
+      # bundled PostgreSQL and quickstart layers are new.
       - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: $/.github/actions/build-docker-image
@@ -447,8 +447,8 @@ jobs:
         uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
-          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
-          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          artifact-name: platform-docker-image
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
       - uses: $/.github/actions/capture-docs-screenshots
         with:
@@ -554,9 +554,9 @@ jobs:
           e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
-          # Trusted runs pull the -slim variant (no ~352MB dagger-engine.tar —
-          # only the quickstart job consumes it); untrusted PRs load the full image from the
-          # build artifact since only one variant travels as an artifact.
+          # Trusted runs pull the -slim (Kubernetes) image the Helm chart
+          # runs; untrusted PRs load the full image from the build artifact
+          # since only one variant travels as an artifact.
           platform-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
           # Trusted runs: the Kind node pulls the (public) registry image
@@ -857,7 +857,7 @@ jobs:
       # "Load platform image" step then waits for it.
       - name: Pre-pull Lite images (background)
         env:
-          TRUSTED_PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          TRUSTED_PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           IS_UNTRUSTED_PR: ${{ env.UNTRUSTED_PR }}
         run: |
           if [ "$IS_UNTRUSTED_PR" != "true" ]; then
@@ -871,10 +871,9 @@ jobs:
         with:
           working-directory: ./platform
 
-      # The -slim variant: this environment runs with the code runtime
-      # disabled (see e2e-lite-platform.env), so the Dagger engine tar
-      # is dead weight here. Untrusted PRs use their existing full-image
-      # artifact; trusted jobs pull the slim image by this run's SHA.
+      # The full image: the lite stack is a quickstart `docker run` with the
+      # bundled PostgreSQL, which the -slim image lacks. Untrusted PRs use
+      # the image artifact; trusted jobs pull it by this run's SHA.
       # The build dependency guarantees publication before allocating this
       # runner; retry only transient errors.
       - name: Load platform image
@@ -882,8 +881,8 @@ jobs:
         uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
-          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
-          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          artifact-name: platform-docker-image
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
 
       # Check registry availability before the embedded Kind cluster pulls
@@ -1015,8 +1014,7 @@ jobs:
   #      additive — with OpenAPPA enabled the proxy rejects any tool-declaring
   #      request that omits the two APPA tools, which other lite specs rely
   #      on — so it needs its own stack, but its ~30s of tests did not justify
-  #      a runner of their own. It runs FIRST because it uses the -slim image,
-  #      which the build pushes before the full one.
+  #      a runner of their own.
   #   2. Quickstart: a pristine, key-less `docker run` of the full image. The
   #      lite teardown removes every container, network and the embedded Kind
   #      node, and the lite stack keeps no volumes, so the instance still
@@ -1051,17 +1049,17 @@ jobs:
         with:
           working-directory: ./platform
 
-      # The -slim image, as in the lite job (the code runtime is off in that
-      # stack). Untrusted PRs load the one image that travels as an artifact —
-      # the full one — which the quickstart half below then reuses. Trusted
-      # runs pull the exact SHA-tagged slim image directly from the registry.
+      # The full image, as in the lite job: both halves are quickstart
+      # `docker run`s with the bundled PostgreSQL. Untrusted PRs load the
+      # image artifact, which the quickstart half below then reuses. Trusted
+      # runs pull the exact SHA-tagged image directly from the registry.
       - name: Load OpenAPPA platform image
         id: load-openappa-image
         uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
-          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
-          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          artifact-name: platform-docker-image
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
 
       - name: Wait for MCP server base image
@@ -1160,19 +1158,6 @@ jobs:
         if: ${{ always() }}
         run: ./platform/scripts/e2e-lite.sh down
 
-      # Trusted runs pull the full image (the quickstart path deploys the
-      # Dagger engine from its tar); most of its layers are already on the
-      # host from the -slim pull above. Untrusted PRs already loaded it from
-      # the artifact, so they skip this.
-      - name: Load platform image
-        id: load-platform-image
-        if: ${{ env.UNTRUSTED_PR != 'true' }}
-        uses: $/.github/actions/load-platform-image
-        with:
-          source: registry
-          image-tag: ${{ format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-          wait-timeout-seconds: "60"
-
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
       # loaded on the host Docker daemon. The regular e2e tests (platform-e2e-tests) already
@@ -1207,7 +1192,8 @@ jobs:
 
       - name: Start platform in quickstart mode
         env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag || steps.load-openappa-image.outputs.image-tag }}
+          # The image the OpenAPPA half loaded above.
+          PLATFORM_IMAGE_TAG: ${{ steps.load-openappa-image.outputs.image-tag }}
         run: |
           echo "Starting Archestra platform in quickstart mode..."
 
@@ -1688,3 +1674,32 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
+
+  # Only the nightly run on main covers the hibernation suite and the
+  # firefox/webkit projects, and no merge depends on it, so a failure there
+  # would otherwise go unnoticed.
+  notify:
+    name: Report a nightly failure
+    needs:
+      [
+        platform-e2e-build,
+        platform-e2e-k8s-tests,
+        platform-e2e-hibernation-tests,
+        platform-e2e-lite-tests,
+        platform-quickstart-e2e-tests,
+        platform-rust-napi-musl-smoke,
+      ]
+    if: ${{ always() && github.event_name == 'schedule' && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # List the failed jobs of this run.
+      id-token: write # Read the #alerts webhook from Secret Manager.
+    steps:
+      - name: Post to #alerts
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: "The nightly Platform E2E run on main failed. These suites run only nightly, so nothing else catches these failures."
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}

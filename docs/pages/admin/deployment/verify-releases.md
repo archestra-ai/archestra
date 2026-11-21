@@ -22,7 +22,7 @@ Every attestation is signed with a GitHub Actions identity from an Archestra wor
 | VEX | Which reported vulnerabilities do not affect the image, and why | `https://openvex.dev/ns/v0.2.0` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Verification summary | That the build provenance passed Archestra's [SLSA Build L3](https://slsa.dev/spec/v1.0/levels#build-l3) policy, so you can check one attestation instead | `https://slsa.dev/verification_summary/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 
-They cover `docker.io/archestra/platform`, plus `mcp-server-base`, `p4-shim`, `sandbox-base`, and `agent-*` under `ghcr.io/archestra-ai/`.
+They cover `docker.io/archestra/platform`, its `-slim` tags included, plus `mcp-server-base`, `p4-shim`, `sandbox-base`, and `agent-*` under `ghcr.io/archestra-ai/`.
 
 What to know:
 

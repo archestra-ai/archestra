@@ -1668,15 +1668,20 @@ This helper constructs the image reference smartly:
 This maintains backward compatibility with existing deployments that set the full image:tag
 in archestra.image, while also supporting the new imageTag field used by release-please.
 
+A tag the chart builds gets imageVariant's suffix: the default `slim` picks the
+Kubernetes image (1.0.0-slim), empty picks the docker run image (1.0.0).
+
 A released chart also pins the default image (archestra/platform at the
-chart's own version) to the digest in archestra.releaseImageDigests.images.platform.
-Any other image or tag is used as configured.
+chart's own version) to its digest in archestra.releaseImageDigests.images:
+`platform-<variant>`, or `platform` without one. Any other image or tag is
+used as configured.
 
 Examples:
-  image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0"
-    (released 1.0.0 chart: "archestra/platform:1.0.0@sha256:...")
+  image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0-slim"
+    (released 1.0.0 chart: "archestra/platform:1.0.0-slim@sha256:...")
+  image: "archestra/platform", imageTag: "1.0.0", imageVariant: "" -> "archestra/platform:1.0.0"
   image: "archestra/platform:ci-test", imageTag: "1.0.0" -> "archestra/platform:ci-test"
-  image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0"
+  image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0-slim"
 */}}
 {{- define "archestra-platform.image" -}}
 {{- $image := .Values.archestra.image -}}
@@ -1689,13 +1694,15 @@ Examples:
 {{- /* Image already has a tag, use as-is */ -}}
 {{- $image -}}
 {{- else -}}
-{{- /* No tag in image, append imageTag */ -}}
+{{- /* No tag in image, append imageTag and the variant's suffix */ -}}
+{{- $variant := toString (.Values.archestra.imageVariant | default "") -}}
+{{- $tag := ternary (printf "%s-%s" (toString $imageTag) $variant) (toString $imageTag) (ne $variant "") -}}
 {{- $pins := .Values.archestra.releaseImageDigests | default dict -}}
-{{- $digest := get ($pins.images | default dict) "platform" -}}
+{{- $digest := get ($pins.images | default dict) (ternary (printf "platform-%s" $variant) "platform" (ne $variant "")) -}}
 {{- if and $digest (eq (toString $pins.version) (toString $imageTag)) (has $image (list "archestra/platform" "docker.io/archestra/platform")) -}}
-{{- printf "%s:%s@%s" $image $imageTag $digest -}}
+{{- printf "%s:%s@%s" $image $tag $digest -}}
 {{- else -}}
-{{- printf "%s:%s" $image $imageTag -}}
+{{- printf "%s:%s" $image $tag -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

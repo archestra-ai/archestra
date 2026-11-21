@@ -90,7 +90,7 @@ resolve_platform_image() {
       .github/scripts/e2e-image-input-hash.sh)" ]]; then
     local input_hash image
     input_hash=$(cd "${REPO_ROOT}" && bash .github/scripts/e2e-image-input-hash.sh platform)
-    image="${CI_REGISTRY}/platform:input-${input_hash}-slim"
+    image="${CI_REGISTRY}/platform:input-${input_hash}"
     if pull_public "${image}" 2> /dev/null; then
       echo "${image}"
       return

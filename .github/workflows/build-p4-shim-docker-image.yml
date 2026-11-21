@@ -99,5 +99,7 @@ jobs:
           push: "false"
           load: "true"
           tags: p4-shim:${{ github.sha }}
+          # Pull requests do not receive the dhi.io OIDC credential.
+          build-args: RUNTIME_BASE=public
           # Read-only: the publish paths own cache export for this image.
           cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/p4-shim:buildcache-amd64

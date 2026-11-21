@@ -7,10 +7,10 @@
 # Archestra publishes redistributes Perforce software and the pod's egress can
 # stay pinned to the customer's Perforce server alone.
 #
-# Debian (glibc) base — not Alpine like the platform's other images — because
-# the official `p4` binary is glibc-linked and does not run on musl.
-FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
-
+# The official `p4` binary needs glibc. The dev variant supplies apt for the
+# small runtime package set; untrusted PRs use the matching public Node release.
+ARG RUNTIME_BASE=hardened
+FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime-base-public
 RUN apt-get update \
   && apt-get install -y --no-install-recommends apt libapt-pkg6.0 tini libpcre2-8-0 perl-base \
   # CVE-2026-109518: upgrade the package manager inherited from the base image.
@@ -44,10 +44,18 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
   /usr/local/bin/npx \
   /usr/local/bin/corepack
 
+# The published image needs only Node, glibc and tini. Keep apt and the shell
+# in a throwaway stage, then copy the process reaper into the runtime image.
+FROM dhi.io/node:24.22.3-debian12-dev@sha256:cab4b2c693a761af346c0de57a9c53acfc0dfd75acd502b31dd7182fef2104e1 AS tini-build
+RUN apt-get update && apt-get install -y --no-install-recommends tini
+FROM dhi.io/node:24.22.3-debian12@sha256:f86966eca7244d136d7383debd6572d0917c8836200e3ff87282ebcbd7970875 AS runtime-base-hardened
+COPY --from=tini-build /usr/bin/tini /usr/bin/tini
+
+FROM runtime-base-${RUNTIME_BASE}
+
 # Explicit world-readable mode: COPY preserves the build context's file mode,
 # and the server runs as uid 65534.
-COPY server.mjs /app/server.mjs
-RUN chmod 0444 /app/server.mjs
+COPY --chmod=0444 server.mjs /app/server.mjs
 
 # Matches the pod securityContext (runAsNonRoot 65534, readOnlyRootFilesystem;
 # /work is an emptyDir mounted by the runtime manager).

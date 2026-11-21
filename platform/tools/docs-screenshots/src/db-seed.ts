@@ -3,6 +3,7 @@ import {
   AGENT_PLACEMENT,
   CHANNEL_BINDINGS,
   COLLEAGUES,
+  CONNECTIONS,
   DESKTOP_DEVICE,
   KNOWLEDGE_BASE_AGENTS,
   KNOWLEDGE_BASES,
@@ -58,6 +59,7 @@ ON CONFLICT DO NOTHING;`);
   seedYells(state);
   seedLogSession(state);
   seedDesktopDevice(state);
+  seedConnections(state);
 }
 
 /** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
@@ -179,6 +181,30 @@ function seedDesktopDevice(state: SeedState): void {
   runSql(`INSERT INTO desktop_devices (id, organization_id, user_id, name, platform, key_hash, last_polled_at, client_version, created_at)
 VALUES (${sql(DESKTOP_DEVICE.id)}, ${sql(state.organization.id)}, ${sql(state.users.persona)}, ${sql(DESKTOP_DEVICE.name)}, ${sql(DESKTOP_DEVICE.platform)}, encode(sha256(${sql(`docs-device-${DESKTOP_DEVICE.id}`)}::bytea), 'hex'), now() + interval '10 years', ${sql(DESKTOP_DEVICE.version)}, ${FIXTURE_TIME_SQL} - make_interval(days => ${DESKTOP_DEVICE.daysAgo}))
 ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, platform = EXCLUDED.platform, last_polled_at = EXCLUDED.last_polled_at, client_version = EXCLUDED.client_version, created_at = EXCLUDED.created_at;`);
+}
+
+/**
+ * Redeemed Connect-page setups: what Adoption counts as connected and what
+ * the Client connections log lists. Coding clients reach the model through the
+ * organization's LLM Proxy, so each setup points at it. A rerun resets them.
+ */
+function seedConnections(state: SeedState): void {
+  const organizationId = sql(state.organization.id);
+  runSql(
+    CONNECTIONS.map((connection) => {
+      const disconnected =
+        "disconnectedDaysAgo" in connection
+          ? `${FIXTURE_TIME_SQL} - make_interval(days => ${connection.disconnectedDaysAgo})`
+          : "NULL";
+      const redeemedAt = `${FIXTURE_TIME_SQL} - make_interval(days => ${connection.daysAgo})`;
+      return `INSERT INTO connection_setups (id, organization_id, user_id, client_id, platform, base_url, llm_proxy_id, proxy_auth, token_hash, token_start, expires_at, consumed_at, revoked_at, revoked_by_user_id, device_name, created_at)
+VALUES (${sql(connection.id)}, ${organizationId}, ${sql(state.users[connection.user])}, ${sql(connection.client)}, ${sql(connection.platform)}, 'http://localhost:9000/v1',
+  (SELECT id FROM agents WHERE agent_type = 'llm_proxy' AND organization_id = ${organizationId} LIMIT 1), 'provider-key',
+  encode(sha256(${sql(`docs-connection-${connection.id}`)}::bytea), 'hex'), ${sql(`docs-${connection.id.slice(-6)}`)},
+  ${redeemedAt} + interval '10 minutes', ${redeemedAt}, ${disconnected}, ${disconnected === "NULL" ? "NULL" : sql(state.users[connection.user])}, ${sql(connection.device)}, ${redeemedAt} - interval '1 minute')
+ON CONFLICT (id) DO UPDATE SET consumed_at = EXCLUDED.consumed_at, revoked_at = EXCLUDED.revoked_at, revoked_by_user_id = EXCLUDED.revoked_by_user_id, device_name = EXCLUDED.device_name, created_at = EXCLUDED.created_at;`;
+    }).join("\n"),
+  );
 }
 
 function seedYells(state: SeedState): void {

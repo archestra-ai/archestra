@@ -548,6 +548,21 @@ export const USAGE = [
   { user: "persona", agent: "Research Assistant", client: null, type: "openai:responses", model: "gpt-5.4", billingMode: "metered", authMethod: "internal", source: "chat", perDay: 10, inputTokens: 16000, outputTokens: 1800, inputPrice: 2.5, outputPrice: 15, cacheShare: 0.3 },
 ] as const;
 
+/**
+ * Coding clients members set up through the Connect page, for Adoption and the
+ * Client connections type in Logs. Sofia and Daniel set up nothing, so
+ * Coverage shows who has not connected; Marcus's Cursor makes no calls, so he
+ * is connected but inactive. `disconnectedDaysAgo` adds a disconnect event.
+ */
+export const CONNECTIONS = [
+  { id: "c0ec7100-0000-4000-8000-000000000001", user: "persona", client: "claude-code", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 21 },
+  { id: "c0ec7100-0000-4000-8000-000000000002", user: "persona", client: "codex", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 12 },
+  { id: "c0ec7100-0000-4000-8000-000000000003", user: "persona", client: "cursor", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 9 },
+  { id: "c0ec7100-0000-4000-8000-000000000004", user: "priya", client: "claude-code", platform: "macos", device: "priya-mbp", daysAgo: 18 },
+  { id: "c0ec7100-0000-4000-8000-000000000005", user: "marcus", client: "cursor", platform: "linux", device: "marcus-workstation", daysAgo: 6 },
+  { id: "c0ec7100-0000-4000-8000-000000000006", user: "marcus", client: "codex", platform: "linux", device: "marcus-workstation", daysAgo: 25, disconnectedDaysAgo: 4 },
+] as const;
+
 /** Which team runs each agent, and where it runs, so team and environment budgets have usage. */
 export const AGENT_PLACEMENT = [
   { agent: "Support Triage", team: "Customer Support", environment: "production" },

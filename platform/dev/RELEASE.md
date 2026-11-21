@@ -205,7 +205,7 @@ The operator or release agent must create, queue, monitor, and verify these PRs 
 
 Every new stable line ships a page that tells platform admins how to upgrade from the previous line, for example `docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`. Admins read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes; it then appears in the `vX.Y` docs. The `Release Freeze Check` on the `X.Y.0` release PR fails until `docs/pages/admin/upgrade-v*-to-vX-Y.md` exists.
 
-Write it with the `archestra-upgrade-guide` skill. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.
+Write it with the `archestra-upgrade-guide` skill. Start from the draft on `main` (`draft: true`), where PRs collect upgrade notes during the line's development, and remove `draft: true` when it is done: the check rejects a draft. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.
 
 ### Release Please Configuration
 

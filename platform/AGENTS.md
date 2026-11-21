@@ -67,7 +67,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
 - `archestra-dev-resource-cleanup` - use for reclaiming unused local worktrees, branches, development processes, and OrbStack resources while preserving the active Tilt setup.
 - `archestra-docs-writer` - use for writing or editing docs pages under `../docs/pages`: new feature docs, page rewrites, tone/copy fixes, and screenshots.
-- `archestra-upgrade-guide` - use for writing the upgrade guide a new stable line ships (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), or when a release PR fails for a missing one.
+- `archestra-upgrade-guide` - use for writing the upgrade guide a new stable line ships (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), for adding an upgrade note to the next line's draft guide on `main` when a change alters what operators must do, or when a release PR fails for a missing one.
 
 ## Key URLs
 

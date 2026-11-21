@@ -783,6 +783,10 @@ FROM runtime AS unified-slim
 RUN apk del --no-cache curl apk-tools && \
     test -s /lib/apk/db/installed && \
     ! test -e /usr/bin/curl && ! test -e /sbin/apk
+# Nothing in this image needs root (no bundled PostgreSQL, no Docker socket),
+# so it runs as the archestra user wherever it starts, not only under the
+# chart's securityContext. Numeric, so Kubernetes can verify runAsNonRoot.
+USER 10001
 
 # <----- docker run image (archestra/platform:<version>, default target) ----->
 # The runtime plus the bundled PostgreSQL and the quickstart. This MUST remain

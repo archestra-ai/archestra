@@ -203,8 +203,9 @@ archestra:
   # a value set there wins. fsGroup lets these users write the file-storage
   # and diagnostics volumes, including files a root pod wrote before, on
   # volume types that support ownership changes (NFS and hostPath do not:
-  # chown them to 10001 first). Set false to run the pods as root, or on
-  # OpenShift, whose restricted SCC assigns its own non-root UID instead.
+  # chown them to 10001 first). Set false on OpenShift, whose restricted SCC
+  # assigns its own non-root UID instead. The -slim image itself runs as 10001,
+  # so to run the pods as root, also set podSecurityContext.runAsUser: 0.
   runAsNonRoot: true
 
   # With runAsNonRoot, also run the web, worker, and migration containers and

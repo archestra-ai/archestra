@@ -181,8 +181,9 @@ jobs:
       # not need a host-side `pnpm install` / node toolchain. (The MCP Server Base leg
       # sets use-build-action: false and never ran this step.)
 
-      # Untrusted PRs have no OIDC token, so they build from the public node
-      # image instead (RUNTIME_BASE in the Dockerfile).
+      # Untrusted PRs (Dependabot's, private mirrors) have no OIDC token, so
+      # they build from the public node image instead (RUNTIME_BASE in the
+      # Dockerfile). The merge queue builds every PR on the hardened base.
       - name: Log in to Docker Hardened Images
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: $/.github/actions/dhi-login

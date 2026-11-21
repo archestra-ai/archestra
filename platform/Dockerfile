@@ -12,8 +12,8 @@ ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 # The runtime stage's base: `hardened`, Docker's hardened Node image (the
 # published images; the runtime stage says why), or `public`, the public node
-# image of the same release, for CI jobs without registry credentials (pull
-# requests from forks).
+# image of the same release, for CI jobs without registry credentials
+# (Dependabot pull requests' e2e builds; the merge queue builds the hardened one).
 ARG RUNTIME_BASE=hardened
 
 FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base

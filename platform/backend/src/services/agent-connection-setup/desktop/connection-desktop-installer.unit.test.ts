@@ -419,7 +419,7 @@ test.each([
         expect(html.includes("Ask Claude to list the tools")).toBe(withMcp);
         expect(html.includes("Anthropic sign-in")).toBe(withProxy);
         expect(html.includes("Settings → Import")).toBe(withProxy);
-        if (!withProxy) expect(html).not.toContain("check Logs in Archestra");
+        if (!withProxy) expect(html).not.toContain("check the Logs page");
       }
       // A rerun reuses a verified subscription without a second browser sign-in.
       const repeated = new Installer({

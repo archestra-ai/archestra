@@ -885,7 +885,7 @@ function clientMatch(label: string): ClientMatch {
     ][]
   )
     .filter(([source, display]) =>
-      label === ARCHESTRA_CHAT
+      label === CHAT_CLIENT
         ? isChatSource(source)
         : source.startsWith("chatops:") && display.label === label,
     )
@@ -893,7 +893,8 @@ function clientMatch(label: string): ClientMatch {
   return { sources, notExternalAgentIds: familyIds };
 }
 
-const ARCHESTRA_CHAT = "Archestra Chat";
+/** The client name the chat UI's requests share, as the source labels name it. */
+const CHAT_CLIENT = INTERACTION_SOURCE_DISPLAY.chat.label;
 
 function isChatSource(source: string): boolean {
   return source === "chat" || source.startsWith("chat:");
@@ -901,7 +902,7 @@ function isChatSource(source: string): boolean {
 
 /**
  * The app a request came from, as the Client filter names it: a known coding
- * client ("Claude Code"), Archestra's own chat, or a ChatOps channel
+ * client ("Claude Code"), the built-in chat, or a ChatOps channel
  * ("Slack").
  */
 function clientOf(
@@ -910,7 +911,7 @@ function clientOf(
 ): string | undefined {
   const family = clientForExternalAgentIds([externalAgentId]);
   if (family) return family.label;
-  if (source && isChatSource(source)) return ARCHESTRA_CHAT;
+  if (source && isChatSource(source)) return CHAT_CLIENT;
   if (source?.startsWith("chatops:"))
     return INTERACTION_SOURCE_DISPLAY[source].label;
   return undefined;

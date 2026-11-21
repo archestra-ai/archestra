@@ -493,7 +493,7 @@ function sessionSummary(session: Session): SessionSummary {
     lastInteractionType: interactionType(last),
     contentNotStored: false,
     conversationTitle:
-      first.client === "Archestra Chat" ? (first.sessionTitle ?? null) : null,
+      first.client === "Chat" ? (first.sessionTitle ?? null) : null,
     claudeCodeTitle:
       first.client === "Claude Code" ? (first.sessionTitle ?? null) : null,
   });
@@ -909,7 +909,7 @@ function mcpRecord(e: LogEvent): McpToolCall {
             ? "org_token"
             : "user_token",
     oauthClientId: m?.authMethod === "oauth" ? client.id : null,
-    source: e.client === "Archestra Chat" ? "chat" : "api",
+    source: e.client === "Chat" ? "chat" : "api",
     credentialClientId: null,
     credentialClientType: "mcp_server",
     credentialActorClientId: null,
@@ -1390,7 +1390,7 @@ const CLIENTS: Record<
   },
   Codex: { id: CODEX_CLIENT_ID, source: "api", sessionSource: "codex_session" },
   Cursor: { id: CURSOR_CLIENT_ID, source: "api", sessionSource: null },
-  "Archestra Chat": { id: null, source: "chat", sessionSource: null },
+  "Chat": { id: null, source: "chat", sessionSource: null },
   Slack: { id: null, source: "chatops:slack", sessionSource: null },
   "Open WebUI": { id: "open-webui", source: "api", sessionSource: null },
   n8n: { id: "n8n", source: "api", sessionSource: null },

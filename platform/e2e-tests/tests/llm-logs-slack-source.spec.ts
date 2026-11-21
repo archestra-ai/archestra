@@ -206,7 +206,7 @@ async function runSlackLogsChecks({
 
   // 3. ...and the filter genuinely filters: under another client the same
   //    run is gone, otherwise step 2 proves nothing.
-  await goToAdminPage(llmLogsPath({ q: sessionId, client: "Archestra Chat" }));
+  await goToAdminPage(llmLogsPath({ q: sessionId, client: "Chat" }));
   await expect(adminPage.getByText("No events match")).toBeVisible({
     timeout: 20_000,
   });

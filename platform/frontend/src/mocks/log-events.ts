@@ -716,7 +716,7 @@ function generate(anchor: number): LogEvent[] {
         ? pick(["Claude Code", "Cursor", "Codex"])
         : agent.kind === "llm_proxy"
           ? pick(["Claude Code", "Codex", "Open WebUI", "n8n"])
-          : pick(["Archestra Chat", "Slack", "Archestra Chat", "n8n"]);
+          : pick(["Chat", "Slack", "Chat", "n8n"]);
     const m =
       agent.id === "ag-sales"
         ? MODELS[5]

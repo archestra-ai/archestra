@@ -782,5 +782,5 @@ const PROVIDER_LABEL: Record<string, string> = {
 /** Apps the filter shows as request sources rather than client apps. */
 const CLIENT_SOURCE: Record<string, InteractionSource> = {
   Slack: "chatops:slack",
-  "Archestra Chat": "chat",
+  Chat: "chat",
 };

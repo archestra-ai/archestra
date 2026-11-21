@@ -181,15 +181,16 @@ jobs:
       # not need a host-side `pnpm install` / node toolchain. (The MCP Server Base leg
       # sets use-build-action: false and never ran this step.)
 
-      # Untrusted PRs (Dependabot's, private mirrors) have no OIDC token, so
-      # they build from the public node image instead (RUNTIME_BASE in the
-      # Dockerfile). The merge queue builds every PR on the hardened base.
+      # Untrusted PRs (Dependabot's, private mirrors) have no OIDC token: they
+      # log in with the DOCKERHUB_DHI_TOKEN secret (a Dependabot secret too).
+      # There is no build without the hardened base.
       - name: Log in to Docker Hardened Images
-        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        if: ${{ matrix.use-build-action }}
         uses: $/.github/actions/dhi-login
         with:
           dockerfile: ${{ matrix.context }}/Dockerfile
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+          token: ${{ env.UNTRUSTED_PR == 'true' && secrets.DOCKERHUB_DHI_TOKEN || '' }}
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR == 'true' }}
@@ -197,9 +198,6 @@ jobs:
         with:
           context: ${{ matrix.context }}
           load: "true"
-          # No registry credentials: the public node image of the same release
-          # replaces the hardened base (dhi.io refuses anonymous pulls).
-          build-args: RUNTIME_BASE=public
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release

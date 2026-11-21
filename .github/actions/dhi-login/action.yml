@@ -1,17 +1,24 @@
 name: Log in to Docker Hardened Images
 description: >-
-  Log in to dhi.io, Docker's hardened image registry, through the Docker Hub
-  OIDC connection, when the Dockerfile builds from one of its images (any
-  non-comment line naming dhi.io/). dhi.io refuses anonymous pulls. Does
-  nothing for other Dockerfiles, so it can run before any build. The job needs
-  `id-token: write`.
+  Log in to dhi.io, Docker's hardened image registry, when the Dockerfile
+  builds from one of its images (any non-comment line naming dhi.io/). dhi.io
+  refuses anonymous pulls. Does nothing for other Dockerfiles, so it can run
+  before any build. Logs in through the Docker Hub OIDC connection (the job
+  needs `id-token: write`), or with `token` where a job has no OIDC token
+  (Dependabot pull requests).
 inputs:
   dockerfile:
     description: Path to the Dockerfile about to be built.
     required: true
   dockerhub-oidc-connection-id:
-    description: The Docker Hub OIDC connection ID (vars.DOCKERHUB_OIDC_CONNECTION_ID).
+    description: The Docker Hub OIDC connection ID (vars.DOCKERHUB_OIDC_CONNECTION_ID). Ignored with `token`.
     required: true
+  token:
+    description: >-
+      A Docker access token for the archestra account (secrets.DOCKERHUB_DHI_TOKEN), for jobs without an
+      OIDC token. Empty logs in through OIDC.
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -33,4 +40,5 @@ runs:
       with:
         registry: dhi.io
         username: archestra
-        dockerhub-oidc-connection-id: ${{ inputs.dockerhub-oidc-connection-id }}
+        password: ${{ inputs.token }}
+        dockerhub-oidc-connection-id: ${{ inputs.token == '' && inputs.dockerhub-oidc-connection-id || '' }}

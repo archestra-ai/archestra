@@ -28,19 +28,18 @@ export function prepare(input, { dataDir = "/app/data" } = {}) {
   const env = { ...input };
   const messages = [];
   const fail = (...lines) => ({ error: lines.join("\n"), env, messages });
-  const version = env.ARCHESTRA_VERSION || "<version>";
 
   if (env.ARCHESTRA_QUICKSTART === "true") {
     return fail(
       "ERROR: This is the Kubernetes image (-slim), which has no quickstart.",
-      `Use archestra/platform:${version}.`,
+      "Use the docker run image: the same tag without -slim.",
     );
   }
   const databaseUrl = env.ARCHESTRA_DATABASE_URL || env.DATABASE_URL;
   if (!databaseUrl) {
     return fail(
       "ERROR: This is the Kubernetes image (-slim), which has no bundled PostgreSQL.",
-      `Set ARCHESTRA_DATABASE_URL to your PostgreSQL database, or use archestra/platform:${version}.`,
+      "Set ARCHESTRA_DATABASE_URL to your PostgreSQL database, or use the docker run image: the same tag without -slim.",
     );
   }
   // Every process gets the environment unchanged, so every legal URL

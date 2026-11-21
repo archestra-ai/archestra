@@ -9,9 +9,9 @@ const dataDir = () => mkdtempSync(path.join(tmpdir(), "entrypoint-"));
 const database = { ARCHESTRA_DATABASE_URL: "postgres://u:p%40ss@db:5432/archestra?sslmode=require" };
 
 test("refuses the quickstart and a missing database, naming the docker run image", () => {
-  const quickstart = prepare({ ...database, ARCHESTRA_QUICKSTART: "true", ARCHESTRA_VERSION: "1.5.0" }, { dataDir: dataDir() });
+  const quickstart = prepare({ ...database, ARCHESTRA_QUICKSTART: "true" }, { dataDir: dataDir() });
   assert.match(quickstart.error, /no quickstart/);
-  assert.match(quickstart.error, /archestra\/platform:1\.5\.0\./);
+  assert.match(quickstart.error, /the same tag without -slim/);
   assert.match(prepare({}, { dataDir: dataDir() }).error, /no bundled PostgreSQL/);
 });
 

@@ -81,6 +81,7 @@ tests:
     template: archestra-platform.yaml
     documentIndex: 1
     set:
+      archestra.runAsNonRoot: false
       archestra.podSecurityContext: null
       archestra.containerSecurityContext: null
     asserts:
@@ -89,9 +90,7 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
 
-  - it: runs the web, worker, and migration pods as the image's non-root user with runAsNonRoot
-    set:
-      archestra.runAsNonRoot: true
+  - it: runs the web, worker, and migration pods as the image's non-root user by default
     asserts:
       - equal:
           path: spec.template.spec.securityContext
@@ -121,8 +120,6 @@ tests:
 
   - it: runs the migration pod as the non-root user too
     template: migration-job.yaml
-    set:
-      archestra.runAsNonRoot: true
     asserts:
       - equal:
           path: spec.template.spec.securityContext.runAsUser
@@ -149,3 +146,25 @@ tests:
       - equal:
           path: spec.template.spec.securityContext.runAsNonRoot
           value: true
+
+  - it: runs the pods as root, without a fixed user, when runAsNonRoot is off
+    set:
+      archestra.runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            seccompProfile:
+              type: RuntimeDefault
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.capabilities
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true

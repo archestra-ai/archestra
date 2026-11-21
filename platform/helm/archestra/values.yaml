@@ -195,8 +195,10 @@ archestra:
   # podSecurityContext and drops all capabilities in containerSecurityContext;
   # a value set there wins. fsGroup lets these users write the file-storage
   # and diagnostics volumes, including files a root pod wrote before, on
-  # volume types that support ownership changes (NFS does not).
-  runAsNonRoot: false
+  # volume types that support ownership changes (NFS and hostPath do not:
+  # chown them to 10001 first). Set false to run the pods as root, or on
+  # OpenShift, whose restricted SCC assigns its own non-root UID instead.
+  runAsNonRoot: true
 
   # Pod-level securityContext for the web, worker, and migration pods.
   # RuntimeDefault applies the container runtime's default syscall filter,

@@ -1,8 +1,8 @@
 ---
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
-order: 2
-lastUpdated: 2026-11-20
+order: 1
+lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -91,7 +91,7 @@ At the top of **Limits**, the **Default user limit** card sets a baseline per-us
 
 ## How Usage Is Counted
 
-- **Spend (`$`):** counts metered API-key calls at the model's token prices, cache reads and writes included. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)). A charge [estimated for a missing price](/docs/llm-proxy/costs-and-limits#when-a-price-is-missing) counts too, and the limit shows **Includes estimates**.
+- **Spend (`$`):** counts metered API-key calls at the model's token prices, cache reads and writes included. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost)). A charge [estimated for a missing price](/docs/llm-proxy/cost-controls#when-a-price-is-missing) counts too, and the limit shows **Includes estimates**.
 - **Tokens:** counts newly processed input and output tokens reported by the provider after each call finishes (including cache writes and subscription traffic; reused cached input does not consume token limits). Because token counts arrive when a response completes, requests already in flight can push usage slightly past a token limit before subsequent requests are blocked.
 - **Requests:** counts one request when the proxy admits a model call, including subscription traffic.
 

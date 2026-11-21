@@ -184,7 +184,7 @@ Changing a credential's issuer, audience, subject, or conditions revokes the tok
 
 ## Troubleshooting
 
-A refused exchange answers `400` with an `error` code. The **Audit** events in [Logs and Auditing](/docs/admin/logs) show why: open the **Service account token exchanged** event for the account and read `reason`.
+A refused exchange answers `400` with an `error` code. The **Audit** events in [Logs](/docs/insights/logs) show why: open the **Service account token exchanged** event for the account and read `reason`.
 
 | Reason | Fix |
 | --- | --- |

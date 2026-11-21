@@ -1,7 +1,7 @@
 ---
-title: Logs and Auditing
+title: Logs
 description: Investigate model requests, tool calls, and admin changes
-order: 8
+order: 1
 lastUpdated: 2026-11-21
 ---
 
@@ -33,7 +33,7 @@ If a model response stream ends cleanly before its provider reports token counts
 
 A session's **Status** shows **Failed** when a request failed or a Chat turn ended in an error, even if every request row looks healthy. The session page lists those errors under **Failed turns**, as the user saw them, and marks the last request before each one **Turn failed**. **Export JSON** includes them.
 
-To see who has connected which agents and client apps, and how much each is used, open **Adoption** under **Insights**. Its **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. **Coverage** lists users with no calls too, and **Export CSV** saves the filtered list. The page follows the selected date range, except the **State** column on **Coverage**, which always reflects the last 30 days.
+To see who has connected agents and how much each is used, see [Adoption](/docs/insights/adoption).
 
 ## Keep Prompts Out of the Logs
 

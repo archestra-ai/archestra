@@ -1,8 +1,8 @@
 ---
 title: Export Costs
 description: Get LLM spend and usage into spreadsheets, scripts, and FinOps tools as one-off downloads, API queries, or scheduled FOCUS files in your own bucket
-order: 3
-lastUpdated: 2026-11-20
+order: 2
+lastUpdated: 2026-11-21
 ---
 
 Put Archestra's LLM spend next to the rest of your cloud bill. Finance gets the same numbers as the Costs page, split by team, agent, model, and person, without anyone copying them by hand.
@@ -15,7 +15,7 @@ There are three ways, from quickest to most automated:
 
 ## Download a View
 
-Open **Costs**, set up the [cost explorer](/docs/llm-proxy/costs-and-limits/costs#slice-usage-in-the-cost-explorer) view you want, then click **Export** above its table and pick **CSV**, **JSON**, or **Parquet**. The file holds the table as it is on screen, for the selected date range.
+Open **Costs**, set up the [cost explorer](/docs/insights/costs#slice-usage-in-the-cost-explorer) view you want, then click **Export** above its table and pick **CSV**, **JSON**, or **Parquet**. The file holds the table as it is on screen, for the selected date range.
 
 - A split **Summary** exports every metric: one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
 
@@ -68,7 +68,7 @@ Each row is one hour of usage for one combination of provider, model, billing mo
 
 | FOCUS column | Holds |
 | --- | --- |
-| `BilledCost`, `EffectiveCost` | Billed spend in USD. `0` for [subscription traffic](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost), which the provider does not bill per token. |
+| `BilledCost`, `EffectiveCost` | Billed spend in USD. `0` for [subscription traffic](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost), which the provider does not bill per token. |
 | `ListCost` | Archestra's list-price estimate for every request, including subscription traffic. |
 | `ProviderName`, `PublisherName`, `InvoiceIssuerName` | The model provider, such as Anthropic or OpenAI. |
 | `BillingAccountId`, `BillingAccountName` | Your Archestra organization. |

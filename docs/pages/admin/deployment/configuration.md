@@ -645,7 +645,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
-  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost).
 
 ## Chat
 

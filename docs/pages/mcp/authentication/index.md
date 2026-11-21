@@ -15,7 +15,7 @@ Every MCP server signs in its own way, and most clients cannot do it for a whole
 - One way in for each client. Coding agents authenticate through the browser. Scripts, apps, and your identity provider have their own methods. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
 - The right account for each call. The person's own, a shared bot account, or their company identity, exchanged at call time. See [MCP Server Credentials](/docs/mcp/authentication/servers).
 - Credentials stay in Archestra. It stores them, and refreshes OAuth tokens when the provider allows it. Clients never see them.
-- Every call is traceable. The [MCP Gateway logs](/docs/admin/logs) show which account each call used.
+- Every call is traceable. The [MCP Gateway logs](/docs/insights/logs) show which account each call used.
 
 ```mermaid
 graph LR

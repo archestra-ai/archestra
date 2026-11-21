@@ -1,8 +1,8 @@
 ---
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label
-order: 1
-lastUpdated: 2026-11-20
+order: 3
+lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ Open **Costs** under **Insights** in the sidebar to see where your organization'
 Pick a time range in the top-right corner (**Today**, **Last 7 days**, **Last 30 days**, **Last 90 days**, or **Custom**). Five summary cards at the top of the page update for that window:
 
 - **API spend:** metered charges from per-token API keys.
-- **Subscription usage estimate:** what calls through flat-rate subscriptions would have cost at list API rates (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)).
+- **Subscription usage estimate:** what calls through flat-rate subscriptions would have cost at list API rates (see [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost)).
 - **Requests:** total model calls in the selected period.
 - **Tokens:** newly processed input and output tokens (including cache writes; reused cached input is shown separately and does not add to the total).
 - **Active people:** distinct users who ran a model call in the period.
@@ -43,7 +43,7 @@ Below the headline cards, use the cost explorer to break down usage by any dimen
 2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
 3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Agent**, **Person**, **Credential**, **Provider**, and **Model** split by each other, so you can see who uses each agent, or which models each team used and what they cost. The **Tokens by agent and person** and **Spend by team and model** presets open two of these.
 
-Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export** to [download the current table](/docs/llm-proxy/costs-and-limits/exports#download-a-view), or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
+Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export** to [download the current table](/docs/llm-proxy/cost-controls/exports#download-a-view), or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/cost-controls/limits) filtered to the selected scope or row.
 
 ## Group Proxy Costs by Label
 
@@ -77,11 +77,11 @@ A team admin can check what their teams spend against their limits without seein
 
 What to know:
 
-- A request counts for a team the way its [team limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
+- A request counts for a team the way its [team limits](/docs/llm-proxy/cost-controls/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
 - Totals count each request once, even when it counts for both a team and its parent. A parent's row includes its child teams' usage, so rows can add up to more than the total.
 - Agent sharing, team membership, and which team is a child of which are read as they are now. Changing any of them, including moving a team under another parent, changes past figures here. A limit keeps the usage it already counted.
 
 ## What to Know
 
-- **Export the numbers:** download a view, pull it from the API, or schedule files into your own bucket. See [Export Costs](/docs/llm-proxy/costs-and-limits/exports).
+- **Export the numbers:** download a view, pull it from the API, or schedule files into your own bucket. See [Export Costs](/docs/llm-proxy/cost-controls/exports).
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

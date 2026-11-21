@@ -1,13 +1,13 @@
 ---
-title: Costs & Limits
-description: See what every model call costs and cap spend, tokens, or requests before bills climb
-order: 3
-lastUpdated: 2026-11-20
+title: Cost Controls
+description: How Archestra prices every model call, and how to cap spend or export costs
+order: 7
+lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Every model call through Archestra—from [Chat](/docs/chat), [Agents](/docs/agents), or an external tool using the [LLM Proxy](/docs/llm-proxy)—is metered as it finishes. Break down spend and token usage across your organization in [Costs](/docs/llm-proxy/costs-and-limits/costs), cap spend, tokens, or requests in [Limits](/docs/llm-proxy/costs-and-limits/limits) before a runaway loop or shared key drives up your bill, and send the numbers to your FinOps tools with [Export Costs](/docs/llm-proxy/costs-and-limits/exports).
+Every model call through Archestra—from [Chat](/docs/chat), [Agents](/docs/agents), or an external tool using the [LLM Proxy](/docs/llm-proxy)—is metered as it finishes. Break down spend and token usage across your organization in [Costs](/docs/insights/costs), cap spend, tokens, or requests in [Limits](/docs/llm-proxy/cost-controls/limits) before a runaway loop or shared key drives up your bill, and send the numbers to your FinOps tools with [Export Costs](/docs/llm-proxy/cost-controls/exports).
 
 ![Costs showing API spend, subscription usage estimate, requests, tokens, and the cost explorer](/docs/automated_screenshots/llm-proxy_costs.webp)
 
@@ -17,14 +17,14 @@ Every model call through Archestra—from [Chat](/docs/chat), [Agents](/docs/age
 
 <span id="subscription-vs-metered-cost"></span>
 
-Archestra separates per-token API charges from flat-rate subscription traffic so subscription usage never inflates your reported bill or triggers a dollar spend cap. Both [Costs](/docs/llm-proxy/costs-and-limits/costs) and [Limits](/docs/llm-proxy/costs-and-limits/limits) use this distinction:
+Archestra separates per-token API charges from flat-rate subscription traffic so subscription usage never inflates your reported bill or triggers a dollar spend cap. Both [Costs](/docs/insights/costs) and [Limits](/docs/llm-proxy/cost-controls/limits) use this distinction:
 
 | Credential | Counted as | Why |
 | --- | --- | --- |
-| Claude subscription (`sk-ant-oat01-...` or OAuth), ChatGPT Plus/Pro (Codex OAuth), GitHub Copilot, Microsoft 365 Copilot, Zhipu AI Coding Plan | **Subscription (`$0` billed)** | Covered by a flat monthly seat. Archestra records `$0` toward **API spend** and [spend limits](/docs/llm-proxy/costs-and-limits/limits), and tracks what those tokens would have cost at list API rates under **Subscription usage estimate**. |
-| Provider API keys (`sk-ant-api03-...`, `sk-...`, Gemini, Bedrock, Vertex AI, Azure, Mistral, Cohere, DeepSeek, Groq, Fireworks, Together, xAI, Cerebras, OpenRouter, vLLM, Ollama) | **Metered (billed at token prices)** | Billed per token. Counts toward **API spend** and [spend limits](/docs/llm-proxy/costs-and-limits/limits). |
+| Claude subscription (`sk-ant-oat01-...` or OAuth), ChatGPT Plus/Pro (Codex OAuth), GitHub Copilot, Microsoft 365 Copilot, Zhipu AI Coding Plan | **Subscription (`$0` billed)** | Covered by a flat monthly seat. Archestra records `$0` toward **API spend** and [spend limits](/docs/llm-proxy/cost-controls/limits), and tracks what those tokens would have cost at list API rates under **Subscription usage estimate**. |
+| Provider API keys (`sk-ant-api03-...`, `sk-...`, Gemini, Bedrock, Vertex AI, Azure, Mistral, Cohere, DeepSeek, Groq, Fireworks, Together, xAI, Cerebras, OpenRouter, vLLM, Ollama) | **Metered (billed at token prices)** | Billed per token. Counts toward **API spend** and [spend limits](/docs/llm-proxy/cost-controls/limits). |
 
-Both metered and subscription traffic count toward [token and request limits](/docs/llm-proxy/costs-and-limits/limits).
+Both metered and subscription traffic count toward [token and request limits](/docs/llm-proxy/cost-controls/limits).
 
 - **Override on a credential:** when adding or editing a key in **Credentials → LLM Provider API Keys**, set **Cost tracking** to **Metered (per-token billing)** or **Subscription (included in plan)**. Leave it on **Automatic (detect from key)** to use the table above.
 - **Paid overage on a subscription:** if an Anthropic subscription exhausts its plan window and spills into paid Extra Usage (`anthropic-ratelimit-unified-overage-status: active`), Archestra counts that call as metered spend.
@@ -42,18 +42,18 @@ Archestra syncs per-million-token prices (input, output, cache read, and cache w
 
 ### When a Price Is Missing
 
-A request runs even when its model lacks a price for some of the tokens it uses. Archestra estimates the missing rate and charges the request in full. The spend then shows **Includes estimates** in [Limits](/docs/llm-proxy/costs-and-limits/limits) and on the virtual key's spend cap.
+A request runs even when its model lacks a price for some of the tokens it uses. Archestra estimates the missing rate and charges the request in full. The spend then shows **Includes estimates** in [Limits](/docs/llm-proxy/cost-controls/limits) and on the virtual key's spend cap.
 
 - **Cache tokens:** Archestra charges a cache read at half the model's input price, and a cache write at the full input price. Anthropic, Amazon Bedrock, OpenAI, Gemini, and DeepSeek models get their provider's standard cache rates instead.
 - **Input or output:** when a provider key lists prices for a model but leaves out its input or output rate, Archestra uses the model's own price.
 - **To correct an estimate:** set the missing price on the model, then [recompute its past costs](#recompute-past-costs-after-a-price-change).
-- **Limits flagged by an earlier release:** a limit that an earlier release blocked for an unpriced request now blocks only on its spend. It keeps **Includes estimates** until you [reset it](/docs/llm-proxy/costs-and-limits/limits#reset-a-spend-limit) or its window ends. Those requests did not record which limits they were charged to, so recompute cannot clear it.
+- **Limits flagged by an earlier release:** a limit that an earlier release blocked for an unpriced request now blocks only on its spend. It keeps **Includes estimates** until you [reset it](/docs/llm-proxy/cost-controls/limits#reset-a-spend-limit) or its window ends. Those requests did not record which limits they were charged to, so recompute cannot clear it.
 
 Audio calls, and Azure image calls and file uploads, have no price. Archestra does not estimate them: they record no cost and do not count toward spend. Instead, a hard spend limit that covers them refuses the request. A forwarded provider call, such as creating a batch, has no model to match, so any hard spend limit refuses it.
 
 ## Recompute Past Costs After a Price Change
 
-A new price applies to new requests at once. To correct requests already recorded at a wrong or `$0` price, recompute them when you save the price, and [Costs](/docs/llm-proxy/costs-and-limits/costs) and [Limits](/docs/llm-proxy/costs-and-limits/limits) show what they should have cost.
+A new price applies to new requests at once. To correct requests already recorded at a wrong or `$0` price, recompute them when you save the price, and [Costs](/docs/insights/costs) and [Limits](/docs/llm-proxy/cost-controls/limits) show what they should have cost.
 
 1. Go to **Models**, edit the model, and open **Pricing**.
 2. Set the new prices.

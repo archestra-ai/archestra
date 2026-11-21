@@ -45,6 +45,6 @@ Open **Logs** in the Archestra sidebar. It lists every event on one timeline; cl
 - **LLM Proxy** shows model requests, with their session and spend.
 - **MCP Gateway** shows each tool call, with its caller and result.
 
-Click a row to see the full request. Your requests from Chat and from your client are both there. See [Logs and Auditing](/docs/admin/logs) for the other types.
+Click a row to see the full request. Your requests from Chat and from your client are both there. See [Logs](/docs/insights/logs) for the other types.
 
 **Next:** [build an agent](/docs/agents), [add MCP servers](/docs/mcp/servers) to give your agents more tools, or [migrate your agents](/docs/get-started/migrate).

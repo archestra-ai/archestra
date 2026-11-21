@@ -738,9 +738,7 @@ jobs:
           image-pull-timeout-seconds: "60"
           # Production retains its 120s safety floor. ENABLE_E2E_TEST_ENDPOINTS
           # gates this isolated cluster's accelerated 8s timing profile.
-          # These pods run as the image's non-root user, so a nightly run
-          # covers archestra.runAsNonRoot; the K8s job keeps the root default.
-          extra-helm-set: archestra.orchestrator.mcpIdleHibernationSeconds=8,archestra.runAsNonRoot=true
+          extra-helm-set: archestra.orchestrator.mcpIdleHibernationSeconds=8
 
       - name: Run hibernation E2E tests
         id: e2e

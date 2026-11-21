@@ -171,7 +171,7 @@ INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sq
   );
 }
 
-/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. Dated from now, since the Logs page reads the last three days. */
 /**
  * The persona's device, linked and online. A device is online while its MCP
  * bridge polls; no bridge runs here, so the last poll is set far ahead and the
@@ -186,17 +186,18 @@ ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, platform = EXCLUDED.pl
 /**
  * Redeemed Connect-page setups: what Adoption counts as connected and what
  * the Client connections log lists. Coding clients reach the model through the
- * organization's LLM Proxy, so each setup points at it. A rerun resets them.
+ * organization's LLM Proxy, so each setup points at it. Dated from now, since
+ * the Logs page reads the last three days. A rerun resets them.
  */
 function seedConnections(state: SeedState): void {
   const organizationId = sql(state.organization.id);
   runSql(
     CONNECTIONS.map((connection) => {
       const disconnected =
-        "disconnectedDaysAgo" in connection
-          ? `${FIXTURE_TIME_SQL} - make_interval(days => ${connection.disconnectedDaysAgo})`
+        "disconnectedHoursAgo" in connection
+          ? `now() - make_interval(hours => ${connection.disconnectedHoursAgo})`
           : "NULL";
-      const redeemedAt = `${FIXTURE_TIME_SQL} - make_interval(days => ${connection.daysAgo})`;
+      const redeemedAt = `now() - make_interval(hours => ${connection.hoursAgo})`;
       return `INSERT INTO connection_setups (id, organization_id, user_id, client_id, platform, base_url, llm_proxy_id, proxy_auth, token_hash, token_start, expires_at, consumed_at, revoked_at, revoked_by_user_id, device_name, created_at)
 VALUES (${sql(connection.id)}, ${organizationId}, ${sql(state.users[connection.user])}, ${sql(connection.client)}, ${sql(connection.platform)}, 'http://localhost:9000/v1',
   (SELECT id FROM agents WHERE agent_type = 'llm_proxy' AND organization_id = ${organizationId} LIMIT 1), 'provider-key',
@@ -212,8 +213,8 @@ function seedYells(state: SeedState): void {
   runSql(
     YELLS.map(
       (yell) => `INSERT INTO openappa_yells (id, organization_id, caller_id, session_id, tool_call_id, message, with_trajectory, superyell, created_at)
-VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, ${FIXTURE_TIME_SQL} - make_interval(mins => ${yell.minutesAgo}))
-ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message;`,
+VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, now() - make_interval(mins => ${yell.minutesAgo}))
+ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message, created_at = EXCLUDED.created_at;`,
     ).join("\n"),
   );
 }

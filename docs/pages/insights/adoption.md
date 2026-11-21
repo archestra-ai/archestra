@@ -15,6 +15,8 @@ Open **Insights → Adoption**. Pick a date range at the top; every view follows
 
 **Usage** charts MCP Gateway and LLM Proxy calls from connected clients each day.
 
+![Adoption Usage view with users, active users, and calls, and calls grouped by user](/docs/automated_screenshots/insights-adoption_usage.webp)
+
 - **Show** picks MCP, LLM, or both. **by** groups the calls by user, agent, or gateway.
 - Select a bar or a row to drill into that group, and click **Back** to step out.
 
@@ -35,6 +37,8 @@ A member counts as active when their clients made calls in the range. Setting up
 ## Connection Events
 
 Every connection change is a row in [Logs](/docs/insights/logs) under the **Client connections** type:
+
+![Logs filtered to Client connections, listing connect and disconnect events by member](/docs/automated_screenshots/insights-logs_client-connections.webp)
 
 - **Connected:** a member ran a setup from the Connect page. The row shows the client, the machine and operating system, and the MCP Gateway and LLM Proxy it was set up for.
 - **Disconnected:** a member or an admin disconnected the client, and who did it.

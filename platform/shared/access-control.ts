@@ -2076,6 +2076,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // (author / project access), enforced per-file in the store handler.
   [RouteId.UpdateSkillSandboxArtifactContent]: { agent: ["read"] },
 
+  // One timeline over every log type: the handler reads each type under its
+  // own permission and refuses a caller who can read none.
+  [RouteId.GetLogEvents]: {},
+
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
     auditLog: ["read"],

@@ -431,7 +431,8 @@ function buildQuery({
     const decision = get("decision") as "allow" | "deny" | "review" | undefined;
     if (record === "yell") query.decision = ["yell"];
     else if (decision) query.decision = [decision];
-    else if (record === "consult") query.decision = ["allow", "deny", "review"];
+    else if (record === "consult")
+      query.decision = ["consult", "allow", "deny", "review"];
   } else if (type === "connections") {
     query.actor = get("actor");
     query.connectionAction = get("connectionAction");

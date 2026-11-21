@@ -252,9 +252,12 @@ function What({ event }: { event: LogEvent }) {
       <>
         <span className="truncate font-medium">{c.client}</span>
         <span className="shrink-0 text-muted-foreground">
-          {CONNECTION_VERB[c.action]}
+          {/* A disconnect names no gateway: "Codex disconnected". */}
+          {c.gateway
+            ? CONNECTION_VERB[c.action]
+            : CONNECTION_VERB[c.action].replace(/ \S+$/, "")}
         </span>
-        <span className="truncate font-medium">{c.gateway}</span>
+        {c.gateway && <span className="truncate font-medium">{c.gateway}</span>}
       </>
     );
   }
@@ -557,6 +560,10 @@ const DECISION = {
   review: {
     label: "Approval",
     className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  },
+  consult: {
+    label: "Consult",
+    className: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
   yell: {
     label: "Yell",

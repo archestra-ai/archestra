@@ -552,15 +552,16 @@ export const USAGE = [
  * Coding clients members set up through the Connect page, for Adoption and the
  * Client connections type in Logs. Sofia and Daniel set up nothing, so
  * Coverage shows who has not connected; Marcus's Cursor makes no calls, so he
- * is connected but inactive. `disconnectedDaysAgo` adds a disconnect event.
+ * is connected but inactive. Times count back from the capture, inside the
+ * three days the Logs page reads; `disconnectedHoursAgo` adds a disconnect.
  */
 export const CONNECTIONS = [
-  { id: "c0ec7100-0000-4000-8000-000000000001", user: "persona", client: "claude-code", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 21 },
-  { id: "c0ec7100-0000-4000-8000-000000000002", user: "persona", client: "codex", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 12 },
-  { id: "c0ec7100-0000-4000-8000-000000000003", user: "persona", client: "cursor", platform: "macos", device: "Jordans-MacBook-Pro", daysAgo: 9 },
-  { id: "c0ec7100-0000-4000-8000-000000000004", user: "priya", client: "claude-code", platform: "macos", device: "priya-mbp", daysAgo: 18 },
-  { id: "c0ec7100-0000-4000-8000-000000000005", user: "marcus", client: "cursor", platform: "linux", device: "marcus-workstation", daysAgo: 6 },
-  { id: "c0ec7100-0000-4000-8000-000000000006", user: "marcus", client: "codex", platform: "linux", device: "marcus-workstation", daysAgo: 25, disconnectedDaysAgo: 4 },
+  { id: "c0ec7100-0000-4000-8000-000000000001", user: "persona", client: "claude-code", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 52 },
+  { id: "c0ec7100-0000-4000-8000-000000000002", user: "persona", client: "codex", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 31 },
+  { id: "c0ec7100-0000-4000-8000-000000000003", user: "persona", client: "cursor", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 19 },
+  { id: "c0ec7100-0000-4000-8000-000000000004", user: "priya", client: "claude-code", platform: "macos", device: "priya-mbp", hoursAgo: 44 },
+  { id: "c0ec7100-0000-4000-8000-000000000005", user: "marcus", client: "cursor", platform: "linux", device: "marcus-workstation", hoursAgo: 7 },
+  { id: "c0ec7100-0000-4000-8000-000000000006", user: "marcus", client: "codex", platform: "linux", device: "marcus-workstation", hoursAgo: 66, disconnectedHoursAgo: 3 },
 ] as const;
 
 /** Which team runs each agent, and where it runs, so team and environment budgets have usage. */

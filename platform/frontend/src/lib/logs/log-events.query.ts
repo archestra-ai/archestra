@@ -1,14 +1,11 @@
 // One normalized event shape for every log type the Logs page shows (LLM
 // Proxy, MCP Gateway, Guardrails, Client connections, Audit), read from
-// `GET /api/logs/events`.
-//
-// TODO: the backend endpoint does not exist yet. In mock mode MSW serves it
-// from `src/mocks/log-events.ts`; the backend feed must match that contract
-// (filters, per-filter facets that exclude their own filter, cursor paging,
-// 48 histogram buckets). Each type follows its own permission, `read` for
-// the caller's records and `admin` for everyone's: `log` (LLM Proxy, MCP
-// Gateway), `guardrailsLog`, `clientConnection`, `auditLog`.
+// `GET /api/logs/events` (in mock mode, `src/mocks/log-events.ts`). Each type
+// follows its own permission, `read` for the caller's records and `admin` for
+// everyone's: `log` (LLM Proxy, MCP Gateway), `guardrailsLog`,
+// `clientConnection`, `auditLog`.
 
+import type { SupportedProvider } from "@archestra/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 export type LogSource = "llm" | "mcp" | "guardrails" | "connections" | "audit";
@@ -98,7 +95,7 @@ export interface LogEvent {
   href: string;
 
   llm?: {
-    provider: "anthropic" | "openai" | "gemini" | "bedrock";
+    provider: SupportedProvider;
     model: string;
     inputTokens: number;
     outputTokens: number;
@@ -124,7 +121,8 @@ export interface LogEvent {
     errorMessage?: string;
   };
   guardrail?: {
-    decision: "allow" | "deny" | "review" | "yell";
+    /** A consult of an external service, a yell, or (mock data) a decision. */
+    decision: GuardrailDecision;
     policy: string;
     rule: string;
     tool: string;
@@ -154,6 +152,13 @@ export interface LogEvent {
   };
 }
 
+export type GuardrailDecision =
+  | "allow"
+  | "deny"
+  | "review"
+  | "consult"
+  | "yell";
+
 export interface LogFacetCount {
   value: string;
   count: number;
@@ -170,6 +175,8 @@ export interface LogEventsResponse {
   data: LogEvent[];
   nextCursor: string | null;
   total: number;
+  /** A type had more events in the window than one request reads. */
+  truncated?: boolean;
   facets: {
     source: LogFacetCount[];
     status: LogFacetCount[];
@@ -210,8 +217,7 @@ export interface LogEventsQuery {
   client?: string;
   model?: string;
   mcpServer?: string;
-  /** Guardrails decision(s): allow | deny | review | yell. */
-  decision?: ("allow" | "deny" | "review" | "yell")[];
+  decision?: GuardrailDecision[];
   connectionAction?: string;
   auditAction?: string;
   auditCategory?: string;

@@ -433984,6 +433984,1164 @@
         }
       }
     },
+    "/api/logs/events": {
+      "get": {
+        "operationId": "getLogEvents",
+        "tags": [
+          "Logs"
+        ],
+        "description": "Every log type in one timeline, newest first: LLM Proxy requests, MCP Gateway tool calls, Guardrails consults and yells, client connection events, and audit events. Each type is filtered by its own permission and left out when the caller cannot read it. Returns a page of events with facets and 48 time buckets over the window.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read), [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read), [`clientConnection:read`](/docs/reference/permissions#clientConnection:read), or [`auditLog:read`](/docs/reference/permissions#auditLog:read). Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "description": "Comma-separated record types"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "statuses",
+            "required": false,
+            "description": "Comma-separated statuses"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "description": "Comma-separated Guardrails decisions"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "Free text over every shown field"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "agent",
+            "required": false,
+            "description": "An agent's name"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "description": "An actor's name"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "client",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "model",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "mcpServer",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "connectionAction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "auditAction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "auditCategory",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "resourceType",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "resourceName",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "actorKind",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 24,
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 2160
+            },
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "description": "The window, back from now, in hours"
+          },
+          {
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "description": "The previous page's nextCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "llm",
+                              "mcp",
+                              "guardrails",
+                              "connections",
+                              "audit"
+                            ]
+                          },
+                          "timestamp": {
+                            "type": "string",
+                            "description": "ISO 8601"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "error",
+                              "blocked",
+                              "pending",
+                              "warning"
+                            ]
+                          },
+                          "title": {
+                            "type": "string",
+                            "description": "The model, the tool, the external, the action"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "actor": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "agent",
+                                  "service_account",
+                                  "system"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "agent": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "agent",
+                                  "mcp_gateway",
+                                  "llm_proxy"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "client": {
+                            "description": "The client app the call came from",
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "sessionTitle": {
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "type": "number"
+                          },
+                          "href": {
+                            "type": "string",
+                            "description": "The record's own detail page"
+                          },
+                          "llm": {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string",
+                                "enum": [
+                                  "openai",
+                                  "gemini",
+                                  "anthropic",
+                                  "bedrock",
+                                  "cohere",
+                                  "cerebras",
+                                  "mistral",
+                                  "perplexity",
+                                  "groq",
+                                  "xai",
+                                  "openrouter",
+                                  "vllm",
+                                  "ollama",
+                                  "ollama-native",
+                                  "zhipuai",
+                                  "deepseek",
+                                  "minimax",
+                                  "kimi",
+                                  "kimi-code",
+                                  "azure",
+                                  "github-copilot",
+                                  "microsoft-365-copilot",
+                                  "archestra",
+                                  "voyage",
+                                  "jev"
+                                ]
+                              },
+                              "model": {
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "type": "number"
+                              },
+                              "outputTokens": {
+                                "type": "number"
+                              },
+                              "cacheReadTokens": {
+                                "type": "number"
+                              },
+                              "cost": {
+                                "type": "number",
+                                "description": "USD at list price"
+                              },
+                              "billingMode": {
+                                "type": "string",
+                                "enum": [
+                                  "metered",
+                                  "subscription"
+                                ]
+                              },
+                              "stream": {
+                                "type": "boolean"
+                              },
+                              "toolCallsRequested": {
+                                "type": "number"
+                              },
+                              "errorCode": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "model",
+                              "inputTokens",
+                              "outputTokens",
+                              "cacheReadTokens",
+                              "cost",
+                              "billingMode",
+                              "stream",
+                              "toolCallsRequested"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "mcp": {
+                            "type": "object",
+                            "properties": {
+                              "server": {
+                                "type": "string"
+                              },
+                              "tool": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "type": "string"
+                              },
+                              "authMethod": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              "resultPreview": {
+                                "type": "string"
+                              },
+                              "errorMessage": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "server",
+                              "method",
+                              "authMethod"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "guardrail": {
+                            "type": "object",
+                            "properties": {
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "allow",
+                                  "deny",
+                                  "review",
+                                  "consult",
+                                  "yell"
+                                ]
+                              },
+                              "policy": {
+                                "type": "string"
+                              },
+                              "rule": {
+                                "type": "string"
+                              },
+                              "tool": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "reviewer": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "decision",
+                              "policy",
+                              "rule",
+                              "tool",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "connection": {
+                            "type": "object",
+                            "properties": {
+                              "action": {
+                                "type": "string",
+                                "enum": [
+                                  "connected",
+                                  "first_seen",
+                                  "authorized",
+                                  "token_refreshed",
+                                  "disconnected"
+                                ]
+                              },
+                              "client": {
+                                "type": "string"
+                              },
+                              "gateway": {
+                                "type": "string"
+                              },
+                              "clientVersion": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "action",
+                              "client",
+                              "gateway"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "audit": {
+                            "type": "object",
+                            "properties": {
+                              "action": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string"
+                              },
+                              "resourceType": {
+                                "type": "string"
+                              },
+                              "resourceName": {
+                                "type": "string"
+                              },
+                              "httpMethod": {
+                                "type": "string"
+                              },
+                              "statusCode": {
+                                "type": "number"
+                              },
+                              "ip": {
+                                "type": "string"
+                              },
+                              "diff": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "field": {
+                                      "type": "string"
+                                    },
+                                    "before": {
+                                      "nullable": true,
+                                      "type": "string"
+                                    },
+                                    "after": {
+                                      "nullable": true,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "field",
+                                    "before",
+                                    "after"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "action",
+                              "category",
+                              "resourceType",
+                              "resourceName",
+                              "httpMethod",
+                              "statusCode",
+                              "ip"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "timestamp",
+                          "status",
+                          "title",
+                          "actor",
+                          "href"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number",
+                      "description": "Matching events in the window that was read"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "facets": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "status": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "agent": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "actor": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "client": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "model": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "mcpServer": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "decision": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "connectionAction": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "auditAction": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "auditCategory": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "resourceType": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "resourceName": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "\"resourceType::resourceName\" pairs"
+                        },
+                        "auditCategoryAction": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "\"auditCategory::auditAction\" pairs"
+                        },
+                        "actorByKind": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "\"actorKind::actorName\" pairs"
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "status",
+                        "agent",
+                        "actor",
+                        "client",
+                        "model",
+                        "mcpServer",
+                        "decision",
+                        "connectionAction",
+                        "auditAction",
+                        "auditCategory",
+                        "resourceType",
+                        "resourceName",
+                        "auditCategoryAction",
+                        "actorByKind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          },
+                          "bySource": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "required": [
+                              "llm",
+                              "mcp",
+                              "guardrails",
+                              "connections",
+                              "audit"
+                            ]
+                          },
+                          "errors": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "bySource",
+                          "errors"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "48 equal buckets over the window"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor",
+                    "total",
+                    "truncated",
+                    "facets",
+                    "buckets"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Requires `log:read`, `guardrailsLog:read`, `clientConnection:read`, or `auditLog:read`. Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+          "permissions": []
+        }
+      }
+    },
     "/api/mcp/app/{appId}": {
       "post": {
         "operationId": "mcpAppProxyPost",

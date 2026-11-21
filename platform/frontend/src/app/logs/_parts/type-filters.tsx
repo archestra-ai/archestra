@@ -334,7 +334,7 @@ function GuardrailFilters({
             value: "consult",
             label: "Consults",
             description: "Checks Guardrails ran before a tool call",
-            count: dc("allow") + dc("deny") + dc("review"),
+            count: dc("consult") + dc("allow") + dc("deny") + dc("review"),
             mark: <ActionIcon icon={ShieldCheck} tone="text-amber-500" />,
           },
           {
@@ -352,7 +352,7 @@ function GuardrailFilters({
           })
         }
       />
-      {record !== "yell" && (
+      {record !== "yell" && dc("allow") + dc("deny") + dc("review") > 0 && (
         <FilterChip
           name="Decision"
           idleLabel="All decisions"

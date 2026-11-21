@@ -15,6 +15,7 @@
 // agents, or the manual steps themselves.
 
 import { DocsPage, resolveMcpClientServerName } from "@archestra/shared";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   BookOpen,

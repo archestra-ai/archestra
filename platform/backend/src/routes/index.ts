@@ -12,6 +12,7 @@ export { default as appRoutes } from "./app/app.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as archestraCliRoutes } from "./archestra-cli/archestra-cli.routes";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
+export { default as logEventsRoutes } from "./log-events/log-events.routes";
 export { default as authRoutes } from "./auth";
 export { default as autoRoutingRoutes } from "./auto-routing/auto-routing.routes";
 export { default as blobProviderRoutes } from "./blob-provider/blob-provider.routes";

@@ -307,6 +307,12 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Log in to Docker Hardened Images
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ${{ inputs.dockerfile || format('{0}/Dockerfile', inputs.image_directory) }}
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Build Docker image
         if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
         id: build

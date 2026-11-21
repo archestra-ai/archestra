@@ -182,7 +182,7 @@ class StageShapeTests(unittest.TestCase):
         self.assertTrue(any('sha256sum -c "$sums"' in line for line in lines[download:download + 12]))
 
     def test_runtime_image_takes_the_stage_output(self):
-        runtime = DOCKERFILE.split("\nFROM base AS runtime\n", 1)[1].split("\nFROM ", 1)[0]
+        runtime = DOCKERFILE.split("\nFROM runtime-base-${RUNTIME_BASE} AS runtime\n", 1)[1].split("\nFROM ", 1)[0]
         # Relative to /app; both published images are built from this stage.
         self.assertTrue(runtime.startswith("WORKDIR /app\n"))
         self.assertTrue("\nCOPY --from=archestra-cli-release /out/ ./archestra-cli/\n" in runtime)

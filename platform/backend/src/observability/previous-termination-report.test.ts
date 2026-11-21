@@ -127,7 +127,7 @@ describe("reportAbnormalPreviousTermination", () => {
   });
 
   test("does not re-report a termination already recorded in the marker file", async () => {
-    // supervisord restarts the backend process without restarting the
+    // the image's supervisor restarts the backend process without restarting the
     // container, so the same lastState is read again on the next boot.
     primeFs(["archestra-platform:containerd://abc"]);
     readNamespacedPod.mockResolvedValue(

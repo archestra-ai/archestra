@@ -1,0 +1,36 @@
+name: Log in to Docker Hardened Images
+description: >-
+  Log in to dhi.io, Docker's hardened image registry, through the Docker Hub
+  OIDC connection, when the Dockerfile builds from one of its images (any
+  non-comment line naming dhi.io/). dhi.io refuses anonymous pulls. Does
+  nothing for other Dockerfiles, so it can run before any build. The job needs
+  `id-token: write`.
+inputs:
+  dockerfile:
+    description: Path to the Dockerfile about to be built.
+    required: true
+  dockerhub-oidc-connection-id:
+    description: The Docker Hub OIDC connection ID (vars.DOCKERHUB_OIDC_CONNECTION_ID).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check whether the Dockerfile uses a hardened image
+      id: check
+      shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+      run: |
+        set -euo pipefail
+        if grep -Eq '^[^#]*dhi\.io/' "$DOCKERFILE"; then
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "needed=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Log in to dhi.io
+      if: ${{ steps.check.outputs.needed == 'true' }}
+      uses: $/.github/actions/docker-login
+      with:
+        registry: dhi.io
+        username: archestra
+        dockerhub-oidc-connection-id: ${{ inputs.dockerhub-oidc-connection-id }}

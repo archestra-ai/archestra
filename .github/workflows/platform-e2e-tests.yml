@@ -143,6 +143,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       packages: write # Trusted CI publishes images and caches to GHCR.
+      id-token: write # Docker Hub OIDC login to pull the Platform's hardened base image.
     strategy:
       fail-fast: false
       matrix:
@@ -180,12 +181,24 @@ jobs:
       # not need a host-side `pnpm install` / node toolchain. (The MCP Server Base leg
       # sets use-build-action: false and never ran this step.)
 
+      # Untrusted PRs have no OIDC token, so they build from the public node
+      # image instead (RUNTIME_BASE in the Dockerfile).
+      - name: Log in to Docker Hardened Images
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ${{ matrix.context }}/Dockerfile
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Build Platform image
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR == 'true' }}
         uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           load: "true"
+          # No registry credentials: the public node image of the same release
+          # replaces the hardened base (dhi.io refuses anonymous pulls).
+          build-args: RUNTIME_BASE=public
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release

@@ -72,6 +72,11 @@ jobs:
       - name: Read release version
         id: version
         run: echo "version=$(jq -er .platform .github/release-please/.release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ${{ matrix.dockerfile || format('{0}/Dockerfile', matrix.context) }}
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Build image
         uses: $/.github/actions/build-docker-image
         with:

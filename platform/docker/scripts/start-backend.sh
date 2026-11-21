@@ -1,7 +1,7 @@
 #!/bin/sh
-# supervisord's backend program (docker/supervisord/supervisord.conf).
+# The backend program of supervisor.mjs.
 #
-# Runs as soon as supervisord starts, alongside the bundled PostgreSQL and the
+# Runs as soon as the supervisor starts, alongside the bundled PostgreSQL and the
 # frontend, instead of after fixed sleeps:
 # - waits for the bundled PostgreSQL to accept connections (an external
 #   database is not waited for: the migrations report its errors)
@@ -16,8 +16,8 @@ cd /app/backend
 # Maintenance mode must be able to boot when the external database is down for
 # planned work, so it skips the database wait and the migrations.
 if [ -z "${ARCHESTRA_MAINTENANCE_MODE_MESSAGE:-}" ]; then
-    # The entrypoint adds the postgres program only for the bundled database.
-    if grep -q '^\[program:postgres\]' /etc/supervisord.conf; then
+    # The supervisor sets this only when it runs the bundled database.
+    if [ "${ARCHESTRA_DATABASE_BUNDLED:-}" = "true" ]; then
         waited=0
         until pg_isready -q -h 127.0.0.1 -p 5432; do
             if [ "$waited" -ge 600 ]; then

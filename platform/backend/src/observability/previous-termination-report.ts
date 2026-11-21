@@ -21,7 +21,7 @@ import logger from "@/logging";
  *   in-cluster client — never from the orchestrator's MCP-workload
  *   configuration, which may point at a different namespace or an external
  *   cluster.
- * - Each termination is reported once. supervisord restarts the backend
+ * - Each termination is reported once. The image's supervisor restarts the backend
  *   *process* without restarting the *container*, so the same lastState is
  *   re-read on every such restart; a marker file in container-local tmp
  *   (preserved across process restarts, wiped by a real container restart)
@@ -130,7 +130,7 @@ const SERVICE_ACCOUNT_NAMESPACE_PATH =
 
 /**
  * Container-local record of terminations already reported by this container
- * instance — preserved across supervisord-level process restarts, wiped by a
+ * instance — preserved across supervisor-level process restarts, wiped by a
  * real container restart.
  */
 const REPORTED_MARKER_PATH = path.join(

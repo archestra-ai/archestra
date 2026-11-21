@@ -115,7 +115,9 @@ What to know:
 
 ## How Fast Vulnerabilities Get Fixed
 
-Archestra fixes a critical vulnerability in its release images within 7 days of a fix being available upstream, and a high one within 30 days. Those are ceilings: the team is usually much faster 😉 Medium and low vulnerabilities are fixed in regular releases.
+Archestra fixes a critical vulnerability in its release images within 14 days of a fix being published upstream, and a high one within 30 days. Those are ceilings: the team is usually much faster 😉 Medium and low vulnerabilities are fixed in regular releases.
+
+New releases of dependencies and base images wait 7 days before Archestra adopts them. Malicious releases are usually caught and pulled within hours, so the wait keeps a compromised package out of the images, and it fits inside the 14-day ceiling.
 
 What to know:
 

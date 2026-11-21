@@ -20,15 +20,13 @@ index_json=$(<"$index_file")
 rm -f "$index_file"
 case "$registry_host" in
   ghcr.io)
-    # Public pulls still use an anonymous registry bearer token. Never forward
-    # a Google credential to another registry.
+    # Public pulls use an anonymous registry bearer token.
     # supply-chain-policy: allow-unverified-download anonymous auth API response; no downloaded code is executed
     access_token=$(curl --fail --silent --show-error --get \
       --data-urlencode "service=ghcr.io" \
       --data-urlencode "scope=repository:${registry_path}:pull" \
       https://ghcr.io/token | jq -er '.token')
     ;;
-  *-docker.pkg.dev) access_token=$(gcloud auth print-access-token 2>/dev/null || true) ;;
   *) echo "Unsupported attestation registry: $registry_host" >&2; exit 1 ;;
 esac
 

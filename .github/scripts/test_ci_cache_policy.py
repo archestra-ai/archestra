@@ -37,7 +37,7 @@ class CachePolicyTests(unittest.TestCase):
         env_block, run_block = step.split("        run: |\n", 1)
         expression = re.search(r"USE_REGISTRY_CACHE: \$\{\{ (.*) \}\}", env_block).group(1)
         script = "\n".join(line[10:] for line in run_block.splitlines())
-        for provider in ("dockerhub", "ghcr", "gar", "none"):
+        for provider in ("dockerhub", "ghcr", "none"):
             for export in ("true", "false"):
                 with self.subTest(provider=provider, export=export), tempfile.TemporaryDirectory() as directory:
                     output = Path(directory) / "outputs"

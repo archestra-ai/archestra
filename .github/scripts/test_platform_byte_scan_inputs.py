@@ -220,7 +220,6 @@ assert ref.startswith(os.environ['EXPECTED_REPO'] + ('@' if '@' in ref else ':')
 name = 'attestation' if ref.endswith('b' * 64) else 'index'
 sys.stdout.write((pathlib.Path(os.environ['FIXTURE']) / name).read_text())
 ''')
-            (root / "gcloud").write_text("#!/bin/sh\nexit 1\n")
             (root / "curl").write_text('''#!/usr/bin/env python3
 import os, pathlib, sys
 if sys.argv[-1] == 'https://ghcr.io/token':
@@ -233,7 +232,7 @@ assert sys.argv[-1].startswith('https://' + os.environ['EXPECTED_REPO'].split('/
 assert '@' not in sys.argv[-1], sys.argv[-1]
 pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text((pathlib.Path(os.environ['FIXTURE']) / 'sbom').read_text())
 ''')
-            for command in ("docker", "gcloud", "curl"):
+            for command in ("docker", "curl"):
                 (root / command).chmod(0o755)
             reference = INPUTS.IMAGE + ("@" + digest if pinned else ":" + "a" * 40 + "-e2e")
             result = subprocess.run(["bash", str(SCRIPTS / "resolve-attested-image.sh"), reference],

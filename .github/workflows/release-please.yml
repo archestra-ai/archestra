@@ -770,7 +770,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.39.0 # TODO: the v1.39.0 commit SHA
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.40.0 # TODO: the v1.40.0 commit SHA
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -889,7 +889,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.39.0 # TODO: the v1.39.0 commit SHA
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@v1.40.0 # TODO: the v1.40.0 commit SHA
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

@@ -2,7 +2,7 @@
 title: Export Costs
 description: Get LLM spend and usage into spreadsheets, scripts, and FinOps tools as one-off downloads, API queries, or scheduled FOCUS files in your own bucket
 order: 3
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-20
 ---
 
 Put Archestra's LLM spend next to the rest of your cloud bill. Finance gets the same numbers as the Costs page, split by team, agent, model, and person, without anyone copying them by hand.
@@ -15,7 +15,7 @@ There are three ways, from quickest to most automated:
 
 ## Download a View
 
-Open **Costs & Limits → Costs**, set up the [cost explorer](/docs/llm-proxy/costs-and-limits/costs#slice-usage-in-the-cost-explorer) view you want, then click **Export** above its table and pick **CSV**, **JSON**, or **Parquet**. The file holds the table as it is on screen, for the selected date range.
+Open **Costs**, set up the [cost explorer](/docs/llm-proxy/costs-and-limits/costs#slice-usage-in-the-cost-explorer) view you want, then click **Export** above its table and pick **CSV**, **JSON**, or **Parquet**. The file holds the table as it is on screen, for the selected date range.
 
 - A split **Summary** exports every metric: one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
 
@@ -32,7 +32,7 @@ Archestra writes one CSV per hour or per day into your own Amazon S3 or Google C
 
 Before you start, add a [blob provider](/docs/admin/blob-providers) for the bucket or container. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
 
-1. Open **Costs & Limits → Exports** and click **Schedule export**.
+1. Open **Cost Controls → Exports** and click **Schedule export**. **Schedule exports…** in the **Export** menu on **Costs** opens the same page.
 2. Name it and pick the blob provider under **Destination**.
 3. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
 4. Under **Start from**, keep **Now**, or pick **A date** or **All recorded usage** to also write past usage.

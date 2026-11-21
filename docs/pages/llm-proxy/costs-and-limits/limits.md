@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,7 +15,7 @@ Set budgets and rate limits in **Limits** so a busy key, runaway agent loop, or 
 
 ## Create a Limit
 
-1. Go to **Limits** and click **Add Limit**.
+1. Go to **Cost Controls → Limits** and click **Add Limit**.
 2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
 4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
@@ -43,7 +43,7 @@ When more than one rule matches a call, every matching hard rule must allow it:
 
 ### Team Limits
 
-Open **Limits** in the sidebar to view usage for teams you administer and their child teams. Use **Add Limit** and select a child team to give it an allowance. See [team member and admin roles](/docs/admin/access-control#team-roles).
+Open **Cost Controls** in the sidebar to view usage for teams you administer and their child teams. Use **Add Limit** and select a child team to give it an allowance. See [team member and admin roles](/docs/admin/access-control#team-roles).
 
 You can create, edit, delete, and reset child-team limits, including allocations set by your organization. Your own team's ceiling stays read-only unless you also administer one of its parent teams. A child with allowance left is still blocked when a parent reaches its limit.
 

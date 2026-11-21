@@ -72,7 +72,7 @@ Required permissions:
 
 ## Yells
 
-When the agent can't achieve its task because of the policy, it reports the problem via a special yell tool call. The reports are listed in **Logs → Guardrails**, in one timeline with the Guardrails consults. Set the type filter to **Yells** to see only the reports.
+When the agent can't achieve its task because of the policy, it reports the problem via a special yell tool call. The reports are listed in **Logs** under the **Guardrails** type, in one timeline with the Guardrails consults. Set **Record type** to **Yells** to see only the reports.
 
 ![The Guardrails log filtered to yells, listing three agent reports, with who reported each and when](/docs/automated_screenshots/platform-openappa_yells.webp)
 

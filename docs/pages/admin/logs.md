@@ -9,21 +9,23 @@ lastUpdated: 2026-11-21
 
 Know what every agent did, as whom, and what it cost. Archestra logs every model request, tool call, and admin change, from Chat, messaging channels, and connected clients. You do not turn anything on.
 
-To forward events from the **Audit** tab to your SIEM, configure [audit log export](/docs/admin/observability/audit-logs).
+To forward **Audit** events to your SIEM, configure [audit log export](/docs/admin/observability/audit-logs).
 
 ![An incident investigation with model requests and parallel MCP tool calls on a shared waterfall timeline, including timing, tokens, cost, and conversation details](/docs/automated_screenshots/admin-logs_session-waterfall.webp)
 
 ## What Gets Logged
 
-| Tab | One row per | Open a row for |
+**Logs** shows every type on one timeline, newest first. Click a type's tile to see only that type and its own filters, and scroll to go further back.
+
+| Type | One row per | Open a row for |
 | --- | --- | --- |
 | **LLM Proxy** | Session: agent, model, tokens, spend | The whole conversation. **Export JSON** saves it. |
 | **MCP Gateway** | Tool call: tool, gateway, account used, result | The arguments and the full result |
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
 | **Guardrails** | Request to a service used by [Guardrails](/docs/agents/guardrails): service, tool, outcome. Or a [yell](/docs/agents/guardrails/policies#yells): the report, who sent it, and whether it is resolved | The service request and reply, or the whole report |
-| **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Activity** | Drill into a group to see which agents and gateways it used |
+| **Client connections** | Connection event: a client app connected, was authorized, refreshed its token, or disconnected | Who connected which app to which gateway, and when |
 
-Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. Requests handled by an [auto router](/docs/llm-proxy/auto-routing) are marked **auto→** and open to an **Auto routing** panel showing the router, tier scores, chosen model, and estimated savings. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
+Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. Requests handled by an [auto router](/docs/llm-proxy/auto-routing) are marked **auto→** and open to an **Auto routing** panel showing the router, tier scores, chosen model, and estimated savings. An **MCP Gateway** tool call shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
 
 When your coding agent [hands a task to a Remote Agent](/docs/agents/runtime/handoff) and brings it back, the run's requests join the session's timeline. **Ran on** shows when the work was in your client and when it was in Agent Runtime. Click an Agent Runtime stretch to open the run.
 
@@ -31,7 +33,7 @@ If a model response stream ends cleanly before its provider reports token counts
 
 A session's **Status** shows **Failed** when a request failed or a Chat turn ended in an error, even if every request row looks healthy. The session page lists those errors under **Failed turns**, as the user saw them, and marks the last request before each one **Turn failed**. **Export JSON** includes them.
 
-In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
+To see who has connected which agents and client apps, and how much each is used, open **Adoption** under **Insights**. Its **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. **Coverage** lists users with no calls too, and **Export CSV** saves the filtered list. The page follows the selected date range, except the **State** column on **Coverage**, which always reflects the last 30 days.
 
 ## Keep Prompts Out of the Logs
 
@@ -51,16 +53,16 @@ By default, logs keep the conversation text but not the images, audio, and files
 
 ## Who Can Read Them
 
-Each tab has its own permission. Its `read` action shows your own records, and its `admin` action shows everyone's.
+Each type has its own permission. Its `read` action shows your own records, and its `admin` action shows everyone's.
 
-| Tab | Your own | Everyone's |
+| Type | Your own | Everyone's |
 | --- | --- | --- |
 | LLM Proxy, MCP Gateway | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
 | Guardrails | [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read) | [`guardrailsLog:admin`](/docs/reference/permissions#guardrailsLog:admin) |
-| Agent connections | [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) | [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin) |
+| Client connections | [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) | [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin) |
 | Audit | [`auditLog:read`](/docs/reference/permissions#auditLog:read) | [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) |
 
-With [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) alone, **Agent connections** lists only your own connect and disconnect events. **Usage** and **User connections** cover every member, so they need [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin).
+With [`clientConnection:read`](/docs/reference/permissions#clientConnection:read) alone, **Client connections** lists only your own connect and disconnect events. **Adoption** covers every member, so it needs [`clientConnection:admin`](/docs/reference/permissions#clientConnection:admin).
 
 Sharing an agent or a gateway with someone does not let them read its logs.
 

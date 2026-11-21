@@ -7,6 +7,13 @@
       "runner": "ubuntu-24.04-16core"
     },
     {
+      "key": "docker.io/archestra/platform:slim",
+      "dockerfile": "platform/Dockerfile",
+      "context": "platform",
+      "target": "unified-slim",
+      "runner": "ubuntu-24.04-16core"
+    },
+    {
       "key": "ghcr.io/archestra-ai/mcp-server-base",
       "dockerfile": "platform/docker_images/mcp_server/Dockerfile",
       "context": "platform/docker_images/mcp_server"

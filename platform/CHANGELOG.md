@@ -1,5 +1,64 @@
 # Changelog
 
+## [1.5.0-rc.42](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.41...platform-v1.5.0-rc.42) (2026-11-21)
+
+
+### Features
+
+* **agent-images:** run Kimi Code 2.6.3 in the Kimi catalog image ([#11071](https://github.com/archestra-ai/archestra/issues/11071)) ([4d023ef](https://github.com/archestra-ai/archestra/commit/4d023ef66195f81d9d6002ad05077a6090ca7eaa))
+* **dev:** run the commit check and PR enqueue from a dev VM checkout ([#11044](https://github.com/archestra-ai/archestra/issues/11044)) ([faa5167](https://github.com/archestra-ai/archestra/commit/faa5167f823820e74a981d81add5e2abb8cefff4))
+* **helm:** run the platform pods as non-root by default ([#10825](https://github.com/archestra-ai/archestra/issues/10825)) ([3759c25](https://github.com/archestra-ai/archestra/commit/3759c25085d25e1e313c029295f8751d37c742af))
+* **model-catalog:** expose reasoning levels, output limit and endpoints per model ([#11045](https://github.com/archestra-ai/archestra/issues/11045)) ([d61fc3c](https://github.com/archestra-ai/archestra/commit/d61fc3cee200766c785bb6ffc155aadf61fdb64e))
+* **openappa:** let a chat agent decide on a subagent's narrowing answer ([#11011](https://github.com/archestra-ai/archestra/issues/11011)) ([554e574](https://github.com/archestra-ai/archestra/commit/554e5746f2bb2fc11cee16c4f845a519998070d6))
+* **plugins:** authorize plugins through per-plugin grants ([#11039](https://github.com/archestra-ai/archestra/issues/11039)) ([6ad90f6](https://github.com/archestra-ai/archestra/commit/6ad90f689d0b1207d16c80f4530102d4936a47fd))
+* **service-accounts:** create declared service accounts and federated credentials on startup ([#11037](https://github.com/archestra-ai/archestra/issues/11037)) ([80f8a71](https://github.com/archestra-ai/archestra/commit/80f8a71d29f8e9e12e110fdde5ef34be21212658))
+
+
+### Bug Fixes
+
+* **agent-hermes:** run Hermes on CPython 3.14.10 ([#11070](https://github.com/archestra-ai/archestra/issues/11070)) ([34a9d59](https://github.com/archestra-ai/archestra/commit/34a9d59efa73733f8c49aad9de146c22035f6832))
+* **apps:** fix the unsaved-changes prompt in app settings ([#11065](https://github.com/archestra-ai/archestra/issues/11065)) ([a9da7c9](https://github.com/archestra-ai/archestra/commit/a9da7c9efc860104b3435a73d15874a71bda4266))
+* **auth:** upgrade @better-auth/oauth-provider to 1.7.7 without breaking MCP clients ([#10985](https://github.com/archestra-ai/archestra/issues/10985)) ([e209c83](https://github.com/archestra-ai/archestra/commit/e209c83a5cc86d1e640055124b82a944d4d8ee28))
+* **chat:** order tool-call circles chronologically and open cards under their circles ([#11069](https://github.com/archestra-ai/archestra/issues/11069)) ([58ee473](https://github.com/archestra-ai/archestra/commit/58ee4738d14167845f67c0c35a011bb30c8f6b87))
+* **chat:** render LaTeX math in chat messages ([#11043](https://github.com/archestra-ai/archestra/issues/11043)) ([8a45805](https://github.com/archestra-ai/archestra/commit/8a45805f1f3a413c23c07a556dbbe98953d44ad3))
+* **logs:** show each user's email in the LLM logs user filter ([#11068](https://github.com/archestra-ai/archestra/issues/11068)) ([d1c0dd0](https://github.com/archestra-ai/archestra/commit/d1c0dd0bef9fd5edc92132952f40885059ec50ec))
+* **mcp:** keep shared MCP server names unique within an environment ([#11064](https://github.com/archestra-ai/archestra/issues/11064)) ([72fa481](https://github.com/archestra-ai/archestra/commit/72fa4813e135466e157a43d4a5b440a65ba36f9f))
+* **openappa-rs:** decode an escaped parent result on fork replay and correct the engine pin ([#11052](https://github.com/archestra-ai/archestra/issues/11052)) ([23f0cc6](https://github.com/archestra-ai/archestra/commit/23f0cc656902789902897b2f075baed5526f8834))
+* **openappa:** correct the audit records of two guardrails routes ([#11050](https://github.com/archestra-ai/archestra/issues/11050)) ([f51220f](https://github.com/archestra-ai/archestra/commit/f51220fe80638f7d257deae9f88bc2ff5feebde0))
+* **openappa:** fix relay, notice and buffer defects in the proxy plugin and drop three dead upgrade shims ([#11055](https://github.com/archestra-ai/archestra/issues/11055)) ([145390f](https://github.com/archestra-ai/archestra/commit/145390fcca10fdafff17bcdb5a0b72eea5cd1236))
+* **openappa:** keep the reason of a call denied for malformed arguments on its result ([#10962](https://github.com/archestra-ai/archestra/issues/10962)) ([fc02d94](https://github.com/archestra-ai/archestra/commit/fc02d94b36896472076ff7d71cef54db66037f68))
+* **openappa:** plain wording for a held subagent answer, and its docs ([#11057](https://github.com/archestra-ai/archestra/issues/11057)) ([9b0f2f0](https://github.com/archestra-ai/archestra/commit/9b0f2f05f625ae65a409119707271833d8e2718c))
+* **openappa:** retry the child rejections read and reuse two backend helpers ([#11025](https://github.com/archestra-ai/archestra/issues/11025)) ([89ce07e](https://github.com/archestra-ai/archestra/commit/89ce07e3196ab2385c1d7c45d9901d25af1c8b9d))
+* **security:** drop the RUSTSEC-2026-0459 ignore now that rusqlite 0.41 is in ([#11062](https://github.com/archestra-ai/archestra/issues/11062)) ([72ab59a](https://github.com/archestra-ai/archestra/commit/72ab59aea7200cec7fa92d170cb5332507d3b55b))
+* **security:** move to containerd 2.2.10 and mcp 1.30.0, and drop Hermes build leftovers ([#11076](https://github.com/archestra-ai/archestra/issues/11076)) ([51c549b](https://github.com/archestra-ai/archestra/commit/51c549bf8f8edbb4e42cf3e4331a261a3b00fc64))
+* **security:** move to Node.js 24.22.3, go-jose 4.1.7 and rmcp 3.9.0 ([#11046](https://github.com/archestra-ai/archestra/issues/11046)) ([bda4bcc](https://github.com/archestra-ai/archestra/commit/bda4bccc62769326847e5128320c179d897c1c89))
+
+
+### Documentation
+
+* collect v1.5 upgrade notes in a draft upgrade guide ([#11082](https://github.com/archestra-ai/archestra/issues/11082)) ([c482e91](https://github.com/archestra-ai/archestra/commit/c482e91001fdb5ec7f366585ee73cd19ae45f1f9))
+
+
+### Dependencies
+
+* bump golang from 1.27.3-bookworm to 1.27.4-bookworm in /platform/docker_images/agent in the base-images group across 1 directory ([#10883](https://github.com/archestra-ai/archestra/issues/10883)) ([a9ff256](https://github.com/archestra-ai/archestra/commit/a9ff256b6d9d17af1a5f9c657d7ee20477578560))
+* bump patched AI SDK, Microsoft agents and Confluence packages ([#11031](https://github.com/archestra-ai/archestra/issues/11031)) ([709b51e](https://github.com/archestra-ai/archestra/commit/709b51e014622ab87ded3760089475ccd9806b04))
+* bump the rust-dependencies group across 1 directory with 4 updates ([#10717](https://github.com/archestra-ai/archestra/issues/10717)) ([3405bad](https://github.com/archestra-ai/archestra/commit/3405bad1f894afa752c57a023a2b400eff2af802))
+
+
+### Code Refactoring
+
+* **openappa-rs:** reuse existing helpers and fix a test skip in the appa bindings ([#11028](https://github.com/archestra-ai/archestra/issues/11028)) ([a83d40c](https://github.com/archestra-ai/archestra/commit/a83d40c127a259c829b72eb3eac8b4ed99d4750f))
+* **openappa:** drop redundant code in the appa proxy plugin ([#11027](https://github.com/archestra-ai/archestra/issues/11027)) ([ef5410e](https://github.com/archestra-ai/archestra/commit/ef5410e5eb7991925786736890ea3ee8e625570d))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump OpenAPPA to v0.45.0 ([#11034](https://github.com/archestra-ai/archestra/issues/11034)) ([11a6669](https://github.com/archestra-ai/archestra/commit/11a666987e93d26d757815f3fddc961b5e859a84))
+* **docker:** drop apk, curl, yarn and corepack from the platform image ([#11080](https://github.com/archestra-ai/archestra/issues/11080)) ([96047c6](https://github.com/archestra-ai/archestra/commit/96047c67320324886e82a92fda2cf1280166808b))
+* update agent runtime CLIs ([#10259](https://github.com/archestra-ai/archestra/issues/10259)) ([c7882e4](https://github.com/archestra-ai/archestra/commit/c7882e499d77f981f7981076501257c7d2c39905))
+* update client versions ([#11066](https://github.com/archestra-ai/archestra/issues/11066)) ([8211b96](https://github.com/archestra-ai/archestra/commit/8211b9692319e013205d223d8e25703bfb206872))
+
 ## [1.5.0-rc.41](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.40...platform-v1.5.0-rc.41) (2026-11-20)
 
 

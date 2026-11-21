@@ -128,7 +128,9 @@ const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
  * runs a pod without a profile unconfined unless the kubelet sets
  * `--seccomp-default`.
  */
-const RUNTIME_DEFAULT_SECCOMP: k8s.V1SeccompProfile = { type: "RuntimeDefault" };
+const RUNTIME_DEFAULT_SECCOMP: k8s.V1SeccompProfile = {
+  type: "RuntimeDefault",
+};
 
 /**
  * Default transport-level health contract for managed HTTP MCP servers.

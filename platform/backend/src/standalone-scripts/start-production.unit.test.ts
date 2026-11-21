@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+// A namespace import keeps the module specifier on the directive's line.
 // @ts-expect-error — plain ESM module that starts the server in the image
-import {
-  maxOldSpaceSizeMib,
-  serverArguments,
-} from "../../scripts/start-production.mjs";
+import * as startProduction from "../../scripts/start-production.mjs";
+
+const { maxOldSpaceSizeMib, serverArguments } = startProduction;
 
 const heap = (env: Record<string, string>) => maxOldSpaceSizeMib(env);
 

@@ -200,7 +200,7 @@ test("a yell-only reader opens a report without fetching policy or settings", as
         chat: ["read"],
         guardrailsPolicy: [],
         organizationSettings: [],
-        guardrailsYell: ["read"],
+        guardrailsLog: ["read"],
       },
     },
     {

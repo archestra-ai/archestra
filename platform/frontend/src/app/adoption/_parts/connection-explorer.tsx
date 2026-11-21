@@ -80,7 +80,8 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
   ).length;
   const connected = members.filter((member) => member.agents.length > 0).length;
   const idle = connected - usedInRange;
-  const unconnected = members.length - connected;
+  // Members without an agent or traffic are only counted, not listed.
+  const unconnected = adoption.data.memberCount - connected;
   const agents = members.reduce(
     (count, member) => count + member.agents.length,
     0,
@@ -100,7 +101,7 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
       >
         <KpiTile
           label="Users"
-          value={members.length.toLocaleString()}
+          value={adoption.data.memberCount.toLocaleString()}
           caption={`${agents.toLocaleString()} agents connected`}
         />
         <KpiTile

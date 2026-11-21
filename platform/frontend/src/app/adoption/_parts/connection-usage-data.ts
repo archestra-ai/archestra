@@ -151,7 +151,8 @@ export function groupsOf({
       ),
     };
   });
-  // Keep users with no calls visible at the root; a scoped view contains only matching paths.
+  // Keep members with agents but no calls visible at the root; a scoped view
+  // contains only matching paths.
   if (dimension === "user" && !scope.user && !scope.agent && !scope.service) {
     const present = new Set(rows.map((row) => row.key));
     const query = search.trim().toLowerCase();

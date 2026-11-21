@@ -3,8 +3,10 @@ import type {
   InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -46,7 +48,14 @@ import type { InteractionAuthMethod } from "@/types/interaction";
 export const llmUsageHourlyTable = pgTable(
   "llm_usage_hourly",
   usageColumns(),
-  (table) => [index("llm_usage_hourly_hour_idx").on(table.hour)],
+  (table) => [
+    index("llm_usage_hourly_hour_idx").on(table.hour),
+    // Hours rolled before `run` existed, which the rollup refreshes newest
+    // first and Adoption reads from raw rows until then.
+    index("llm_usage_hourly_run_unknown_idx")
+      .on(table.hour)
+      .where(sql`${table.run} IS NULL`),
+  ],
 );
 
 /**
@@ -162,5 +171,8 @@ function usageColumns() {
     source: varchar("source").$type<InteractionSource>(),
     // Requests whose response was an error (`interactions.failed`).
     failedRequests: integer("failed_requests").notNull().default(0),
+    // Whether the requests belong to an agent run (`interactions.run_id` is
+    // set). Null on hours rolled before it, until the rollup refreshes them.
+    run: boolean("run"),
   };
 }

@@ -9,7 +9,7 @@ import {
   Download,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
@@ -31,10 +31,11 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  type AgentAdoption,
+  type AdoptionMembersQuery,
   type AgentAdoptionMember,
   type AgentAdoptionStatus,
-  useAgentAdoption,
+  useAgentAdoptionMembers,
+  useExportAgentAdoptionMembers,
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
@@ -83,32 +84,11 @@ const STATE_OPTIONS = [
   { value: "notConnected", label: "Not connected" },
 ];
 
-/** The table lists users without an agent first. */
-const STATE_ORDER: AgentAdoptionStatus[] = [
-  "notConnected",
-  "inactive",
-  "active",
-];
-
 /**
  * Every user and their configured agents, including users with no calls.
  */
 export function AgentAdoptionUsers({ window }: { window: ConnectionsWindow }) {
-  const { data, isPending, isLoadingError, refetch } = useAgentAdoption({
-    startDate: window.startDate,
-    endDate: window.endDate,
-  });
   const [filter, setFilter] = useTableFilter();
-
-  if (isLoadingError) {
-    return (
-      <QueryLoadError
-        title="Couldn't load agent adoption"
-        onRetry={() => refetch()}
-      />
-    );
-  }
-  if (isPending || !data) return <Skeleton className="h-80 rounded-xl" />;
 
   return (
     <div>
@@ -125,12 +105,7 @@ export function AgentAdoptionUsers({ window }: { window: ConnectionsWindow }) {
             Cursor. Chat and built-in agents don't.
           </p>
         </div>
-        <UserTable
-          adoption={data}
-          window={window}
-          filter={filter}
-          onFilterChange={setFilter}
-        />
+        <UserTable window={window} filter={filter} onFilterChange={setFilter} />
       </section>
     </div>
   );
@@ -139,7 +114,9 @@ export function AgentAdoptionUsers({ window }: { window: ConnectionsWindow }) {
 // === Users table ===
 
 type TableFilter = { state: AgentAdoptionStatus | typeof ALL; q: string };
-type SortKey = "state" | "user" | "gateway" | "llm";
+type SortKey = NonNullable<AdoptionMembersQuery["sortBy"]>;
+/** 1 is a column's natural order: last calls newest first, else A to Z. */
+type Sort = { key: SortKey; dir: 1 | -1 };
 
 /** The table's state filter and search, kept in the URL. */
 function useTableFilter(): [TableFilter, (next: Partial<TableFilter>) => void] {
@@ -168,53 +145,44 @@ function useTableFilter(): [TableFilter, (next: Partial<TableFilter>) => void] {
   return [filter, set];
 }
 
+/** The members list's query for a filter and sort, without its page. */
+function membersQuery(params: {
+  window: ConnectionsWindow;
+  filter: TableFilter;
+  sort: Sort;
+}): Omit<AdoptionMembersQuery, "limit" | "offset"> {
+  const { window, filter, sort } = params;
+  const newestFirst = sort.key === "gateway" || sort.key === "llm";
+  return {
+    startDate: window.startDate,
+    endDate: window.endDate,
+    state: filter.state === ALL ? undefined : filter.state,
+    search: filter.q.trim() || undefined,
+    sortBy: sort.key,
+    sortDirection: (sort.dir === 1) === newestFirst ? "desc" : "asc",
+  };
+}
+
 function UserTable({
-  adoption,
   window,
   filter,
   onFilterChange,
 }: {
-  adoption: AgentAdoption;
   window: ConnectionsWindow;
   filter: TableFilter;
   onFilterChange: (next: Partial<TableFilter>) => void;
 }) {
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
-    key: "state",
-    dir: 1,
-  });
+  const [sort, setSort] = useState<Sort>({ key: "state", dir: 1 });
   const [pageIndex, setPageIndex] = useState(0);
   const rangeStart = window.startDate ? new Date(window.startDate) : null;
-  const rows = useMemo(() => {
-    const needle = filter.q.trim().toLowerCase();
-    const time = (at: string | null) => (at ? Date.parse(at) : 0);
-    const byName = (a: AgentAdoptionMember, b: AgentAdoptionMember) =>
-      (a.name || a.email).localeCompare(b.name || b.email);
-    const compare: Record<
-      SortKey,
-      (a: AgentAdoptionMember, b: AgentAdoptionMember) => number
-    > = {
-      state: (a, b) =>
-        STATE_ORDER.indexOf(a.status) - STATE_ORDER.indexOf(b.status) ||
-        byName(a, b),
-      user: byName,
-      gateway: (a, b) =>
-        time(b.gatewayLastSeenAt) - time(a.gatewayLastSeenAt) || byName(a, b),
-      llm: (a, b) =>
-        time(b.llmLastSeenAt) - time(a.llmLastSeenAt) || byName(a, b),
-    };
-    return adoption.members
-      .filter(
-        (member) =>
-          (filter.state === ALL || member.status === filter.state) &&
-          (!needle ||
-            [member.name, member.email, ...member.agents.map(agentLabel)]
-              .join(" ")
-              .toLowerCase()
-              .includes(needle)),
-      )
-      .sort((a, b) => compare[sort.key](a, b) * sort.dir);
-  }, [adoption.members, filter.state, filter.q, sort]);
+  const query = membersQuery({ window, filter, sort });
+  const { data, isPending, isLoadingError, refetch } = useAgentAdoptionMembers({
+    ...query,
+    limit: PAGE_SIZE,
+    offset: pageIndex * PAGE_SIZE,
+  });
+  const exportMembers = useExportAgentAdoptionMembers();
+  const total = data?.pagination.total ?? 0;
   function changeFilter(next: Partial<TableFilter>) {
     setPageIndex(0);
     onFilterChange(next);
@@ -331,8 +299,10 @@ function UserTable({
             <Button
               variant="outline"
               size="sm"
-              disabled={rows.length === 0}
-              onClick={() => downloadUsersCsv(rows)}
+              disabled={total === 0 || exportMembers.isPending}
+              onClick={() =>
+                exportMembers.mutate(query, { onSuccess: downloadUsersCsv })
+              }
             >
               <Download className="size-4" />
               <span>Export CSV</span>
@@ -360,60 +330,69 @@ function UserTable({
           />
         </FilterBar>
       </CollectionFilters>
-      <DataTable
-        data={rows.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE)}
-        columns={columns}
-        getRowId={(member) => member.userId}
-        hideSelectedCount
-        hidePaginationWhenSinglePage
-        manualPagination
-        pagination={{ pageIndex, pageSize: PAGE_SIZE, total: rows.length }}
-        onPaginationChange={({ pageIndex: next }) => setPageIndex(next)}
-        fixedWidthColumnIds={["icon", "state", "gateway", "llm"]}
-        flexibleColumnIds={["user", "agents"]}
-        emptyMessage={
-          adoption.members.length === 0
-            ? "No users yet."
-            : "No users match your filters"
-        }
-        renderExpandedRows={({ row }) =>
-          row.original.agents.map((agent) => (
-            <TableRow
-              key={agent.clientId ?? agent.name}
-              className="bg-muted/20 hover:bg-muted/30"
-            >
-              <TableCell />
-              <TableCell />
-              <TableCell>
-                <div className="flex min-w-0 items-center gap-2">
-                  <AgentIcon agent={agent} size={20} />
-                  <div className="min-w-0">
-                    <span className="block truncate text-xs font-medium">
-                      {agentLabel(agent)}
-                    </span>
-                    <SetupLine agent={agent} />
+      {isLoadingError ? (
+        <QueryLoadError
+          title="Couldn't load agent adoption"
+          onRetry={() => refetch()}
+        />
+      ) : isPending && !data ? (
+        <Skeleton className="h-80 rounded-xl" />
+      ) : (
+        <DataTable
+          data={data?.data ?? []}
+          columns={columns}
+          getRowId={(member) => member.userId}
+          hideSelectedCount
+          hidePaginationWhenSinglePage
+          manualPagination
+          pagination={{ pageIndex, pageSize: PAGE_SIZE, total }}
+          onPaginationChange={({ pageIndex: next }) => setPageIndex(next)}
+          fixedWidthColumnIds={["icon", "state", "gateway", "llm"]}
+          flexibleColumnIds={["user", "agents"]}
+          emptyMessage={
+            filter.state === ALL && !filter.q
+              ? "No users yet."
+              : "No users match your filters"
+          }
+          renderExpandedRows={({ row }) =>
+            row.original.agents.map((agent) => (
+              <TableRow
+                key={agent.clientId ?? agent.name}
+                className="bg-muted/20 hover:bg-muted/30"
+              >
+                <TableCell />
+                <TableCell />
+                <TableCell>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <AgentIcon agent={agent} size={20} />
+                    <div className="min-w-0">
+                      <span className="block truncate text-xs font-medium">
+                        {agentLabel(agent)}
+                      </span>
+                      <SetupLine agent={agent} />
+                    </div>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <StatePill
-                  state={agent.status}
-                  label={AGENT_STATES[agent.status].label}
-                />
-              </TableCell>
-              <TableCell>
-                <LastCall
-                  at={agent.lastGatewayCallAt}
-                  rangeStart={rangeStart}
-                />
-              </TableCell>
-              <TableCell>
-                <LastCall at={agent.lastLlmCallAt} rangeStart={rangeStart} />
-              </TableCell>
-            </TableRow>
-          ))
-        }
-      />
+                </TableCell>
+                <TableCell>
+                  <StatePill
+                    state={agent.status}
+                    label={AGENT_STATES[agent.status].label}
+                  />
+                </TableCell>
+                <TableCell>
+                  <LastCall
+                    at={agent.lastGatewayCallAt}
+                    rangeStart={rangeStart}
+                  />
+                </TableCell>
+                <TableCell>
+                  <LastCall at={agent.lastLlmCallAt} rangeStart={rangeStart} />
+                </TableCell>
+              </TableRow>
+            ))
+          }
+        />
+      )}
     </div>
   );
 }

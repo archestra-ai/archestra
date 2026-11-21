@@ -1,4 +1,8 @@
-import { CLAUDE_CLIENT_ID, type CursorQuery } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_ID,
+  type CursorQuery,
+  type PaginationQuery,
+} from "@archestra/shared";
 import {
   connectAgentLabel,
   INSTALLER_CLIENT_LABELS,
@@ -10,14 +14,20 @@ import db, { schema, type Transaction } from "@/database";
 import {
   type CursorPaginatedResult,
   createCursorPaginatedResult,
+  createPaginatedResult,
   decodeCursor,
+  type PaginatedResult,
 } from "@/database/utils/pagination";
+import LlmUsageRollupModel, {
+  type UsageFacts,
+} from "@/models/llm-usage-rollup";
 import {
   connectClientForOAuthClient,
   connectClientForOAuthClientSql,
 } from "@/services/connected-client-oauth";
 import type {
   AdoptionAgent,
+  AdoptionMemberSortBy,
   AdoptionUse,
   AgentAdoption,
   AgentAdoptionMember,
@@ -29,7 +39,9 @@ import type {
   ConnectionEventAction,
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
+  SortDirection,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 const setups = schema.connectionSetupsTable;
 
@@ -397,8 +409,8 @@ class ConnectedClientModel {
     );
     const inWindow = (column: SQL) =>
       sql`${column} BETWEEN ${timestampSql(since)} AND ${timestampSql(until)}`;
-    const interactions = schema.interactionsTable;
     const toolCalls = schema.mcpToolCallsTable;
+    const agents = schema.agentsTable;
     type TrafficRow = {
       via_id: string | null;
       via_name: string | null;
@@ -411,11 +423,9 @@ class ConnectedClientModel {
       /** Newest call that did something, in the last 30 days. */
       last_use_at: Date | string | null;
     };
-    const [members, gateway, llm, setupRows, signIns] = await Promise.all([
-      db.execute<{ user_id: string; name: string; email: string }>(sql`
-        SELECT u.id AS user_id, u.name, u.email
-        FROM ${schema.membersTable} m
-        JOIN ${schema.usersTable} u ON u.id = m.user_id
+    const [memberCount, gateway, llm, setupRows, signIns] = await Promise.all([
+      db.execute<{ count: number }>(sql`
+        SELECT count(*)::int AS count FROM ${schema.membersTable} m
         WHERE m.organization_id = ${organizationId}
       `),
       db.execute<OAuthAgentRow & TrafficRow>(sql`
@@ -443,36 +453,22 @@ class ConnectedClientModel {
             AND ${toolCalls.userId} IS NOT NULL
           GROUP BY 1, 2, 3
         )
-        SELECT t.*, c.name, c.redirect_uris, g.name AS via_name
+        -- Agent lookups are correlated subqueries, so each group probes its
+        -- gateway by primary key rather than hashing every agent.
+        SELECT t.*, c.name, c.redirect_uris,
+          (SELECT a.name FROM ${agents} a WHERE a.id = t.via_id) AS via_name
         FROM traffic t
         LEFT JOIN ${schema.oauthClientsTable} c ON c.client_id = t.oauth_client_id
-        JOIN ${schema.agentsTable} g ON g.id = t.via_id
-        WHERE g.organization_id = ${organizationId}
+        WHERE (SELECT a.organization_id FROM ${agents} a WHERE a.id = t.via_id) = ${organizationId}
       `),
-      db.execute<{ user_id: string; agent: string | null } & TrafficRow>(sql`
-        WITH traffic AS MATERIALIZED (
-          SELECT coalesce(k.author_id, ${interactions.userId}) AS user_id,
-            ${interactions.externalAgentId} AS agent,
-            ${interactions.profileId} AS via_id,
-            count(*) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)})::int AS calls,
-            max(${interactions.createdAt}) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)}) AS window_last_at,
-            max(${interactions.createdAt}) AS last_call_at,
-            max(${interactions.createdAt}) FILTER (WHERE ${interactions.createdAt} >= ${timestampSql(activeSince)}) AS last_use_at
-          FROM ${interactions}
-          LEFT JOIN ${schema.virtualApiKeysTable} k
-            ON k.id = ${interactions.passthroughVirtualKeyId}
-          WHERE ${interactions.createdAt} >= ${timestampSql(readFrom)}
-            AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
-            AND ${interactions.runId} IS NULL
-            AND coalesce(k.author_id, ${interactions.userId}) IS NOT NULL
-          GROUP BY 1, 2, 3
-        )
-        SELECT t.*, p.name AS via_name
-        FROM traffic t
-        LEFT JOIN ${schema.agentsTable} p ON p.id = t.via_id
-        WHERE (p.organization_id = ${organizationId} OR t.via_id IS NULL)
-          AND ${externalLlmAgent({ organizationId, agent: sql`t.agent` })}
-      `),
+      adoptionLlmTraffic({
+        organizationId,
+        since,
+        until,
+        readFrom,
+        activeSince,
+        now,
+      }),
       // Redeemed setups not yet disconnected, dated by the first.
       db.execute<{
         user_id: string;
@@ -497,19 +493,31 @@ class ConnectedClientModel {
       `),
     ]);
 
+    // Only members who set something up or sent something are read: the
+    // others have nothing to show but their name (see listAdoptionMembers).
+    const seen = [
+      ...new Set(
+        [setupRows, signIns, gateway, llm].flatMap((result) =>
+          result.rows.map((row) => row.user_id),
+        ),
+      ),
+    ];
+    const members =
+      seen.length === 0
+        ? { rows: [] }
+        : await db.execute<{ user_id: string; name: string; email: string }>(
+            sql`
+              SELECT u.id AS user_id, u.name, u.email
+              FROM ${schema.membersTable} m
+              JOIN ${schema.usersTable} u ON u.id = m.user_id
+              WHERE m.organization_id = ${organizationId}
+                AND m.user_id = ANY(${sql.param(seen)}::text[])
+            `,
+          );
+
     const byUser = new Map<string, AgentAdoptionMember>();
     for (const row of members.rows) {
-      byUser.set(row.user_id, {
-        userId: row.user_id,
-        name: row.name,
-        email: row.email,
-        status: "notConnected",
-        gatewayLastSeenAt: null,
-        llmLastSeenAt: null,
-        agents: [],
-        gatewayUses: [],
-        llmUses: [],
-      });
+      byUser.set(row.user_id, unconnectedMember(row));
     }
     // The newest call that did something, per agent.
     const lastUse = new Map<object, Date>();
@@ -613,7 +621,77 @@ class ConnectedClientModel {
       }
     }
 
-    return { since, until, members: [...byUser.values()] };
+    return {
+      since,
+      until,
+      memberCount: memberCount.rows[0]?.count ?? 0,
+      members: [...byUser.values()].filter(hasAdoption),
+    };
+  }
+
+  /**
+   * One page of every organization member as the Coverage table lists them:
+   * the members `adoption` holds as they are, and every other member not
+   * connected with nothing to show. Filtered by state and by a search of
+   * names, emails and agent names, then sorted; ties go by name.
+   */
+  static async listAdoptionMembers(params: {
+    organizationId: string;
+    adoption: AgentAdoption;
+    state?: AgentAdoptionStatus;
+    search?: string;
+    sortBy: AdoptionMemberSortBy;
+    sortDirection: SortDirection;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<AgentAdoptionMember>> {
+    const { organizationId, adoption, sortDirection } = params;
+    const known = new Map(adoption.members.map((m) => [m.userId, m]));
+    const facts = adoption.members.map((member) => ({
+      user_id: member.userId,
+      state: STATE_RANK[member.status],
+      gateway_at: member.gatewayLastSeenAt?.toISOString() ?? null,
+      llm_at: member.llmLastSeenAt?.toISOString() ?? null,
+      agents: member.agents
+        .flatMap((agent) => [
+          agent.name,
+          connectAgentLabel(agent.clientId ?? "") ?? "",
+        ])
+        .join(" "),
+    }));
+    const name = sql`coalesce(nullif(u.name, ''), u.email)`;
+    const dir = sql.raw(sortDirection === "asc" ? "ASC" : "DESC");
+    // A last call sorts newest first; members with none go last.
+    const lastCall = (column: string) =>
+      sql`k.${sql.raw(column)} ${dir} NULLS ${sql.raw(sortDirection === "asc" ? "FIRST" : "LAST")}`;
+    const order = {
+      state: sql`coalesce(k.state, 0) ${dir}, ${name} ASC`,
+      user: sql`${name} ${dir}`,
+      gateway: sql`${lastCall("gateway_at")}, ${name} ASC`,
+      llm: sql`${lastCall("llm_at")}, ${name} ASC`,
+    }[params.sortBy];
+    const search = params.search?.trim();
+    const pattern = search ? `%${escapeLikePattern(search)}%` : null;
+    const from = sql`
+      FROM ${schema.membersTable} m
+      JOIN ${schema.usersTable} u ON u.id = m.user_id
+      LEFT JOIN jsonb_to_recordset(${JSON.stringify(facts)}::jsonb)
+        AS k(user_id text, state int, gateway_at timestamptz, llm_at timestamptz, agents text)
+        ON k.user_id = u.id
+      WHERE m.organization_id = ${organizationId}
+        ${params.state ? sql`AND coalesce(k.state, 0) = ${STATE_RANK[params.state]}` : sql``}
+        ${pattern ? sql`AND (u.name ILIKE ${pattern} OR u.email ILIKE ${pattern} OR k.agents ILIKE ${pattern})` : sql``}`;
+    const [page, total] = await Promise.all([
+      db.execute<{ user_id: string; name: string; email: string }>(sql`
+        SELECT u.id AS user_id, u.name, u.email ${from}
+        ORDER BY ${order}, u.id
+        LIMIT ${params.pagination.limit} OFFSET ${params.pagination.offset}`),
+      db.execute<{ count: number }>(sql`SELECT count(*)::int AS count ${from}`),
+    ]);
+    return createPaginatedResult(
+      page.rows.map((row) => known.get(row.user_id) ?? unconnectedMember(row)),
+      total.rows[0]?.count ?? 0,
+      params.pagination,
+    );
   }
 
   /**
@@ -732,7 +810,6 @@ class ConnectedClientModel {
       sql`${column} BETWEEN ${timestampSql(since)} AND ${timestampSql(until)}`;
     const orgAgents = orgAgentIds(organizationId);
     const orgMembers = sql`SELECT ${schema.membersTable.userId} FROM ${schema.membersTable} WHERE ${schema.membersTable.organizationId} = ${organizationId}${userId ? sql` AND ${schema.membersTable.userId} = ${userId}` : sql``}`;
-    const interactions = schema.interactionsTable;
     const toolCalls = schema.mcpToolCallsTable;
 
     const [gateway, llm] = await Promise.all([
@@ -748,27 +825,7 @@ class ConnectedClientModel {
           AND ${toolCalls.userId} IN (${orgMembers})
         GROUP BY 1
       `),
-      db.execute<{ day: string; calls: number }>(sql`
-        WITH traffic AS MATERIALIZED (
-          SELECT date_trunc('day', ${interactions.createdAt}) AS day,
-            ${interactions.externalAgentId} AS agent,
-            ${interactions.profileId} AS via_id, count(*)::int AS calls
-          FROM ${interactions}
-          LEFT JOIN ${schema.virtualApiKeysTable} k
-            ON k.id = ${interactions.passthroughVirtualKeyId}
-          WHERE ${inWindow(sql`${interactions.createdAt}`)}
-            AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
-            AND ${interactions.runId} IS NULL
-            AND coalesce(k.author_id, ${interactions.userId}) IN (${orgMembers})
-          GROUP BY 1, 2, 3
-        )
-        SELECT to_char(t.day, 'YYYY-MM-DD') AS day, sum(t.calls)::int AS calls
-        FROM traffic t
-        LEFT JOIN ${schema.agentsTable} p ON p.id = t.via_id
-        WHERE (p.organization_id = ${organizationId} OR t.via_id IS NULL)
-          AND ${externalLlmAgent({ organizationId, agent: sql`t.agent` })}
-        GROUP BY 1
-      `),
+      llmUsageByDay({ organizationId, since, until, orgMembers }),
     ]);
 
     const gatewayByDay = new Map(gateway.rows.map((r) => [r.day, r.calls]));
@@ -862,24 +919,10 @@ function agentGatewayTraffic() {
 }
 
 /**
- * Exclude agent-to-agent calls after aggregation, so organization agent ids
- * are checked once per traffic group rather than per interaction. Built-in
- * callers name an Archestra agent (`<agentId>` or `<agentId>:<agentId>`) as
- * the external agent; source and run-id filtering happens before grouping.
- */
-function externalLlmAgent(params: { organizationId: string; agent: SQL }) {
-  const { organizationId, agent } = params;
-  return sql`(${agent} IS NULL
-    OR split_part(${agent}, ':', 1) NOT IN (
-      SELECT ${schema.agentsTable.id}::text FROM ${schema.agentsTable}
-      WHERE ${schema.agentsTable.organizationId} = ${organizationId}))`;
-}
-
-/**
  * The Archestra agent id an LLM call's external agent names, as a uuid for a
- * primary-key probe, or null when it names none. Matches
- * {@link externalLlmAgent}'s text comparison exactly: only the canonical
- * lowercase form of an id is one.
+ * primary-key probe, or null when it names none: built-in callers name an
+ * Archestra agent (`<agentId>` or `<agentId>:<agentId>`) as the external
+ * agent. Only the canonical lowercase form of an id is one.
  */
 function archestraAgentId(agent: SQL): SQL {
   return sql`CASE WHEN split_part(${agent}, ':', 1)
@@ -915,6 +958,218 @@ function earliest(current: Date | null, next: Date): Date {
 const ACTIVE_DAYS = 30;
 /** Last calls read this far back, to keep the interactions scan bounded. */
 const LAST_CALL_LOOKBACK_DAYS = 180;
+
+/** The Coverage table's state order: members without an agent first. */
+const STATE_RANK: Record<AgentAdoptionStatus, number> = {
+  notConnected: 0,
+  inactive: 1,
+  active: 2,
+};
+
+/** A member with no agent and no traffic: only their name to show. */
+function unconnectedMember(row: {
+  user_id: string;
+  name: string;
+  email: string;
+}): AgentAdoptionMember {
+  return {
+    userId: row.user_id,
+    name: row.name,
+    email: row.email,
+    status: "notConnected",
+    gatewayLastSeenAt: null,
+    llmLastSeenAt: null,
+    agents: [],
+    gatewayUses: [],
+    llmUses: [],
+  };
+}
+
+/** Whether a member has anything beyond their name to show. */
+function hasAdoption(member: AgentAdoptionMember): boolean {
+  return (
+    member.agents.length > 0 ||
+    member.gatewayUses.length > 0 ||
+    member.llmUses.length > 0 ||
+    member.gatewayLastSeenAt !== null ||
+    member.llmLastSeenAt !== null
+  );
+}
+
+/** A window as the usage rollup reads it. */
+function usageWindow(since: Date, until: Date) {
+  return LlmUsageRollupModel.window(
+    `custom:${since.toISOString()}_${until.toISOString()}`,
+  );
+}
+
+/**
+ * External API calls among usage rows: the ones `getAdoption` counts as a
+ * member's own agent. Archestra's agent runs and built-in callers (Chat,
+ * Slack, compaction and the like) are left out.
+ */
+function externalApiCalls(facts: UsageFacts): SQL {
+  return sql`(${facts.source} = 'api' OR ${facts.source} IS NULL) AND NOT ${facts.run}`;
+}
+
+/** {@link adoptionLlmTraffic}'s rows, one per member, agent and LLM proxy. */
+interface LlmTrafficRow extends Record<string, unknown> {
+  user_id: string;
+  agent: string | null;
+  via_id: string | null;
+  via_name: string | null;
+  /** Calls in the window, and the newest of them. */
+  calls: number;
+  window_last_at: Date | string | null;
+  /** Newest call over the lookback. */
+  last_call_at: Date | string;
+  /** Newest call in the last 30 days. */
+  last_use_at: Date | string | null;
+}
+
+/**
+ * LLM proxy traffic for `getAdoption`, read from the usage rollup rather than
+ * every request of the lookback: calls in the window (and the newest of them)
+ * from one read, and the newest calls over the lookback from another, each
+ * exact at its bounds. A call is the member's when a passthrough key they
+ * authored was sent, else the sender's, since the user header alone is only
+ * a hint.
+ */
+async function adoptionLlmTraffic(params: {
+  organizationId: string;
+  since: Date;
+  until: Date;
+  readFrom: Date;
+  activeSince: Date;
+  now: Date;
+}) {
+  const { organizationId } = params;
+  const [inRange, lookback] = await Promise.all([
+    usageWindow(params.since, params.until),
+    usageWindow(
+      params.readFrom,
+      params.until > params.now ? params.until : params.now,
+    ),
+  ]);
+  const w = LlmUsageRollupModel.facts(inRange, { runs: true });
+  const l = LlmUsageRollupModel.facts(lookback, { runs: true });
+  const inRangeCalls = db
+    .select({
+      userId: sql<string | null>`${w.userId}`.as("user_id"),
+      keyId: sql<string | null>`${w.passthroughVirtualKeyId}`.as("key_id"),
+      agent: sql<string | null>`${w.externalAgentId}`.as("agent"),
+      viaId: sql<string | null>`${w.profileId}`.as("via_id"),
+      calls: sql<number>`sum(${w.requests})::int`.as("calls"),
+      windowLastAt: sql`max(${w.maxCreatedAt})`.as("window_last_at"),
+      lastCallAt: sql`NULL::timestamp`.as("last_call_at"),
+      lastUseAt: sql`NULL::timestamp`.as("last_use_at"),
+    })
+    .from(w)
+    .where(externalApiCalls(w))
+    .groupBy(
+      w.userId,
+      w.passthroughVirtualKeyId,
+      w.externalAgentId,
+      w.profileId,
+    );
+  const lookbackCalls = db
+    .select({
+      userId: sql<string | null>`${l.userId}`.as("user_id"),
+      keyId: sql<string | null>`${l.passthroughVirtualKeyId}`.as("key_id"),
+      agent: sql<string | null>`${l.externalAgentId}`.as("agent"),
+      viaId: sql<string | null>`${l.profileId}`.as("via_id"),
+      calls: sql<number>`0`.as("calls"),
+      windowLastAt: sql`NULL::timestamp`.as("window_last_at"),
+      lastCallAt: sql`max(${l.maxCreatedAt})`.as("last_call_at"),
+      // Each row's newest call is past the bound exactly when one of its
+      // calls is, so the bound needs no raw rows.
+      lastUseAt:
+        sql`max(${l.maxCreatedAt}) FILTER (WHERE ${l.maxCreatedAt} >= ${timestampSql(params.activeSince)})`.as(
+          "last_use_at",
+        ),
+    })
+    .from(l)
+    .where(externalApiCalls(l))
+    .groupBy(
+      l.userId,
+      l.passthroughVirtualKeyId,
+      l.externalAgentId,
+      l.profileId,
+    );
+  const agents = schema.agentsTable;
+  return db.execute<LlmTrafficRow>(sql`
+    WITH facts AS MATERIALIZED ((${inRangeCalls}) UNION ALL (${lookbackCalls})),
+    traffic AS MATERIALIZED (
+      SELECT coalesce(k.author_id, f.user_id) AS user_id, f.agent, f.via_id,
+        coalesce(sum(f.calls), 0)::int AS calls,
+        max(f.window_last_at) AS window_last_at,
+        -- The window lies inside the lookback; this only guards the type.
+        coalesce(max(f.last_call_at), max(f.window_last_at)) AS last_call_at,
+        max(f.last_use_at) AS last_use_at
+      FROM facts f
+      LEFT JOIN ${schema.virtualApiKeysTable} k ON k.id = f.key_id
+      WHERE coalesce(k.author_id, f.user_id) IS NOT NULL
+      GROUP BY 1, 2, 3
+    )
+    -- Agent lookups are correlated subqueries, so each probes the primary key
+    -- for one group rather than hashing every agent of the organization.
+    SELECT t.*, (SELECT a.name FROM ${agents} a WHERE a.id = t.via_id) AS via_name
+    FROM traffic t
+    WHERE (t.via_id IS NULL
+        OR (SELECT a.organization_id FROM ${agents} a WHERE a.id = t.via_id) = ${organizationId})
+      AND (t.agent IS NULL
+        OR (SELECT a.organization_id FROM ${agents} a WHERE a.id = ${archestraAgentId(sql`t.agent`)}) IS DISTINCT FROM ${organizationId})
+  `);
+}
+
+/**
+ * LLM proxy calls from members' agents per UTC day, for `getAdoptionUsage`:
+ * the same traffic {@link adoptionLlmTraffic} counts, from the usage rollup.
+ */
+async function llmUsageByDay(params: {
+  organizationId: string;
+  since: Date;
+  until: Date;
+  orgMembers: SQL;
+}) {
+  const { organizationId } = params;
+  const f = LlmUsageRollupModel.facts(
+    await usageWindow(params.since, params.until),
+    { runs: true },
+  );
+  const day = sql`date_trunc('day', ${f.hour})`;
+  const calls = db
+    .select({
+      day: sql`${day}`.as("day"),
+      userId: sql<string | null>`${f.userId}`.as("user_id"),
+      keyId: sql<string | null>`${f.passthroughVirtualKeyId}`.as("key_id"),
+      agent: sql<string | null>`${f.externalAgentId}`.as("agent"),
+      viaId: sql<string | null>`${f.profileId}`.as("via_id"),
+      calls: sql<number>`sum(${f.requests})::int`.as("calls"),
+    })
+    .from(f)
+    .where(externalApiCalls(f))
+    .groupBy(
+      day,
+      f.userId,
+      f.passthroughVirtualKeyId,
+      f.externalAgentId,
+      f.profileId,
+    );
+  const agents = schema.agentsTable;
+  return db.execute<{ day: string; calls: number }>(sql`
+    WITH traffic AS MATERIALIZED (${calls})
+    SELECT to_char(t.day, 'YYYY-MM-DD') AS day, sum(t.calls)::int AS calls
+    FROM traffic t
+    LEFT JOIN ${schema.virtualApiKeysTable} k ON k.id = t.key_id
+    WHERE coalesce(k.author_id, t.user_id) IN (${params.orgMembers})
+      AND (t.via_id IS NULL
+        OR (SELECT a.organization_id FROM ${agents} a WHERE a.id = t.via_id) = ${organizationId})
+      AND (t.agent IS NULL
+        OR (SELECT a.organization_id FROM ${agents} a WHERE a.id = ${archestraAgentId(sql`t.agent`)}) IS DISTINCT FROM ${organizationId})
+    GROUP BY 1
+  `);
+}
 
 /** Gateway calls on a pasted token: the agent didn't say what it is. */
 const UNKNOWN_AGENT = { clientId: null, name: "Unknown agent" };

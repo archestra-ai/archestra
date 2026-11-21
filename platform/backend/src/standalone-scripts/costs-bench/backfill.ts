@@ -38,11 +38,16 @@ async function main() {
       timeBudgetMs: 60_000,
       throttleRatio: 0,
     });
-    hours += result.rolled + result.recomputed;
+    hours += result.rolled + result.recomputed + result.refreshed;
     process.stdout.write(
-      `rolled ${result.rolled}, recomputed ${result.recomputed} (${hours} hours in ${Math.round((Date.now() - started) / 1000)} s)\n`,
+      `rolled ${result.rolled}, recomputed ${result.recomputed}, refreshed ${result.refreshed} (${hours} hours in ${Math.round((Date.now() - started) / 1000)} s)\n`,
     );
-    if (result.rolled === 0 && result.recomputed === 0) break;
+    if (
+      result.rolled === 0 &&
+      result.recomputed === 0 &&
+      result.refreshed === 0
+    )
+      break;
   }
   process.exit(0);
 }

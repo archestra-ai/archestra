@@ -81,6 +81,7 @@ tests:
     template: archestra-platform.yaml
     documentIndex: 1
     set:
+      archestra.runAsNonRoot: false
       archestra.podSecurityContext: null
       archestra.containerSecurityContext: null
     asserts:
@@ -88,3 +89,82 @@ tests:
           path: spec.template.spec.securityContext
       - notExists:
           path: spec.template.spec.containers[0].securityContext
+
+  - it: runs the web, worker, and migration pods as the image's non-root user by default
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+
+  - it: runs the migration pod as the non-root user too
+    template: migration-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 10001
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: ["ALL"]
+
+  - it: keeps an operator's own user and group over the runAsNonRoot defaults
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.runAsNonRoot: true
+      archestra.podSecurityContext:
+        runAsUser: 20000
+        fsGroup: 20000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 20000
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 20000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: runs the pods as root, without a fixed user, when runAsNonRoot is off
+    set:
+      archestra.runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            seccompProfile:
+              type: RuntimeDefault
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.capabilities
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true

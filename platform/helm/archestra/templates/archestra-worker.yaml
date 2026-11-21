@@ -43,9 +43,8 @@ spec:
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      {{- with .Values.archestra.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "archestra-platform.podSecurityContext" . }}
+      {{- . | nindent 6 }}
       {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}

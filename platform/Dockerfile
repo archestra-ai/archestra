@@ -613,7 +613,6 @@ RUN apk --no-cache upgrade && \
     rm -rf /usr/local/bin/npx && \
     rm -rf /root/.npm && \
     rm -rf /root/.node-gyp && \
-    mkdir -p /var/log/supervisor && \
     # Clean up
     rm -rf /tmp/*
 
@@ -692,6 +691,17 @@ RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
+# The image starts as root, which the quickstart needs (the Docker socket, the
+# embedded PostgreSQL). It can also run as the archestra user (UID 10001), as
+# the Helm chart's `archestra.runAsNonRoot` does, or as an arbitrary UID in
+# group 0 (OpenShift). The paths those processes write belong to UID 10001 and
+# are group-0 writable; any other path in the image stays read-only to them.
+RUN addgroup -g 10001 archestra && \
+    adduser -D -u 10001 -G archestra -h /home/archestra -s /sbin/nologin archestra && \
+    mkdir -p /app/data /run/archestra /var/log/supervisor /home/archestra && \
+    chown 10001:0 /app/data /run/archestra /var/log/supervisor /home/archestra && \
+    chmod 0775 /app/data /run/archestra /var/log/supervisor /home/archestra
+
 # Mark PostgreSQL data directory as a volume for data persistence
 VOLUME /var/lib/postgresql/data /app/data
 
@@ -767,6 +777,10 @@ COPY --from=archestra-cli-release /out/ ./archestra-cli/
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
+# Next.js writes optimized images here at runtime, also as a non-root user.
+RUN mkdir -p /app/frontend/.next/cache && \
+    chown 10001:0 /app/frontend/.next/cache && \
+    chmod 0775 /app/frontend/.next/cache
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions

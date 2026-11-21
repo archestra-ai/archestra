@@ -53,7 +53,7 @@ Added latency uses the gateway’s internal timer minus the mock MCP server’s 
 
 Both tests use local mock servers, with no real inference or provider spend.
 
-- LLM comparison: Archestra 1.5.0-rc.42 with the fixes from [#11106](https://github.com/archestra-ai/archestra/pull/11106) versus LiteLLM 1.106.4, using LiteLLM’s default content omission. Follow the [pinned harness](https://github.com/archestra-ai/archestra/tree/130fd487625ab1054f8954e6854684e09b9cc216/platform/benchmarks/cross-proxy) in clean-database sensitivity mode; select its `archestra` and `litellm-default` results.
+- LLM comparison: Archestra versus LiteLLM 1.106.4, using LiteLLM’s default content omission. Follow the [pinned harness](https://github.com/archestra-ai/archestra/tree/130fd487625ab1054f8954e6854684e09b9cc216/platform/benchmarks/cross-proxy) in clean-database sensitivity mode; select its `archestra` and `litellm-default` results.
 - MCP gateway: the table updates with each Archestra release. The [benchmark workflow](https://github.com/archestra-ai/archestra/actions/workflows/llm-proxy-benchmark.yml) retains measurements; the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) covers local setup.
 
 Run the MCP benchmark from `platform/` with Node.js, pnpm, Rust and Docker installed:

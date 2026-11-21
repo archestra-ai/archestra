@@ -52,7 +52,7 @@ Replace the key without downtime: every replica learns the new key before any re
 
    ```bash
    kubectl -n archestra exec deploy/archestra-platform -- \
-     sh -c 'cd /app/backend && node dist/standalone-scripts/reencrypt-content.ee.mjs'
+     node /app/backend/dist/standalone-scripts/reencrypt-content.ee.mjs
    ```
 
    It exits successfully and its last line shows `"status":"completed"`. Run it again: `"totalRewritten":0` confirms no content is left under the old key.

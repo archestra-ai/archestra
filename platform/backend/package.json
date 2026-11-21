@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
-    "start": "NODE_ENV=production ./scripts/start-production.sh",
+    "start": "NODE_ENV=production node ./scripts/start-production.mjs",
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "node ../scripts/check-workspace.mjs test",

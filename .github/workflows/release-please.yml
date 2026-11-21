@@ -423,7 +423,7 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
@@ -432,9 +432,6 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
@@ -446,7 +443,7 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
@@ -455,9 +452,6 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-p4-shim-docker-image:
     name: Build and push p4 Shim Docker image
@@ -471,7 +465,7 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
@@ -480,9 +474,6 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
@@ -496,7 +487,7 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
@@ -505,9 +496,6 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image:
     name: Build and stage ${{ matrix.image.name }} Docker image

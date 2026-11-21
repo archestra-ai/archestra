@@ -60,12 +60,13 @@ describe("GET /api/logs/events", () => {
       organizationId: organization.id,
       routes: [routes],
     });
-    const list = (userId: string) =>
+    const get = (path: string, userId: string) =>
       app.inject({
         method: "GET",
-        url: "/api/logs/events?hours=1",
+        url: `/api/logs/${path}?hours=1`,
         headers: { [USER_HEADER]: userId },
       });
+    const list = (userId: string) => get("events", userId);
     try {
       // An editor holds log:read: their own LLM request, no one else's, and
       // no audit events.
@@ -91,7 +92,18 @@ describe("GET /api/logs/events", () => {
         href: `/audit/logs/${audit.id}`,
       });
 
+      // Counts follow the same permissions: audit only, grouped by type.
+      const auditorStats = (await get("stats", auditor.id)).json();
+      expect(auditorStats.total).toBe(1);
+      expect(auditorStats.facets.source).toEqual([
+        { value: "audit", count: 1 },
+      ]);
+      expect(auditorStats.facets.auditAction).toEqual([
+        { value: "Agent updated", count: 1 },
+      ]);
+
       expect((await list(nobody.id)).statusCode).toBe(403);
+      expect((await get("stats", nobody.id)).statusCode).toBe(403);
     } finally {
       await app.close();
     }

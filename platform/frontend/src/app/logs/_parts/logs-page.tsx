@@ -21,11 +21,13 @@ import { Input } from "@/components/ui/input";
 import {
   type LogEvent,
   type LogEventsQuery,
-  type LogEventsResponse,
+  type LogEventsPage,
   type LogSource,
+  type LogStats,
   type LogStatus,
   SOURCES,
   useLogEvents,
+  useLogStats,
 } from "@/lib/logs/log-events.query";
 import { cn } from "@/lib/utils/tailwind";
 import { DayHeader, LogRow, SkeletonRows, sameDay } from "./log-row";
@@ -52,14 +54,13 @@ export function LogsPage() {
   const filterKey = JSON.stringify(filters);
 
   // ----- tiles: per-type counts that ignore the type and its filters -----
-  const tiles = useLogEvents({ q: q || undefined, hours, limit: 1 });
-  const tileProblems = useLogEvents({
+  const tiles = useLogStats({ q: q || undefined, hours });
+  const tileProblems = useLogStats({
     q: q || undefined,
     hours,
     statuses: PROBLEM_STATUSES,
-    limit: 1,
   });
-  const bySource = (f?: LogEventsResponse["facets"]) =>
+  const bySource = (f?: LogStats["facets"]) =>
     Object.fromEntries(
       SOURCES.map((s) => [
         s.id,
@@ -71,7 +72,7 @@ export function LogsPage() {
   const first = useLogEvents(filters);
   const [extra, setExtra] = useState<ExtraPages>(EMPTY_EXTRA);
   const active = extra.key === filterKey ? extra : EMPTY_EXTRA;
-  const pages: LogEventsResponse[] = [];
+  const pages: LogEventsPage[] = [];
   if (first.data) {
     pages.push(first.data);
     for (const c of active.cursors) {
@@ -137,8 +138,9 @@ export function LogsPage() {
   }, []);
 
   const days = groupByDay(rows);
-  const facets = first.data?.facets;
-  const total = first.data?.total ?? 0;
+  const stats = useLogStats(filters);
+  const facets = stats.data?.facets;
+  const total = stats.data?.total ?? 0;
   const hasFilters = !!type || !!q || PER_TYPE_KEYS.some((k) => !!get(k));
 
   const compact = useCompactFilters();
@@ -457,7 +459,7 @@ const PAGE_SIZE = 50;
 type ExtraPages = {
   key: string;
   cursors: string[];
-  loaded: Record<string, LogEventsResponse>;
+  loaded: Record<string, LogEventsPage>;
 };
 const EMPTY_EXTRA: ExtraPages = { key: "", cursors: [], loaded: {} };
 
@@ -466,7 +468,7 @@ function PageFetcher({
   onLoaded,
 }: {
   query: LogEventsQuery;
-  onLoaded: (data: LogEventsResponse) => void;
+  onLoaded: (data: LogEventsPage) => void;
 }) {
   const { data, isPlaceholderData } = useLogEvents(query);
   // biome-ignore lint/correctness/useExhaustiveDependencies: report each page once
@@ -510,8 +512,8 @@ const DESCRIPTION =
 // Only fields the search really matches, so the hint is a promise.
 const SEARCH_PLACEHOLDER: Record<LogSource | "all", string> = {
   all: "Search tools, models, people, agents…",
-  llm: "Search prompts, models, session IDs…",
-  mcp: "Search tools, servers, results…",
+  llm: "Search models, people, session IDs…",
+  mcp: "Search tools, servers, people…",
   guardrails: "Search tools, policies, reasons…",
   connections: "Search people, apps, gateways…",
   audit: "Search actions, resources, people…",

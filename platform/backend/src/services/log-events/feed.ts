@@ -1,165 +1,220 @@
+import type { KeysetPosition } from "@/models/log-feed";
 import type {
   LogEvent,
-  LogEventsQuery,
-  LogEventsResponse,
+  LogEventsPage,
   LogSource,
+  LogStats,
+  LogStatsQuery,
+  LogStatus,
 } from "@/types/log-events";
 
 /**
- * Filters, pages, and counts the events read for one window, newest first.
- * Each facet counts the events every other filter keeps, so a picker still
- * lists its other values after one is picked. The cursor is the offset into
- * the filtered events.
+ * A group of events that share every field the Logs page filters and counts
+ * by, within one hour. Counts are sums of facts, so a busy hour costs one
+ * fact per distinct group, not one per event.
  */
-export function queryFeed(params: {
-  events: LogEvent[];
-  query: LogEventsQuery;
+export type LogFact = {
+  source: LogSource;
+  /** Start of the fact's hour, in ms. */
+  hour: number;
+  status: LogStatus;
+  count: number;
+  actor: LogEvent["actor"];
+  agent?: { name: string; kind: "agent" | "mcp_gateway" | "llm_proxy" };
+  client?: string;
+  model?: string;
+  provider?: NonNullable<LogEvent["llm"]>["provider"];
+  mcpServer?: string;
+  decision?: NonNullable<LogEvent["guardrail"]>["decision"];
+  connectionAction?: NonNullable<LogEvent["connection"]>["action"];
+  audit?: {
+    action: string;
+    category: string;
+    resourceType: string;
+    resourceName: string;
+  };
+  sessionId?: string;
+  /**
+   * The words a search matches, for a type searched in memory. Absent when
+   * the database already applied the search.
+   */
+  text?: string;
+};
+
+/**
+ * The total, each filter's values counted as if that filter were off, and
+ * hourly buckets, for the facts the query keeps.
+ */
+export function summarize(params: {
+  facts: LogFact[];
+  query: LogStatsQuery;
   from: Date;
   to: Date;
   truncated: boolean;
-}): LogEventsResponse {
-  const { query, from, to, truncated } = params;
-  const events = [...params.events].sort(
-    (a, b) =>
-      Date.parse(b.timestamp) - Date.parse(a.timestamp) ||
-      b.id.localeCompare(a.id),
-  );
+}): LogStats {
+  const { facts, query } = params;
   const q = query.q?.toLowerCase().trim();
-  const match = (e: LogEvent, skip?: string) =>
+  const keep = (f: LogFact, skip?: string) =>
     (skip === "source" ||
       !query.sources.length ||
-      query.sources.includes(e.source)) &&
+      query.sources.includes(f.source)) &&
     (skip === "status" ||
       !query.statuses.length ||
-      query.statuses.includes(e.status)) &&
-    (!query.sessionId || e.sessionId === query.sessionId) &&
-    (skip === "agent" || !query.agent || e.agent?.name === query.agent) &&
-    (skip === "actor" || !query.actor || e.actor.name === query.actor) &&
-    (skip === "client" || !query.client || e.client === query.client) &&
-    (skip === "model" || !query.model || e.llm?.model === query.model) &&
+      query.statuses.includes(f.status)) &&
+    (!query.sessionId ||
+      f.text === undefined ||
+      f.sessionId === query.sessionId) &&
+    (skip === "agent" || !query.agent || f.agent?.name === query.agent) &&
+    (skip === "actor" || !query.actor || f.actor.name === query.actor) &&
+    (skip === "client" || !query.client || f.client === query.client) &&
+    (skip === "model" || !query.model || f.model === query.model) &&
     (skip === "mcpServer" ||
       !query.mcpServer ||
-      e.mcp?.server === query.mcpServer) &&
+      f.mcpServer === query.mcpServer) &&
     (skip === "decision" ||
       !query.decision.length ||
-      (!!e.guardrail && query.decision.includes(e.guardrail.decision))) &&
+      (!!f.decision && query.decision.includes(f.decision))) &&
     (skip === "connectionAction" ||
       !query.connectionAction ||
-      e.connection?.action === query.connectionAction) &&
+      f.connectionAction === query.connectionAction) &&
     (skip === "auditAction" ||
       !query.auditAction ||
-      e.audit?.action === query.auditAction) &&
+      f.audit?.action === query.auditAction) &&
     (skip === "auditCategory" ||
       !query.auditCategory ||
-      e.audit?.category === query.auditCategory) &&
+      f.audit?.category === query.auditCategory) &&
     (skip === "resourceType" ||
       !query.resourceType ||
-      e.audit?.resourceType === query.resourceType) &&
+      f.audit?.resourceType === query.resourceType) &&
     (skip === "resourceName" ||
       !query.resourceName ||
-      e.audit?.resourceName === query.resourceName) &&
+      f.audit?.resourceName === query.resourceName) &&
     (skip === "actorKind" ||
       !query.actorKind ||
-      e.actor.kind === query.actorKind) &&
-    (!q || haystack(e).includes(q));
-  const facetOf = (skip: string, pick: (e: LogEvent) => string | undefined) =>
+      f.actor.kind === query.actorKind) &&
+    (!q || f.text === undefined || f.text.includes(q));
+  const facetOf = (skip: string, pick: (f: LogFact) => string | undefined) =>
     facet(
-      events.filter((e) => match(e, skip)),
+      facts.filter((f) => keep(f, skip)),
       pick,
     );
-
-  const filtered = events.filter((e) => match(e));
-  const offset = Math.max(0, Number.parseInt(query.cursor ?? "0", 10) || 0);
-  const end = offset + query.limit;
+  const kept = facts.filter((f) => keep(f));
 
   return {
-    data: filtered.slice(offset, end),
-    nextCursor: end < filtered.length ? String(end) : null,
-    total: filtered.length,
-    truncated,
+    total: kept.reduce((n, f) => n + f.count, 0),
     facets: {
-      source: facetOf("source", (e) => e.source),
-      status: facetOf("status", (e) => e.status),
-      agent: facetOf("agent", (e) => e.agent?.name),
-      actor: facetOf("actor", (e) => e.actor.name),
-      client: facetOf("client", (e) => e.client),
-      model: facetOf("model", (e) => e.llm?.model),
-      mcpServer: facetOf("mcpServer", (e) => e.mcp?.server),
-      decision: facetOf("decision", (e) => e.guardrail?.decision),
-      connectionAction: facetOf(
-        "connectionAction",
-        (e) => e.connection?.action,
-      ),
-      auditAction: facetOf("auditAction", (e) => e.audit?.action),
-      auditCategory: facetOf("auditCategory", (e) => e.audit?.category),
-      resourceType: facetOf("resourceType", (e) => e.audit?.resourceType),
-      resourceName: facetOf("resourceName", (e) =>
-        e.audit
-          ? `${e.audit.resourceType}::${e.audit.resourceName}`
+      source: facetOf("source", (f) => f.source),
+      status: facetOf("status", (f) => f.status),
+      agent: facetOf("agent", (f) => f.agent?.name),
+      actor: facetOf("actor", (f) => f.actor.name),
+      client: facetOf("client", (f) => f.client),
+      model: facetOf("model", (f) => f.model),
+      mcpServer: facetOf("mcpServer", (f) => f.mcpServer),
+      decision: facetOf("decision", (f) => f.decision),
+      connectionAction: facetOf("connectionAction", (f) => f.connectionAction),
+      auditAction: facetOf("auditAction", (f) => f.audit?.action),
+      auditCategory: facetOf("auditCategory", (f) => f.audit?.category),
+      resourceType: facetOf("resourceType", (f) => f.audit?.resourceType),
+      resourceName: facetOf("resourceName", (f) =>
+        f.audit
+          ? `${f.audit.resourceType}::${f.audit.resourceName}`
           : undefined,
       ),
-      auditCategoryAction: facetOf("auditAction", (e) =>
-        e.audit ? `${e.audit.category}::${e.audit.action}` : undefined,
+      auditCategoryAction: facetOf("auditAction", (f) =>
+        f.audit ? `${f.audit.category}::${f.audit.action}` : undefined,
       ),
-      actorByKind: facetOf("actor", (e) => `${e.actor.kind}::${e.actor.name}`),
+      actorByKind: facetOf("actor", (f) => `${f.actor.kind}::${f.actor.name}`),
     },
-    buckets: buckets(filtered, from.getTime(), to.getTime()),
+    buckets: buckets(kept, params.from, params.to),
+    directory: directory(facts),
+    truncated: params.truncated,
   };
+}
+
+/**
+ * Each type's position in the timeline: the last row a page showed, or
+ * `"end"` once its rows ran out. A type without one starts at the newest.
+ */
+type FeedCursor = Partial<Record<LogSource, KeysetPosition | "end">>;
+
+function encodeFeedCursor(cursor: FeedCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+/** A cursor that does not decode starts from the newest events. */
+export function decodeFeedCursor(value: string | undefined): FeedCursor {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    );
+    return parsed && typeof parsed === "object" ? (parsed as FeedCursor) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * One page from each type's newest rows after its position. Each type read
+ * `limit + 1` rows, so a type that returned fewer has no more; a type whose
+ * rows the page did not reach keeps its position and is read again.
+ */
+export function mergePages(params: {
+  pages: Partial<Record<LogSource, LogEvent[]>>;
+  cursor: FeedCursor;
+  limit: number;
+}): LogEventsPage {
+  const { pages, cursor, limit } = params;
+  const merged = (Object.values(pages).flat() as LogEvent[]).sort(newestFirst);
+  const data = merged.slice(0, limit);
+  if (merged.length <= limit) return { data, nextCursor: null };
+
+  const next: FeedCursor = { ...cursor };
+  for (const [source, rows] of Object.entries(pages) as [
+    LogSource,
+    LogEvent[],
+  ][]) {
+    const shown = data.filter((e) => e.source === source);
+    const last = shown.at(-1);
+    if (last) next[source] = { at: last.timestamp, id: last.id };
+    if (shown.length === rows.length && rows.length <= limit)
+      next[source] = "end";
+  }
+  return { data, nextCursor: encodeFeedCursor(next) };
 }
 
 // === Internal helpers
 
-const BUCKETS = 48;
+const HOUR = 3_600_000;
 
-function haystack(e: LogEvent): string {
-  return [
-    e.title,
-    e.summary,
-    e.actor.name,
-    e.agent?.name,
-    e.client,
-    e.sessionTitle,
-    e.llm?.model,
-    e.mcp?.server,
-    e.mcp?.tool,
-    e.guardrail?.policy,
-    e.guardrail?.reason,
-    e.guardrail?.tool,
-    e.audit?.action,
-    e.audit?.resourceName,
-    e.connection?.client,
-    e.connection?.gateway,
-    e.id,
-    e.sessionId,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+function newestFirst(a: LogEvent, b: LogEvent): number {
+  return (
+    Date.parse(b.timestamp) - Date.parse(a.timestamp) ||
+    (b.id > a.id ? 1 : b.id < a.id ? -1 : 0)
+  );
 }
 
 function facet(
-  events: LogEvent[],
-  pick: (e: LogEvent) => string | undefined,
+  facts: LogFact[],
+  pick: (f: LogFact) => string | undefined,
 ): { value: string; count: number }[] {
   const counts = new Map<string, number>();
-  for (const e of events) {
-    const value = pick(e);
-    if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+  for (const f of facts) {
+    const value = pick(f);
+    if (value) counts.set(value, (counts.get(value) ?? 0) + f.count);
   }
   return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 }
 
-function buckets(
-  events: LogEvent[],
-  from: number,
-  to: number,
-): LogEventsResponse["buckets"] {
-  const size = (to - from) / BUCKETS;
-  const out = Array.from({ length: BUCKETS }, (_, i) => ({
-    start: new Date(from + i * size).toISOString(),
-    end: new Date(from + (i + 1) * size).toISOString(),
+/** One bucket per clock hour the window touches. */
+function buckets(facts: LogFact[], from: Date, to: Date): LogStats["buckets"] {
+  const first = Math.floor(from.getTime() / HOUR) * HOUR;
+  const count = Math.floor(to.getTime() / HOUR) - first / HOUR + 1;
+  const out = Array.from({ length: count }, (_, i) => ({
+    start: new Date(first + i * HOUR).toISOString(),
+    end: new Date(first + (i + 1) * HOUR).toISOString(),
     bySource: {
       llm: 0,
       mcp: 0,
@@ -169,14 +224,28 @@ function buckets(
     } satisfies Record<LogSource, number>,
     errors: 0,
   }));
-  for (const e of events) {
-    const i = Math.min(
-      BUCKETS - 1,
-      Math.floor((Date.parse(e.timestamp) - from) / size),
-    );
-    if (i < 0) continue;
-    out[i].bySource[e.source] += 1;
-    if (e.status === "error" || e.status === "blocked") out[i].errors += 1;
+  for (const f of facts) {
+    const bucket = out[Math.floor((f.hour - first) / HOUR)];
+    if (!bucket) continue;
+    bucket.bySource[f.source] += f.count;
+    if (f.status === "error" || f.status === "blocked")
+      bucket.errors += f.count;
   }
   return out;
+}
+
+function directory(facts: LogFact[]): LogStats["directory"] {
+  const agents = new Map<string, NonNullable<LogFact["agent"]>["kind"]>();
+  const models = new Map<string, NonNullable<LogFact["provider"]>>();
+  const emails = new Map<string, string>();
+  for (const f of facts) {
+    if (f.agent) agents.set(f.agent.name, f.agent.kind);
+    if (f.model && f.provider) models.set(f.model, f.provider);
+    if (f.actor.email) emails.set(f.actor.name, f.actor.email);
+  }
+  return {
+    agents: [...agents].map(([name, kind]) => ({ name, kind })),
+    models: [...models].map(([name, provider]) => ({ name, provider })),
+    emails: [...emails].map(([name, email]) => ({ name, email })),
+  };
 }

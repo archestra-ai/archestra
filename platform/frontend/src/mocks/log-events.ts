@@ -1,5 +1,5 @@
 // Deterministic, realistic cross-source log feed for the unified Logs page,
-// served by MSW at `GET /api/logs/events`. Sessions are coherent: a user in a
+// served by MSW at `GET /api/logs/events` and `GET /api/logs/stats`. Sessions are coherent: a user in a
 // client app drives an agent; each turn is an LLM request, the tool calls it
 // asks for go through a guardrail consult and then the MCP Gateway, and the
 // next LLM request carries the results. Audit and connection events are
@@ -10,22 +10,38 @@ import type {
   LogActor,
   LogBucket,
   LogEvent,
-  LogEventsResponse,
+  LogEventsPage,
   LogFacetCount,
   LogSource,
+  LogStats,
   LogStatus,
 } from "@/lib/logs/log-events.query";
 
 export const unifiedLogsHandlers = [
   http.get("/api/logs/events", ({ request }) => {
-    const p = new URL(request.url).searchParams;
-    return HttpResponse.json(queryFeed(p));
+    const { data, nextCursor } = queryFeed(new URL(request.url).searchParams);
+    return HttpResponse.json({ data, nextCursor } satisfies LogEventsPage);
+  }),
+  http.get("/api/logs/stats", ({ request }) => {
+    const { total, facets, buckets, inWindow } = queryFeed(
+      new URL(request.url).searchParams,
+    );
+    return HttpResponse.json({
+      total,
+      facets,
+      buckets,
+      directory: directoryOf(inWindow),
+      truncated: false,
+    } satisfies LogStats);
   }),
 ];
 
 // ===== query =====
 
-function queryFeed(p: URLSearchParams): LogEventsResponse {
+function queryFeed(
+  p: URLSearchParams,
+): LogEventsPage &
+  Pick<LogStats, "total" | "facets" | "buckets"> & { inWindow: LogEvent[] } {
   const all = getFeed();
   const hours = Number(p.get("hours") ?? 24);
   const now = Date.now();
@@ -164,6 +180,25 @@ function queryFeed(p: URLSearchParams): LogEventsResponse {
       ),
     },
     buckets: buckets(filtered, from, now),
+    inWindow,
+  };
+}
+
+function directoryOf(events: LogEvent[]): LogStats["directory"] {
+  const agents = new Map<string, LogStats["directory"]["agents"][number]>();
+  const models = new Map<string, LogStats["directory"]["models"][number]>();
+  const emails = new Map<string, string>();
+  for (const e of events) {
+    if (e.agent)
+      agents.set(e.agent.name, { name: e.agent.name, kind: e.agent.kind });
+    if (e.llm)
+      models.set(e.llm.model, { name: e.llm.model, provider: e.llm.provider });
+    if (e.actor.email) emails.set(e.actor.name, e.actor.email);
+  }
+  return {
+    agents: [...agents.values()],
+    models: [...models.values()],
+    emails: [...emails].map(([name, email]) => ({ name, email })),
   };
 }
 

@@ -1156,6 +1156,7 @@ export const RouteId = {
 
   // Unified Logs
   GetLogEvents: "getLogEvents",
+  GetLogStats: "getLogStats",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

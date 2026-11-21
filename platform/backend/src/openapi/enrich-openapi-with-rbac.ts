@@ -378,6 +378,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   [RouteId.GetLogEvents]:
     "Requires `log:read`, `guardrailsLog:read`, `clientConnection:read`, or `auditLog:read`. Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+  [RouteId.GetLogStats]:
+    "Requires `log:read`, `guardrailsLog:read`, `clientConnection:read`, or `auditLog:read`. Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
   [RouteId.CreateRuntimeCredential]:
     "Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
   // The three purge routes are gated by role, not by permission: the caller

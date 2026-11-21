@@ -1,4 +1,23 @@
 -- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+-- The Logs page counts LLM Proxy requests from the hourly usage rollup, so the
+-- rollup gains what it filters by: the request `source` (Slack, Chat, a coding
+-- client's turn kind) as a key, and `failed_requests` as a measure. Both are
+-- set once when an interaction is written, so the insert trigger already
+-- marks every hour that needs them. Adding a nullable column, or one with a
+-- constant default, is a catalog change on these aggregate tables; no rewrite.
+ALTER TABLE "llm_usage_daily" ADD COLUMN "source" varchar;--> statement-breakpoint
+ALTER TABLE "llm_usage_daily" ADD COLUMN "failed_requests" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "llm_usage_hourly" ADD COLUMN "source" varchar;--> statement-breakpoint
+ALTER TABLE "llm_usage_hourly" ADD COLUMN "failed_requests" integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+-- Hours rolled before this migration hold no source and no failures. Mark the
+-- last four days for recompute, so the three days the Logs page reads come
+-- back with them; the periodic llm_usage_rollup task recomputes each hour.
+SELECT llm_usage_rollup_mark(ARRAY(
+  SELECT DISTINCT hour FROM llm_usage_hourly
+  WHERE hour >= date_trunc('hour', now() AT TIME ZONE 'UTC') - interval '96 hours'
+));
+--> statement-breakpoint
 -- Two log resources change, and every custom role keeps what it could see.
 --
 -- `guardrailsYell` becomes `guardrailsLog`, which now also covers the

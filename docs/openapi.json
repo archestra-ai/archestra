@@ -433990,7 +433990,7 @@
         "tags": [
           "Logs"
         ],
-        "description": "Every log type in one timeline, newest first: LLM Proxy requests, MCP Gateway tool calls, Guardrails consults and yells, client connection events, and audit events. Each type is filtered by its own permission and left out when the caller cannot read it. Returns a page of events with facets and 48 time buckets over the window.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read), [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read), [`clientConnection:read`](/docs/reference/permissions#clientConnection:read), or [`auditLog:read`](/docs/reference/permissions#auditLog:read). Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+        "description": "Every log type in one timeline, newest first: LLM Proxy requests, MCP Gateway tool calls, Guardrails consults and yells, client connection events, and audit events. Each type is filtered by its own permission and left out when the caller cannot read it. Returns one page; pass `nextCursor` back as `cursor` for the next.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read), [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read), [`clientConnection:read`](/docs/reference/permissions#clientConnection:read), or [`auditLog:read`](/docs/reference/permissions#auditLog:read). Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
         "parameters": [
           {
             "schema": {
@@ -434026,7 +434026,7 @@
             "in": "query",
             "name": "q",
             "required": false,
-            "description": "Free text over every shown field"
+            "description": "Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id"
           },
           {
             "schema": {
@@ -434129,10 +434129,10 @@
           {
             "schema": {
               "default": 24,
-              "type": "number",
+              "type": "integer",
               "minimum": 0,
               "exclusiveMinimum": true,
-              "maximum": 2160
+              "maximum": 168
             },
             "in": "query",
             "name": "hours",
@@ -434141,10 +434141,10 @@
           },
           {
             "schema": {
-              "default": 100,
+              "default": 50,
               "type": "integer",
               "minimum": 1,
-              "maximum": 500
+              "maximum": 100
             },
             "in": "query",
             "name": "limit",
@@ -434530,14 +434530,425 @@
                     },
                     "nextCursor": {
                       "nullable": true,
+                      "description": "Pass back as `cursor` for the next page; null on the last",
                       "type": "string"
-                    },
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Requires `log:read`, `guardrailsLog:read`, `clientConnection:read`, or `auditLog:read`. Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/logs/stats": {
+      "get": {
+        "operationId": "getLogStats",
+        "tags": [
+          "Logs"
+        ],
+        "description": "Counts for the log events the filters match in the window: the total, each filter's values (counted as if that filter were off), and one bucket per hour. Each type is filtered by its own permission, as in the timeline.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`log:read`](/docs/reference/permissions#log:read), [`guardrailsLog:read`](/docs/reference/permissions#guardrailsLog:read), [`clientConnection:read`](/docs/reference/permissions#clientConnection:read), or [`auditLog:read`](/docs/reference/permissions#auditLog:read). Each type is returned under its own permission: LLM Proxy and MCP Gateway under `log`, Guardrails under `guardrailsLog`, client connections under `clientConnection`, and audit events under `auditLog`. `read` returns the caller's own records, and `admin` returns everyone's.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "description": "Comma-separated record types"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "statuses",
+            "required": false,
+            "description": "Comma-separated statuses"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "description": "Comma-separated Guardrails decisions"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "agent",
+            "required": false,
+            "description": "An agent's name"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "description": "An actor's name"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "client",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "model",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "mcpServer",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "connectionAction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "auditAction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "auditCategory",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "resourceType",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "resourceName",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "actorKind",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 24,
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 168
+            },
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "description": "The window, back from now, in hours"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
                     "total": {
-                      "type": "number",
-                      "description": "Matching events in the window that was read"
-                    },
-                    "truncated": {
-                      "type": "boolean"
+                      "type": "number"
                     },
                     "facets": {
                       "type": "object",
@@ -434886,16 +435297,120 @@
                         ],
                         "additionalProperties": false
                       },
-                      "description": "48 equal buckets over the window"
+                      "description": "One bucket per hour of the window"
+                    },
+                    "directory": {
+                      "type": "object",
+                      "properties": {
+                        "agents": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "agent",
+                                  "mcp_gateway",
+                                  "llm_proxy"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string",
+                                "enum": [
+                                  "openai",
+                                  "gemini",
+                                  "anthropic",
+                                  "bedrock",
+                                  "cohere",
+                                  "cerebras",
+                                  "mistral",
+                                  "perplexity",
+                                  "groq",
+                                  "xai",
+                                  "openrouter",
+                                  "vllm",
+                                  "ollama",
+                                  "ollama-native",
+                                  "zhipuai",
+                                  "deepseek",
+                                  "minimax",
+                                  "kimi",
+                                  "kimi-code",
+                                  "azure",
+                                  "github-copilot",
+                                  "microsoft-365-copilot",
+                                  "archestra",
+                                  "voyage",
+                                  "jev"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "provider"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "emails": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "agents",
+                        "models",
+                        "emails"
+                      ],
+                      "additionalProperties": false,
+                      "description": "What the facets name: each agent's kind, model's maker, person's email"
+                    },
+                    "truncated": {
+                      "type": "boolean",
+                      "description": "A small type had more events in the window than one count reads"
                     }
                   },
                   "required": [
-                    "data",
-                    "nextCursor",
                     "total",
-                    "truncated",
                     "facets",
-                    "buckets"
+                    "buckets",
+                    "directory",
+                    "truncated"
                   ],
                   "additionalProperties": false
                 }

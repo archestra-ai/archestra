@@ -139,15 +139,22 @@ export type LogEvent = z.infer<typeof LogEventSchema>;
 
 const FacetSchema = z.array(z.object({ value: z.string(), count: z.number() }));
 
-export const LogEventsResponseSchema = z.object({
+/** One page of the timeline, newest first. */
+export const LogEventsPageSchema = z.object({
   data: z.array(LogEventSchema),
-  nextCursor: z.string().nullable(),
-  total: z.number().describe("Matching events in the window that was read"),
-  /**
-   * Each type is read up to a fixed number of its newest events in the window,
-   * so a busy window's counts cover those, not every event in it.
-   */
-  truncated: z.boolean(),
+  nextCursor: z
+    .string()
+    .nullable()
+    .describe("Pass back as `cursor` for the next page; null on the last"),
+});
+export type LogEventsPage = z.infer<typeof LogEventsPageSchema>;
+
+/**
+ * Counts for the events the filters match in the window: the total, each
+ * filter's values (counted as if that filter were off), and hourly buckets.
+ */
+export const LogStatsSchema = z.object({
+  total: z.number(),
   facets: z.object({
     source: FacetSchema,
     status: FacetSchema,
@@ -176,20 +183,46 @@ export const LogEventsResponseSchema = z.object({
         errors: z.number(),
       }),
     )
-    .describe("48 equal buckets over the window"),
+    .describe("One bucket per hour of the window"),
+  directory: z
+    .object({
+      agents: z.array(
+        z.object({
+          name: z.string(),
+          kind: z.enum(["agent", "mcp_gateway", "llm_proxy"]),
+        }),
+      ),
+      models: z.array(
+        z.object({ name: z.string(), provider: SupportedProvidersSchema }),
+      ),
+      emails: z.array(z.object({ name: z.string(), email: z.string() })),
+    })
+    .describe(
+      "What the facets name: each agent's kind, model's maker, person's email",
+    ),
+  truncated: z
+    .boolean()
+    .describe(
+      "A small type had more events in the window than one count reads",
+    ),
 });
-export type LogEventsResponse = z.infer<typeof LogEventsResponseSchema>;
+export type LogStats = z.infer<typeof LogStatsSchema>;
 
 const csv = z
   .string()
   .optional()
   .transform((value) => (value ? value.split(",").filter(Boolean) : []));
 
-export const LogEventsQuerySchema = z.object({
+export const LogStatsQuerySchema = z.object({
   sources: csv.describe("Comma-separated record types"),
   statuses: csv.describe("Comma-separated statuses"),
   decision: csv.describe("Comma-separated Guardrails decisions"),
-  q: z.string().optional().describe("Free text over every shown field"),
+  q: z
+    .string()
+    .optional()
+    .describe(
+      "Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id",
+    ),
   sessionId: z.string().optional(),
   agent: z.string().optional().describe("An agent's name"),
   actor: z.string().optional().describe("An actor's name"),
@@ -204,11 +237,16 @@ export const LogEventsQuerySchema = z.object({
   actorKind: z.string().optional(),
   hours: z.coerce
     .number()
+    .int()
     .positive()
-    .max(24 * 90)
+    .max(24 * 7)
     .default(24)
     .describe("The window, back from now, in hours"),
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+export type LogStatsQuery = z.infer<typeof LogStatsQuerySchema>;
+
+export const LogEventsQuerySchema = LogStatsQuerySchema.extend({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional().describe("The previous page's nextCursor"),
 });
 export type LogEventsQuery = z.infer<typeof LogEventsQuerySchema>;

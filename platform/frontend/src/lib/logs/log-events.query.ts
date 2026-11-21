@@ -171,12 +171,15 @@ export interface LogBucket {
   errors: number;
 }
 
-export interface LogEventsResponse {
+/** One page of the timeline, newest first. */
+export interface LogEventsPage {
   data: LogEvent[];
   nextCursor: string | null;
+}
+
+/** Counts for the events a query matches, from `GET /api/logs/stats`. */
+export interface LogStats {
   total: number;
-  /** A type had more events in the window than one request reads. */
-  truncated?: boolean;
   facets: {
     source: LogFacetCount[];
     status: LogFacetCount[];
@@ -185,13 +188,13 @@ export interface LogEventsResponse {
     client: LogFacetCount[];
     model: LogFacetCount[];
     mcpServer: LogFacetCount[];
-    /** Guardrails: allow | deny | review | yell. */
+    /** Guardrails: consult | allow | deny | review | yell. */
     decision: LogFacetCount[];
-    /** Agent connections: connected | first_seen | authorized | token_refreshed | disconnected. */
+    /** Client connections: connected | first_seen | authorized | token_refreshed | disconnected. */
     connectionAction: LogFacetCount[];
     /** Audit: the action label, e.g. "Agent updated". */
     auditAction: LogFacetCount[];
-    /** Audit: the action's category, e.g. "Users & access". */
+    /** Audit: the action's category, e.g. "Agent". */
     auditCategory: LogFacetCount[];
     /** Audit: resource type, e.g. "agent", "mcp_server". */
     resourceType: LogFacetCount[];
@@ -202,14 +205,22 @@ export interface LogEventsResponse {
     /** "actorKind::actorName" pairs (user | agent | service_account | system). */
     actorByKind: LogFacetCount[];
   };
-  /** 48 equal buckets over the requested window, for histograms. */
+  /** One bucket per clock hour of the window, for histograms. */
   buckets: LogBucket[];
+  /** What the facets name: each agent's kind, model's maker, person's email. */
+  directory: {
+    agents: { name: string; kind: "agent" | "mcp_gateway" | "llm_proxy" }[];
+    models: { name: string; provider: SupportedProvider }[];
+    emails: { name: string; email: string }[];
+  };
+  /** A small type had more events in the window than one count reads. */
+  truncated: boolean;
 }
 
 export interface LogEventsQuery {
   sources?: LogSource[];
   statuses?: LogStatus[];
-  /** Free text over title, summary, actor, agent, tool, model. */
+  /** Models, people, agents, clients, servers, tools, actions, resources, or an exact session id. */
   q?: string;
   sessionId?: string;
   agent?: string;
@@ -230,43 +241,61 @@ export interface LogEventsQuery {
   cursor?: string | null;
 }
 
+/** One page of the timeline. */
 export function useLogEvents(query: LogEventsQuery = {}) {
   return useQuery({
     queryKey: ["log-events", query],
-    queryFn: async (): Promise<LogEventsResponse> => {
-      const params = new URLSearchParams();
-      if (query.sources?.length) params.set("sources", query.sources.join(","));
-      if (query.decision?.length)
-        params.set("decision", query.decision.join(","));
-      if (query.statuses?.length)
-        params.set("statuses", query.statuses.join(","));
-      for (const key of [
-        "q",
-        "sessionId",
-        "agent",
-        "actor",
-        "client",
-        "model",
-        "mcpServer",
-        "connectionAction",
-        "auditAction",
-        "auditCategory",
-        "resourceType",
-        "resourceName",
-        "actorKind",
-        "cursor",
-      ] as const) {
-        const value = query[key];
-        if (value) params.set(key, value);
-      }
-      params.set("hours", String(query.hours ?? 24));
-      params.set("limit", String(query.limit ?? 100));
+    queryFn: async (): Promise<LogEventsPage> => {
+      const params = searchParams(query);
+      params.set("limit", String(query.limit ?? 50));
+      if (query.cursor) params.set("cursor", query.cursor);
       const res = await fetch(`/api/logs/events?${params}`);
       if (!res.ok) throw new Error(`logs feed ${res.status}`);
       return res.json();
     },
     placeholderData: keepPreviousData,
   });
+}
+
+/** Counts, filter values and hourly buckets for a query. */
+export function useLogStats(query: LogEventsQuery = {}) {
+  const { cursor: _cursor, limit: _limit, ...rest } = query;
+  return useQuery({
+    queryKey: ["log-stats", rest],
+    queryFn: async (): Promise<LogStats> => {
+      const res = await fetch(`/api/logs/stats?${searchParams(rest)}`);
+      if (!res.ok) throw new Error(`logs stats ${res.status}`);
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
+  });
+}
+
+function searchParams(query: LogEventsQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.sources?.length) params.set("sources", query.sources.join(","));
+  if (query.decision?.length) params.set("decision", query.decision.join(","));
+  if (query.statuses?.length) params.set("statuses", query.statuses.join(","));
+  for (const key of [
+    "q",
+    "sessionId",
+    "agent",
+    "actor",
+    "client",
+    "model",
+    "mcpServer",
+    "connectionAction",
+    "auditAction",
+    "auditCategory",
+    "resourceType",
+    "resourceName",
+    "actorKind",
+  ] as const) {
+    const value = query[key];
+    if (value) params.set(key, value);
+  }
+  params.set("hours", String(query.hours ?? 24));
+  return params;
 }
 
 // ===== small shared formatters (variants may use or ignore) =====

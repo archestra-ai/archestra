@@ -6,15 +6,17 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migration = fs.readFileSync(
-  path.join(
-    __dirname,
-    "0655_guardrails-log-and-client-connection-permissions.sql",
-  ),
+  path.join(__dirname, "0655_aromatic_sebastian_shaw.sql"),
   "utf8",
 );
 
+/** The migration's role rewrite; the test database already has its columns. */
 async function migrate() {
-  await db.execute(sql.raw(migration));
+  for (const statement of migration.split("--> statement-breakpoint")) {
+    if (statement.includes("organization_role")) {
+      await db.execute(sql.raw(statement));
+    }
+  }
 }
 
 async function rolePermission(id: string) {

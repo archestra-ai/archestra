@@ -2079,6 +2079,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // One timeline over every log type: the handler reads each type under its
   // own permission and refuses a caller who can read none.
   [RouteId.GetLogEvents]: {},
+  [RouteId.GetLogStats]: {},
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

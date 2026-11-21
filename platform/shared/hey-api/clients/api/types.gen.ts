@@ -110588,7 +110588,7 @@ export type GetLogEventsData = {
          */
         decision?: string;
         /**
-         * Free text over every shown field
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
          */
         q?: string;
         sessionId?: string;
@@ -110784,12 +110784,135 @@ export type GetLogEventsResponses = {
                 }>;
             };
         }>;
-        nextCursor: string | null;
         /**
-         * Matching events in the window that was read
+         * Pass back as `cursor` for the next page; null on the last
          */
+        nextCursor: string | null;
+    };
+};
+
+export type GetLogEventsResponse = GetLogEventsResponses[keyof GetLogEventsResponses];
+
+export type GetLogStatsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Comma-separated record types
+         */
+        sources?: string;
+        /**
+         * Comma-separated statuses
+         */
+        statuses?: string;
+        /**
+         * Comma-separated Guardrails decisions
+         */
+        decision?: string;
+        /**
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
+         */
+        q?: string;
+        sessionId?: string;
+        /**
+         * An agent's name
+         */
+        agent?: string;
+        /**
+         * An actor's name
+         */
+        actor?: string;
+        client?: string;
+        model?: string;
+        mcpServer?: string;
+        connectionAction?: string;
+        auditAction?: string;
+        auditCategory?: string;
+        resourceType?: string;
+        resourceName?: string;
+        actorKind?: string;
+        /**
+         * The window, back from now, in hours
+         */
+        hours?: number;
+    };
+    url: '/api/logs/stats';
+};
+
+export type GetLogStatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLogStatsError = GetLogStatsErrors[keyof GetLogStatsErrors];
+
+export type GetLogStatsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
         total: number;
-        truncated: boolean;
         facets: {
             source: Array<{
                 value: string;
@@ -110862,7 +110985,7 @@ export type GetLogEventsResponses = {
             }>;
         };
         /**
-         * 48 equal buckets over the window
+         * One bucket per hour of the window
          */
         buckets: Array<{
             start: string;
@@ -110872,10 +110995,31 @@ export type GetLogEventsResponses = {
             };
             errors: number;
         }>;
+        /**
+         * What the facets name: each agent's kind, model's maker, person's email
+         */
+        directory: {
+            agents: Array<{
+                name: string;
+                kind: 'agent' | 'mcp_gateway' | 'llm_proxy';
+            }>;
+            models: Array<{
+                name: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            }>;
+            emails: Array<{
+                name: string;
+                email: string;
+            }>;
+        };
+        /**
+         * A small type had more events in the window than one count reads
+         */
+        truncated: boolean;
     };
 };
 
-export type GetLogEventsResponse = GetLogEventsResponses[keyof GetLogEventsResponses];
+export type GetLogStatsResponse = GetLogStatsResponses[keyof GetLogStatsResponses];
 
 export type McpAppProxyPostData = {
     body: {

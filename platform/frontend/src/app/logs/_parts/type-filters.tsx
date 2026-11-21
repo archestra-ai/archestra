@@ -44,11 +44,11 @@ import { SourceIcon } from "@/components/source-badge";
 import {
   type LogEvent,
   type LogEventsQuery,
-  type LogEventsResponse,
   type LogFacetCount,
   type LogSource,
+  type LogStats,
   type LogStatus,
-  useLogEvents,
+  useLogStats,
 } from "@/lib/logs/log-events.query";
 import { cn } from "@/lib/utils/tailwind";
 import { type ChipOption, FilterChip } from "./filter-chip";
@@ -56,7 +56,7 @@ import { type PaneGroup, PanePicker, SectionsChip } from "./pane-picker";
 
 type Getter = (key: string) => string | undefined;
 type Setter = (patch: Record<string, string | undefined>) => void;
-type Facets = LogEventsResponse["facets"];
+type Facets = LogStats["facets"];
 
 export const PROBLEM_STATUSES: LogStatus[] = [
   "error",
@@ -391,10 +391,10 @@ function AuditFilters({
     for (const k of keys) delete q[k];
     return q;
   };
-  const eventFacets = useLogEvents(without("auditAction", "auditCategory")).data
+  const eventFacets = useLogStats(without("auditAction", "auditCategory")).data
     ?.facets;
-  const actorFacets = useLogEvents(without("actor", "actorKind")).data?.facets;
-  const resourceFacets = useLogEvents(without("resourceType", "resourceName"))
+  const actorFacets = useLogStats(without("actor", "actorKind")).data?.facets;
+  const resourceFacets = useLogStats(without("resourceType", "resourceName"))
     .data?.facets;
   const statusCount = (s: string) =>
     resourceFacets?.status.find((f) => f.value === s)?.count;
@@ -525,20 +525,22 @@ function paneGroups(
 // ===== small pieces =====
 
 /**
- * Facets carry names only; one wide page of the type tells each agent's kind,
- * each model's maker and each person's email. Shared (and cached) by every
- * chip of the type.
+ * Facets carry names only; the type's stats tell each agent's kind, each
+ * model's maker and each person's email. Shared (and cached) by every chip
+ * of the type.
  */
 function useDirectory(type: LogSource) {
-  const { data } = useLogEvents({ sources: [type], hours: 72, limit: 500 });
-  const agents = new Map<string, NonNullable<LogEvent["agent"]>>();
-  const models = new Map<string, NonNullable<LogEvent["llm"]>["provider"]>();
-  const emails = new Map<string, string>();
-  for (const e of data?.data ?? []) {
-    if (e.agent) agents.set(e.agent.name, e.agent);
-    if (e.llm) models.set(e.llm.model, e.llm.provider);
-    if (e.actor.email) emails.set(e.actor.name, e.actor.email);
-  }
+  const { data } = useLogStats({ sources: [type], hours: 72 });
+  const directory = data?.directory;
+  const agents = new Map<string, NonNullable<LogEvent["agent"]>>(
+    (directory?.agents ?? []).map((a) => [a.name, { id: a.name, ...a }]),
+  );
+  const models = new Map<string, NonNullable<LogEvent["llm"]>["provider"]>(
+    (directory?.models ?? []).map((m) => [m.name, m.provider]),
+  );
+  const emails = new Map<string, string>(
+    (directory?.emails ?? []).map((e) => [e.name, e.email]),
+  );
   return { agents, models, emails };
 }
 

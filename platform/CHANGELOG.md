@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0-rc.43](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.42...platform-v1.5.0-rc.43) (2026-11-21)
+
+
+### Features
+
+* **helm:** run the platform pods with a read-only root filesystem ([#11088](https://github.com/archestra-ai/archestra/issues/11088)) ([fe3c47b](https://github.com/archestra-ai/archestra/commit/fe3c47b3021cf70ee1013af28b492a2e0b69e020))
+* **mcp:** run MCP server pods under the runtime's default seccomp profile ([#11103](https://github.com/archestra-ai/archestra/issues/11103)) ([e4a5d70](https://github.com/archestra-ai/archestra/commit/e4a5d7005ff7c3d6c018c9c859d7ac5f086db044))
+* **platform:** build the Kubernetes image on Docker's distroless hardened Node image ([#11101](https://github.com/archestra-ai/archestra/issues/11101)) ([7f84229](https://github.com/archestra-ai/archestra/commit/7f8422929d0d778a2b9cec89f8631391a41bb8ca))
+* **platform:** publish a slim Kubernetes image and run it from the Helm chart ([#11091](https://github.com/archestra-ai/archestra/issues/11091)) ([92792f5](https://github.com/archestra-ai/archestra/commit/92792f55aa571d53201dce7b145f6b61c15cfcf4))
+* **platform:** run the platform image on a Docker hardened base with a Node supervisor ([#11095](https://github.com/archestra-ai/archestra/issues/11095)) ([d58277c](https://github.com/archestra-ai/archestra/commit/d58277c7ad5f7b2e37c42eea8b9acd856cd4e893))
+
+
+### Miscellaneous Chores
+
+* **platform:** verify the hardened Node base instead of exempting it ([#11100](https://github.com/archestra-ai/archestra/issues/11100)) ([3751d6b](https://github.com/archestra-ai/archestra/commit/3751d6b3d498d911e86cdafd442bbc0697f512ca))
+
 ## [1.5.0-rc.42](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.41...platform-v1.5.0-rc.42) (2026-11-21)
 
 

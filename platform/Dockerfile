@@ -796,18 +796,15 @@ ENTRYPOINT ["node", "/app/entrypoint.mjs"]
 # the last stage: builds without --target (releases, quickstart CI, fork PRs,
 # local docker build) get the full image.
 FROM runtime AS unified
-# PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
-# pg_trgm, which migrations 0116/0378 use for the conversation and user
-# search indexes (they skip the indexes when the extension is missing).
-# su-exec runs it as its own system user.
-#
-# 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
-# CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-# CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the libcurl
-# floor: a bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors
-# guarantee the fixed versions.
-RUN apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
-        postgresql-pgvector su-exec && \
+# Install PostgreSQL 18, pg_trgm (contrib), and pgvector from the hardened
+# Alpine repository used by the Node base. Keep the major version and data
+# directory unchanged so existing quickstart volumes remain readable. Restrict
+# this install to DHI: the public Alpine community pgvector package is older.
+RUN printf '%s\n' 'https://dhi.io/apk/alpine/v3.23/main' > /tmp/dhi-postgres-repositories && \
+    apk --repositories-file /tmp/dhi-postgres-repositories add --no-cache \
+        postgresql18=18.7-r0 postgresql18-contrib=18.7-r0 \
+        pgvector-0-pg18=0.8.7-r1 su-exec=0.3-r0 && \
+    rm /tmp/dhi-postgres-repositories && \
     # The postgres user comes with the package.
     mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql

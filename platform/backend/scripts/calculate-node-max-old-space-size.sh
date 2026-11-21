@@ -26,7 +26,7 @@ fi
 
 # Memory inside this container that is NOT available to this Node process,
 # because something else in the container needs it. The web container runs the
-# Next.js server and supervisord alongside the backend; the worker and renderer
+# Next.js server and the supervisor alongside the backend; the worker and renderer
 # run a single Node process and set nothing here.
 reserved_mib=${ARCHESTRA_NODE_MEMORY_RESERVED_MIB:-0}
 case "$reserved_mib" in

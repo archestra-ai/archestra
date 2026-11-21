@@ -1440,7 +1440,6 @@ shared mounts.
 {{- range $dir := list
   (dict "name" "writable-tmp" "mountPath" "/tmp")
   (dict "name" "writable-run" "mountPath" "/run/archestra")
-  (dict "name" "writable-supervisor-log" "mountPath" "/var/log/supervisor")
   (dict "name" "writable-data" "mountPath" "/app/data")
   (dict "name" "writable-home" "mountPath" "/home/archestra")
   (dict "name" "writable-next-cache" "mountPath" "/app/frontend/.next/cache") }}

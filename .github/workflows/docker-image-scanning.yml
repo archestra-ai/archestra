@@ -82,6 +82,11 @@ jobs:
       - name: Resolve release build inputs
         id: inputs
         run: python3 .github/scripts/release-candidate.py prepare
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ${{ matrix.dockerfile || format('{0}/Dockerfile', matrix.context) }}
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Build candidate locally
         uses: $/.github/actions/build-docker-image
         with:

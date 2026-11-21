@@ -29,8 +29,6 @@ tests:
               mountPath: /tmp
             - name: writable-run
               mountPath: /run/archestra
-            - name: writable-supervisor-log
-              mountPath: /var/log/supervisor
             - name: writable-data
               mountPath: /app/data
             - name: writable-home
@@ -46,7 +44,7 @@ tests:
         documentSelector: *platformPods
       - lengthEqual:
           path: spec.template.spec.volumes
-          count: 7
+          count: 6
         documentSelector: *platformPods
       - equal:
           path: spec.template.spec.initContainers[?(@.name == "vault-secrets")].volumeMounts
@@ -57,8 +55,6 @@ tests:
               mountPath: /tmp
             - name: writable-run
               mountPath: /run/archestra
-            - name: writable-supervisor-log
-              mountPath: /var/log/supervisor
             - name: writable-data
               mountPath: /app/data
             - name: writable-home
@@ -77,10 +73,10 @@ tests:
           value: true
       - lengthEqual:
           path: spec.template.spec.containers[0].volumeMounts
-          count: 6
+          count: 5
       - lengthEqual:
           path: spec.template.spec.volumes
-          count: 6
+          count: 5
 
   - it: renders the writable root filesystem and no emptyDirs when the value is off
     set:

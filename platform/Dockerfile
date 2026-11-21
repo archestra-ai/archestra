@@ -10,6 +10,11 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
+# The runtime stage's base: `hardened`, Docker's hardened Node image (the
+# published images; the runtime stage says why), or `public`, the public node
+# image of the same release, for CI jobs without registry credentials
+# (Dependabot pull requests' e2e builds; the merge queue builds the hardened one).
+ARG RUNTIME_BASE=hardened
 
 FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
 ARG TARGETARCH
@@ -508,8 +513,9 @@ COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
 RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 
 # <----- Runtime stage (shared by both published images) ----->
-# Everything both images run: the backend, the frontend, supervisord, git,
-# kubectl and the Dagger CLI. Two images are built on it:
+# Everything both images run: the backend, the frontend, the Node supervisor
+# (docker/scripts/supervisor.mjs), git, kubectl and the Dagger CLI. Two images
+# are built on it:
 #   unified-slim  the Kubernetes image (archestra/platform:<version>-slim, the
 #                 Helm chart's default): no bundled PostgreSQL, no quickstart.
 #   unified       the docker run image (archestra/platform:<version>): adds
@@ -517,8 +523,26 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 #                 Dagger Engine archive.
 # Both share these layers, so the second costs one build of its own layers and
 # a registry stores and serves the shared ones once.
-FROM base AS runtime
+#
+# The base is Docker's hardened Node image (https://docs.docker.com/dhi/),
+# built by Docker from Docker's package builds with its own provenance, SBOM
+# and VEX. Its -dev variant, because the platform needs a shell for its
+# entrypoint and apk for the packages below; each image removes apk at the end.
+# Same Node release and Alpine branch as the builder stages above, so their
+# native addons load here. Pulling it needs a Docker login (`docker login
+# dhi.io`, any Docker account); CI logs in where it builds this file
+# (.github/actions/dhi-login).
+# supply-chain-policy: allow-unverified-image Docker signs its hardened images with a cosign key and
+# publishes their provenance, SBOM and VEX, but the base-image check can't log in to dhi.io or verify a
+# key-based signature yet; this stays until base-images.toml in archestra-ai/.github lists dhi.io.
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime-base-hardened
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-public
+# Only the selected base is pulled.
+FROM runtime-base-${RUNTIME_BASE} AS runtime
 WORKDIR /app
+# The hardened image runs as UID 1000 by default. This stage installs packages,
+# and the full image starts as root (see the archestra user below).
+USER root
 
 ARG VERSION=dev
 ARG TARGETARCH
@@ -529,7 +553,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
 # 127.0.0.1, not `localhost`: the API and the Next.js server both bind IPv4
-# only (backend config.ts pins the API to 0.0.0.0; supervisord starts Next with
+# only (backend config.ts pins the API to 0.0.0.0; supervisor.mjs starts Next with
 # HOSTNAME=0.0.0.0), while `localhost` resolves to ::1 first — getaddrinfo
 # applies RFC 6724 precedence regardless of /etc/hosts order, and musl has no
 # /etc/gai.conf to retune it. Naming it would start every hop to the backend on
@@ -553,7 +577,7 @@ ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 # Idle keep-alive window (ms) for both HTTP servers in this image: the Fastify
-# API reads it directly, and supervisord maps it onto KEEP_ALIVE_TIMEOUT for the
+# API reads it directly, and supervisor.mjs maps it onto KEEP_ALIVE_TIMEOUT for the
 # Next.js standalone server, which otherwise falls back to Node's 5s default.
 # It has to stay above the keep-alive timeout of whatever proxies the container
 # (a cloud load balancer holds pooled connections far longer than 5s), so
@@ -574,36 +598,37 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
-    # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
-    # The pinned node:24-alpine3.23 base ships curl 8.19.0-r0. The bare `apk upgrade` above
-    # would pick up the fix, but this RUN layer is Docker-cached on its instruction text and
-    # never re-ran against the newer index — pin curl/libcurl explicitly so the fixed version
-    # is guaranteed (and adding this line busts the stale cache).
-    apk add --no-cache --upgrade "curl>=8.20.0-r0" "libcurl>=8.20.0-r0" && \
+    # CVE-2026-6276, CVE-2026-5773: libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
+    # The bare `apk upgrade` above would pick up fixes, but this RUN layer is
+    # Docker-cached on its instruction text and never re-runs against a newer
+    # index — so the floors below guarantee the fixed versions whatever the cache holds.
+    apk add --no-cache --upgrade "libcurl>=8.20.0-r0" && \
     # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
     # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
-    # The pinned base ships 3.5.6-r0 and only the libraries are installed here — the
-    # `openssl` CLI package is not — so the floors go on libcrypto3/libssl3. Same stale-layer
-    # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
-    # so the explicit floors both guarantee the fixed version and bust the cache.
+    # Only the libraries are installed here (the `openssl` CLI package is not), so the
+    # floors go on libcrypto3/libssl3.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
     # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
-    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    # fixed in 1.2.5-r24).
     apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
     apk add --no-cache git git-daemon && \
+    # Nothing here uses npm, yarn or corepack (pnpm runs only in the builder
+    # stages; DB migrations call drizzle-kit directly), and they bring extra
+    # dependencies and vulnerabilities. The hardened base installs them as
+    # packages; the public node image (RUNTIME_BASE=public) as files.
+    for package in npm yarn corepack; do \
+        if apk info --installed "$package" >/dev/null; then apk del --no-cache "$package"; fi; \
+    done && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* /root/.npm /root/.node-gyp && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
-    # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
-    # See https://github.com/grafana/grafana-image-renderer/pull/625
-    rm -rf /usr/local/lib/node_modules/npm && \
-    rm -rf /usr/local/bin/npm && \
-    rm -rf /usr/local/bin/npx && \
-    rm -rf /root/.npm && \
-    rm -rf /root/.node-gyp && \
+    ! command -v npm && ! command -v yarn && ! command -v corepack && \
     # Clean up
     rm -rf /tmp/*
 
@@ -638,43 +663,6 @@ RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
-# CVE-2026-6100 (CRITICAL) plus CVE-2026-15308, CVE-2026-11972, CVE-2026-11940, CVE-2026-4786
-# and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
-# supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
-# before python3 is installed and cannot lift it.
-# Expat 2.10.0-r0 fixes the high-severity XML parser advisories. It arrives
-# transitively with python3, so require the patched version explicitly.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.10.0-r0" && \
-    # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
-    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
-    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
-           /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
-           /usr/lib/python*/ensurepip && \
-    # CVE-2026-23949: jaraco-context 5.3.0 (fixed in 6.1.0). Vendored inside py3-setuptools
-    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
-    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/jaraco/context.py \
-           /usr/lib/python*/site-packages/setuptools/_vendor/jaraco.context-*.dist-info
-
-# CVE-2026-23949: jaraco.context 5.3.0, also vendored inside py3-setuptools.
-# Unlike the vendored wheel above it can't be deleted — jaraco.text imports
-# jaraco.context at setuptools/pkg_resources import time — so replace it with
-# the fixed 6.1.0 wheel from PyPI, pinned by sha256. 6.1.0 ships jaraco/context
-# as a package directory (5.3.0 was a single context.py module), hence the
-# directory copy.
-RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
-        "https://files.pythonhosted.org/packages/8d/48/aa685dbf1024c7bd82bede569e3a85f82c32fd3d79ba5fea578f0159571a/jaraco_context-6.1.0-py3-none-any.whl" && \
-    echo "a43b5ed85815223d0d3cfdb6d7ca0d2bc8946f28f30b6f3216bda070f68badda  /tmp/jaraco_context-6.1.0-py3-none-any.whl" | sha256sum -c - && \
-    VENDOR=$(echo /usr/lib/python3*/site-packages/setuptools/_vendor) && \
-    python3 -m zipfile -e /tmp/jaraco_context-6.1.0-py3-none-any.whl /tmp/jaraco_context && \
-    rm -rf "$VENDOR"/jaraco/context.py \
-           "$VENDOR"/jaraco/__pycache__/context.* \
-           "$VENDOR"/jaraco.context-*.dist-info && \
-    cp -r /tmp/jaraco_context/jaraco/context "$VENDOR"/jaraco/context && \
-    cp -r /tmp/jaraco_context/jaraco_context-6.1.0.dist-info "$VENDOR"/ && \
-    rm -rf /tmp/jaraco_context /tmp/jaraco_context-6.1.0-py3-none-any.whl && \
-    # sanity check: the swapped-in module must keep the setuptools import chain intact
-    python3 -c "import pkg_resources, setuptools" && \
-    supervisord --version
 
 # The image starts as root, which the quickstart needs (the Docker socket, the
 # embedded PostgreSQL). It can also run as the archestra user (UID 10001), as
@@ -683,9 +671,9 @@ RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
 # are group-0 writable; any other path in the image stays read-only to them.
 RUN addgroup -g 10001 archestra && \
     adduser -D -u 10001 -G archestra -h /home/archestra -s /sbin/nologin archestra && \
-    mkdir -p /app/data /run/archestra /var/log/supervisor /home/archestra && \
-    chown 10001:0 /app/data /run/archestra /var/log/supervisor /home/archestra && \
-    chmod 0775 /app/data /run/archestra /var/log/supervisor /home/archestra
+    mkdir -p /app/data /run/archestra /home/archestra && \
+    chown 10001:0 /app/data /run/archestra /home/archestra && \
+    chmod 0775 /app/data /run/archestra /home/archestra
 
 VOLUME /app/data
 
@@ -697,20 +685,8 @@ COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
 COPY docker/scripts/start-backend.sh /app/start-backend.sh
-COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
+COPY docker/scripts/supervisor.mjs /app/supervisor.mjs
 
-# CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
-# /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
-# reach it. pnpm is only needed in the builder stage (the `pnpm build` +
-# `pnpm deploy` there); this runtime stage runs no pnpm at all — DB migrations
-# call drizzle-kit directly (see docker/supervisord/supervisord.conf) — so drop
-# corepack/pnpm from the final image entirely. Nothing at runtime uses the base
-# image's yarn or corepack either. Each image removes apk itself last
-# (at the end of this file), after its own packages.
-RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx \
-           /usr/local/bin/corepack /usr/local/lib/node_modules/corepack \
-           /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* && \
-    git --version
 
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the
@@ -768,11 +744,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# Nothing at runtime uses the curl CLI (libcurl stays: git's HTTPS transport
-# links it) or apk itself, and a package manager in a running container only
-# helps an intruder. `apk del` removes apk last and keeps its database, so
-# image scanners still list every OS package. Each image below runs it as its
-# last step, after any packages of its own.
+# Nothing at runtime uses apk itself, and a package manager in a running
+# container only helps an intruder. `apk del` removes apk last and keeps its
+# database, so image scanners still list every OS package. Each image below
+# runs it as its last step, after any packages of its own.
 
 # <----- Kubernetes image (archestra/platform:<version>-slim) ----->
 # The Helm chart's default image. The database is external and the cluster is
@@ -780,7 +755,7 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 # entrypoint says which image to use when started without a database URL or
 # with ARCHESTRA_QUICKSTART. CI's Kubernetes e2e jobs build this target.
 FROM runtime AS unified-slim
-RUN apk del --no-cache curl apk-tools && \
+RUN apk del --no-cache apk-tools && \
     test -s /lib/apk/db/installed && \
     ! test -e /usr/bin/curl && ! test -e /sbin/apk
 # Nothing in this image needs root (no bundled PostgreSQL, no Docker socket),
@@ -800,16 +775,15 @@ FROM runtime AS unified
 #
 # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
 # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-# CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
-# pin: a bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
-# guarantee the fixed versions and bust the cache.
+# CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the libcurl
+# floor: a bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors
+# guarantee the fixed versions.
 RUN apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
         postgresql-pgvector su-exec && \
     # The postgres user comes with the package.
     mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 VOLUME /var/lib/postgresql/data
-COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 EXPOSE 5432
 
 # The quickstart's embedded KinD cluster: the docker CLI drives the host's
@@ -837,6 +811,6 @@ RUN wget -O /app/agent-sandbox.quickstart.yaml \
 # containerd cannot see the host Docker image cache) — see docker-entrypoint.sh
 # and the commit that introduced the tar (#5275).
 COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar
-RUN apk del --no-cache curl apk-tools && \
+RUN apk del --no-cache apk-tools && \
     test -s /lib/apk/db/installed && \
     ! test -e /usr/bin/curl && ! test -e /sbin/apk

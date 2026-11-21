@@ -1,4 +1,5 @@
-// Used before supervisord starts; keep the backend's derived deadline below it.
+// Used before supervisor.mjs starts: its backend stop timeout. Keep the
+// backend's derived deadline below it.
 function seconds(name, fallback, minimum = 1) {
   const raw = process.env[name];
   if (raw === undefined) return fallback;

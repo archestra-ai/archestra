@@ -3,8 +3,8 @@
   "@id": "https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json",
   "author": "Archestra (https://archestra.ai)",
   "role": "Document Creator",
-  "timestamp": "2026-11-20T02:54:18Z",
-  "version": 16,
+  "timestamp": "2026-11-21T04:11:49Z",
+  "version": 19,
   "statements": [
     {
       "vulnerability": {
@@ -91,6 +91,44 @@
     },
     {
       "vulnerability": {
+        "name": "CVE-2025-15558"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/platform",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/github.com/docker/cli@29.3.1%2Bincompatible"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-21T04:11:49Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is in the Docker CLI's plugin manager on Windows, which also searches C:\\ProgramData\\Docker\\cli-plugins, a directory a low-privileged Windows user can create (GHSA-p436-gjf2-799p); upstream states that non-Windows binaries are not affected. These images ship only Linux builds of the module: the Dagger CLI, which compiles it in, and, in the docker run image, the docker CLI."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-15558"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/platform",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/github.com/docker/cli@29.3.0%2Bincompatible.dirty"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-21T04:11:49Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is in the Docker CLI's plugin manager on Windows, which also searches C:\\ProgramData\\Docker\\cli-plugins, a directory a low-privileged Windows user can create (GHSA-p436-gjf2-799p); upstream states that non-Windows binaries are not affected. These images ship only Linux builds of the module: the Dagger CLI, which compiles it in, and, in the docker run image, the docker CLI."
+    },
+    {
+      "vulnerability": {
         "name": "CVE-2025-47917"
       },
       "products": [
@@ -163,6 +201,25 @@
       "timestamp": "2026-11-20T02:54:17Z",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "The vulnerable function mbedtls_x509_string_to_names() belongs to Mbed TLS's X.509 library (libmbedx509), which these images do not install; they ship only libmbedcrypto7, whose /usr/lib/x86_64-linux-gnu/libmbedcrypto.so.2.28.3 neither exports nor references that function (nm -D)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-66413"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/platform",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.52.1-r0?os_name=alpine&os_version=3.23"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-21T04:11:48Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is in Git for Windows: its HTTP transport answers a server's NTLM challenge with the signed-in Windows user's credentials (SSPI), so a malicious server can capture their NTLM hash (GHSA-hv9c-4jm9-jh3x, fixed in Git for Windows 2.53.0(2)). These images ship Alpine Linux's git, a Linux build with no SSPI and no Windows credentials to send."
     },
     {
       "vulnerability": {

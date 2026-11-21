@@ -1320,7 +1320,7 @@ export function parseActiveChatRunPollIntervalMs(params: {
  * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
  * unset) plus every URL in `ARCHESTRA_API_BASE_URL` — the same
  * comma-separated list the frontend's `getExternalProxyUrls` reads (after
- * supervisord re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
+ * the image's supervisor re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
  * Next.js process). The backend inherits the canonical `ARCHESTRA_API_BASE_URL`
  * directly, so we read that here.
  *
@@ -2656,7 +2656,7 @@ const config = {
      * closes it. Must stay above the keep-alive timeout of anything proxying
      * this server — see {@link parseKeepAliveTimeoutMs}. Configurable via
      * ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS, which also drives the Next.js
-     * server (mapped to KEEP_ALIVE_TIMEOUT in the container's supervisord
+     * server (mapped to KEEP_ALIVE_TIMEOUT by the container's supervisor
      * config) so both processes share one setting.
      */
     keepAliveTimeoutMs: parseKeepAliveTimeoutMs(

@@ -81,6 +81,8 @@ helm_resource(
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)
 # Start with: tilt trigger archestra-k8s
+# Its image builds from Docker's hardened Node image, which needs a one-time
+# `docker login dhi.io` with any Docker account (see the Dockerfile's runtime stage).
 # NOTE: This resource is skipped on Windows due to k8s_yaml() using heredoc syntax
 # which is not compatible with Windows CMD
 if os.name != 'nt':

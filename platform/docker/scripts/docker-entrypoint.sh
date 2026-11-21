@@ -9,10 +9,9 @@ set -e
 #   backend starts at once and attaches to the cluster when its kubeconfig
 #   appears at KUBECONFIG_PATH
 # - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
-# - writes the supervisord config for this start, with the postgres program
-#   when the bundled database is used
-# - injects the resolved DATABASE_URL into supervisord's environment
-# - starts supervisord in the background so container signals can trigger graceful cleanup
+# - exports the resolved DATABASE_URL for the processes it starts
+# - starts supervisor.mjs (PostgreSQL when bundled, the backend, the frontend)
+#   in the background so container signals can trigger graceful cleanup
 # - stops the embedded KinD cluster on shutdown but keeps it, so the next start
 #   resumes it in seconds instead of creating a new one
 
@@ -37,7 +36,7 @@ KIND_NETWORK="archestra-kind"
 # Must match a version supported by the KinD binary version compiled in the builder stage.
 # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
 KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
-# Track the background cluster setup and supervisord for cleanup
+# Track the background cluster setup and the supervisor for cleanup
 PROVISION_PID=""
 SUPERVISOR_PID=""
 
@@ -56,7 +55,7 @@ cleanup() {
         kill "$PROVISION_PID" 2>/dev/null || true
     fi
 
-    # Stop supervisord gracefully before stopping the KinD cluster
+    # Stop the platform's processes gracefully before stopping the KinD cluster
     if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
         echo "Stopping services..."
         kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
@@ -224,8 +223,8 @@ connect_cluster() {
 }
 
 # Joins the KinD network and exports the backend's Kubernetes settings, none
-# of which depend on the cluster existing yet. Fast, so it runs before
-# supervisord: the backend reads these once at startup.
+# of which depend on the cluster existing yet. Fast, so it runs before the
+# supervisor starts the backend, which reads these once at startup.
 configure_quickstart_backend() {
     # From a previous run, in the data volume: the backend must not attach to
     # the cluster before this run's API answers.
@@ -278,7 +277,7 @@ configure_quickstart_backend() {
 
 # Brings up the embedded cluster, publishes its kubeconfig, then the Dagger
 # Engine and the Agent Sandbox controller. Runs in the background while
-# supervisord starts PostgreSQL, the backend and the frontend.
+# the supervisor starts PostgreSQL, the backend and the frontend.
 provision_cluster() {
     # Failures are handled explicitly: under set -e a stray failing command
     # would end this background job silently and leave the backend waiting.
@@ -498,14 +497,7 @@ fi
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
-# supervisord reads the config written here, never /etc/supervisord.conf.
-SUPERVISOR_CONF=/run/archestra/supervisord.conf
-if [ "$RUN_AS_ROOT" = "true" ]; then
-    cp /etc/supervisord.conf "$SUPERVISOR_CONF"
-else
-    sed '/^user=root$/d' /etc/supervisord.conf > "$SUPERVISOR_CONF"
-fi
-
+SUPERVISOR_ARGS=""
 if [ "$USE_EXTERNAL_DB" = "false" ]; then
     # The Kubernetes image (archestra/platform:<version>-slim) bundles no PostgreSQL.
     if ! command -v pg_ctl >/dev/null 2>&1; then
@@ -526,7 +518,7 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 
-    cat /etc/supervisord.postgres.conf >> "$SUPERVISOR_CONF"
+    SUPERVISOR_ARGS="--postgres"
 
     # The setup below prints several screens of initdb and server output on a
     # healthy start. Keep it out of `docker logs` unless a step fails, and send
@@ -606,14 +598,14 @@ else
     # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
-# Supervisord passes its own environment through unchanged. Exporting avoids
-# rewriting a config file and preserves every legal URL character verbatim.
+# The supervisor passes its environment to every process unchanged, so every
+# legal URL character survives verbatim.
 export DATABASE_URL="$EFFECTIVE_DATABASE_URL"
 
 # Normalize the keep-alive timeout before either server reads it.
 #
 # The backend validates this itself and falls back to the default on a bad
-# value, but supervisord hands the raw string to the Next.js server as
+# value, but the supervisor hands the raw string to the Next.js server as
 # KEEP_ALIVE_TIMEOUT, and that server treats anything unparsable as "unset" and
 # drops to Node's 5s default. Without this, one typo would leave the two servers
 # on wildly different windows — and silently put the *public-facing* one back on
@@ -639,23 +631,23 @@ unset keep_alive_ms keep_alive_invalid
 
 # ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
 # handled in-process by the backend via the ngrok agent SDK — no binary download
-# or supervisord program is needed. See backend/src/ngrok-tunnel-manager.ts.
+# or separate process is needed. See backend/src/ngrok-tunnel-manager.ts.
 
 # Derive the supervisor limit from the same durations as the backend.
 ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS="$(node /app/shutdown-budget.mjs)"
 export ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS
 
-# Start supervisord in foreground but allow signal handling
-# Run in background and wait so trap can catch signals
-/usr/bin/supervisord -c "$SUPERVISOR_CONF" &
+# Run the supervisor in the background and wait, so the trap can catch signals.
+# shellcheck disable=SC2086 # SUPERVISOR_ARGS is empty or one flag
+node /app/supervisor.mjs $SUPERVISOR_ARGS &
 SUPERVISOR_PID=$!
 
-# Wait for supervisord to exit (or for a signal)
+# Wait for the supervisor to exit (or for a signal)
 wait "$SUPERVISOR_PID"
-# Note: if supervisord is terminated by a signal, `wait` returns 128 + signal.
+# Note: if the supervisor is terminated by a signal, `wait` returns 128 + signal.
 # We intentionally propagate this composite exit code to `cleanup` for diagnostics.
 EXIT_CODE=$?
 
-# If we get here, supervisord exited on its own or was terminated by a signal.
+# If we get here, the supervisor exited on its own or was terminated by a signal.
 # Run cleanup with the raw exit code from `wait` (may be 128 + signal on signals).
 cleanup "$EXIT_CODE"

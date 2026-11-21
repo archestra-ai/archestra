@@ -622,21 +622,7 @@ class AgentModel {
       // The organization's media setting rides along so each log write learns
       // it from the read it already makes; an organization change drops the
       // cached entry like an agent change does.
-      const [result] = await db
-        .select({
-          environmentId: schema.agentsTable.environmentId,
-          accessAllTools: schema.agentsTable.accessAllTools,
-          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
-        })
-        .from(schema.agentsTable)
-        .leftJoin(
-          schema.organizationsTable,
-          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
-        )
-        .where(
-          and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
-        )
-        .limit(1);
+      const [result] = await AgentModel.toolAccessFields.get().execute({ id });
       return result ?? null;
     });
   }
@@ -6791,6 +6777,29 @@ class AgentModel {
     // SPDX-SnippetEnd
     return agents;
   }
+
+  /** Read on every logged request: see {@link findToolAccessFields}. */
+  private static readonly toolAccessFields = new PreparedQuery((database) =>
+    database
+      .select({
+        environmentId: schema.agentsTable.environmentId,
+        accessAllTools: schema.agentsTable.accessAllTools,
+        keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
+      })
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.id, sql.placeholder("id")),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_agent_tool_access_fields"),
+  );
 
   private static readonly gatewayById = new PreparedQuery((database) =>
     database

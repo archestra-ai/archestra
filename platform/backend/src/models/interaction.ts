@@ -57,7 +57,7 @@ import {
 } from "@/log-content";
 import logger from "@/logging";
 import {
-  exportSessionSummary,
+  SessionSummaryExport,
   shouldExportSessionSummary,
 } from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -613,6 +613,11 @@ function matchesSessionKey(sessionKey: string): SQL {
 }
 
 class InteractionModel {
+  /** Session summaries exported after writes, batched under load. */
+  private static readonly sessionSummaries = new SessionSummaryExport((page) =>
+    InteractionModel.summarizeSessionPage(page, undefined),
+  );
+
   /** Whether the organization has any LLM request logged under a session. */
   static async existsBySessionId(params: {
     organizationId: string;
@@ -3921,21 +3926,10 @@ class InteractionModel {
     // bounded session aggregation as the UI, so time ranges/truncated log queries
     // cannot turn a partial set of requests into misleading totals.
     if (shouldExportSessionSummary()) {
-      trackBackgroundWork(
-        InteractionModel.summarizeSessionPage(
-          [
-            {
-              sessionId: insertValues.sessionId ?? null,
-              interactionId: insertValues.sessionId ? null : interaction.id,
-            },
-          ],
-          undefined,
-        )
-          .then((rows) => {
-            for (const row of rows) exportSessionSummary(row);
-          })
-          .catch(() => {}),
-      );
+      InteractionModel.sessionSummaries.enqueue({
+        sessionId: insertValues.sessionId ?? null,
+        interactionId: insertValues.sessionId ? null : interaction.id,
+      });
     }
     return interaction;
   }

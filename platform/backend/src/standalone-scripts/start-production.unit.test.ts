@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM module that starts the server in the image
-import { maxOldSpaceSizeMib, serverArguments } from "../../scripts/start-production.mjs";
+import {
+  maxOldSpaceSizeMib,
+  serverArguments,
+} from "../../scripts/start-production.mjs";
 
 const heap = (env: Record<string, string>) => maxOldSpaceSizeMib(env);
 
@@ -37,14 +40,17 @@ describe("maxOldSpaceSizeMib", () => {
     "--inspect --max-old-space-size=1600",
   ])("preserves an existing NODE_OPTIONS limit: %s", (nodeOptions) => {
     expect(
-      heap({ NODE_OPTIONS: nodeOptions, ARCHESTRA_NODE_MEMORY_LIMIT_MIB: "3072" }),
+      heap({
+        NODE_OPTIONS: nodeOptions,
+        ARCHESTRA_NODE_MEMORY_LIMIT_MIB: "3072",
+      }),
     ).toBeNull();
   });
 
   it("fails fast for an invalid explicit override", () => {
-    expect(() => heap({ ARCHESTRA_NODE_MAX_OLD_SPACE_SIZE_MIB: "large" })).toThrow(
-      "must be a non-negative integer",
-    );
+    expect(() =>
+      heap({ ARCHESTRA_NODE_MAX_OLD_SPACE_SIZE_MIB: "large" }),
+    ).toThrow("must be a non-negative integer");
   });
 
   it("ignores malformed discovered values", () => {
@@ -129,16 +135,21 @@ describe("serverArguments", () => {
   });
 
   it("leaves source maps off in the quickstart unless asked for", () => {
-    expect(serverArguments({ ARCHESTRA_QUICKSTART: "true" }).args).not.toContain(
-      "--enable-source-maps",
-    );
     expect(
-      serverArguments({ ARCHESTRA_QUICKSTART: "true", ARCHESTRA_NODE_SOURCE_MAPS: "true" }).args,
+      serverArguments({ ARCHESTRA_QUICKSTART: "true" }).args,
+    ).not.toContain("--enable-source-maps");
+    expect(
+      serverArguments({
+        ARCHESTRA_QUICKSTART: "true",
+        ARCHESTRA_NODE_SOURCE_MAPS: "true",
+      }).args,
     ).toContain("--enable-source-maps");
   });
 
   it("warns about an invalid source maps setting and keeps the default", () => {
-    const { args, messages } = serverArguments({ ARCHESTRA_NODE_SOURCE_MAPS: "yes" });
+    const { args, messages } = serverArguments({
+      ARCHESTRA_NODE_SOURCE_MAPS: "yes",
+    });
     expect(args).toContain("--enable-source-maps");
     expect(messages).toEqual([
       "WARNING: invalid ARCHESTRA_NODE_SOURCE_MAPS value 'yes', using true",

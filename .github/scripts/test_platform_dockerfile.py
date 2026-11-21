@@ -31,11 +31,14 @@ class PlatformDockerfileTests(unittest.TestCase):
         self.assertNotRegex(slim, r"(?m)^RUN ")
 
     def test_both_bases_are_the_same_node_release(self):
-        pins = {alias: ref for ref, alias in re.findall(r"^FROM (\S+) AS (runtime-base-\w+)$", DOCKERFILE, re.M)}
+        pins = {alias: ref for ref, alias in re.findall(r"^FROM (\S+) AS (runtime-base-[\w-]+)$", DOCKERFILE, re.M)}
         release = lambda ref: re.match(r"^[^:]+:([\d.]+-alpine[\d.]+)", ref).group(1)
-        self.assertEqual(release(pins["runtime-base-hardened"]), release(pins["runtime-base-distroless"]))
-        self.assertTrue(pins["runtime-base-distroless"].startswith("dhi.io/node:"))
-        self.assertNotIn("-dev@", pins["runtime-base-distroless"])
+        for alias in ("runtime-base-public", "runtime-base-distroless-hardened", "runtime-base-distroless-public"):
+            self.assertEqual(release(pins[alias]), release(pins["runtime-base-hardened"]), alias)
+        self.assertTrue(pins["runtime-base-distroless-hardened"].startswith("dhi.io/node:"))
+        self.assertNotIn("-dev@", pins["runtime-base-distroless-hardened"])
+        # Builds without a dhi.io login pick the public bases for both images.
+        self.assertEqual(pins["runtime-base-distroless"], "runtime-base-distroless-${RUNTIME_BASE}")
 
 
 if __name__ == "__main__":

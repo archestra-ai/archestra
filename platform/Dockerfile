@@ -526,8 +526,9 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 #
 # The base is Docker's hardened Node image (https://docs.docker.com/dhi/),
 # built by Docker from Docker's package builds with its own provenance, SBOM
-# and VEX. Its -dev variant, because the platform needs a shell for its
-# entrypoint and apk for the packages below; each image removes apk at the end.
+# and VEX. Its -dev variant here, for apk and the packages below; the docker
+# run image also needs its shell. The Kubernetes image is the distroless
+# variant with this stage's files copied on (unified-slim).
 # Same Node release and Alpine branch as the builder stages above, so their
 # native addons load here. Pulling it needs a Docker login (`docker login
 # dhi.io`, any Docker account); CI logs in where it builds this file
@@ -538,8 +539,12 @@ FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab06
 FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-public
 # The same hardened Node release without the -dev tools: no shell, no apk, only
 # node and its libraries. The Kubernetes image is built on it (unified-slim).
-# Keep its digest on the same Node release as the -dev pin above.
-FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
+# Keep its digest on the same Node release as the -dev pin above. Builds
+# without a dhi.io login (RUNTIME_BASE=public) use the public image instead,
+# shell included.
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless-hardened
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-distroless-public
+FROM runtime-base-distroless-${RUNTIME_BASE} AS runtime-base-distroless
 # Only the selected base is pulled.
 FROM runtime-base-${RUNTIME_BASE} AS runtime
 WORKDIR /app

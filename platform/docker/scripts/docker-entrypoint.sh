@@ -422,6 +422,11 @@ fi
 # For production, use external Kubernetes clusters without mounting the Docker socket.
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
+    # The Kubernetes image (archestra/platform:<version>-slim) has no KinD.
+    if ! command -v kind >/dev/null 2>&1; then
+        echo "ERROR: This is the Kubernetes image (-slim), which has no quickstart. Use archestra/platform:${ARCHESTRA_VERSION}."
+        exit 1
+    fi
     echo "Quickstart mode enabled - starting the embedded KinD cluster in the background..."
 
     # Quickstart is meant for humans tailing `docker logs`, so default the
@@ -469,11 +474,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         exit 1
     fi
     echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
-
-    if ! command -v kind >/dev/null 2>&1; then
-        echo "ERROR: KinD binary not found in this image."
-        exit 1
-    fi
 fi
 
 rm -f "$QUICKSTART_FAILED_FILE"
@@ -507,6 +507,12 @@ else
 fi
 
 if [ "$USE_EXTERNAL_DB" = "false" ]; then
+    # The Kubernetes image (archestra/platform:<version>-slim) bundles no PostgreSQL.
+    if ! command -v pg_ctl >/dev/null 2>&1; then
+        echo "ERROR: This is the Kubernetes image (-slim), which has no bundled PostgreSQL."
+        echo "Set ARCHESTRA_DATABASE_URL to your PostgreSQL database, or use archestra/platform:${ARCHESTRA_VERSION}."
+        exit 1
+    fi
     if [ "$RUN_AS_ROOT" != "true" ]; then
         echo "ERROR: The bundled PostgreSQL runs as its own system user, so the container must start as root to use it."
         echo "Start the container as root (the image's default user), or set ARCHESTRA_DATABASE_URL to an external PostgreSQL database."

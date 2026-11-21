@@ -142,7 +142,8 @@ class ImageInputTests(unittest.TestCase):
 
     def test_screenshot_harness_pulls_the_current_input_tag(self):
         image, calls = self.resolve()
-        self.assertTrue(image.endswith(f":input-{self.digest()}-slim"), image)
+        # The full image: the lite stack runs the bundled PostgreSQL.
+        self.assertTrue(image.endswith(f":input-{self.digest()}"), image)
         self.assertIn(f"pull --quiet {image}", calls)
         self.assertNotIn("build ", calls)
 

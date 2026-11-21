@@ -13,3 +13,4 @@ lastUpdated: 2026-11-20
 A v1.4 values file renders with the v1.5 chart, but these keys need changes:
 
 - `archestra.runAsNonRoot`: the web, worker, and migration pods run as UID 10001 by default. Before you upgrade, run `chown -R 10001` on file-storage and diagnostics volumes on NFS or `hostPath`: Kubernetes regroups other volume types for you. On OpenShift, set it to `false`, so its restricted SCC assigns the UID. To keep running as root, set it to `false`.
+- `archestra.imageVariant`: the chart runs `archestra/platform:<version>-slim`, which has no bundled PostgreSQL or quickstart tooling. If you mirror images, mirror the `-slim` tag. If you pin `archestra.imageTag` to a release before 1.5.0, set this to `""`: those releases have no `-slim` image.

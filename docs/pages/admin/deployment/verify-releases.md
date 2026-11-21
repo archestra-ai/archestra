@@ -113,6 +113,18 @@ What to know:
 - An image that no statement covers has no VEX attestation, so `gh attestation verify` fails for it. Scan it as usual.
 - Statements are added as Archestra investigates new advisories. The newest are in [`vex/openvex.json`](https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json), which Grype and Trivy read as is.
 
+## How Fast Vulnerabilities Get Fixed
+
+Archestra fixes a critical vulnerability in its release images within 14 days of a fix being published upstream, and a high one within 30 days. Those are ceilings: the team is usually much faster 😉 Medium and low vulnerabilities are fixed in regular releases.
+
+New releases of dependencies and base images wait 7 days before Archestra adopts them. Malicious releases are usually caught and pulled within hours, so the wait keeps a compromised package out of the images, and it fits inside the 14-day ceiling.
+
+What to know:
+
+- A fix lands in the next release candidate and is backported to the latest stable line as a patch release. Earlier stable lines get no fixes, so upgrade to the latest one.
+- Archestra never releases an image with a fixable critical or high vulnerability. Base images are checked for updates daily, and the next release's images are built and scanned nightly, so an advisory is caught between releases.
+- A finding that cannot be exploited in the image gets a [VEX statement](#drop-findings-that-do-not-affect-the-image), so your scanner drops it. Archestra triages the latest stable release and release candidate each week.
+
 ## Admit Only Archestra Images
 
 Make your cluster refuse any Archestra image that Archestra did not build. Kyverno and Sigstore policy-controller run in your cluster next to the chart. The chart does not install either.

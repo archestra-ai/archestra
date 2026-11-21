@@ -767,7 +767,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@93e1d8fdd1aba31ad2501f134220188ab3083f22 # v1.40.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@72a9eeea31a9b19195f3f07877f17d4a6adf84a2 # v1.43.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -785,10 +785,20 @@ jobs:
       # merge, read from main with the VEX document; each image's benchmark
       # is attested with the waivers it used.
       benchmark-waivers: .github/image-benchmark-waivers.json
+      # Docker signs VEX for each Docker Hardened Images base (dhi.io) these
+      # Dockerfiles pin, read at the release commit; its statements about
+      # package builds an image holds are attested with the image's own.
+      base-images-from: |
+        platform/Dockerfile
+        platform/docker_images/agent/Dockerfile
+        platform/docker_images/mcp_server/Dockerfile
+        platform/docker_images/p4_shim/Dockerfile
+        platform/docker_images/sandbox_base/Dockerfile
       wait: false
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      DHI_TOKEN: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
 
   publisher-smoke:
     name: Publisher dry run
@@ -886,7 +896,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@93e1d8fdd1aba31ad2501f134220188ab3083f22 # v1.40.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@72a9eeea31a9b19195f3f07877f17d4a6adf84a2 # v1.43.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

@@ -115,7 +115,7 @@ What to know:
 
 ## How Fast Vulnerabilities Get Fixed
 
-Archestra fixes a critical vulnerability in its release images within 7 days of a fix being available upstream, and a high one within 30 days. Medium and low vulnerabilities are fixed in regular releases.
+Archestra fixes a critical vulnerability in its release images within 7 days of a fix being available upstream, and a high one within 30 days. Those are ceilings: the team is usually much faster ;) Medium and low vulnerabilities are fixed in regular releases.
 
 What to know:
 

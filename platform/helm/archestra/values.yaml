@@ -202,11 +202,12 @@ archestra:
 
   # With runAsNonRoot, also run the web, worker, and migration containers and
   # the chart's init containers with a read-only root filesystem. The chart
-  # mounts an emptyDir at each path the platform image writes: /tmp,
-  # /run/archestra (supervisord's config and pid file), /var/log/supervisor,
-  # /app/data (Node diagnostic reports), /home/archestra (HOME: the skill
-  # marketplace and Dagger CLI caches), and /app/frontend/.next/cache (Next.js
-  # optimized images). A volume of your own mounted at one of these paths
+  # mounts an emptyDir at each path the platform image writes: /tmp
+  # (supervisord and the backend's temporary files), /run/archestra
+  # (supervisord's config and pid file), /var/log/supervisor, /app/data (Node
+  # diagnostic reports), /home/archestra (HOME: the skill marketplace, Dagger
+  # CLI, and kubectl caches), and /app/frontend/.next/cache (Next.js optimized
+  # images). A volume of your own mounted at one of these paths
   # through extraVolumes and extraVolumeMounts, or the file-storage volume,
   # replaces its emptyDir, for example to set a sizeLimit. Set false if a
   # custom image or command writes anywhere else; readOnlyRootFilesystem in

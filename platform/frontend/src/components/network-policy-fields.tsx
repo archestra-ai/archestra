@@ -35,7 +35,6 @@ export function NetworkPolicyFields({
   setAllowedCidrsText,
   supportsFqdn,
   enforcementStatus,
-  clusterKnown = true,
   baselineLoaded,
   disabled,
 }: {
@@ -53,27 +52,18 @@ export function NetworkPolicyFields({
     | "verified-not-enforced"
     | "unknown"
     | null;
-  /**
-   * Whether the reader may read what the cluster enforces. For someone who
-   * may not, `supportsFqdn` and `enforcementStatus` carry no finding, so
-   * the notices about the cluster are left out: they would state a guess,
-   * to someone who cannot act on it.
-   */
-  clusterKnown?: boolean;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
   // A probe watched a deny-all policy fail to stop a packet: every rule below
   // would be accepted and never enforced, so the section is disabled rather
   // than offering controls that silently do nothing.
-  const enforcementUnavailable =
-    clusterKnown && enforcementStatus === "verified-not-enforced";
+  const enforcementUnavailable = enforcementStatus === "verified-not-enforced";
   // Nothing measured this cluster — the probe was disabled, never ran, or its
   // pods aged out. The controls stay usable because most such clusters do
   // enforce; the notice is what stops "no warning" from reading as "verified".
   const enforcementUnverified =
-    clusterKnown &&
-    (enforcementStatus === "unknown" || enforcementStatus === null);
+    enforcementStatus === "unknown" || enforcementStatus === null;
   return (
     <div className="space-y-4">
       {enforcementUnavailable ? (
@@ -119,7 +109,7 @@ export function NetworkPolicyFields({
             change isn't saved against the wrong baseline.
           </AlertDescription>
         </Alert>
-      ) : clusterKnown && !supportsFqdn ? (
+      ) : !supportsFqdn ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
           <AlertTitle>Domain allowlists unavailable</AlertTitle>

@@ -372,15 +372,7 @@ export function AgentRuntimeEnvironmentFields({
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
   const runtimeEnabled = useFeature("agentRuntime");
-  // The credentials list is read only for someone who may read it: for
-  // anyone else the request is refused, so it is not sent, and the fields
-  // offer no credential to attach.
-  const { data: canReadCredentials } = useHasPermissions({
-    credential: ["read"],
-  });
-  const runtimeCredentials = useRuntimeCredentials(
-    runtimeEnabled === true && canReadCredentials === true,
-  );
+  const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
   const canAttach = useCanAttachCredential();
   const { data: canCreateCredential } = useHasPermissions({
     credential: ["create"],

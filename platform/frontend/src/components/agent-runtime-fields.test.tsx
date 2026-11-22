@@ -344,11 +344,6 @@ describe("AgentRuntimeFields", () => {
     vi.mocked(useFeature).mockImplementation((flag) =>
       flag === "agentRuntime" ? true : undefined,
     );
-    // Someone who may read credentials is offered the organization's.
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as ReturnType<typeof useHasPermissions>);
     const user = userEvent.setup();
 
     render(

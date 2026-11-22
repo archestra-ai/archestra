@@ -230,7 +230,7 @@ jobs:
       # (every Docker Hardened Images base) with its digest preserved.
       - name: Set up skopeo
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: $/.github/actions/setup-skopeo
+        uses: archestra-ai/.github/actions/setup-skopeo@v1.45.0
 
       - name: Promote exact scanned bytes without rebuilding
         id: promote

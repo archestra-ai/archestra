@@ -241,7 +241,7 @@ Apply the workflow change separately to each supported release branch; changing 
 ## Troubleshooting
 
 - **Build failure:** Inspect the failure, then use **Re-run all jobs** on the same workflow run (or the Release Gate message's *Retry*), not **Re-run failed jobs**. Build digests and candidate selections are artifacts of one run attempt, so a re-run of only the failed jobs cannot find the earlier attempt's and fails with `Incomplete release digest set`. A re-run of all jobs promotes the same merge-queue scanned archives again and rebuilds nothing; it works while that scan is under 24 hours old.
-- **No release PR after the stable-cut configuration PR:** Release Please counts only commits under `platform/`, and the configuration PR changes only `.github/`. If the new branch has no other `platform/` commit since the RC tag, Release Please skips the release PR. Merge a small change under `platform/` to the branch, then confirm the `X.Y.0` release PR opens.
+- **No release PR after a change outside `platform/`:** Release Please counts only commits under `platform/`. When every commit since the branch's last release tag changes only other paths, such as the stable-cut configuration PR or a `.github/` fix to the release workflow, its run logs `No commits for path: platform, skipping` and opens no release PR. Merge a small change under `platform/` to the branch, then confirm the release PR opens (`X.Y.0` after a stable cut, the next RC on `main`).
 - **Qualification fails before merging:** Fix the candidate before merging its release PR. If a failed build has already created an unpublished draft, use the recovery process below with explicit authorization.
 - **Abandon an unpublished candidate:**
   1. Cancel the workflow run.
